@@ -1,0 +1,45 @@
+﻿# Downloaded source PDFs (~1.3 GB, regenerable via scripts/extract_figures.py)
+pdfs/
+
+# Intermediate Figure-1 crops and QC contact sheets (regenerable)
+images/**/*.png
+data/*.png
+
+# Run logs
+data/*.txt
+data/*.log
+
+# Python
+__pycache__/
+*.pyc
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# session credentials
+data/or_cookies.json
+data/enrich*.log
+data/enrich*.err
+
+# session challenge pages / misc transient
+data/challenge.html
+data/click*.json
+
+# transient run state (queues, attempts, relay, backups)
+data/attempts.json
+data/pdf_queue.json
+data/pdf_fails.json
+data/batch_jobs.json
+data/batch_missing.json
+data/relay.*
+data/*.backup.jsonl
+data/figures.prev.json
+data/indexes.json
+data/scores.jsonl
+data/analyze.*
+data/*.err
+data/ledger.json
+data/or_test*
