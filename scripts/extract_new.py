@@ -57,6 +57,13 @@ def sess_for(host):
     if not hasattr(local, key):
         s = requests.Session()
         s.trust_env = (key == "proxy")
+        # Explicit fallback to the local Clash mixed port when no proxy env var
+        # is present in the launching shell (Clash Verge profile reloads can
+        # also move the listener; PROXY_URL env overrides the default).
+        if key == "proxy":
+            import os as _os
+            pu = _os.environ.get("PROXY_URL", "http://127.0.0.1:7897")
+            s.proxies.update({"http": pu, "https": pu})
         s.headers.update({"User-Agent": E.BROWSER_UA,
                           "Accept": "application/pdf,text/html,*/*"})
         setattr(local, key, s)

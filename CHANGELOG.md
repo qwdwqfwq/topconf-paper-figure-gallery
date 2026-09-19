@@ -2,11 +2,29 @@
 
 本项目的重要变更记录（格式参考 Keep a Changelog）。
 
-## [Unreleased]
+## [0.3.0] - 2026-09-20
 
-- 扩展至每个会议约 1000 张精选 Figure 1（ICLR / ICML / NeurIPS，2023–2025）。
+- 新增三个会议：**CVPR / ACL / AAAI（2023–2025）**，与 ICLR / ICML / NeurIPS 同管线处理。
+- 画廊规模由 60 张人工精选扩充至 **2,298 张**（2,238 张管线选图 + 60 张 v1 人工底）：
+  ICLR 370 / ICML 310 / NeurIPS 803 / CVPR 225 / ACL 326 / AAAI 264。
+- **全量枚举人眼目检**：六会议全部候选图按 40 格/页拼成联系表逐页目检
+  （共 81 页），剔除纯图表、聊天/示例页、视频帧条带、结果照片墙、UI 截图、
+  波形页等；另做 8 轮随机种子抽检（seed 11 / 73 / 2024 / 555 / 31337 / 4242 / 88 / 2026），
+  `data/exclude.txt` 累计排除约 1,400 张低质量裁剪。
+- 新增候选池与抽取管线：CVF Open Access、ACL Anthology（long/short/findings）、
+  AAAI OJS issue archive（`build_pool_new.py` / `extract_new.py`）。
+- 补齐 95 条 proceedings 记录缺失的作者字段（NeurIPS 87、ICML 8），
+  最终 figures.json 缺图 0、缺作者 0。
+- 双语 README（英文在前）、"如何用画廊画你自己的主图"方法论章节、
+  30 秒级真实操作演示 GIF（docs/demo.gif）、GitHub social preview 与 banner。
+- 清理无引用 stale JPEG 752 张；`clean_stale.py` 扩展为六会议。
+
+## [0.2.0] - 2026-09-18
+
+- ICLR / ICML / NeurIPS 自动管线扩量（2023–2025）。
 - 新增"设计感"自动评分：基于矢量元素、标签密度、位图占比、配色与边缘切割检测，
-  过滤纯大图拼接、纯表格与默认样式图表。
+  25+ 条 reject 规则过滤纯大图拼接、纯表格与默认样式图表；dHash 感知哈希去重。
+- 多随机种子拼图目检 QA 流程（`sheet_qa.py` / `enum_sheets.py`）。
 
 ## [0.1.0] - 2026-09-17
 

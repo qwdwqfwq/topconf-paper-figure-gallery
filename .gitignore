@@ -5,9 +5,14 @@ pdfs/
 images/**/*.png
 data/*.png
 
-# Run logs
+# Run logs / QA scratch dumps
 data/*.txt
 data/*.log
+# ...but keep the authoritative manual exclusion list tracked
+!data/exclude.txt
+
+# Selection snapshots / backups (selected.json is the canonical one)
+data/selected_prev.json
 
 # Python
 __pycache__/
@@ -51,3 +56,7 @@ data/*.html
 
 # GitHub Data API blob cache
 data/gh_blobs.json
+
+# one-off network route scratch tests
+scripts/test_gh_route*.py
+scripts/test_net.py

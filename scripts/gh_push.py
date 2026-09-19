@@ -71,9 +71,15 @@ if __name__ == "__main__":
     r = req("GET", API + "/git/ref/heads/main")
     print("ref main:", r.status_code)
     parent = None
+    base_tree = None
     if r.status_code == 200:
         parent = r.json()["object"]["sha"]
         print("parent:", parent)
+        # base_tree for POST /git/trees must be a TREE sha, not a commit sha.
+        c = req("GET", API + "/commits/" + parent)
+        if c.status_code == 200:
+            base_tree = c.json()["commit"]["tree"]["sha"]
+            print("base tree:", base_tree)
     r = req("POST", API + "/git/blobs", json={"content": "probe", "encoding": "utf-8"})
     print("blob probe:", r.status_code)
     if mode == "probe":
@@ -114,10 +120,31 @@ if __name__ == "__main__":
 
     # Build the tree in chunks with base_tree: a single 2000+ entry tree POST
     # times out at GitHub's gateway (504), while ~400-entry chunks succeed.
-    CHUNK = 400
-    tree_sha = parent
-    for i in range(0, len(entries), CHUNK):
-        chunk = entries[i:i + CHUNK]
+    # Deletions: files present in the remote base tree but absent from the
+    # local tracked set must be explicitly removed (sha=null), since chaining
+    # trees with base_tree only overlays additions.
+    deletions = []
+    if base_tree:
+        tr = req("GET", API + "/git/trees/" + base_tree + "?recursive=1")
+        if tr.status_code == 200:
+            tj = tr.json()
+            if tj.get("truncated"):
+                raise RuntimeError("base tree listing truncated, need paged fetch")
+            remote_paths = {t["path"] for t in tj.get("tree", [])
+                            if t.get("type") == "blob"}
+            local_paths = {e["path"] for e in entries}
+            deletions = [{"path": p, "mode": "100644", "type": "blob", "sha": None}
+                         for p in sorted(remote_paths - local_paths)]
+            print("deletions:", len(deletions), flush=True)
+
+    # Build the tree in chunks with base_tree: a single 2000+ entry tree POST
+    # times out at GitHub's gateway, while ~300-entry chunks succeed.
+    CHUNK = 300
+    tree_sha = base_tree
+    stages = deletions + entries
+    # keep deletions together in the first chunk (well under CHUNK size)
+    for i in range(0, len(stages), CHUNK):
+        chunk = stages[i:i + CHUNK]
         body = {"tree": chunk}
         if tree_sha:
             body["base_tree"] = tree_sha
@@ -125,7 +152,7 @@ if __name__ == "__main__":
         if tree.status_code not in (200, 201):
             raise RuntimeError(tree.text[:1000])
         tree_sha = tree.json()["sha"]
-        print(f"tree chunk {i + len(chunk)}/{len(entries)} -> {tree_sha[:8]}", flush=True)
+        print(f"tree chunk {min(i + len(chunk), len(stages))}/{len(stages)} -> {tree_sha[:8]}", flush=True)
     commit = req("POST", API + "/git/commits",
                  json={"message": COMMIT_MSG, "tree": tree_sha,
                        **({"parents": [parent]} if parent else {})})

@@ -134,7 +134,7 @@
         <div class="card-badges">
           <span class="badge ${f.venue}">${VENUES[f.venue].name}</span>
           <span class="badge year">${f.year}</span>
-          <span class="badge pattern">${f.pattern}</span>
+          <span class="badge pattern">${PATTERNS[f.pattern] || f.pattern}</span>
         </div>
         <h3 class="card-title">${escapeHtml(f.title)}</h3>
         <p class="card-authors">${escapeHtml(authorsText(f))}</p>

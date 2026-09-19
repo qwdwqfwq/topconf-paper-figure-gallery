@@ -1,16 +1,15 @@
-
 <div align="center">
 
 <img src="docs/banner.jpg" alt="Top-Conf Figure Gallery banner" width="920">
 
-<img src="docs/demo.gif" alt="Search and lightbox demo" width="920">
-
 # 🎨 Top-Conf Figure Gallery
-### 顶会论文主图灵感画廊 · ICLR / ICML / NeurIPS
+### 顶会论文主图灵感画廊 · ICLR · ICML · NeurIPS · CVPR · ACL · AAAI · 2023–2025
+
+<img src="docs/demo.gif" alt="Search, filter and lightbox demo" width="920">
 
 [![Website](https://img.shields.io/website?down_color=lightgrey&label=Gallery&up_color=blue&up_message=online&url=https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)
-![Figures](https://img.shields.io/badge/figures-2051-orange)
-[![Venues](https://img.shields.io/badge/venues-ICLR%20%C2%B7%20ICML%20%C2%B7%20NeurIPS-purple)](#)
+![Figures](https://img.shields.io/badge/figures-2298-orange)
+![Venues](https://img.shields.io/badge/venues-ICLR·ICML·NeurIPS·CVPR·ACL·AAAI-purple)
 ![Years](https://img.shields.io/badge/years-2023--2025-success)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](requirements.txt)
 [![License: MIT](https://img.shields.io/badge/code%20license-MIT-green.svg)](LICENSE)
@@ -19,79 +18,115 @@
 ![Last commit](https://img.shields.io/github/last-commit/qwdwqfwq/topconf-paper-figure-gallery)
 ![Stars](https://img.shields.io/github/stars/qwdwqfwq/topconf-paper-figure-gallery?style=social)
 
-**做论文配图时，先看看顶会里最会画图的人是怎么画的。**
+**Before you design your paper's Figure 1, see how the best papers do it.**
+A searchable, filterable gallery of well-designed Figure 1 / teaser figures — pure static
+HTML/CSS/JS, no build step, works offline.
+
+**做论文配图前，先看看顶会里最会画图的人是怎么画的。**
 一个可搜索、可筛选的 Figure 1 / Teaser 画廊，纯静态、零构建、双击即开。
 
-[🌐 在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/) · [📚 数据与方法](docs/METHODOLOGY.md) · [⚖️ 图片版权 / 下架](IMAGES_POLICY.md) · [🤝 贡献指南](CONTRIBUTING.md)
+[🌐 Live gallery 在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/) · [📚 Methodology 数据与方法](docs/METHODOLOGY.md) ·
+[⚖️ Image policy 版权 / 下架](IMAGES_POLICY.md) · [🤝 Contributing 贡献指南](CONTRIBUTING.md)
 
 </div>
 
+---
+
 ## English
 
-**Top-Conf Figure Gallery** is a searchable, static collection of visually
-designed Figure 1 / teaser figures from ICLR, ICML and NeurIPS (2023–2025),
-with CVPR, ACL and AAAI entering through the same reviewed pipeline. It is a
-reference library for researchers who want to make a clearer paper overview,
-not a ranking of papers. Every card links back to its paper and records the
-venue, year and visual pattern.
+**Top-Conf Figure Gallery** collects visually *designed* Figure 1 / teaser figures
+(conceptual diagrams, system frameworks, pipelines, architectures, benchmark overviews)
+from six top ML/AI conferences, 2023–2025. It is a reference library for researchers
+who want a clearer overview figure — it is not a ranking of papers. Every card links
+back to its source paper and records venue, year, authors and a visual-pattern tag.
 
-Use the live [gallery](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/),
-search by title or author, combine filters, and open a card for the lightbox.
-The site is plain HTML/CSS/JS, so it also works offline after cloning.
+- 🗂️ Filter by **venue / year / visual pattern**; infinite-scroll masonry and a lightbox
+- 🔍 Full-text **search over titles and authors** (e.g. `DPO`, `robot`, `gaussian`, `agent`)
+- 🚫 Default matplotlib charts, plain tables, GUI screenshots and unlabeled photo dumps
+  are explicitly **excluded by 25+ heuristic rules**, then every remaining candidate is
+  checked in **page-by-page full-enumeration human QA** (plus multi-seed random audits);
+  see [METHODOLOGY.md](docs/METHODOLOGY.md)
+- 📦 Pure static site (HTML/CSS/JS), no backend, no build; clone and double-click
+- 🔁 Fully open, reproducible pipeline: proceedings index → PDF download → Figure 1 crop
+  → design-quality scoring → dHash de-duplication → full-enumeration visual QA
 
-### How to design your own overview figure
+### 🎓 How to use this gallery to design your own overview figure
 
-Start with one sentence that names the input, transformation and outcome.
-Choose a reading direction (left-to-right for a pipeline, centre-out for a
-system, or top-to-bottom for a hierarchy), then give each stage one visual
-verb and one accent colour. Keep a quiet background, align modules to a small
-grid, and spend the largest text on the contribution rather than on every
-implementation detail. The `conceptual`, `framework`, `pipeline`, and
-`architecture` filters are useful pattern references; copy the information
-hierarchy and spacing, not the artwork. Before exporting, check the figure at
-the width of a two-column paper and remove any label that cannot be read there.
+1. **Write the one-sentence story first** — input → transformation → output. Everything
+   in the figure should serve that sentence.
+2. **Pick a reading direction that matches the story**: left-to-right for a pipeline,
+   centre-out for a system/framework, top-to-bottom for a hierarchy or taxonomy.
+3. **Give each stage one visual verb and one accent colour** — boxes for modules, arrows
+   for data flow, icons for data types. Use a neutral background; reserve colour for what
+   matters (your contribution, the novel path, the output).
+4. **Steal hierarchy and spacing, not artwork.** Filter `framework` / `pipeline` /
+   `architecture` / `conceptual` and study how 8–12 similar papers align modules to a
+   grid, size labels, and separate "what exists" from "what is new" (dashed/grey vs
+   coloured/full).
+5. **Label at paper width.** Export, then view the figure at the width of a two-column
+   page: any label you cannot read must be enlarged, moved, or deleted.
+6. **One figure, one message.** If a reviewer should remember a single claim, the figure's
+   visual centre must already state it — results belong in Figure 2, not the teaser.
 
 ### Add a paper or a better figure
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the metadata format and quality
-bar. New venues are staged as metadata candidates with
-`python scripts/harvest_new_venues.py`; PDF extraction, heuristic scoring,
-dHash de-duplication, and a sampled visual QA pass happen before publication.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the metadata format and the quality bar.
+Community PRs (new papers, better crops, new venues such as CHI / RSS / CoRL) are the
+intended growth path after the 2023–2025 baseline.
 
-The image files remain attributed to their authors and publishers. See
-[IMAGES_POLICY.md](IMAGES_POLICY.md) for the educational-use and takedown
-policy.
+Image files remain attributed to their authors and publishers; see
+[IMAGES_POLICY.md](IMAGES_POLICY.md) for the educational-use and 72-hour takedown policy.
 
 ---
 
 ## ✨ 这是什么
 
 写论文最头疼的不是"画什么图"，而是**想不到主图还能怎么排版、怎么隐喻**。
-本仓库把 ICLR / ICML / NeurIPS 近三年里**真正体现作者排版与设计功力**的 Figure 1
-集中起来，做成一个集群式画廊：
+本仓库把六大顶会 2023–2025 里**真正体现作者排版与设计功力**的 Figure 1 / Teaser
+集中起来，做成一个可检索的集群式画廊：
 
 - 🗂️ 按 **会议 / 年份 / 视觉模式**（概念图、框架图、流程图、架构图、任务全景…）筛选
-- 🔍 标题、作者、关键词 **全文搜索**（如 `DPO`、`robot`、`gaussian`、`Song`）
-- 🖼️ 卡片瀑布流 + 点击**灯箱大图**，一键跳转原文
-- 🚫 明确**剔除**纯大图拼接（几张照片堆一起）、默认样式图表和纯表格——只留有设计的图
+- 🔍 标题、作者、关键词 **全文搜索**（如 `DPO`、`robot`、`gaussian`、`agent`）
+- 🖼️ 卡片瀑布流 + 点击**灯箱大图**，键盘 ←/→ 翻图，一键跳转原文
+- 🚫 明确**剔除**默认 matplotlib 图表、纯表格、GUI 截图、无标签照片墙——只留有设计的图
 - 📦 纯静态页面（HTML/CSS/JS），无需联网、无需构建，`file://` 双击即可打开
-- 🔁 数据管线完全开源：会议索引 → PDF 下载 → Figure 1 裁剪 → 设计感评分，可复现、可扩展
+- 🔁 数据管线完全开源：会议索引 → PDF 下载 → Figure 1 裁剪 → 25+ 条规则打分 → dHash 去重 → 全量逐张目检 QA
 
-## 📊 收录规模
+## 🎓 怎么用这个画廊画你自己的主图
+
+1. **先写一句话故事**——输入 → 变换 → 输出，图上每个元素都要服务这句话。
+2. **按故事选阅读方向**：流程用从左到右，系统/框架用由中心向外，层级/全景用自上而下。
+3. **每个阶段只给一种视觉动词、一个强调色**：方框=模块，箭头=数据流，图标=数据类型；
+   背景保持克制，颜色只留给重点（你的贡献、新路径、输出）。
+4. **抄信息层级与留白，不抄画风**：用 `framework` / `pipeline` / `architecture` /
+   `conceptual` 筛选，看 8–12 张同类图如何对齐网格、分配字号、区分"已有部分"
+   （虚线/灰色）与"本文新增"（彩色/实心）。
+5. **按论文成图宽度检查可读性**：导出后缩到双栏论文里的实际宽度，看不清的标签放大、挪位或删掉。
+6. **一图一主旨**：如果希望审稿人只记住一个结论，图的视觉中心就必须直接说出它；
+   结果对比留给 Figure 2，不要塞进 teaser。
+
+## 📊 收录规模（质量优先，不硬凑数量）
 
 | 会议 | 2023 | 2024 | 2025 | 合计 |
 |---|---:|---:|---:|---:|
-| 🟣 **ICLR** | 102 | 142 | 336 | **580** |
-| 🟢 **ICML** | 69 | 145 | 257 | **471** |
-| 🔴 **NeurIPS** | 250 | 420 | 330 | **1000** |
-| | | | **总计** | **2051** |
+| 🟣 **ICLR** | 68 | 88 | 214 | **370** |
+| 🟢 **ICML** | 51 | 87 | 172 | **310** |
+| 🔴 **NeurIPS** | 206 | 329 | 268 | **803** |
+| 🟠 **CVPR** | 65 | 64 | 96 | **225** |
+| 🔵 **ACL** | 84 | 74 | 168 | **326** |
+| 🟡 **AAAI** | 59 | 66 | 139 | **264** |
+| | | | **总计 Total** | **2298** |
 
 > 图片均从正式出版 PDF 渲染裁剪（约 180–216 DPI），网页版压缩为 ≤1500px JPEG；
-> 每张图都标注论文标题、全部作者与原文链接。
+> 每张图都标注论文标题、全部作者与原文链接。六会议候选图均经过**全量枚举逐张人眼目检**
+> （见 [METHODOLOGY](docs/METHODOLOGY.md)），数量差异来自"设计型主图"占比的真实分布：
+> NeurIPS 最高（803）；CVPR 的 Figure 1 常为结果照片墙而大量落选（225）；
+> ACL/AAAI 的框架图文混排稳定（326/264）；理论向 ICML 默认图表更多（310）。
+> 质量优先、宁少勿凑，数量不代表会议水平。
 
 ## 🧭 视觉模式分类
 
-学术界对"论文图类型"没有统一标准，下面是本画廊按**图的视觉功能**做的实用分类：
+标签描述的是**图的视觉功能**（不是论文领域），属于本画廊的实用分类：
 
 | 标签 | 含义 | 代表 |
 |---|---|---|
@@ -102,10 +137,9 @@ policy.
 | `taxonomy` | 任务 / 能力 / 数据全景（benchmark overview） | EmbodiedBench、SimWorld |
 | `teaser` | 经过版式设计的图文混排主视觉 | VIMA、PixArt-α |
 
-
 ## 🚀 快速开始
 
-**方式一：直接打开** —— 下载/克隆仓库后双击 `index.html`（数据已内联，无需联网）。
+**方式一：在线浏览** —— 直接访问 [GitHub Pages 在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)。
 
 **方式二：本地服务器**
 
@@ -116,23 +150,21 @@ python -m http.server 8000
 # 浏览器打开 http://localhost:8000
 ```
 
-**方式三：在线浏览** —— 直接访问 [GitHub Pages](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)。
+**方式三：直接打开** —— 双击 `index.html`（数据已内联在 `assets/figures.js`，无需联网）。
 
 ## 🗃️ 仓库结构
 
 ```
-├── index.html               # 画廊主页
+├── index.html               # 画廊主页（搜索 / 筛选 / 无限滚动 / 灯箱）
 ├── assets/
-│   ├── style.css / app.js   # 样式与筛选/搜索/灯箱逻辑
+│   ├── style.css / app.js   # 样式与交互逻辑
 │   └── figures.js           # 图片元数据（由 data/figures.json 生成）
-├── images/<venue>/final/    # 画廊图片（JPEG）
+├── images/<venue>/final/    # 画廊图片（≤1500px JPEG）
 ├── data/
-│   ├── figures.json         # 精选清单：标题/作者/模式/链接/来源
-│   ├── pool/                # 全量候选论文池（复现用）
-│   ├── indexes.json          # proceedings 全量索引
-│   └── openreview/          # ICLR OpenReview 原始导出
+│   ├── figures.json         # 画廊唯一权威清单：标题/作者/模式/链接/来源
+│   └── pool/                # 全量候选论文池（复现用）
 ├── scripts/                 # 完整数据管线（见 docs/METHODOLOGY.md）
-├── docs/                    # 方法文档与 banner
+├── docs/                    # 方法文档、banner、演示 GIF
 └── .github/workflows/       # GitHub Pages 自动部署
 ```
 
@@ -142,28 +174,39 @@ python -m http.server 8000
 
 ```bash
 pip install -r requirements.txt
-python scripts/build_pool.py        # 候选论文池（proceedings + OpenReview + arXiv）
-python scripts/extract_all.py       # 并行下载 PDF、裁剪 Figure 1（断点续跑）
-python scripts/score_select.py      # 设计感评分、去重、按配额选图
-python scripts/build_web.py         # 生成网页 JPEG 与 assets/figures.js
+# ICLR / ICML / NeurIPS（OpenReview / PMLR / NeurIPS proceedings / arXiv）
+python scripts/build_pool.py          # 候选论文池
+python scripts/extract_all.py         # 并行下载 PDF、裁剪 Figure 1（断点续跑）
+# CVPR / ACL / AAAI（CVF / ACL Anthology / AAAI OJS；需本地代理见脚本注释）
+python scripts/build_pool_new.py cvpr,acl,aaai
+python scripts/extract_new.py cvpr,acl,aaai 12
+# 六个会议统一打分、装配
+python scripts/score_select.py 980    # 25+ 条 reject 规则、设计感评分、dHash 去重、按配额选图
+python scripts/assemble_gallery.py 1000   # PNG→JPEG、生成 figures.json / figures.js
+python scripts/clean_stale.py         # 删除无引用图片
+python scripts/sheet_qa.py 31         # 随机 32 格目检 QA（多 seed 抽检）
 ```
 
 ## 🗺️ Roadmap
 
 - [x] 60 张人工精选种子画廊（v0.1）
-- [ ] 扩展至每个会议约 1,000 张（共 ~3,000），自动设计感评分 + 人工抽检
-- [ ] CVPR / ACL / CHI / RSS 等会议扩展
+- [x] ICLR / ICML / NeurIPS 自动管线扩量（v0.2–v0.3）
+- [x] CVPR / ACL / AAAI（2023–2025）同管线扩展（v0.3）
+- [ ] 多 seed QA 持续清噪、社区 PR 补图机制
+- [ ] CHI / CoRL / RSS / EMNLP 等会议扩展
 - [ ] 相似图推荐、按配色检索、一键导出 BibTeX
 
 ## 🤝 贡献
 
 欢迎补图、修标签、修 bug、扩展新会议——先看 [CONTRIBUTING.md](CONTRIBUTING.md)，
-特别注意**收录标准**：不要纯照片墙和默认图表。
+特别注意**收录标准**：不要纯照片墙和默认图表。提 PR 即代表你确认图片来自正式出版论文、
+且仅用于署名的学术参考。
 
 ## ⚠️ 版权说明
 
 图片版权归**原作者与出版方**所有，本仓库仅作非商业教育/研究用途的署名索引；
-ICLR / ICML(PMLR) / NeurIPS 正式出版论文多为 CC BY 4.0。
+ICLR / ICML(PMLR) / NeurIPS / CVPR(CVF) / ACL Anthology 正式出版论文多为 CC BY 4.0，
+AAAI 论文版权归 AAAI 与作者所有（fair-use 学术参考）。
 版权方若要求下架，请提 Issue 或邮件 **939123836@qq.com**，核实后 72 小时内删除。
 详见 [IMAGES_POLICY.md](IMAGES_POLICY.md)。
 
@@ -173,14 +216,66 @@ ICLR / ICML(PMLR) / NeurIPS 正式出版论文多为 CC BY 4.0。
 
 ```bibtex
 @misc{topconf_figure_gallery,
-  title  = {Top-Conf Figure Gallery: A Curated Gallery of Figure 1 / Teaser Designs from ICLR, ICML and NeurIPS},
+  title  = {Top-Conf Figure Gallery: A Curated Gallery of Figure 1 / Teaser Designs from ICLR, ICML, NeurIPS, CVPR, ACL and AAAI (2023-2025)},
   year   = {2026},
   url    = {https://github.com/qwdwqfwq/topconf-paper-figure-gallery}
 }
 ```
 
-## 🖼️ 图录（2051 张，完整筛选体验请用[在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)）
+## 🖼️ 精选图录（每会议-年份评分最高的 2 张；完整 2298 张请用[在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)）
 
-<details><summary><b>ICLR 2023</b>（102 张）</summary>
-| 预览 | 论文 | 第一作者 | 模式 ||---|---|---|---|| <img src="images/iclr/final/iclr2023-0022.jpg" width="240"> | [Active Learning for Object Detection with Evidential Deep Learning and Hierarchical Uncertainty Aggregation](https://openreview.net/forum?id=MnEjsw-vj-X) | Younghyun Park et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0042.jpg" width="240"> | [Automatic Chain of Thought Prompting in Large Language Models](https://openreview.net/forum?id=5NTt8GFjUHkr) | Zhuosheng Zhang et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0057.jpg" width="240"> | [Binding Language Models in Symbolic Languages](https://openreview.net/forum?id=lH1PV42cbF) | Zhoujun Cheng et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0068.jpg" width="240"> | [Capturing the Motion of Every Joint: 3D Human Pose and Shape Estimation with Independent Tokens](https://openreview.net/forum?id=0Vv4H4Ch0la) | Sen Yang et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0099.jpg" width="240"> | [Contextual Image Masking Modeling via Synergized Contrasting without View Augmentation for Faster and Better Visual Pretraining](https://openreview.net/forum?id=A3sgyt4HWp) | Shaofeng Zhang et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0100.jpg" width="240"> | [Continual Pre-training of Language Models](https://openreview.net/forum?id=m_GDIItaI3o) | Zixuan Ke et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0102.jpg" width="240"> | [Contrastive Audio-Visual Masked Autoencoder](https://openreview.net/forum?id=QPtMRyk5rb) | Yuan Gong et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0106.jpg" width="240"> | [Curriculum-based Co-design of Morphology and Control of Voxel-based Soft Robots](https://openreview.net/forum?id=r9fX833CsuN) | Yuxing Wang et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0144.jpg" width="240"> | [Diffusion-GAN: Training GANs with Diffusion](https://openreview.net/forum?id=HZf7UbpWHuA) | Zhendong Wang et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0149.jpg" width="240"> | [Diffusion Probabilistic Fields](https://openreview.net/forum?id=ik91mY-2GN) | Peiye Zhuang et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0156.jpg" width="240"> | [Discovering Latent Knowledge in Language Models Without Supervision](https://openreview.net/forum?id=ETKGuby0hcs) | Collin Burns et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0166.jpg" width="240"> | [Dr.Spider: A Diagnostic Evaluation Benchmark towards Text-to-SQL Robustness](https://openreview.net/forum?id=Wc5bmZZU9cy) | Shuaichen Chang et al. | Taxonomy 全景 || <img src="images/iclr/final/iclr2023-0170.jpg" width="240"> | [DualAfford: Learning Collaborative Visual Affordance for Dual-gripper Manipulation](https://openreview.net/forum?id=I_YZANaz5X) | Yan Zhao et al. | Framework 框架 || <img src="images/iclr/final/iclr2023-0173.jpg" width="240"> | [E-CRF: Embedded Conditional Random Field for Boundary-caused Class Weights Confusion in Semantic Segmentation](https://openreview.net/forum?id=g1GnnCI1OrC) | Jie Zhu et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-02.jpg" width="240"> | [DiffDock: Diffusion Steps, Twists, and Turns for Molecular Docking](https://openreview.net/forum?id=kKF8_K-mBbS) | Gabriele Corso et al. | Conceptual 概念示意 || <img src="images/iclr/final/iclr2023-0203.jpg" width="240"> | [Exploring The Role of Mean Teachers in Self-supervised Masked Auto-Encoders](https://openreview.net/forum?id=7sn6Vxp92xV) | Youngwan Lee et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0206.jpg" width="240"> | [Fake It Until You Make It : Towards Accurate Near-Distribution Novelty Detection](https://openreview.net/forum?id=QWQM0ZwZdRS) | Hossein Mirzaei et al. | Conceptual 概念示意 || <img src="images/iclr/final/iclr2023-0224.jpg" width="240"> | [GAIN: On the Generalization of Instructional Action Understanding](https://openreview.net/forum?id=RlPmWBiyp6w) | Junlong Li et al. | Conceptual 概念示意 || <img src="images/iclr/final/iclr2023-0228.jpg" width="240"> | [Generate rather than Retrieve: Large Language Models are Strong Context Generators](https://openreview.net/forum?id=fB0hRu9GZUS) | Wenhao Yu et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0270.jpg" width="240"> | [ImageNet-X: Understanding Model Mistakes with Factor of Variation Annotations](https://openreview.net/forum?id=HXz7Vcm3VgM) | Badr Youbi Idrissi et al. | Conceptual 概念示意 || <img src="images/iclr/final/iclr2023-0272.jpg" width="240"> | [ImaginaryNet: Learning Object Detectors without Real Images and Annotations](https://openreview.net/forum?id=9MbhFHqrti9) | Minheng Ni et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0286.jpg" width="240"> | [Interpretability in the Wild: a Circuit for Indirect Object Identification in GPT-2 Small](https://openreview.net/forum?id=NpsVSN6o4ul) | Kevin Ro Wang et al. | Conceptual 概念示意 || <img src="images/iclr/final/iclr2023-0299.jpg" width="240"> | [Language Modelling with Pixels](https://openreview.net/forum?id=FkSp8VW8RjH) | Phillip Rust et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-03.jpg" width="240"> | [DreamFusion: Text-to-3D using 2D Diffusion](https://openreview.net/forum?id=FjNys5c7VyY) | Ben Poole et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0303.jpg" width="240"> | [Large Language Models are Human-Level Prompt Engineers](https://openreview.net/forum?id=92gvk82DE-) | Yongchao Zhou et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0308.jpg" width="240"> | [Learning a Data-Driven Policy Network for Pre-Training Automated Feature Engineering](https://openreview.net/forum?id=688hNNMigVX) | Liyao Li et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0309.jpg" width="240"> | [Learning Controllable Adaptive Simulation for Multi-resolution Physics](https://openreview.net/forum?id=PbfgkZ2HdbE) | Tailin Wu et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0311.jpg" width="240"> | [Learning Hierarchical Protein Representations via Complete 3D Graph Networks](https://openreview.net/forum?id=9X-hgLDLYkQ) | Limei Wang et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0312.jpg" width="240"> | [Learning Human-Compatible Representations for Case-Based Decision Support](https://openreview.net/forum?id=r0xte-t40I) | Han Liu et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0319.jpg" width="240"> | [Learning Object-Language Alignments for Open-Vocabulary Object Detection](https://openreview.net/forum?id=mjHlitXvReu) | Chuang Lin et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0328.jpg" width="240"> | [Learning to Jointly Share and Prune Weights for Grounding Based Vision and Language Models](https://openreview.net/forum?id=UMERaIHMwB3) | Shangqian Gao et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0331.jpg" width="240"> | [Learning What and Where: Disentangling Location and Identity Tracking Without Supervision](https://openreview.net/forum?id=NeDc-Ak-H_) | Manuel Traub et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0346.jpg" width="240"> | [Lossless Adaptation of Pretrained Vision Models For Robotic Manipulation](https://openreview.net/forum?id=5IND3TXJRb-) | Mohit Sharma et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0350.jpg" width="240"> | [MAESTRO: Open-Ended Environment Design for Multi-Agent Reinforcement Learning](https://openreview.net/forum?id=sKWlRDzPfd7) | Mikayel Samvelyan et al. | Framework 框架 || <img src="images/iclr/final/iclr2023-0353.jpg" width="240"> | [Markup-to-Image Diffusion Models with Scheduled Sampling](https://openreview.net/forum?id=81VJDmOE2ol) | Yuntian Deng et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0354.jpg" width="240"> | [Masked Frequency Modeling for Self-Supervised Visual Pre-Training](https://openreview.net/forum?id=9-umxtNPx5E) | Jiahao Xie et al. | Conceptual 概念示意 || <img src="images/iclr/final/iclr2023-0358.jpg" width="240"> | [MaskViT: Masked Visual Pre-Training for Video Prediction](https://openreview.net/forum?id=QAV2CcLEDh) | Agrim Gupta et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0378.jpg" width="240"> | [MixPro: Data Augmentation with MaskMix and Progressive Attention Labeling for Vision Transformer](https://openreview.net/forum?id=dRjWsd3gwsm) | Qihao Zhao et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0381.jpg" width="240"> | [Modeling Multimodal Aleatoric Uncertainty in Segmentation with Mixture of Stochastic Experts](https://openreview.net/forum?id=KE_wJD2RK4) | Zhitong Gao et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-04.jpg" width="240"> | [Equivariant Descriptor Fields: SE(3)-Equivariant Energy-Based Models for End-to-End Visual Robotic Manipulation Learning](https://openreview.net/forum?id=dnjZSPGmY5O) | Hyunwoo Ryu et al. | Pipeline 流程 || <img src="images/iclr/final/iclr2023-0473.jpg" width="240"> | [Progressively Compressed Auto-Encoder for Self-supervised Representation Learning](https://openreview.net/forum?id=8T4qmZbTkW7) | Jin Li et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0499.jpg" width="240"> | [Retrieval-based Controllable Molecule Generation](https://openreview.net/forum?id=vDFA1tpuLvk) | Zichao Wang et al. | Pipeline 流程 || <img src="images/iclr/final/iclr2023-05.jpg" width="240"> | [Lossless Adaptation of Pretrained Vision Models For Robotic Manipulation](https://openreview.net/forum?id=5IND3TXJRb-) | Mohit Sharma et al. | Pipeline 流程 || <img src="images/iclr/final/iclr2023-0503.jpg" width="240"> | [Reward Design with Language Models](https://openreview.net/forum?id=10uNUgI5Kl) | Minae Kwon et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0507.jpg" width="240"> | [Robust and Controllable Object-Centric Learning through Energy-based Models](https://openreview.net/forum?id=wcNtbEtcGIC) | Ruixiang ZHANG et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0519.jpg" width="240"> | [Schema Inference for Interpretable Image Classification](https://openreview.net/forum?id=VGI9dSmTgPF) | Haofei Zhang et al. | Conceptual 概念示意 || <img src="images/iclr/final/iclr2023-0524.jpg" width="240"> | [Selective Frequency Network for Image Restoration](https://openreview.net/forum?id=tyZ1ChGZIKO) | Yuning Cui et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0530.jpg" width="240"> | [Semantic Uncertainty: Linguistic Invariances for Uncertainty Estimation in Natural Language Generation](https://openreview.net/forum?id=VD-AYtP0dve) | Lorenz Kuhn et al. | Pipeline 流程 || <img src="images/iclr/final/iclr2023-0543.jpg" width="240"> | [SQA3D: Situated Question Answering in 3D Scenes](https://openreview.net/forum?id=IDJx97BC38) | Xiaojian Ma et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0550.jpg" width="240"> | [StrucTexTv2: Masked Visual-Textual Prediction for Document Image Pre-training](https://openreview.net/forum?id=HE_75XY5Ljh) | Yuechen Yu et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0564.jpg" width="240"> | [Temporal Coherent Test Time Optimization for Robust Video Classification](https://openreview.net/forum?id=-t4D61w4zvQ) | Chenyu Yi et al. | Conceptual 概念示意 || <img src="images/iclr/final/iclr2023-0576.jpg" width="240"> | [The Role of ImageNet Classes in Fréchet Inception Distance](https://openreview.net/forum?id=4oXTQ6m_ws8) | Tuomas Kynkäänniemi et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0582.jpg" width="240"> | [Towards Effective and Interpretable Human-Agent Collaboration in MOBA Games: A Communication Perspective](https://openreview.net/forum?id=q3F0UBAruO) | Yiming Gao et al. | Framework 框架 || <img src="images/iclr/final/iclr2023-0596.jpg" width="240"> | [Transformer-based World Models Are Happy With 100k Interactions](https://openreview.net/forum?id=TdBaDGCpjly) | Jan Robine et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0619.jpg" width="240"> | [UNIFIED-IO: A Unified Model for Vision, Language, and Multi-modal Tasks](https://openreview.net/forum?id=E01k9048soZ) | Jiasen Lu et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0621.jpg" width="240"> | [Universal Few-shot Learning of Dense Prediction Tasks with Visual Token Matching](https://openreview.net/forum?id=88nT0j5jAn) | Donggyun Kim et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0630.jpg" width="240"> | [Using Both Demonstrations and Language Instructions to Efficiently Learn Robotic Tasks](https://openreview.net/forum?id=4u42KCQxCn8) | Albert Yu et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0632.jpg" width="240"> | [Valid P-Value for Deep Learning-driven Salient Region](https://openreview.net/forum?id=qihMOPw4Sf_) | Miwa Daiki et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0646.jpg" width="240"> | [Wasserstein Auto-encoded MDPs: Formal Verification of Efficiently Distilled RL Policies with Many-sided Guarantees](https://openreview.net/forum?id=JLLTtEdh1ZY) | Florent Delgrange et al. | Pipeline 流程 || <img src="images/iclr/final/iclr2023-0653.jpg" width="240"> | [When and Why Vision-Language Models Behave like Bags-Of-Words, and What to Do About It?](https://openreview.net/forum?id=KRLUvxh8uaX) | Mert Yuksekgonul et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0658.jpg" width="240"> | [Write and Paint: Generative Vision-Language Models are Unified Modal Learners](https://openreview.net/forum?id=HgQR0mXQ1_a) | Shizhe Diao et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0659.jpg" width="240"> | [Zero-Shot Image Restoration Using Denoising Diffusion Null-Space Model](https://openreview.net/forum?id=mRieQgMtNTQ) | Yinhuai Wang et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0672.jpg" width="240"> | [A Learning Based Hypothesis Test for Harmful Covariate Shift](https://openreview.net/forum?id=rdfgqiwz7lZ) | Tom Ginsberg et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0675.jpg" width="240"> | [A Mixture-of-Expert Approach to RL-based Dialogue Management](https://openreview.net/forum?id=4FBUihxz5nm) | Yinlam Chow et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0691.jpg" width="240"> | [A Time Series is Worth 64 Words: Long-term Forecasting with Transformers](https://openreview.net/forum?id=Jbdc0vTOcol) | Yuqi Nie et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-07.jpg" width="240"> | [Neural Image-based Avatars: Generalizable Radiance Fields for Human Avatar Modeling](https://openreview.net/forum?id=-ng-FXFlzgK) | YoungJoong Kwon et al. | Pipeline 流程 || <img src="images/iclr/final/iclr2023-0704.jpg" width="240"> | [Adaptive Budget Allocation for Parameter-Efficient Fine-Tuning](https://openreview.net/forum?id=lq62uWRJjiY) | Qingru Zhang et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0741.jpg" width="240"> | [AutoTransfer: AutoML with Knowledge Transfer - An Application to Graph Neural Networks](https://openreview.net/forum?id=y81ppNf_vg) | Kaidi Cao et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0762.jpg" width="240"> | [Block and Subword-Scaling Floating-Point (BSFP) : An Efficient Non-Uniform Quantization For Low Precision Inference](https://openreview.net/forum?id=VWm4o4l3V9e) | Yun-Chen Lo et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0763.jpg" width="240"> | [Boosting Adversarial Transferability using Dynamic Cues](https://openreview.net/forum?id=SZynfVLGd5) | Muzammal Naseer et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0764.jpg" width="240"> | [Boosting Causal Discovery via Adaptive Sample Reweighting](https://openreview.net/forum?id=LNpMtk15AS4) | An Zhang et al. | Conceptual 概念示意 || <img src="images/iclr/final/iclr2023-0773.jpg" width="240"> | [BSTT: A Bayesian Spatial-Temporal Transformer for Sleep Staging](https://openreview.net/forum?id=ZxdkjTgK_Dl) | Yuchen Liu et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0780.jpg" width="240"> | [Can We Faithfully Represent Absence States to Compute Shapley Values on a DNN?](https://openreview.net/forum?id=YV8tP7bW6Kt) | Jie Ren et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0789.jpg" width="240"> | [Characterizing intrinsic compositionality in transformers with Tree Projections](https://openreview.net/forum?id=sAOOeI878Ns) | Shikhar Murty et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0793.jpg" width="240"> | [ChordMixer: A Scalable Neural Attention Model for Sequences with Different Length](https://openreview.net/forum?id=E8mzu3JbdR) | Ruslan Khalitov et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0803.jpg" width="240"> | [Composing Ensembles of Pre-trained Models via Iterative Consensus](https://openreview.net/forum?id=gmwDKo-4cY) | Shuang Li et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0806.jpg" width="240"> | [Compositional Law Parsing with Latent Random Functions](https://openreview.net/forum?id=PEuxUXIMLlA) | Fan Shi et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0817.jpg" width="240"> | [Constraining Representations Yields Models That Know What They Don't Know](https://openreview.net/forum?id=1w_Amtk67X) | Joao Monteiro et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0826.jpg" width="240"> | [Continuous-Discrete Convolution for Geometry-Sequence Modeling in Proteins](https://openreview.net/forum?id=P5Z-Zl9XJ7) | Hehe Fan et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0844.jpg" width="240"> | [CUDA: Curriculum of Data Augmentation for Long-tailed Recognition](https://openreview.net/forum?id=RgUPdudkWlN) | Sumyeong Ahn et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0845.jpg" width="240"> | [CUTS: Neural Causal Discovery from Irregular Time-Series Data](https://openreview.net/forum?id=UG8bQcD3Emv) | Yuxiao Cheng et al. | Conceptual 概念示意 || <img src="images/iclr/final/iclr2023-0849.jpg" width="240"> | [DAG Learning on the Permutahedron](https://openreview.net/forum?id=m9LCdYgN8-6) | Valentina Zantedeschi et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0853.jpg" width="240"> | [Data Continuity Matters: Improving Sequence Modeling with Lipschitz Regularizer](https://openreview.net/forum?id=27uBgHuoSQ) | Eric Qu et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0857.jpg" width="240"> | [DCI-ES: An Extended Disentanglement Framework with Connections to Identifiability](https://openreview.net/forum?id=462z-gLgSht) | Cian Eastwood et al. | Framework 框架 || <img src="images/iclr/final/iclr2023-0872.jpg" width="240"> | [Deja Vu: Continual Model Generalization for Unseen Domains](https://openreview.net/forum?id=L8iZdgeKmI6) | Chenxi Liu et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0893.jpg" width="240"> | [Distilling Model Failures as Directions in Latent Space](https://openreview.net/forum?id=99RpBVpLiX) | Saachi Jain et al. | Pipeline 流程 || <img src="images/iclr/final/iclr2023-0901.jpg" width="240"> | [Does Deep Learning Learn to Abstract? A Systematic Probing Framework](https://openreview.net/forum?id=QB1dMPEXau5) | Shengnan An et al. | Framework 框架 || <img src="images/iclr/final/iclr2023-0908.jpg" width="240"> | [DropIT: Dropping Intermediate Tensors for Memory-Efficient DNN Training](https://openreview.net/forum?id=Kn6i2BZW69w) | Joya Chen et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0913.jpg" width="240"> | [EA-HAS-Bench: Energy-aware Hyperparameter and Architecture Search Benchmark](https://openreview.net/forum?id=n-bvaLSCC78) | Shuguang Dou et al. | Taxonomy 全景 || <img src="images/iclr/final/iclr2023-0916.jpg" width="240"> | [Edgeformers: Graph-Empowered Transformers for Representation Learning on Textual-Edge Networks](https://openreview.net/forum?id=2YQrqe4RNv) | Bowen Jin et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0943.jpg" width="240"> | [Equivariant Energy-Guided SDE for Inverse Molecular Design](https://openreview.net/forum?id=r0otLtOwYW) | Fan Bao et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0952.jpg" width="240"> | [Explaining RL Decisions with Trajectories](https://openreview.net/forum?id=5Egggz1q575) | Shripad Vilasrao Deshmukh et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-0957.jpg" width="240"> | [Expressive Monotonic Neural Networks](https://openreview.net/forum?id=w2P7fMy_RH) | Niklas Nolte et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-0988.jpg" width="240"> | [FLIP: A Provable Defense Framework for Backdoor Mitigation in Federated Learning](https://openreview.net/forum?id=Xo2E217_M4n) | Kaiyuan Zhang et al. | Framework 框架 || <img src="images/iclr/final/iclr2023-1003.jpg" width="240"> | [Generalize Learned Heuristics to Solve Large-scale Vehicle Routing Problems in Real-time](https://openreview.net/forum?id=6ZajpxqTlQ) | Qingchun Hou et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-1018.jpg" width="240"> | [Graph Neural Networks are Inherently Good Generalizers: Insights by Bridging GNNs and MLPs](https://openreview.net/forum?id=dqnNW2omZL6) | Chenxiao Yang et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-1087.jpg" width="240"> | [Knowledge Distillation based Degradation Estimation for Blind Super-Resolution](https://openreview.net/forum?id=Fg3mYW8owg) | Bin Xia et al. | Pipeline 流程 || <img src="images/iclr/final/iclr2023-1113.jpg" width="240"> | [Learning Heterogeneous Interaction Strengths by Trajectory Prediction with Graph Neural Network](https://openreview.net/forum?id=qU6NIcpaSi-) | Seungwoong Ha et al. | Architecture 架构 || <img src="images/iclr/final/iclr2023-1116.jpg" width="240"> | [Learning Label Encodings for Deep Regression](https://openreview.net/forum?id=k60XE_b0Ix6) | Deval Shah et al. | Teaser 主视觉 || <img src="images/iclr/final/iclr2023-1128.jpg" width="240"> | [Learning Symbolic Models for Graph-structured Physical Mechanism](https://openreview.net/forum?id=f2wN4v_2__W) | Hongzhi Shi et al. | Conceptual 概念示意 || <img src="images/iclr/final/iclr2023-12.jpg" width="240"> | [Programmatically Grounded, Compositionally Generalizable Robotic Manipulation](https://openreview.net/forum?id=rZ-wylY5VI) | Renhao Wang et al. | Pipeline 流程 || <img src="images/iclr/final/iclr2023-1201.jpg" width="240"> | [Model-based Causal Bayesian Optimization](https://openreview.net/forum?id=Vk-34OQ7rFo) | Scott Sussex et al. | Conceptual 概念示意 |
-</details>
+<br>
+
+**ICLR**
+
+
+| <a href="https://openreview.net/forum?id=qU6NIcpaSi-"><img src="images/iclr/final/iclr2023-1113.jpg" width="230"></a><br><sub>2023 · <a href="https://openreview.net/forum?id=qU6NIcpaSi-">Learning Heterogeneous Interaction Strengths by Trajectory Prediction with Graph Neural Net…</a></sub> | <a href="https://openreview.net/forum?id=VGI9dSmTgPF"><img src="images/iclr/final/iclr2023-0519.jpg" width="230"></a><br><sub>2023 · <a href="https://openreview.net/forum?id=VGI9dSmTgPF">Schema Inference for Interpretable Image Classification</a></sub> | <a href="https://openreview.net/forum?id=NxoFmGgWC9"><img src="images/iclr/final/iclr2024-1145.jpg" width="230"></a><br><sub>2024 · <a href="https://openreview.net/forum?id=NxoFmGgWC9">Unleashing Large-Scale Video Generative Pre-training for Visual Robot Manipulation</a></sub> |
+|---|---|---|
+| <a href="https://openreview.net/forum?id=otHZ8JAIgh"><img src="images/iclr/final/iclr2024-0835.jpg" width="230"></a><br><sub>2024 · <a href="https://openreview.net/forum?id=otHZ8JAIgh">Prototypical Information Bottlenecking and Disentangling for Multimodal Cancer Survival Pre…</a></sub> | <a href="https://openreview.net/forum?id=Y1r9yCMzeA"><img src="images/iclr/final/iclr2025-0844.jpg" width="230"></a><br><sub>2025 · <a href="https://openreview.net/forum?id=Y1r9yCMzeA">GraphArena: Evaluating and Exploring Large Language Models on Graph Computation</a></sub> | <a href="https://openreview.net/forum?id=3E8YNv1HjU"><img src="images/iclr/final/iclr2025-1641.jpg" width="230"></a><br><sub>2025 · <a href="https://openreview.net/forum?id=3E8YNv1HjU">Recite, Reconstruct, Recollect: Memorization in LMs as a Multifaceted Phenomenon</a></sub> |
+
+<br>
+
+**ICML**
+
+
+| <a href="https://proceedings.mlr.press/v202/cho23a.html"><img src="images/icml/final/icml2023-0361.jpg" width="230"></a><br><sub>2023 · <a href="https://proceedings.mlr.press/v202/cho23a.html">Neural Latent Aligner: Cross-trial Alignment for Learning Representations of Complex, Natur…</a></sub> | <a href="https://proceedings.mlr.press/v202/liu23f.html"><img src="images/icml/final/icml2023-0042.jpg" width="230"></a><br><sub>2023 · <a href="https://proceedings.mlr.press/v202/liu23f.html">AudioLDM: Text-to-Audio Generation with Latent Diffusion Models</a></sub> | <a href="https://proceedings.mlr.press/v235/cachet24a.html"><img src="images/icml/final/icml2024-0136.jpg" width="230"></a><br><sub>2024 · <a href="https://proceedings.mlr.press/v235/cachet24a.html">Bridging Environments and Language with Rendering Functions and Vision-Language Models</a></sub> |
+|---|---|---|
+| <a href="https://proceedings.mlr.press/v235/lee24h.html"><img src="images/icml/final/icml2024-2288.jpg" width="230"></a><br><sub>2024 · <a href="https://proceedings.mlr.press/v235/lee24h.html">Recurrent Early Exits for Federated Learning with Heterogeneous Clients</a></sub> | <a href="https://proceedings.mlr.press/v267/zhang25aq.html"><img src="images/icml/final/icml2025-0857.jpg" width="230"></a><br><sub>2025 · <a href="https://proceedings.mlr.press/v267/zhang25aq.html">Locate-then-edit for Multi-hop Factual Recall under Knowledge Editing</a></sub> | <a href="https://proceedings.mlr.press/v267/li25v.html"><img src="images/icml/final/icml2025-1208.jpg" width="230"></a><br><sub>2025 · <a href="https://proceedings.mlr.press/v267/li25v.html">R*: Efficient Reward Design via Reward Structure Evolution and Parameter Alignment Optimiza…</a></sub> |
+
+<br>
+
+**NeurIPS**
+
+
+| <a href="https://proceedings.neurips.cc/paper_files/paper/2023/hash/4b0eea69deea512c9e2c469187643dc2-Abstract-Conference.html"><img src="images/neurips/final/neurips2023-1177.jpg" width="230"></a><br><sub>2023 · <a href="https://proceedings.neurips.cc/paper_files/paper/2023/hash/4b0eea69deea512c9e2c469187643dc2-Abstract-Conference.html">SwiftSage: A Generative Agent with Fast and Slow Thinking for Complex Interactive Tasks</a></sub> | <a href="https://proceedings.neurips.cc/paper_files/paper/2023/hash/88a129e44f25a571ae8b838057c46855-Abstract-Conference.html"><img src="images/neurips/final/neurips2023-0665.jpg" width="230"></a><br><sub>2023 · <a href="https://proceedings.neurips.cc/paper_files/paper/2023/hash/88a129e44f25a571ae8b838057c46855-Abstract-Conference.html">LayoutPrompter: Awaken the Design Ability of Large Language Models</a></sub> | <a href="https://proceedings.neurips.cc/paper_files/paper/2024/hash/fe0007fcfd707673660ec0f9014bc48e-Abstract-Datasets_and_Benchmarks_Track.html"><img src="images/neurips/final/neurips2024-2534.jpg" width="230"></a><br><sub>2024 · <a href="https://proceedings.neurips.cc/paper_files/paper/2024/hash/fe0007fcfd707673660ec0f9014bc48e-Abstract-Datasets_and_Benchmarks_Track.html">A survey and benchmark of high-dimensional Bayesian optimization of discrete sequences</a></sub> |
+|---|---|---|
+| <a href="https://proceedings.neurips.cc/paper_files/paper/2024/hash/237ffa9a473eff1c66d085dba7f813ba-Abstract-Datasets_and_Benchmarks_Track.html"><img src="images/neurips/final/neurips2024-4243.jpg" width="230"></a><br><sub>2024 · <a href="https://proceedings.neurips.cc/paper_files/paper/2024/hash/237ffa9a473eff1c66d085dba7f813ba-Abstract-Datasets_and_Benchmarks_Track.html">Task Me Anything</a></sub> | <a href="https://arxiv.org/abs/2509.21927"><img src="images/neurips/final/neurips2025-1405.jpg" width="230"></a><br><sub>2025 · <a href="https://arxiv.org/abs/2509.21927">SingRef6D: Monocular Novel Object Pose Estimation with a Single RGB Reference</a></sub> | <a href="https://arxiv.org/abs/2510.23605"><img src="images/neurips/final/neurips2025-1601.jpg" width="230"></a><br><sub>2025 · <a href="https://arxiv.org/abs/2510.23605">Track, Inpaint, Resplat: Subject-driven 3D and 4D Generation with Progressive Texture Infil…</a></sub> |
+
+<br>
+
+**CVPR**
+
+
+| <a href="https://openaccess.thecvf.com/content/CVPR2023/html/Chen_TrojDiff_Trojan_Attacks_on_Diffusion_Models_With_Diverse_Targets_CVPR_2023_paper.html"><img src="images/cvpr/final/cvpr2023-Chen_TrojDiff_Trojan_Attacks_on_Diffusion_Models_With_Diverse_Targets_CVPR_2023_paper.jpg" width="230"></a><br><sub>2023 · <a href="https://openaccess.thecvf.com/content/CVPR2023/html/Chen_TrojDiff_Trojan_Attacks_on_Diffusion_Models_With_Diverse_Targets_CVPR_2023_paper.html">TrojDiff: Trojan Attacks on Diffusion Models With Diverse Targets</a></sub> | <a href="https://openaccess.thecvf.com/content/CVPR2023/html/Shao_Detecting_and_Grounding_Multi-Modal_Media_Manipulation_CVPR_2023_paper.html"><img src="images/cvpr/final/cvpr2023-Shao_Detecting_and_Grounding_Multi-Modal_Media_Manipulation_CVPR_2023_paper.jpg" width="230"></a><br><sub>2023 · <a href="https://openaccess.thecvf.com/content/CVPR2023/html/Shao_Detecting_and_Grounding_Multi-Modal_Media_Manipulation_CVPR_2023_paper.html">Detecting and Grounding Multi-Modal Media Manipulation</a></sub> | <a href="https://openaccess.thecvf.com/content/CVPR2024/html/Shou_Learning_Large-Factor_EM_Image_Super-Resolution_with_Generative_Priors_CVPR_2024_paper.html"><img src="images/cvpr/final/cvpr2024-Shou_Learning_Large-Factor_EM_Image_Super-Resolution_with_Generative_Priors_CVPR_2024_paper.jpg" width="230"></a><br><sub>2024 · <a href="https://openaccess.thecvf.com/content/CVPR2024/html/Shou_Learning_Large-Factor_EM_Image_Super-Resolution_with_Generative_Priors_CVPR_2024_paper.html">Learning Large-Factor EM Image Super-Resolution with Generative Priors</a></sub> |
+|---|---|---|
+| <a href="https://openaccess.thecvf.com/content/CVPR2024/html/Huang_VBench_Comprehensive_Benchmark_Suite_for_Video_Generative_Models_CVPR_2024_paper.html"><img src="images/cvpr/final/cvpr2024-Huang_VBench_Comprehensive_Benchmark_Suite_for_Video_Generative_Models_CVPR_2024_paper.jpg" width="230"></a><br><sub>2024 · <a href="https://openaccess.thecvf.com/content/CVPR2024/html/Huang_VBench_Comprehensive_Benchmark_Suite_for_Video_Generative_Models_CVPR_2024_paper.html">VBench: Comprehensive Benchmark Suite for Video Generative Models</a></sub> | <a href="https://openaccess.thecvf.com/content/CVPR2025/html/Jagpal_EIDT-V_Exploiting_Intersections_in_Diffusion_Trajectories_for_Model-Agnostic_Zero-Shot_Training-Free_CVPR_2025_paper.html"><img src="images/cvpr/final/cvpr2025-Jagpal_EIDT-V_Exploiting_Intersections_in_Diffusion_Trajectories_for_Model-Agnostic_Zero-Shot_Training-Free_CVPR_2025_paper.jpg" width="230"></a><br><sub>2025 · <a href="https://openaccess.thecvf.com/content/CVPR2025/html/Jagpal_EIDT-V_Exploiting_Intersections_in_Diffusion_Trajectories_for_Model-Agnostic_Zero-Shot_Training-Free_CVPR_2025_paper.html">EIDT-V: Exploiting Intersections in Diffusion Trajectories for Model-Agnostic, Zero-Shot, T…</a></sub> | <a href="https://openaccess.thecvf.com/content/CVPR2025/html/Wang_FSFM_A_Generalizable_Face_Security_Foundation_Model_via_Self-Supervised_Facial_CVPR_2025_paper.html"><img src="images/cvpr/final/cvpr2025-Wang_FSFM_A_Generalizable_Face_Security_Foundation_Model_via_Self-Supervised_Facial_CVPR_2025_paper.jpg" width="230"></a><br><sub>2025 · <a href="https://openaccess.thecvf.com/content/CVPR2025/html/Wang_FSFM_A_Generalizable_Face_Security_Foundation_Model_via_Self-Supervised_Facial_CVPR_2025_paper.html">FSFM: A Generalizable Face Security Foundation Model via Self-Supervised Facial Representat…</a></sub> |
+
+<br>
+
+**ACL**
+
+
+| <a href="https://aclanthology.org/2023.acl-long.421/"><img src="images/acl/final/acl2023-2023.acl-long.421.jpg" width="230"></a><br><sub>2023 · <a href="https://aclanthology.org/2023.acl-long.421/">C on FEDE : Contrastive Feature Decomposition for Multimodal Sentiment Analysis</a></sub> | <a href="https://aclanthology.org/2023.findings-acl.508/"><img src="images/acl/final/acl2023-2023.findings-acl.508.jpg" width="230"></a><br><sub>2023 · <a href="https://aclanthology.org/2023.findings-acl.508/">Prosody- TTS : Improving Prosody with Masked Autoencoder and Conditional Diffusion Model Fo…</a></sub> | <a href="https://aclanthology.org/2024.findings-acl.155/"><img src="images/acl/final/acl2024-2024.findings-acl.155.jpg" width="230"></a><br><sub>2024 · <a href="https://aclanthology.org/2024.findings-acl.155/">DELL : Generating Reactions and Explanations for LLM -Based Misinformation Detection</a></sub> |
+|---|---|---|
+| <a href="https://aclanthology.org/2024.acl-long.360/"><img src="images/acl/final/acl2024-2024.acl-long.360.jpg" width="230"></a><br><sub>2024 · <a href="https://aclanthology.org/2024.acl-long.360/">G rounding GPT : Language Enhanced Multi-modal Grounding Model</a></sub> | <a href="https://aclanthology.org/2025.findings-acl.191/"><img src="images/acl/final/acl2025-2025.findings-acl.191.jpg" width="230"></a><br><sub>2025 · <a href="https://aclanthology.org/2025.findings-acl.191/">N eg VQA : Can Vision Language Models Understand Negation?</a></sub> | <a href="https://aclanthology.org/2025.acl-long.859/"><img src="images/acl/final/acl2025-2025.acl-long.859.jpg" width="230"></a><br><sub>2025 · <a href="https://aclanthology.org/2025.acl-long.859/">A Troublemaker with Contagious Jailbreak Makes Chaos in Honest Towns</a></sub> |
+
+<br>
+
+**AAAI**
+
+
+| <a href="https://ojs.aaai.org/index.php/AAAI/article/view/25639"><img src="images/aaai/final/aaai2023-25639.jpg" width="230"></a><br><sub>2023 · <a href="https://ojs.aaai.org/index.php/AAAI/article/view/25639">MDM: Molecular Diffusion Model for 3D Molecule Generation</a></sub> | <a href="https://ojs.aaai.org/index.php/AAAI/article/view/26628"><img src="images/aaai/final/aaai2023-26628.jpg" width="230"></a><br><sub>2023 · <a href="https://ojs.aaai.org/index.php/AAAI/article/view/26628">What Does Your Face Sound Like? 3D Face Shape towards Voice</a></sub> | <a href="https://ojs.aaai.org/index.php/AAAI/article/view/27775"><img src="images/aaai/final/aaai2024-27775.jpg" width="230"></a><br><sub>2024 · <a href="https://ojs.aaai.org/index.php/AAAI/article/view/27775">PosDiffNet: Positional Neural Diffusion for Point Cloud Registration in a Large Field of Vi…</a></sub> |
+|---|---|---|
+| <a href="https://ojs.aaai.org/index.php/AAAI/article/view/29496"><img src="images/aaai/final/aaai2024-29496.jpg" width="230"></a><br><sub>2024 · <a href="https://ojs.aaai.org/index.php/AAAI/article/view/29496">Wavelet Dynamic Selection Network for Inertial Sensor Signal Enhancement</a></sub> | <a href="https://ojs.aaai.org/index.php/AAAI/article/view/33754"><img src="images/aaai/final/aaai2025-33754.jpg" width="230"></a><br><sub>2025 · <a href="https://ojs.aaai.org/index.php/AAAI/article/view/33754">EditBoard: Towards a Comprehensive Evaluation Benchmark for Text-Based Video Editing Models</a></sub> | <a href="https://ojs.aaai.org/index.php/AAAI/article/view/33863"><img src="images/aaai/final/aaai2025-33863.jpg" width="230"></a><br><sub>2025 · <a href="https://ojs.aaai.org/index.php/AAAI/article/view/33863">Enhancing Multivariate Time-Series Domain Adaptation via Contrastive Frequency Graph Discov…</a></sub> |
+
+<sub>图片版权归原作者及出版方所有，点击图片跳转原文。</sub>

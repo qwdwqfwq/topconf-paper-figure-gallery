@@ -151,7 +151,8 @@ def reject(r):
         return "default chart"
     # bar/scatter chart pages: bars look like many plain rects, few labels
     if (r["paths"] < 600 and r["curves"] < 160 and 18 < r["rects"] < 95
-            and r["spans"] < 75 and r["sat"] < 0.16 and r["bitmap_frac"] < 0.15):
+            and r["spans"] < 75 and r["sat"] < 0.16 and r["bitmap_frac"] < 0.15
+            and r["rects"] < 70 and r["chars"] < 400):
         return "default chart"
     # small vector chart page: a couple of line/bar panels, no designed panels
     if (r["bitmap_frac"] < 0.40 and r["sat"] < 0.07 and r["rects"] < 36
@@ -204,6 +205,28 @@ def reject(r):
     # heatmap cell grids: hundreds of small colored rects, low saturation
     if r["rects"] > 400 and r["sat"] < 0.12 and r["bitmap_frac"] < 0.30 and r["spans"] < 120:
         return "heatmap grid"
+    # multi-panel line-chart pages: hundreds/thousands of curves on white bg,
+    # no module boxes (colored/dark framework figures drawn with paths are
+    # protected by the white + saturation gates)
+    if (r["curves"] > 800 and r["rects"] < 8 and r["spans"] < 40
+            and r["bitmap_frac"] < 0.2 and r["white"] > 0.50 and r["sat"] < 0.10):
+        return "default chart"
+    if (r["curves"] > 300 and r["rects"] < 5 and r["spans"] < 70
+            and r["sat"] < 0.10 and r["bitmap_frac"] < 0.15 and r["white"] > 0.55):
+        return "default chart"
+    # axes-dense grey chart pages even with many tick labels
+    if (r["paths"] > 1500 and r["rects"] < 20 and r["sat"] < 0.06
+            and r["spans"] < 150 and r["white"] < 0.55 and r["bitmap_frac"] < 0.2):
+        return "default chart"
+    # colorful heatmap strips: saturated tiny cells, almost no boxes/curves
+    if (r["sat"] > 0.25 and r["rects"] < 15 and r["bitmap_frac"] < 0.10
+            and r["spans"] > 40 and r["white"] < 0.45 and r["curves"] < 50
+            and r["paths"] < 300):
+        return "heatmap grid"
+    # densely labeled rasterized pages (photo/result grids with captions everywhere)
+    if (r["bitmap_frac"] > 0.75 and r["label_density"] > 45 and r["sat"] < 0.20
+            and r["rects"] < 200):
+        return "raster results grid"
     # dense multi-panel plot grids (contour / heatmap / surface meshes)
     if r["paths"] > 50000 and r["spans"] < 60 and r["rects"] < 40:
         return "plot grid"
@@ -214,6 +237,44 @@ def reject(r):
     # shaded 3D surface / rendered-plot panels
     if 0.32 < r["bitmap_frac"] < 0.60 and r["sat"] < 0.22 and r["spans"] < 45 and r["rects"] < 22 and r["white"] < 0.62:
         return "rendered plot"
+    # --- v0.3 QA: CVPR-style result/frame/example pages that slipped through ---
+    # NOTE: fully rasterized framework overviews (bmp~1) are metric-identical to
+    # photo grids, so the bitmap gate stays below 0.88; high-bmp cases are left
+    # for manual contact-sheet QA.
+    # result frame / photo-grid pages: bitmap-heavy, almost no drawn structure
+    if (0.55 < r["bitmap_frac"] < 0.88 and r["vec"] < 75 and r["paths"] < 140
+            and r["rects"] < 35 and r["spans"] < 110 and r["sat"] < 0.20
+            and r["white"] < 0.75 and r["chars"] < 900):
+        return "result frame grid"
+    # dark qualitative example / text pages: many chars, tiny structure
+    # (module architectures are protected by paths/rects/bmp gates)
+    if (r["chars"] > 650 and r["paths"] < 120 and r["rects"] < 30
+            and r["spans"] > 80 and r["bitmap_frac"] < 0.35 and r["white"] < 0.50):
+        return "example/text page"
+    # sparse math / toy-concept pages with almost no drawn content on white
+    if (r["vec"] < 15 and r["bitmap_frac"] < 0.05 and r["white"] > 0.72
+            and r["rects"] < 20 and (r["paths"] + r["curves"]) < 120):
+        return "sparse math"
+    # radar/bar chart pages on white with photo strips (curves-drawn axes)
+    if (0.40 < r["bitmap_frac"] < 0.60 and r["white"] > 0.60 and r["sat"] < 0.08
+            and r["paths"] < 350 and r["spans"] < 60 and r["rects"] < 25
+            and r["curves"] > 60 and r["chars"] > 200):
+        return "default chart"
+    # box-less bar/line chart pages with moderate structure but no modules;
+    # module architectures protected by boxes, labels, paths and non-white bg
+    if (r["bitmap_frac"] < 0.25 and r["sat"] < 0.12 and 30 <= r["rects"] < 60
+            and r["spans"] < 80 and r["paths"] < 400 and r["curves"] < 250
+            and r["white"] < 0.50 and r["chars"] < 350):
+        return "default chart"
+    # desaturated radar/bar pages on white, bitmap-heavy, axes-dense
+    if (0.45 < r["bitmap_frac"] < 0.70 and r["white"] > 0.62 and r["sat"] < 0.05
+            and r["spans"] < 80 and r["rects"] < 60 and r["paths"] < 1500
+            and 300 < r["curves"] < 1500 and r["chars"] > 300):
+        return "default chart"
+    # saturated heatmap/chart pages, bitmap-dominated, few modules
+    if (r["bitmap_frac"] > 0.85 and r["sat"] > 0.22 and r["rects"] < 60
+            and r["spans"] < 60):
+        return "raster chart"
     if r["white"] > 0.985 and r["edge"] < 0.01: return "blank"
     return None
 

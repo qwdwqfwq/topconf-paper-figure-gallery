@@ -5,7 +5,7 @@
 ## 我可以贡献什么
 
 - **补图 / 换图**：某篇论文的 Figure 1 更能代表它，或你发现某张图裁剪不完整、质量不佳。
-- **新会议 / 新年份**：CVPR、ACL、CHI、RSS 等会议的扩展（建议先开 Issue 讨论目录命名）。
+- **新会议 / 新年份**：CHI、CoRL、RSS、EMNLP、KDD 等会议的扩展（建议先开 Issue 讨论目录命名）。
 - **视觉模式修正**：`pattern` 标签标错时直接指出。
 - **网页改进**：筛选、搜索、灯箱、移动端体验等。
 - **数据管线修复**：解析失败、链接失效、作者信息错误。
@@ -35,7 +35,8 @@ python -m http.server 8000   # 然后访问 http://localhost:8000
 ```
 
 - 网页是纯静态的：`index.html` + `assets/`，数据在 `assets/figures.js`（由 `data/figures.json` 生成）。
-- 修改数据后重新生成：`python scripts/build_web.py`。
+- 修改数据后重新装配：`python scripts/assemble_gallery.py 1000`，再 `python scripts/clean_stale.py`
+  （完整管线见 [docs/METHODOLOGY.md](docs/METHODOLOGY.md)）。
 
 ## 提交规范
 
