@@ -60,13 +60,19 @@ RESP = """
 ### Top-Conf Figure Gallery v0.3
 
 A searchable gallery of well-designed Figure 1 / teaser figures from six top
-ML conferences (ICLR, ICML, NeurIPS, CVPR, ACL, AAAI), 2023–2025.
+ML conferences, 2023–2025: **2,298 curated figures**
+(NeurIPS 803 · ICLR 370 · ACL 326 · ICML 310 · AAAI 264 · CVPR 225).
 
-- Thousands of curated figures with venue / year / visual-pattern filters
-- Pure static site, full-text search, masonry + lightbox, works offline
-- Open and reproducible curation pipeline (PDF crop → 25+ design-quality
-  rules → dHash de-duplication → sampled visual QA)
-- Bilingual README (EN/中文) and a "how to design your own overview figure" guide
+- Six venues (ICLR, ICML, NeurIPS, CVPR, ACL, AAAI) with venue / year /
+  visual-pattern filters, full-text title/author search, masonry + lightbox
+- Every surviving candidate checked in **page-by-page full-enumeration human
+  QA** (81 contact sheets) plus 8 multi-seed random audits; ~1,400 low-quality
+  crops (default charts, photo dumps, screenshots, video-frame strips) excluded
+- Pure static site, no backend, no build, works offline
+- Open reproducible pipeline: proceedings index → PDF crop → 25+ design-quality
+  rules → dHash de-duplication → full-enumeration visual QA
+- Bilingual README (EN/中文), a "how to design your own overview figure"
+  methodology guide, and a 24 s screen-recorded demo GIF
 
 Live gallery: https://qwdwqfwq.github.io/topconf-paper-figure-gallery/
 """
