@@ -26,8 +26,19 @@ with sync_playwright() as p:
     pg = browser.new_page(viewport={"width": 1440, "height": 900})
     errors = []
     pg.on("console", lambda m: errors.append(m.text) if m.type == "error" else None)
-    pg.goto(URL, wait_until="networkidle", timeout=60000)
-    pg.wait_for_timeout(1500)
+    import time
+    last_err = None
+    for attempt in range(4):
+        try:
+            pg.goto(URL, wait_until="domcontentloaded", timeout=60000)
+            last_err = None
+            break
+        except Exception as e:
+            last_err = e
+            time.sleep(3)
+    if last_err:
+        raise last_err
+    pg.wait_for_timeout(3000)
     pg.screenshot(path=str(OUT / "live_1_landing.png"))
     n_cards = pg.eval_on_selector_all(".card", "els => els.length")
     total = pg.eval_on_selector("#total-figures", "el => el.textContent")

@@ -18,23 +18,24 @@ with sync_playwright() as p:
     pg.goto(URL, wait_until="domcontentloaded", timeout=60000)
     pg.wait_for_timeout(2500)
     # human-like: one viewport per step, wait for this screen's imgs to decode
-    for step in range(40):
-        pg.evaluate("window.scrollBy(0, Math.round(window.innerHeight*0.9))")
-        pg.wait_for_timeout(700)
+    for step in range(260):
+        pg.evaluate("window.scrollBy(0, Math.round(window.innerHeight*0.95))")
+        pg.wait_for_timeout(300)
         # wait for visible images to finish loading
         pg.evaluate("""async () => {
           const vis = [...document.querySelectorAll('#gallery img')].filter(i => {
             const r = i.getBoundingClientRect();
-            return r.top < innerHeight && r.bottom > 0;
+            return r.top < innerHeight + 1800 && r.bottom > -200;
           });
           await Promise.all(vis.map(i => i.complete ? null :
             new Promise(res => { i.addEventListener('load', res, {once:true});
                                  i.addEventListener('error', res, {once:true}); })));
         }""")
+        at_bottom = pg.evaluate("() => scrollY + innerHeight >= document.body.scrollHeight - 5")
         cards = pg.eval_on_selector_all("#gallery .card", "els => els.length")
-        if cards >= 2298:
+        if at_bottom and cards >= 2298:
             break
-    pg.wait_for_timeout(1500)
+    pg.wait_for_timeout(2500)
     stats = pg.evaluate("""() => {
       const imgs = [...document.querySelectorAll('#gallery img')];
       const broken = imgs.filter(i => i.naturalWidth === 0).map(i => ({src:(i.currentSrc||i.src).split('/').pop(),
