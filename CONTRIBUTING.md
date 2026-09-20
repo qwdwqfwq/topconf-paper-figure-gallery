@@ -2,6 +2,18 @@
 
 欢迎一起把这个配图灵感画廊做得更好。提 PR 前请先阅读本说明。
 
+## 两种贡献方式
+
+**方式一：不开代码，开 Issue 即可（推荐大多数人）**
+
+- 想推荐某篇论文 / 某张主图：开一个 **[Suggest a figure](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/issues/new?template=add-figure-request.md)** Issue，贴上论文链接（最好注明是 Figure 1 / Teaser），维护者会按收录标准评估并处理。
+- 发现某张图裁剪不完整、标错作者或标签：直接开 Bug report Issue，注明图片 id（卡片灯箱里可见，形如 `neurips2024-19`）。
+- 版权问题：使用 Image removal request 模板，见 [IMAGES_POLICY.md](IMAGES_POLICY.md)。
+
+**方式二：直接提 PR**
+
+适合熟悉 Git / 数据管线的贡献者，流程见下文。
+
 ## 我可以贡献什么
 
 - **补图 / 换图**：某篇论文的 Figure 1 更能代表它，或你发现某张图裁剪不完整、质量不佳。
@@ -41,7 +53,10 @@ python -m http.server 8000   # 然后访问 http://localhost:8000
 ## 提交规范
 
 - 一个 PR 只做一件事；提交信息用英文祈使句，如 `add ICLR 2025 conceptual figures`。
-- 新增图片必须同时更新 `data/figures.json`（标题、作者、论文链接、来源、pattern）。
+- 新增图片请把 JPEG 放到 `images/<venue>/final/`，并在 `data/figures.json` 追加一条记录：
+  `id`、`venue`、`year`、`title`、`authors`、`pattern`、`image`、`paper`、`pdf_source`、
+  `score`、`w`、`h`（宽高可由 `assemble_gallery.py` 自动补全）。随后运行
+  `python scripts/assemble_gallery.py 1000` 重新生成 `assets/figures.js`。
 - 不要提交 `pdfs/`、中间 PNG 与日志（`.gitignore` 已排除）。
 
 ## 版权

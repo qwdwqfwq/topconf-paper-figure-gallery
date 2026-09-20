@@ -1,0 +1,431 @@
+=== page 0 ===
+000 acl2023-2023.acl-long.122  Breeding Machine Translations: Evolutionary approach to survive and thrive in th
+001 acl2023-2023.acl-long.123  M oral D ial: A Framework to Train and Evaluate Moral Dialogue Systems via Moral
+002 acl2023-2023.acl-long.146  C ross2 S tr A : Unpaired Cross-lingual Image Captioning with Cross-lingual Cros
+003 acl2023-2023.acl-long.172  Did You Read the Instructions? Rethinking the Effectiveness of Task Definitions 
+004 acl2023-2023.acl-long.174  CORE : Cooperative Training of Retriever-Reranker for Effective Dialogue Respons
+005 acl2023-2023.acl-long.231  Counterfactual Multihop QA : A Cause-Effect Approach for Reducing Disconnected R
+006 acl2023-2023.acl-long.29  Revealing Single Frame Bias for Video-and-Language Learning
+007 acl2023-2023.acl-long.339  mi CSE : Mutual Information Contrastive Learning for Low-shot Sentence Embedding
+008 acl2023-2023.acl-long.351  Long-Tailed Question Answering in an Open World
+009 acl2023-2023.acl-long.353  Efficient Transformers with Dynamic Token Pooling
+010 acl2023-2023.acl-long.372  FL am E : Few-shot Learning from Natural Language Explanations
+011 acl2023-2023.acl-long.382  Are Experts Needed? On Human Evaluation of Counselling Reflection Generation
+012 acl2023-2023.acl-long.397  Local Byte Fusion for Neural Machine Translation
+013 acl2023-2023.acl-long.421  C on FEDE : Contrastive Feature Decomposition for Multimodal Sentiment Analysis
+014 acl2023-2023.acl-long.43  CLCL : Non-compositional Expression Detection with Contrastive Learning and Curr
+015 acl2023-2023.acl-long.449  Multi-Row, Multi-Span Distant Supervision For T able+ T ext Question Answering
+016 acl2023-2023.acl-long.479  AV - T ran S peech: Audio-Visual Robust Speech-to-Speech Translation
+017 acl2023-2023.acl-long.481  V endor L ink: An NLP approach for Identifying & Linking Vendor Migrants & Poten
+018 acl2023-2023.acl-long.485  Dynamic Regularization in UDA for Transformers in Multimodal Classification
+019 acl2023-2023.acl-long.5  Binary and Ternary Natural Language Generation
+020 acl2023-2023.acl-long.500  Synthesize, Prompt and Transfer: Zero-shot Conversational Question Generation wi
+021 acl2023-2023.acl-long.518  CLAPS peech: Learning Prosody from Text Context with Contrastive Language-Audio 
+022 acl2023-2023.acl-long.526  Learning to Imagine: Visually-Augmented Natural Language Generation
+023 acl2023-2023.acl-long.533  Pre-training Multi-party Dialogue Models with Latent Discourse Inference
+024 acl2023-2023.acl-long.539  D ecomp E val: Evaluating Generated Texts as Unsupervised Decomposed Question An
+025 acl2023-2023.acl-long.561  Improved Instruction Ordering in Recipe-Grounded Conversation
+026 acl2023-2023.acl-long.585  Robust Representation Learning with Reliable Pseudo-labels Generation via Self-A
+027 acl2023-2023.acl-long.599  Target-Side Augmentation for Document-Level Machine Translation
+028 acl2023-2023.acl-long.615  AMPERE : AMR -Aware Prefix for Generation-Based Event Argument Extraction Model
+029 acl2023-2023.acl-long.634  A lign S core: Evaluating Factual Consistency with A Unified Alignment Function
+030 acl2023-2023.acl-long.654  Logic-driven Indirect Supervision: An Application to Crisis Counseling
+031 acl2023-2023.acl-long.658  Contrastive Novelty-Augmented Learning: Anticipating Outliers with Large Languag
+032 acl2023-2023.acl-long.690  Hard Sample Aware Prompt-Tuning
+033 acl2023-2023.acl-long.72  Consistency Regularization Training for Compositional Generalization
+034 acl2023-2023.acl-long.723  TAGPRIME : A Unified Framework for Relational Structure Extraction
+035 acl2023-2023.acl-long.742  Dense- ATOMIC : Towards Densely-connected ATOMIC with High Knowledge Coverage an
+036 acl2023-2023.acl-long.744  CTC -based Non-autoregressive Speech Translation
+037 acl2023-2023.acl-long.750  MVP -Tuning: Multi-View Knowledge Retrieval with Prompt Tuning for Commonsense R
+038 acl2023-2023.acl-long.755  Disentangled Phonetic Representation for C hinese Spelling Correction
+039 acl2023-2023.acl-long.760  On the Compositional Generalization in Versatile Open-domain Dialogue
+=== page 1 ===
+040 acl2023-2023.acl-long.803  PAD -Net: An Efficient Framework for Dynamic Networks
+041 acl2023-2023.acl-long.815  Faking Fake News for Real Fake News Detection: Propaganda-Loaded Training Data G
+042 acl2023-2023.acl-long.818  A Systematic Study of Knowledge Distillation for Natural Language Generation wit
+043 acl2023-2023.acl-long.833  Visually-augmented pretrained language models for NLP tasks without images
+044 acl2023-2023.acl-long.849  An Extensible Plug-and-Play Method for Multi-Aspect Controllable Text Generation
+045 acl2023-2023.acl-long.883  Causes and Cures for Interference in Multilingual Translation
+046 acl2023-2023.acl-long.893  Analyzing Transformers in Embedding Space
+047 acl2023-2023.acl-long.91  Neural Unsupervised Reconstruction of Protolanguage Word Forms
+048 acl2023-2023.acl-long.97  Query Enhanced Knowledge-Intensive Conversation via Unsupervised Joint Modeling
+049 acl2023-2023.acl-short.113  Do Models Really Learn to Follow Instructions? An Empirical Study of Instruction
+050 acl2023-2023.acl-short.65  Modular Visual Question Answering via Code Generation
+051 acl2023-2023.acl-short.98  Debiasing Generative Named Entity Recognition by Calibrating Sequence Likelihood
+052 acl2023-2023.findings-acl.100  2*n is better than n 2 : Decomposing Event Coreference Resolution into Two Tract
+053 acl2023-2023.findings-acl.107  Extract and Attend: Improving Entity Translation in Neural Machine Translation
+054 acl2023-2023.findings-acl.137  Cross Encoding as Augmentation: Towards Effective Educational Text Classificatio
+055 acl2023-2023.findings-acl.14  D yna M i TE : Discovering Explosive Topic Evolutions with User Guidance
+056 acl2023-2023.findings-acl.180  Operator Selection and Ordering in a Pipeline Approach to Efficiency Optimizatio
+057 acl2023-2023.findings-acl.186  Learning to Predict Persona Information for Dialogue Personalization without Exp
+058 acl2023-2023.findings-acl.191  Improved Logical Reasoning of Language Models via Differentiable Symbolic Progra
+059 acl2023-2023.findings-acl.224  N ews D ialogues: Towards Proactive News Grounded Conversation
+060 acl2023-2023.findings-acl.265  Reinforcement Learning for Topic Models
+061 acl2023-2023.findings-acl.31  TADA : Efficient Task-Agnostic Domain Adaptation for Transformers
+062 acl2023-2023.findings-acl.360  An Exploration of Encoder-Decoder Approaches to Multi-Label Classification for L
+063 acl2023-2023.findings-acl.380  Towards Diverse and Effective Question-Answer Pair Generation from Children Stor
+064 acl2023-2023.findings-acl.386  Modular and On-demand Bias Mitigation with Attribute-Removal Subnetworks
+065 acl2023-2023.findings-acl.393  Distilling Calibrated Knowledge for Stance Detection
+066 acl2023-2023.findings-acl.40  Recursion of Thought: A Divide-and-Conquer Approach to Multi-Context Reasoning w
+067 acl2023-2023.findings-acl.432  Digging out Discrimination Information from Generated Samples for Robust Visual 
+068 acl2023-2023.findings-acl.447  DUB : Discrete Unit Back-translation for Speech Translation
+069 acl2023-2023.findings-acl.451  Prompt-Based Metric Learning for Few-Shot NER
+070 acl2023-2023.findings-acl.46  The Web Can Be Your Oyster for Improving Language Models
+071 acl2023-2023.findings-acl.5  Modularized Zero-shot VQA with Pre-trained Models
+072 acl2023-2023.findings-acl.508  Prosody- TTS : Improving Prosody with Masked Autoencoder and Conditional Diffusi
+073 acl2023-2023.findings-acl.532  Constructing Word-Context-Coupled Space Aligned with Associative Knowledge Relat
+074 acl2023-2023.findings-acl.533  Fixed Input Parameterization for Efficient Prompting
+075 acl2023-2023.findings-acl.539  Neural Architecture Search for Parameter-Efficient Fine-tuning of Large Pre-trai
+076 acl2023-2023.findings-acl.548  Entropy-guided Vocabulary Augmentation of Multilingual Language Models for Low-r
+077 acl2023-2023.findings-acl.549  Class-Adaptive Self-Training for Relation Extraction with Incompletely Annotated
+078 acl2023-2023.findings-acl.552  A lt CLIP : Altering the Language Encoder in CLIP for Extended Language Capabili
+079 acl2023-2023.findings-acl.554  Feature Interactions Reveal Linguistic Structure in Language Models
+=== page 2 ===
+080 acl2023-2023.findings-acl.583  Enhancing Cross-lingual Transfer via Phonemic Transcription Integration
+081 acl2023-2023.findings-acl.6  T imeline QA : A Benchmark for Question Answering over Timelines
+082 acl2023-2023.findings-acl.603  Visual Coherence Loss for Coherent and Visually Grounded Story Generation
+083 acl2023-2023.findings-acl.604  A na M eta: A Table Understanding Dataset of Field Metadata Knowledge Shared by 
+084 acl2023-2023.findings-acl.608  On the Off-Target Problem of Zero-Shot Multilingual Neural Machine Translation
+085 acl2023-2023.findings-acl.617  Alleviating Exposure Bias via Multi-level Contrastive Learning and Deviation Sim
+086 acl2023-2023.findings-acl.62  Triggering Multi-Hop Reasoning for Question Answering in Language Models using S
+087 acl2023-2023.findings-acl.626  Denoising Enhanced Distantly Supervised Ultrafine Entity Typing
+088 acl2023-2023.findings-acl.653  Augmenting Large Language Model Translators via Translation Memories
+089 acl2023-2023.findings-acl.662  Learning from a Friend: Improving Event Extraction via Self-Training with Feedba
+090 acl2023-2023.findings-acl.683  Replace and Report: NLP Assisted Radiology Report Generation
+091 acl2023-2023.findings-acl.701  Foveate, Attribute, and Rationalize: Towards Physically Safe and Trustworthy AI
+092 acl2023-2023.findings-acl.725  H yper PELT : Unified Parameter-Efficient Language Model Tuning for Both Languag
+093 acl2023-2023.findings-acl.741  F luent S peech: Stutter-Oriented Automatic Speech Editing with Context-Aware Di
+094 acl2023-2023.findings-acl.754  Easy-to-Hard Learning for Information Extraction
+095 acl2023-2023.findings-acl.79  Hypothetical Training for Robust Machine Reading Comprehension of Tabular Contex
+096 acl2023-2023.findings-acl.801  Nonparametric Decoding for Generative Retrieval
+097 acl2023-2023.findings-acl.810  Domain Generalization via Switch Knowledge Distillation for Robust Review Repres
+098 acl2023-2023.findings-acl.845  Enhancing Neural Topic Model with Multi-Level Supervisions from Seed Words
+099 acl2023-2023.findings-acl.873  E fficient VLM : Fast and Accurate Vision-Language Models via Knowledge Distilla
+100 acl2023-2023.findings-acl.880  Hybrid and Collaborative Passage Reranking
+101 acl2023-2023.findings-acl.89  A Confidence-based Partial Label Learning Model for Crowd-Annotated Named Entity
+102 acl2023-2023.findings-acl.894  Images in Language Space: Exploring the Suitability of Large Language Models for
+103 acl2023-2023.findings-acl.901  Decouple knowledge from paramters for plug-and-play language modeling
+104 acl2023-2023.findings-acl.96  Adversarial Multi-task Learning for End-to-end Metaphor Detection
+105 acl2024-2024.acl-long.189  Prompt Expansion for Adaptive Text-to-Image Generation
+106 acl2024-2024.acl-long.192  Democratizing LLM s for Low-Resource Languages by Leveraging their E nglish Domi
+107 acl2024-2024.acl-long.196  What Does the Bot Say? Opportunities and Risks of Large Language Models in Socia
+108 acl2024-2024.acl-long.238  SAC - KG : Exploiting Large Language Models as Skilled Automatic Constructors fo
+109 acl2024-2024.acl-long.252  One-Shot Learning as Instruction Data Prospector for Large Language Models
+110 acl2024-2024.acl-long.256  N ext L evel BERT : Masked Language Modeling with Higher-Level Representations f
+111 acl2024-2024.acl-long.282  OLIVE : Object Level In-Context Visual Embeddings
+112 acl2024-2024.acl-long.334  Not All Experts are Equal: Efficient Expert Pruning and Skipping for Mixture-of-
+113 acl2024-2024.acl-long.347  WRP : Weight Recover Prune for Structured Sparsity
+114 acl2024-2024.acl-long.360  G rounding GPT : Language Enhanced Multi-modal Grounding Model
+115 acl2024-2024.acl-long.371  W eb V oyager: Building an End-to-End Web Agent with Large Multimodal Models
+116 acl2024-2024.acl-long.377  ARIES : A Corpus of Scientific Paper Edits Made in Response to Peer Reviews
+117 acl2024-2024.acl-long.39  D oc L ens: Multi-aspect Fine-grained Evaluation for Medical Text Generation
+118 acl2024-2024.acl-long.395  Prompt Optimization via Adversarial In-Context Learning
+119 acl2024-2024.acl-long.413  HD -Eval: Aligning Large Language Model Evaluators Through Hierarchical Criteria
+=== page 3 ===
+120 acl2024-2024.acl-long.433  LLME mbed: Rethinking Lightweight LLM ’s Genuine Function in Text Classification
+121 acl2024-2024.acl-long.450  A Modular Approach for Multimodal Summarization of TV Shows
+122 acl2024-2024.acl-long.457  Machine Unlearning of Pre-trained Large Language Models
+123 acl2024-2024.acl-long.473  Enhancing Dialogue State Tracking Models through LLM -backed User-Agents Simulat
+124 acl2024-2024.acl-long.489  M 3 AV : A Multimodal, Multigenre, and Multipurpose Audio-Visual Academic Lectur
+125 acl2024-2024.acl-long.494  Ex3: Automatic Novel Writing by Extracting, Excelsior and Expanding
+126 acl2024-2024.acl-long.510  Math-Shepherd: Verify and Reinforce LLM s Step-by-step without Human Annotations
+127 acl2024-2024.acl-long.543  Uni-Dubbing: Zero-Shot Speech Synthesis from Visual Articulation
+128 acl2024-2024.acl-long.564  Learning Relational Decomposition of Queries for Question Answering from Tables
+129 acl2024-2024.acl-long.570  LLM s in the Imaginarium: Tool Learning through Simulated Trial and Error
+130 acl2024-2024.acl-long.604  Benchmarking C hinese Commonsense Reasoning of LLM s: From C hinese-Specifics to
+131 acl2024-2024.acl-long.614  An Expert is Worth One Token: Synergizing Multiple Expert LLM s as Generalist vi
+132 acl2024-2024.acl-long.619  J ump C oder: Go Beyond Autoregressive Coder via Online Modification
+133 acl2024-2024.acl-long.621  Language Models can Exploit Cross-Task In-context Learning for Data-Scarce Novel
+134 acl2024-2024.acl-long.629  Learning Task Decomposition to Assist Humans in Competitive Programming
+135 acl2024-2024.acl-long.645  Document-level Claim Extraction and Decontextualisation for Fact-Checking
+136 acl2024-2024.acl-long.663  VIES core: Towards Explainable Metrics for Conditional Image Synthesis Evaluatio
+137 acl2024-2024.acl-long.684  A Community-Centric Perspective for Characterizing and Detecting Anti- A sian Vi
+138 acl2024-2024.acl-long.688  GLIMPSE : Pragmatically Informative Multi-Document Summarization for Scholarly R
+139 acl2024-2024.acl-long.72  Advancing Abductive Reasoning in Knowledge Graphs through Complex Logical Hypoth
+140 acl2024-2024.acl-long.725  WARDEN : Multi-Directional Backdoor Watermarks for Embedding-as-a-Service Copyri
+141 acl2024-2024.acl-long.729  Chunk, Align, Select: A Simple Long-sequence Processing Method for Transformers
+142 acl2024-2024.acl-long.733  M obile S peech: A Fast and High-Fidelity Framework for Mobile Zero-Shot Text-to
+143 acl2024-2024.acl-long.740  Meta-Tuning LLM s to Leverage Lexical Knowledge for Generalizable Language Style
+144 acl2024-2024.acl-long.744  When Benchmarks are Targets: Revealing the Sensitivity of Large Language Model L
+145 acl2024-2024.acl-long.751  Skin-in-the-Game: Decision Making via Multi-Stakeholder Alignment in LLM s
+146 acl2024-2024.acl-long.755  Explanation-aware Soft Ensemble Empowers Large Language Model In-context Learnin
+147 acl2024-2024.acl-long.756  What is the Best Way for C hat GPT to Translate Poetry?
+148 acl2024-2024.acl-long.767  Controlled Text Generation for Black-box Language Models via Score-based Progres
+149 acl2024-2024.acl-long.778  Causal-Guided Active Learning for Debiasing Large Language Models
+150 acl2024-2024.acl-long.791  D 2 LLM : Decomposed and Distilled Large Language Models for Semantic Search
+151 acl2024-2024.acl-long.823  SPZ : A Semantic Perturbation-based Data Augmentation Method with Zonal-Mixing f
+152 acl2024-2024.acl-long.825  Iterative Forward Tuning Boosts In-Context Learning in Language Models
+153 acl2024-2024.acl-long.830  S afety B ench: Evaluating the Safety of Large Language Models
+154 acl2024-2024.acl-short.27  Generating Harder Cross-document Event Coreference Resolution Datasets using Met
+155 acl2024-2024.acl-short.70  Estimating the Level of Dialectness Predicts Inter-annotator Agreement in Multi-
+156 acl2024-2024.findings-acl.116  M ol TC : Towards Molecular Relational Modeling In Language Models
+157 acl2024-2024.findings-acl.136  Multilingual Instruction Tuning With Just a Pinch of Multilinguality
+158 acl2024-2024.findings-acl.15  Lexicon-Level Contrastive Visual-Grounding Improves Language Modeling
+159 acl2024-2024.findings-acl.155  DELL : Generating Reactions and Explanations for LLM -Based Misinformation Detec
+=== page 4 ===
+160 acl2024-2024.findings-acl.158  FUSE : Measure-Theoretic Compact Fuzzy Set Representation for Taxonomy Expansion
+161 acl2024-2024.findings-acl.176  Efficient Knowledge Infusion via KG - LLM Alignment
+162 acl2024-2024.findings-acl.211  Lost in the Source Language: How Large Language Models Evaluate the Quality of M
+163 acl2024-2024.findings-acl.23  Tables as Texts or Images: Evaluating the Table Reasoning Ability of LLM s and M
+164 acl2024-2024.findings-acl.277  SPIN : Sparsifying and Integrating Internal Neurons in Large Language Models for
+165 acl2024-2024.findings-acl.284  Instruction Tuning with Retrieval-based Examples Ranking for Aspect-based Sentim
+166 acl2024-2024.findings-acl.29  Benchmarking Cognitive Biases in Large Language Models as Evaluators
+167 acl2024-2024.findings-acl.324  Before Generation, Align it! A Novel and Effective Strategy for Mitigating Hallu
+168 acl2024-2024.findings-acl.326  S tat B ot. S wiss: Bilingual Open Data Exploration in Natural Language
+169 acl2024-2024.findings-acl.360  It takes two to borrow: a donor and a recipient. Who’s who?
+170 acl2024-2024.findings-acl.379  Speech-based Slot Filling using Large Language Models
+171 acl2024-2024.findings-acl.395  Whose Emotions and Moral Sentiments do Language Models Reflect?
+172 acl2024-2024.findings-acl.41  Do LVLM s Understand Charts? Analyzing and Correcting Factual Errors in Chart Ca
+173 acl2024-2024.findings-acl.412  Identifying Semantic Induction Heads to Understand In-Context Learning
+174 acl2024-2024.findings-acl.48  Conversational Question Answering with Language Models Generated Reformulations 
+175 acl2024-2024.findings-acl.493  Towards Unified Task Embeddings Across Multiple Models: Bridging the Gap for Pro
+176 acl2024-2024.findings-acl.509  Knowledge Context Modeling with Pre-trained Language Models for Contrastive Know
+177 acl2024-2024.findings-acl.51  Are U a Joke Master? Pun Generation via Multi-Stage Curriculum Learning towards 
+178 acl2024-2024.findings-acl.526  Towards Objectively Benchmarking Social Intelligence of Language Agents at the A
+179 acl2024-2024.findings-acl.531  EVIT : Event-Oriented Instruction Tuning for Event Reasoning
+180 acl2024-2024.findings-acl.538  The Critique of Critique
+181 acl2024-2024.findings-acl.549  On the Vulnerability of Safety Alignment in Open-Access LLM s
+182 acl2024-2024.findings-acl.578  B ook2 D ial: Generating Teacher Student Interactions from Textbooks for Cost-Ef
+183 acl2024-2024.findings-acl.598  An Empirical Study on Parameter-Efficient Fine-Tuning for M ulti M odal Large La
+184 acl2024-2024.findings-acl.60  Finding and Editing Multi-Modal Neurons in Pre-Trained Transformers
+185 acl2024-2024.findings-acl.635  AS - ES Learning: Towards efficient C o T learning in small models
+186 acl2024-2024.findings-acl.637  TAME - RD : Text Assisted Replication of Image Multi-Adjustments for Reverse Des
+187 acl2024-2024.findings-acl.638  Batch- ICL : Effective, Efficient, and Order-Agnostic In-Context Learning
+188 acl2024-2024.findings-acl.679  C ode A ttack: Revealing Safety Generalization Challenges of Large Language Mode
+189 acl2024-2024.findings-acl.689  Discourse Structure-Aware Prefix for Generation-Based End-to-End Argumentation M
+190 acl2024-2024.findings-acl.701  M at P lot A gent: Method and Evaluation for LLM -Based Agentic Scientific Data 
+191 acl2024-2024.findings-acl.703  CM oral E val: A Moral Evaluation Benchmark for C hinese Large Language Models
+192 acl2024-2024.findings-acl.71  B io T 5+: Towards Generalized Biological Understanding with IUPAC Integration a
+193 acl2024-2024.findings-acl.732  Large Language Models are Few-Shot Training Example Generators: A Case Study in 
+194 acl2024-2024.findings-acl.773  E co R ank: Budget-Constrained Text Re-ranking Using Large Language Models
+195 acl2024-2024.findings-acl.775  Aligning Large Multimodal Models with Factually Augmented RLHF
+196 acl2024-2024.findings-acl.809  Code Needs Comments: Enhancing Code LLM s with Comment Augmentation
+197 acl2024-2024.findings-acl.81  Teacher-Student Training for Debiasing: General Permutation Debiasing for Large 
+198 acl2024-2024.findings-acl.810  Efficient Domain Adaptation for Non-Autoregressive Machine Translation
+199 acl2024-2024.findings-acl.813  F resh LLM s: Refreshing Large Language Models with Search Engine Augmentation
+=== page 5 ===
+200 acl2024-2024.findings-acl.832  T ext G en SHAP : Scalable Post-Hoc Explanations in Text Generation with Long Do
+201 acl2024-2024.findings-acl.911  SLIDE : A Framework Integrating Small and Large Language Models for Open-Domain 
+202 acl2024-2024.findings-acl.918  Knowledge-Infused Legal Wisdom: Navigating LLM Consultation through the Lens of 
+203 acl2024-2024.findings-acl.924  Small Language Models Need Strong Verifiers to Self-Correct Reasoning
+204 acl2024-2024.findings-acl.931  emotion2vec: Self-Supervised Pre-Training for Speech Emotion Representation
+205 acl2025-2025.acl-long.1001  Amplifying Trans and Nonbinary Voices: A Community-Centred Harm Taxonomy for LLM
+206 acl2025-2025.acl-long.1002  Enhancing Human Evaluation in Machine Translation with Comparative Judgement
+207 acl2025-2025.acl-long.1023  Structural Reasoning Improves Molecular Understanding of LLM
+208 acl2025-2025.acl-long.1040  THOR - M o E : Hierarchical Task-Guided and Context-Responsive Routing for Neura
+209 acl2025-2025.acl-long.1043  OZS peech: One-step Zero-shot Speech Synthesis with Learned-Prior-Conditioned Fl
+210 acl2025-2025.acl-long.1049  P sy D ial: A Large-scale Long-term Conversational Dataset for Mental Health Sup
+211 acl2025-2025.acl-long.1055  LED -Merging: Mitigating Safety-Utility Conflicts in Model Merging with Location
+212 acl2025-2025.acl-long.1064  Evaluating Personalized Tool-Augmented LLM s from the Perspectives of Personaliz
+213 acl2025-2025.acl-long.107  A ndroid L ab: Training and Systematic Benchmarking of Android Autonomous Agents
+214 acl2025-2025.acl-long.108  Modular Sentence Encoders: Separating Language Specialization from Cross-Lingual
+215 acl2025-2025.acl-long.1095  LESA : Learnable LLM Layer Scaling-Up
+216 acl2025-2025.acl-long.1101  MEMERAG : A Multilingual End-to-End Meta-Evaluation Benchmark for Retrieval Augm
+217 acl2025-2025.acl-long.1113  Look Both Ways and No Sink: Converting LLM s into Text Encoders without Training
+218 acl2025-2025.acl-long.1122  WET : Overcoming Paraphrasing Vulnerabilities in Embeddings-as-a-Service with Li
+219 acl2025-2025.acl-long.1124  One Q uant LLM for ALL : Fine-tuning Quantized LLM s Once for Efficient Deployme
+220 acl2025-2025.acl-long.1183  C hem A ctor: Enhancing Automated Extraction of Chemical Synthesis Actions with 
+221 acl2025-2025.acl-long.1186  Decoding on Graphs: Faithful and Sound Reasoning on Knowledge Graphs through Gen
+222 acl2025-2025.acl-long.1201  Personalized Generation In Large Model Era: A Survey
+223 acl2025-2025.acl-long.1207  LLM s know their vulnerabilities: Uncover Safety Gaps through Natural Distributi
+224 acl2025-2025.acl-long.1210  Multiple LLM Agents Debate for Equitable Cultural Alignment
+225 acl2025-2025.acl-long.1212  SEA : Low-Resource Safety Alignment for Multimodal Large Language Models via Syn
+226 acl2025-2025.acl-long.1217  i N ews: A Multimodal Dataset for Modeling Personalized Affective Responses to N
+227 acl2025-2025.acl-long.1231  Efficient Ensemble for Fine-tuning Language Models on Multiple Datasets
+228 acl2025-2025.acl-long.1252  Finding A Voice: Exploring the Potential of A frican A merican Dialect and Voice
+229 acl2025-2025.acl-long.1263  Teaching an Old LLM Secure Coding: Localized Preference Optimization on Distille
+230 acl2025-2025.acl-long.1272  Research Borderlands: Analysing Writing Across Research Cultures
+231 acl2025-2025.acl-long.1300  Q u ASAR : A Question-Driven Structure-Aware Approach for Table-to-Text Generati
+232 acl2025-2025.acl-long.131  MAIN - RAG : Multi-Agent Filtering Retrieval-Augmented Generation
+233 acl2025-2025.acl-long.1325  MAGNET : Augmenting Generative Decoders with Representation Learning and Infilli
+234 acl2025-2025.acl-long.1326  Internal Value Alignment in Large Language Models through Controlled Value Vecto
+235 acl2025-2025.acl-long.1348  Online Iterative Self-Alignment for Radiology Report Generation
+236 acl2025-2025.acl-long.135  G iga S peech 2: An Evolving, Large-Scale and Multi-domain ASR Corpus for Low-Re
+237 acl2025-2025.acl-long.1373  DISC : Plug-and-Play Decoding Intervention with Similarity of Characters for C h
+238 acl2025-2025.acl-long.1394  Pretraining Context Compressor for Large Language Models with Embedding-Based Me
+239 acl2025-2025.acl-long.1396  Length-Induced Embedding Collapse in PLM -based Models
+=== page 6 ===
+240 acl2025-2025.acl-long.1407  𝒜 3 : Automatic Alignment Framework for Attributed Text Generation
+241 acl2025-2025.acl-long.1413  C oach M e: Decoding Sport Elements with a Reference-Based Coaching Instruction 
+242 acl2025-2025.acl-long.1421  Bypass Back-propagation: Optimization-based Structural Pruning for Large Languag
+243 acl2025-2025.acl-long.1426  F in MME : Benchmark Dataset for Financial Multi-Modal Reasoning Evaluation
+244 acl2025-2025.acl-long.1435  The Task Shield: Enforcing Task Alignment to Defend Against Indirect Prompt Inje
+245 acl2025-2025.acl-long.1459  MAP o RL : Multi-Agent Post-Co-Training for Collaborative Large Language Models 
+246 acl2025-2025.acl-long.1522  Theory of Mind in Large Language Models: Assessment and Enhancement
+247 acl2025-2025.acl-long.1541  Refining Salience-Aware Sparse Fine-Tuning Strategies for Language Models
+248 acl2025-2025.acl-long.1595  Scalable Vision Language Model Training via High Quality Data Curation
+249 acl2025-2025.acl-long.1597  Towards Economical Inference: Enabling D eep S eek’s Multi-Head Latent Attention
+250 acl2025-2025.acl-long.1601  A fro CS -xs: Creating a Compact, High-Quality, Human-Validated Code-Switched Da
+251 acl2025-2025.acl-long.1603  Design Choices for Extending the Context Length of Visual Language Models
+252 acl2025-2025.acl-long.211  BELLE : A Bi-Level Multi-Agent Reasoning Framework for Multi-Hop Question Answer
+253 acl2025-2025.acl-long.217  QAE ncoder: Towards Aligned Representation Learning in Question Answering System
+254 acl2025-2025.acl-long.241  A Silver Bullet or a Compromise for Full Attention? A Comprehensive Study of Gis
+255 acl2025-2025.acl-long.275  Self-Taught Agentic Long Context Understanding
+256 acl2025-2025.acl-long.30  H otel M atch- LLM : Joint Multi-Task Training of Small and Large Language Model
+257 acl2025-2025.acl-long.317  Assessing Dialect Fairness and Robustness of Large Language Models in Reasoning 
+258 acl2025-2025.acl-long.332  T heorem E xplain A gent: Towards Video-based Multimodal Explanations for LLM Th
+259 acl2025-2025.acl-long.347  PIC : Unlocking Long-Form Text Generation Capabilities of Large Language Models 
+260 acl2025-2025.acl-long.358  DRAG : Distilling RAG for SLM s from LLM s to Transfer Knowledge and Mitigate Ha
+261 acl2025-2025.acl-long.37  Efficient and Accurate Prompt Optimization: the Benefit of Memory in Exemplar-Gu
+262 acl2025-2025.acl-long.388  Distilling an End-to-End Voice Assistant Without Instruction Training Data
+263 acl2025-2025.acl-long.389  C o M et: Metaphor-Driven Covert Communication for Multi-Agent Language Games
+264 acl2025-2025.acl-long.397  S ynthesize M e! Inducing Persona-Guided Prompts for Personalized Reward Models 
+265 acl2025-2025.acl-long.402  R 2- M ulti O mnia: Leading Multilingual Multimodal Reasoning via Self-Training
+266 acl2025-2025.acl-long.441  INTERACT : Enabling Interactive, Question-Driven Learning in Large Language Mode
+267 acl2025-2025.acl-long.468  KG -Agent: An Efficient Autonomous Agent Framework for Complex Reasoning over Kn
+268 acl2025-2025.acl-long.481  Investigating and Extending Homans’ Social Exchange Theory with Large Language M
+269 acl2025-2025.acl-long.501  HAIC : Improving Human Action Understanding and Generation with Better Captions 
+270 acl2025-2025.acl-long.514  Mitigating Confounding in Speech-Based Dementia Detection through Weight Masking
+271 acl2025-2025.acl-long.518  P riva CI -Bench: Evaluating Privacy with Contextual Integrity and Legal Complia
+272 acl2025-2025.acl-long.535  Sample-Efficient Human Evaluation of Large Language Models via Maximum Discrepan
+273 acl2025-2025.acl-long.551  Pre 3 : Enabling Deterministic Pushdown Automata for Faster Structured LLM Gener
+274 acl2025-2025.acl-long.575  UORA : Uniform Orthogonal Reinitialization Adaptation in Parameter Efficient Fin
+275 acl2025-2025.acl-long.577  TROVE : A Challenge for Fine-Grained Text Provenance via Source Sentence Tracing
+276 acl2025-2025.acl-long.578  C a LMQA : Exploring culturally specific long-form question answering across 23 
+277 acl2025-2025.acl-long.631  Accurate KV Cache Quantization with Outlier Tokens Tracing
+278 acl2025-2025.acl-long.634  Activation Steering Decoding: Mitigating Hallucination in Large Vision-Language 
+279 acl2025-2025.acl-long.637  Upcycling Instruction Tuning from Dense to Mixture-of-Experts via Parameter Merg
+=== page 7 ===
+280 acl2025-2025.acl-long.676  GALL a: Graph Aligned Large Language Models for Improved Source Code Understandi
+281 acl2025-2025.acl-long.682  Recent Advances in Speech Language Models: A Survey
+282 acl2025-2025.acl-long.684  Multi-task Adversarial Attacks against Black-box Model with Few-shot Queries
+283 acl2025-2025.acl-long.685  SPECTRA : Faster Large Language Model Inference with Optimized Internal and Exte
+284 acl2025-2025.acl-long.687  Innovative Image Fraud Detection with Cross-Sample Anomaly Analysis: The Power o
+285 acl2025-2025.acl-long.706  Instruction Tuning on Public Government and Cultural Data for Low-Resource Langu
+286 acl2025-2025.acl-long.713  Flexora: Flexible Low-Rank Adaptation for Large Language Models
+287 acl2025-2025.acl-long.748  DCG - SQL : Enhancing In-Context Learning for Text-to- SQL with Deep Contextual 
+288 acl2025-2025.acl-long.759  Beyond One-Size-Fits-All: Tailored Benchmarks for Efficient Evaluation
+289 acl2025-2025.acl-long.768  Masks Can be Learned as an Alternative to Experts
+290 acl2025-2025.acl-long.803  LIFB ench: Evaluating the Instruction Following Performance and Stability of Lar
+291 acl2025-2025.acl-long.82  Improve Vision Language Model Chain-of-thought Reasoning
+292 acl2025-2025.acl-long.834  T rip C raft: A Benchmark for Spatio-Temporally Fine Grained Travel Planning
+293 acl2025-2025.acl-long.859  A Troublemaker with Contagious Jailbreak Makes Chaos in Honest Towns
+294 acl2025-2025.acl-long.862  Understanding Large Language Model Vulnerabilities to Social Bias Attacks
+295 acl2025-2025.acl-long.873  S cene G en A gent: Precise Industrial Scene Generation with Coding Agent
+296 acl2025-2025.acl-long.875  Enhancing Text Editing for Grammatical Error Correction: A rabic as a Case Study
+297 acl2025-2025.acl-long.881  Revisit Self-Debugging with Self-Generated Tests for Code Generation
+298 acl2025-2025.acl-long.886  Enhancing Spoken Discourse Modeling in Language Models Using Gestural Cues
+299 acl2025-2025.acl-long.891  Identifying Open Challenges in Language Identification
+300 acl2025-2025.acl-long.906  O mni A lign- V : Towards Enhanced Alignment of MLLM s with Human Preference
+301 acl2025-2025.acl-long.911  DNAS peech: A Contextualized and Situated Text-to-Speech Dataset with Dialogues,
+302 acl2025-2025.acl-long.935  M ega P airs: Massive Data Synthesis for Universal Multimodal Retrieval
+303 acl2025-2025.acl-long.939  Multilingual Arbitration: Optimizing Data Pools to Accelerate Multilingual Progr
+304 acl2025-2025.acl-long.961  ZIPA : A family of efficient models for multilingual phone recognition
+305 acl2025-2025.acl-long.973  DARS : Dynamic Action Re-Sampling to Enhance Coding Agent Performance by Adaptiv
+306 acl2025-2025.acl-long.981  Beyond Prompting: An Efficient Embedding Framework for Open-Domain Question Answ
+307 acl2025-2025.acl-short.10  BQA : Body Language Question Answering Dataset for Video Large Language Models
+308 acl2025-2025.acl-short.87  Enhancing NER by Harnessing Multiple Datasets with Conditional Variational Autoe
+309 acl2025-2025.acl-short.9  Call for Rigor in Reporting Quality of Instruction Tuning Data
+310 acl2025-2025.findings-acl.100  SATA : A Paradigm for LLM Jailbreak via Simple Assistive Task Linkage
+311 acl2025-2025.findings-acl.1008  A n C ast++: Document-Level Evaluation of Graph-based Meaning Representations
+312 acl2025-2025.findings-acl.1009  MME vol: Empowering Multimodal Large Language Models with Evol-Instruct
+313 acl2025-2025.findings-acl.1016  Data Interpreter: An LLM Agent for Data Science
+314 acl2025-2025.findings-acl.1037  Unveiling the Lack of LVLM Robustness to Fundamental Visual Variations: Why and 
+315 acl2025-2025.findings-acl.1038  DYNTEXT : Semantic-Aware Dynamic Text Sanitization for Privacy-Preserving LLM In
+316 acl2025-2025.findings-acl.1043  T ailor KV : A Hybrid Framework for Long-Context Inference via Tailored KV Cache
+317 acl2025-2025.findings-acl.1057  MWPO : Enhancing LLM s Performance through Multi-Weight Preference Strength and 
+318 acl2025-2025.findings-acl.1058  CLEAR : Character Unlearning in Textual and Visual Modalities
+319 acl2025-2025.findings-acl.1061  D iff LM : Controllable Synthetic Data Generation via Diffusion Language Models
+=== page 8 ===
+320 acl2025-2025.findings-acl.1070  Bandit-Based Prompt Design Strategy Selection Improves Prompt Optimizers
+321 acl2025-2025.findings-acl.1110  T ag R outer: Learning Route to LLM s through Tags for Open-Domain Text Generati
+322 acl2025-2025.findings-acl.1113  CRAB : Cross-environment Agent Benchmark for Multimodal Language Model Agents
+323 acl2025-2025.findings-acl.1117  Is It JUST Semantics? A Case Study of Discourse Particle Understanding in LLM s
+324 acl2025-2025.findings-acl.112  Robust and Minimally Invasive Watermarking for E aa S
+325 acl2025-2025.findings-acl.1126  Adversarial Preference Learning for Robust LLM Alignment
+326 acl2025-2025.findings-acl.1185  Dynamic Personality in LLM Agents: A Framework for Evolutionary Modeling and Beh
+327 acl2025-2025.findings-acl.1197  S afe C hain: Safety of Language Models with Long Chain-of-Thought Reasoning Cap
+328 acl2025-2025.findings-acl.1204  Behavioral Analysis of Information Salience in Large Language Models
+329 acl2025-2025.findings-acl.1209  FREE : Fast and Robust Vision Language Models with Early Exits
+330 acl2025-2025.findings-acl.121  Structural Deep Encoding for Table Question Answering
+331 acl2025-2025.findings-acl.1216  USDC : A Dataset of ̲U ser ̲S tance and ̲D ogmatism in Long ̲C onversations
+332 acl2025-2025.findings-acl.1232  J son T uning: Towards Generalizable, Robust, and Controllable Instruction Tunin
+333 acl2025-2025.findings-acl.1237  Removing Prompt-template Bias in Reinforcement Learning from Human Feedback
+334 acl2025-2025.findings-acl.1241  Communication-Efficient and Tensorized Federated Fine-Tuning of Large Language M
+335 acl2025-2025.findings-acl.1246  Missing the Margins: A Systematic Literature Review on the Demographic Represent
+336 acl2025-2025.findings-acl.1265  M ulti TEND : A Multilingual Benchmark for Natural Language to N o SQL Query Tra
+337 acl2025-2025.findings-acl.1273  Decomposed Opinion Summarization with Verified Aspect-Aware Modules
+338 acl2025-2025.findings-acl.128  M ath C oder- VL : Bridging Vision and Code for Enhanced Multimodal Mathematical
+339 acl2025-2025.findings-acl.1283  A Fully Generative Motivational Interviewing Counsellor Chatbot for Moving Smoke
+340 acl2025-2025.findings-acl.1325  LEMONADE : A Large Multilingual Expert-Annotated Abstractive Event Dataset for t
+341 acl2025-2025.findings-acl.1342  Do Vision-Language Models Have Internal World Models? Towards an Atomic Evaluati
+342 acl2025-2025.findings-acl.1344  Enhancing Persona Consistency for LLM s’ Role-Playing using Persona-Aware Contra
+343 acl2025-2025.findings-acl.1345  M 2 - T ab F act: Multi-Document Multi-Modal Fact Verification with Visual and T
+344 acl2025-2025.findings-acl.1348  Towards the Pedagogical Steering of Large Language Models for Tutoring: A Case S
+345 acl2025-2025.findings-acl.1360  CSTRL : Context-Driven Sequential Transfer Learning for Abstractive Radiology Re
+346 acl2025-2025.findings-acl.1363  Knowledge Base Construction for Knowledge-Augmented Text-to- SQL
+347 acl2025-2025.findings-acl.151  Reasoning is All You Need for Video Generalization: A Counterfactual Benchmark w
+348 acl2025-2025.findings-acl.170  SYNTHVERIFY : Enhancing Zero-Shot Claim Verification through Step-by-Step Synthe
+349 acl2025-2025.findings-acl.178  MANB ench: Is Your Multimodal Model Smarter than Human?
+350 acl2025-2025.findings-acl.191  N eg VQA : Can Vision Language Models Understand Negation?
+351 acl2025-2025.findings-acl.199  SCITAT : A Question Answering Benchmark for Scientific Tables and Text Covering 
+352 acl2025-2025.findings-acl.23  Defensive Prompt Patch: A Robust and Generalizable Defense of Large Language Mod
+353 acl2025-2025.findings-acl.242  DAM : Dynamic Attention Mask for Long-Context Large Language Model Inference Acc
+354 acl2025-2025.findings-acl.259  M ega A gent: A Large-Scale Autonomous LLM -based Multi-Agent System Without Pre
+355 acl2025-2025.findings-acl.26  Translate With Care: Addressing Gender Bias, Neutrality, and Reasoning in Large 
+356 acl2025-2025.findings-acl.264  L ong C ite: Enabling LLM s to Generate Fine-grained Citations in Long-Context Q
+357 acl2025-2025.findings-acl.268  N ovel CR : A Large-Scale Bilingual Dataset Tailored for Long-Span Coreference R
+358 acl2025-2025.findings-acl.280  Correcting on Graph: Faithful Semantic Parsing over Knowledge Graphs with Large 
+359 acl2025-2025.findings-acl.287  Beyond Words: Integrating Theory of Mind into Conversational Agents for Human-Li
+=== page 9 ===
+360 acl2025-2025.findings-acl.290  VCD : A Dataset for Visual Commonsense Discovery in Images
+361 acl2025-2025.findings-acl.31  CRPO : Confidence-Reward Driven Preference Optimization for Machine Translation
+362 acl2025-2025.findings-acl.326  Explorer: Scaling Exploration-driven Web Trajectory Synthesis for Multimodal Web
+363 acl2025-2025.findings-acl.360  Generative Music Models’ Alignment with Professional and Amateur Users’ Expectat
+364 acl2025-2025.findings-acl.361  LLM -Forest: Ensemble Learning of LLM s with Graph-Augmented Prompts for Data Im
+365 acl2025-2025.findings-acl.365  K od C ode: A Diverse, Challenging, and Verifiable Synthetic Dataset for Coding
+366 acl2025-2025.findings-acl.373  D epend E val: Benchmarking LLM s for Repository Dependency Understanding
+367 acl2025-2025.findings-acl.393  D oc F usion: A Unified Framework for Document Parsing Tasks
+368 acl2025-2025.findings-acl.407  Code-Switching Curriculum Learning for Multilingual Transfer in LLM s
+369 acl2025-2025.findings-acl.416  Large Language Models for Predictive Analysis: How Far Are They?
+370 acl2025-2025.findings-acl.425  F low2 C ode: Evaluating Large Language Models for Flowchart-based Code Generati
+371 acl2025-2025.findings-acl.443  SQLF orge: Synthesizing Reliable and Diverse Data to Enhance Text-to- SQL Reason
+372 acl2025-2025.findings-acl.452  T 2 DR : A Two-Tier Deficiency-Resistant Framework for Incomplete Multimodal Lea
+373 acl2025-2025.findings-acl.470  Does Your Voice Assistant Remember? Analyzing Conversational Context Recall and 
+374 acl2025-2025.findings-acl.474  LIME : Less Is More for MLLM Evaluation
+375 acl2025-2025.findings-acl.478  MHALO : Evaluating MLLM s as Fine-grained Hallucination Detectors
+376 acl2025-2025.findings-acl.489  F in R ipple: Aligning Large Language Models with Financial Market for Event Rip
+377 acl2025-2025.findings-acl.503  T rip T ailor: A Real-World Benchmark for Personalized Travel Planning
+378 acl2025-2025.findings-acl.541  Multi-Agent Collaboration via Cross-Team Orchestration
+379 acl2025-2025.findings-acl.545  DAGS : A Dependency-Based Dual-Attention and Global Semantic Improvement Framewo
+380 acl2025-2025.findings-acl.551  Q -Mamba: Towards more efficient Mamba models via post-training quantization
+381 acl2025-2025.findings-acl.568  P ro B ench: Judging Multimodal Foundation Models on Open-ended Multi-domain Exp
+382 acl2025-2025.findings-acl.577  Beyond Browsing: API -Based Web Agents
+383 acl2025-2025.findings-acl.591  GLTW : Joint Improved Graph Transformer and LLM via Three-Word Language for Know
+384 acl2025-2025.findings-acl.638  A Conformal Risk Control Framework for Granular Word Assessment and Uncertainty 
+385 acl2025-2025.findings-acl.645  T rans B ench: Breaking Barriers for Transferable Graphical User Interface Agent
+386 acl2025-2025.findings-acl.651  C o VE : Compressed Vocabulary Expansion Makes Better LLM -based Recommender Sys
+387 acl2025-2025.findings-acl.678  m RAKL : Multilingual Retrieval-Augmented Knowledge Graph Construction for Low-R
+388 acl2025-2025.findings-acl.680  RL -Guider: Leveraging Historical Decisions and Feedback for Drug Editing with L
+389 acl2025-2025.findings-acl.687  TCS inger 2: Customizable Multilingual Zero-shot Singing Voice Synthesis
+390 acl2025-2025.findings-acl.688  Compute Optimal Scaling of Skills: Knowledge vs Reasoning
+391 acl2025-2025.findings-acl.690  Lifelong Model Editing with Graph-Based External Memory
+392 acl2025-2025.findings-acl.704  T hink G uard: Deliberative Slow Thinking Leads to Cautious Guardrails
+393 acl2025-2025.findings-acl.718  CROSSAGENTIE : Cross-Type and Cross-Task Multi-Agent LLM Collaboration for Zero-
+394 acl2025-2025.findings-acl.745  S emantic C amo: Jailbreaking Large Language Models through Semantic Camouflage
+395 acl2025-2025.findings-acl.750  Harnessing Large Language Models for Disaster Management: A Survey
+396 acl2025-2025.findings-acl.776  AMXFP 4: Taming Activation Outliers with Asymmetric Microscaling Floating-Point 
+397 acl2025-2025.findings-acl.78  LLM -Based Multi-Agent Systems are Scalable Graph Generative Models
+398 acl2025-2025.findings-acl.780  Task Knowledge Injection via Interpolations and Reinstatement for Large Language
+399 acl2025-2025.findings-acl.785  Position Paper: M e M o: Towards Language Models with Associative Memory Mechani
+=== page 10 ===
+400 acl2025-2025.findings-acl.79  AD - LLM : Benchmarking Large Language Models for Anomaly Detection
+401 acl2025-2025.findings-acl.81  TACO - RL : Task Aware Prompt Compression Optimization with Reinforcement Learni
+402 acl2025-2025.findings-acl.831  DPGA - T ext S yn: Differentially Private Genetic Algorithm for Synthetic Text G
+403 acl2025-2025.findings-acl.834  On the Consistency of Commonsense in Large Language Models
+404 acl2025-2025.findings-acl.84  Towards Efficient LLM Grounding for Embodied Multi-Agent Collaboration
+405 acl2025-2025.findings-acl.842  A Large and Balanced Corpus for Fine-grained A rabic Readability Assessment
+406 acl2025-2025.findings-acl.85  UAQF act: Evaluating Factual Knowledge Utilization of LLM s on Unanswerable Ques
+407 acl2025-2025.findings-acl.857  ASTRID - An Automated and Scalable TRI a D for the Evaluation of RAG -based Clin
+408 acl2025-2025.findings-acl.870  S eq MMR : Sequential Model Merging and LLM Routing for Enhanced Batched Sequent
+409 acl2025-2025.findings-acl.878  Generate, Discriminate, Evolve: Enhancing Context Faithfulness via Fine-Grained 
+410 acl2025-2025.findings-acl.904  Multimodal Fusion and Coherence Modeling for Video Topic Segmentation
+411 acl2025-2025.findings-acl.909  Look & Mark: Leveraging Radiologist Eye Fixations and Bounding boxes in Multimod
+412 acl2025-2025.findings-acl.931  The Devil Is in the Word Alignment Details: On Translation-Based Cross-Lingual T
+413 acl2025-2025.findings-acl.94  Event Pattern-Instance Graph: A Multi-Round Role Representation Learning Strateg
+414 acl2025-2025.findings-acl.952  M ini KV : Pushing the Limits of 2-Bit KV Cache via Compression and System Co-De
+415 acl2025-2025.findings-acl.955  Biases Propagate in Encoder-based Vision-Language Models: A Systematic Analysis 
+416 acl2025-2025.findings-acl.985  E go N ormia: Benchmarking Physical-Social Norm Understanding
+417 acl2025-2025.findings-acl.989  M em B ench: Towards More Comprehensive Evaluation on the Memory of LLM -based A
+418 acl2025-2025.findings-acl.991  L ong A ttn: Selecting Long-context Training Data via Token-level Attention
+419 acl2025-2025.findings-acl.996  Outlier-weighed Layerwise Sampling for LLM Fine-tuning

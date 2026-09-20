@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Image copyright / removal
-    url: https://github.com/qwdqwfqwq/topconf-paper-figure-gallery/issues/new?template=image-removal-request.md
-    about: 版权方下架请求请使用 Image removal request 模板，或邮件 939123836@qq.com。
+  - name: Suggest a figure · 推荐收录论文/图片
+    url: https://github.com/qwdwqfwq/topconf-paper-figure-gallery/issues/new?template=add-figure-request.md
+    about: 想推荐某篇论文的 Figure 1 / Teaser？贴个链接即可，无需写代码。Suggest a paper or teaser figure to add — no coding required.
+  - name: Image copyright / removal · 版权与下架
+    url: https://github.com/qwdwqfwq/topconf-paper-figure-gallery/issues/new?template=image-removal-request.md
+    about: 版权方要求删除图片请使用 Image removal request 模板，或邮件 939123836@qq.com。

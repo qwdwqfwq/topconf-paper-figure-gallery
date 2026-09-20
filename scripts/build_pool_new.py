@@ -5,9 +5,8 @@ and AAAI (OJS), 2023-2025.
 Writes data/pool/<venue>_2023_2025.jsonl with the same row schema as the
 OpenReview pools: id/venue/year/title/authors/pdf/page/tier.
 
-Routing: openaccess.thecvf.com is reachable directly (trust_env=False);
-aclanthology.org and ojs.aaai.org are routed through the local proxy
-(trust_env=True) in this environment.
+Network: direct sessions ignore HTTP(S)_PROXY env vars, proxied sessions
+honor them (set them if your network requires a proxy to reach the venues).
 
 Usage:
     python scripts/build_pool_new.py cvpr
@@ -32,8 +31,8 @@ def session(proxy: bool):
     s.headers.update({"User-Agent": UA})
     return s
 
-SD = session(False)   # direct
-SP = session(True)    # via local Clash proxy
+SD = session(False)   # direct (bypasses proxy env vars)
+SP = session(True)    # honors HTTP(S)_PROXY env vars
 
 # titles that are especially likely to carry a designed overview/teaser figure
 VISUAL_RX = re.compile(

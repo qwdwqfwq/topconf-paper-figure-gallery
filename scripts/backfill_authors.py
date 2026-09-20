@@ -6,15 +6,13 @@ import requests
 from bs4 import BeautifulSoup
 
 ROOT = Path(__file__).resolve().parents[1]
+# Honors standard HTTP_PROXY/HTTPS_PROXY env vars via requests' trust_env;
+# set PROXY_URL to force a specific proxy (e.g. http://127.0.0.1:7897).
+import os
 PROXIES = None
-for px in ("http://127.0.0.1:7897",):
-    try:
-        requests.get("https://openreview.net", proxies={"http": px, "https": px}, timeout=4)
-        PROXIES = {"http": px, "https": px}
-        print("using proxy", px)
-        break
-    except Exception:
-        pass
+if os.environ.get("PROXY_URL"):
+    PROXIES = {"http": os.environ["PROXY_URL"], "https": os.environ["PROXY_URL"]}
+    print("using proxy", os.environ["PROXY_URL"])
 
 fig_path = ROOT / "data" / "figures.json"
 fig = json.loads(fig_path.read_text(encoding="utf-8"))

@@ -42,13 +42,12 @@ back to its source paper and records venue, year, authors and a visual-pattern t
 
 - 🗂️ Filter by **venue / year / visual pattern**; infinite-scroll masonry and a lightbox
 - 🔍 Full-text **search over titles and authors** (e.g. `DPO`, `robot`, `gaussian`, `agent`)
-- 🚫 Default matplotlib charts, plain tables, GUI screenshots and unlabeled photo dumps
-  are explicitly **excluded by 25+ heuristic rules**, then every remaining candidate is
-  checked in **page-by-page full-enumeration human QA** (plus multi-seed random audits);
-  see [METHODOLOGY.md](docs/METHODOLOGY.md)
+- 🚫 **Every figure is hand-reviewed.** 25+ heuristic rules first discard default
+  matplotlib charts, plain tables, GUI screenshots and unlabeled photo dumps; a human then
+  reviews every remaining candidate, page by page — see [METHODOLOGY.md](docs/METHODOLOGY.md)
 - 📦 Pure static site (HTML/CSS/JS), no backend, no build; clone and double-click
 - 🔁 Fully open, reproducible pipeline: proceedings index → PDF download → Figure 1 crop
-  → design-quality scoring → dHash de-duplication → full-enumeration visual QA
+  → design-quality scoring → dHash de-duplication → manual page-by-page review
 
 ### 🎓 How to use this gallery to design your own overview figure
 
@@ -70,9 +69,11 @@ back to its source paper and records venue, year, authors and a visual-pattern t
 
 ### Add a paper or a better figure
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for the metadata format and the quality bar.
-Community PRs (new papers, better crops, new venues such as CHI / RSS / CoRL) are the
-intended growth path after the 2023–2025 baseline.
+The easiest way is to open a **[Suggest a figure](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/issues/new?template=add-figure-request.md)**
+issue with the paper link — no coding required. If you'd like to open a PR,
+[CONTRIBUTING.md](CONTRIBUTING.md) describes the metadata format and the quality bar.
+Community contributions (new papers, better crops, new venues such as CHI / RSS / CoRL)
+are the intended growth path after the 2023–2025 baseline.
 
 Image files remain attributed to their authors and publishers; see
 [IMAGES_POLICY.md](IMAGES_POLICY.md) for the educational-use and 72-hour takedown policy.
@@ -90,7 +91,7 @@ Image files remain attributed to their authors and publishers; see
 - 🖼️ 卡片瀑布流 + 点击**灯箱大图**，键盘 ←/→ 翻图，一键跳转原文
 - 🚫 明确**剔除**默认 matplotlib 图表、纯表格、GUI 截图、无标签照片墙——只留有设计的图
 - 📦 纯静态页面（HTML/CSS/JS），无需联网、无需构建，`file://` 双击即可打开
-- 🔁 数据管线完全开源：会议索引 → PDF 下载 → Figure 1 裁剪 → 25+ 条规则打分 → dHash 去重 → 全量逐张目检 QA
+- 🔁 数据管线完全开源：会议索引 → PDF 下载 → Figure 1 裁剪 → 25+ 条规则打分 → dHash 去重 → 逐张人工复核
 
 ## 🎓 怎么用这个画廊画你自己的主图
 
@@ -105,7 +106,7 @@ Image files remain attributed to their authors and publishers; see
 6. **一图一主旨**：如果希望审稿人只记住一个结论，图的视觉中心就必须直接说出它；
    结果对比留给 Figure 2，不要塞进 teaser。
 
-## 📊 收录规模（质量优先，不硬凑数量）
+## 📊 收录规模 / Coverage
 
 | 会议 | 2023 | 2024 | 2025 | 合计 |
 |---|---:|---:|---:|---:|
@@ -118,11 +119,11 @@ Image files remain attributed to their authors and publishers; see
 | | | | **总计 Total** | **2298** |
 
 > 图片均从正式出版 PDF 渲染裁剪（约 180–216 DPI），网页版压缩为 ≤1500px JPEG；
-> 每张图都标注论文标题、全部作者与原文链接。六会议候选图均经过**全量枚举逐张人眼目检**
-> （见 [METHODOLOGY](docs/METHODOLOGY.md)），数量差异来自"设计型主图"占比的真实分布：
-> NeurIPS 最高（803）；CVPR 的 Figure 1 常为结果照片墙而大量落选（225）；
-> ACL/AAAI 的框架图文混排稳定（326/264）；理论向 ICML 默认图表更多（310）。
-> 质量优先、宁少勿凑，数量不代表会议水平。
+> 每张图都标注论文标题、全部作者与原文链接。六个会议的每一张候选图都经过人工逐页复核
+> （见 [METHODOLOGY](docs/METHODOLOGY.md)）。各会议数量不设统一指标，只保留达到设计标准的图，
+> 因此数量差异反映的是各会议"设计型主图"的占比，而不是会议水平：
+> NeurIPS 的设计型 overview figure 最多（803）；CVPR 的 Figure 1 常为结果照片墙，入选较少（225）；
+> ACL/AAAI 的框架图文混排占比稳定（326/264）；理论向的 ICML 默认图表更多（310）。
 
 ## 🧭 视觉模式分类
 
@@ -177,14 +178,16 @@ pip install -r requirements.txt
 # ICLR / ICML / NeurIPS（OpenReview / PMLR / NeurIPS proceedings / arXiv）
 python scripts/build_pool.py          # 候选论文池
 python scripts/extract_all.py         # 并行下载 PDF、裁剪 Figure 1（断点续跑）
-# CVPR / ACL / AAAI（CVF / ACL Anthology / AAAI OJS；需本地代理见脚本注释）
+# CVPR / ACL / AAAI（CVF / ACL Anthology / AAAI OJS；部分学术站点需在可访问的网络环境运行）
 python scripts/build_pool_new.py cvpr,acl,aaai
 python scripts/extract_new.py cvpr,acl,aaai 12
 # 六个会议统一打分、装配
 python scripts/score_select.py 980    # 25+ 条 reject 规则、设计感评分、dHash 去重、按配额选图
 python scripts/assemble_gallery.py 1000   # PNG→JPEG、生成 figures.json / figures.js
 python scripts/clean_stale.py         # 删除无引用图片
-python scripts/sheet_qa.py 31         # 随机 32 格目检 QA（多 seed 抽检）
+# 人工复核：enum_sheets 按会议生成 40 格/页联系表逐页检查；sheet_qa 可随机抽样复核
+python scripts/enum_sheets.py iclr
+python scripts/sheet_qa.py 31
 ```
 
 ## 🗺️ Roadmap
@@ -192,13 +195,15 @@ python scripts/sheet_qa.py 31         # 随机 32 格目检 QA（多 seed 抽检
 - [x] 60 张人工精选种子画廊（v0.1）
 - [x] ICLR / ICML / NeurIPS 自动管线扩量（v0.2–v0.3）
 - [x] CVPR / ACL / AAAI（2023–2025）同管线扩展（v0.3）
-- [ ] 多 seed QA 持续清噪、社区 PR 补图机制
+- [ ] 持续人工复核、清理不合格图片，开放社区 PR 补图机制
 - [ ] CHI / CoRL / RSS / EMNLP 等会议扩展
 - [ ] 相似图推荐、按配色检索、一键导出 BibTeX
 
 ## 🤝 贡献
 
-欢迎补图、修标签、修 bug、扩展新会议——先看 [CONTRIBUTING.md](CONTRIBUTING.md)，
+欢迎补图、修标签、修 bug、扩展新会议。**不会写代码也没关系**：直接开一个
+[Suggest a figure](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/issues/new?template=add-figure-request.md)
+Issue，贴上论文链接和你推荐的图即可，维护者会处理。提 PR 前请先看 [CONTRIBUTING.md](CONTRIBUTING.md)，
 特别注意**收录标准**：不要纯照片墙和默认图表。提 PR 即代表你确认图片来自正式出版论文、
 且仅用于署名的学术参考。
 

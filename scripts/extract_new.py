@@ -2,10 +2,11 @@
 """Parallel Figure-1 extraction for the new venues (CVPR / ACL / AAAI).
 
 Same crop logic as extract_all.py (first 4 pages, largest region above a
-"Figure N" caption), but routes each host the way this network needs it:
-  openaccess.thecvf.com -> direct (trust_env=False)
-  aclanthology.org      -> local Clash proxy (trust_env=True)
-  ojs.aaai.org          -> local Clash proxy (trust_env=True)
+"Figure N" caption). Network settings:
+  - Standard HTTP_PROXY / HTTPS_PROXY env vars are honored automatically.
+  - PROXY_URL explicitly forces one proxy for every host.
+  - DIRECT_HOSTS is an optional comma-separated list of host substrings that
+    must always be connected to directly (bypassing env proxies).
 
 Resumable: appends one row per paper to data/extract_state.jsonl and skips
 ids already present. PDFs are never kept on disk.
@@ -13,7 +14,7 @@ ids already present. PDFs are never kept on disk.
 Usage:
     python scripts/extract_new.py cvpr,acl,aaai [workers] [limit]
 """
-import json, sys, time, threading, traceback
+import json, os, sys, time, threading, traceback
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import requests, pymupdf as fitz
@@ -30,9 +31,8 @@ TMP.mkdir(parents=True, exist_ok=True)
 VENUES = sys.argv[1].split(",") if len(sys.argv) > 1 else ["cvpr", "acl", "aaai"]
 WORKERS = int(sys.argv[2]) if len(sys.argv) > 2 else 8
 LIMIT = int(sys.argv[3]) if len(sys.argv) > 3 else 0
-# In this network every source is more stable through the local Clash proxy;
-# direct CVF connections hang / chunk-fail. Set DIRECT_HOSTS=() to proxy all.
-DIRECT_HOSTS = ()
+# Hosts forced to connect directly even when proxy env vars are set.
+DIRECT_HOSTS = tuple(h.strip() for h in os.environ.get("DIRECT_HOSTS", "").split(",") if h.strip())
 lock = threading.Lock()
 host_locks = {}
 host_last = {}
@@ -56,13 +56,11 @@ def sess_for(host):
     key = "direct" if host in DIRECT_HOSTS else "proxy"
     if not hasattr(local, key):
         s = requests.Session()
+        # "proxy" sessions honor standard HTTP(S)_PROXY env vars; "direct"
+        # sessions bypass them. PROXY_URL (if set) overrides everything.
         s.trust_env = (key == "proxy")
-        # Explicit fallback to the local Clash mixed port when no proxy env var
-        # is present in the launching shell (Clash Verge profile reloads can
-        # also move the listener; PROXY_URL env overrides the default).
-        if key == "proxy":
-            import os as _os
-            pu = _os.environ.get("PROXY_URL", "http://127.0.0.1:7897")
+        if key == "proxy" and os.environ.get("PROXY_URL"):
+            pu = os.environ["PROXY_URL"]
             s.proxies.update({"http": pu, "https": pu})
         s.headers.update({"User-Agent": E.BROWSER_UA,
                           "Accept": "application/pdf,text/html,*/*"})

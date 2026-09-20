@@ -8,8 +8,9 @@ data/*.png
 # Run logs / QA scratch dumps
 data/*.txt
 data/*.log
-# ...but keep the authoritative manual exclusion list tracked
+# ...but keep the authoritative manual exclusion list and QA provenance
 !data/exclude.txt
+!data/enum_*_ids.txt
 
 # Selection snapshots / backups (selected.json is the canonical one)
 data/selected_prev.json
@@ -61,3 +62,16 @@ data/gh_blobs.json
 scripts/test_gh_route*.py
 scripts/test_net.py
 data/user_report.bin
+
+# local-only working notes and one-off ops/debug scripts (not part of the public repo)
+_local/
+/HANDOFF.md
+/docs/PROMOTION.md
+/docs/DEMO.md
+data/extract_state.jsonl
+data/matched.json
+
+# local-only GitHub ops scripts (kept on disk, never published)
+scripts/gh_push.py
+scripts/gh_runs.py
+scripts/verify_tree.py
