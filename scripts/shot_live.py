@@ -11,6 +11,8 @@ URL = sys.argv[1] if len(sys.argv) > 1 else \
 OUT = Path(__file__).resolve().parents[1] / "data"
 
 use_proxy = URL.startswith("http") and "localhost" not in URL and "127.0.0.1" not in URL
+if len(sys.argv) > 2 and sys.argv[2] == "noproxy":
+    use_proxy = False
 launch_proxy = {"server": "http://127.0.0.1:7897"} if use_proxy else None
 with sync_playwright() as p:
     browser = None
