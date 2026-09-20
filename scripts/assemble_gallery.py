@@ -54,6 +54,19 @@ for r in sel_doc["selected"]:
     have.add(fid); by_venue[venue] += 1
 
 out.sort(key=lambda f: (f["venue"], f["year"], f["id"]))
+
+# attach intrinsic dimensions (for aspect-ratio placeholders / no layout shift)
+nodim = []
+for f in out:
+    p = ROOT / f["image"]
+    if p.exists():
+        with Image.open(p) as im:
+            f["w"], f["h"] = im.size
+    else:
+        nodim.append(f["id"])
+if nodim:
+    print("WARN dims missing for", len(nodim))
+
 (DATA / "figures.json").write_text(json.dumps(out, ensure_ascii=False, indent=1), encoding="utf-8")
 js = "window.FIGURES = " + json.dumps(out, ensure_ascii=False) + ";\n"
 (ROOT / "assets" / "figures.js").write_text(js, encoding="utf-8")

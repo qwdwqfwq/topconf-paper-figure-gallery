@@ -60,3 +60,4 @@ data/gh_blobs.json
 # one-off network route scratch tests
 scripts/test_gh_route*.py
 scripts/test_net.py
+data/user_report.bin

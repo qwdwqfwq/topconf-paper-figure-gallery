@@ -13,48 +13,37 @@
 </head>
 <body>
 
-<header class="site-header">
-  <div class="header-inner">
+<header class="hero">
+  <div class="hero-inner">
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">
         <span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span>
       </div>
-      <div>
+      <div class="brand-text">
         <h1>Top-Conf Figure Gallery</h1>
-        <p class="tagline">顶会论文主图灵感画廊 · ICLR / ICML / NeurIPS / CVPR / ACL / AAAI · 2023–2025</p>
+        <p class="tagline">顶会论文主图灵感画廊 ·
+          <span class="vn iclr">ICLR</span>·<span class="vn icml">ICML</span>·<span class="vn neurips">NeurIPS</span>·<span class="vn cvpr">CVPR</span>·<span class="vn acl">ACL</span>·<span class="vn aaai">AAAI</span>
+          · 2023–2025</p>
       </div>
     </div>
     <p class="intro">
-      <b id="total-figures">…</b> curated Figure 1 / teaser figures from six top conferences —
-      conceptual diagrams, system frameworks, pipelines and architectures. Filter by venue, year or
-      visual pattern, or search titles and authors to find layout ideas for your own paper's overview figure.<br>
-      精选六大顶会中真正体现排版与设计功力的 Figure 1 / Teaser：概念示意图、系统框架图、流程图与架构图。
-      按会议、年份、视觉模式筛选，或直接搜索论文标题与作者，为你自己的论文主图找灵感。
+      <b class="hl-num" id="total-figures">…</b> <b>curated Figure&nbsp;1 / teaser figures</b> from six top ML conferences —
+      <b>conceptual diagrams</b>, <b>system frameworks</b>, <b>pipelines</b> and <b>architectures</b>. Filter by venue, year or visual pattern, or search titles&nbsp;/&nbsp;authors to find layout ideas for <b>your own paper's overview figure</b>.<br>
+      精选六大顶会中真正体现排版与设计功力的 <b>Figure 1 / Teaser</b>：<b>概念示意图</b> · <b>系统框架图</b> · <b>流程图</b> · <b>架构图</b>。
+      按<b>会议 / 年份 / 视觉模式</b>筛选，或直接搜索<b>论文标题与作者</b>，为你自己的论文主图找灵感。
     </p>
+  </div>
+</header>
 
-    <div class="toolbar">
+<div class="stickbar">
+  <div class="stickbar-inner">
+    <div class="stick-row">
       <div class="search-box">
-        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21 21l-4.3-4.3M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/></svg>
-        <input id="search" type="search" placeholder="Search titles / authors, e.g. DPO · robot · 3D · gaussian…   搜索论文标题或作者" autocomplete="off">
+        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" d="M21 21l-4.3-4.3M11 19a8 8 0 1 1 0-16 8 8 0 0 1 0 16z"/></svg>
+        <input id="search" type="search" placeholder="Search titles / authors · DPO · robot · 3D · gaussian…  搜索标题或作者" autocomplete="off">
         <button id="clear-search" class="clear-btn" title="清空 / Clear" hidden>×</button>
       </div>
-
-      <div class="filter-row">
-        <span class="filter-label">Venue<br>会议</span>
-        <div class="chips" id="venue-chips" role="group" aria-label="会议筛选"></div>
-      </div>
-      <div class="filter-row">
-        <span class="filter-label">Year<br>年份</span>
-        <div class="chips" id="year-chips" role="group" aria-label="年份筛选"></div>
-      </div>
-      <div class="filter-row">
-        <span class="filter-label">Pattern<br>模式</span>
-        <div class="chips" id="pattern-chips" role="group" aria-label="视觉模式筛选"></div>
-      </div>
-    </div>
-
-    <div class="result-bar">
-      <span id="result-count"></span>
+      <span id="result-count" class="result-count"></span>
       <div class="sort-wrap">
         <label for="sort">Sort 排序</label>
         <select id="sort">
@@ -64,8 +53,18 @@
         </select>
       </div>
     </div>
+    <div class="filter-row">
+      <span class="filter-label">Venue 会议</span>
+      <div class="chips" id="venue-chips" role="group" aria-label="会议筛选"></div>
+    </div>
+    <div class="filter-row dual">
+      <span class="filter-label">Year 年份</span>
+      <div class="chips" id="year-chips" role="group" aria-label="年份筛选"></div>
+      <span class="filter-label sep">Pattern 模式</span>
+      <div class="chips" id="pattern-chips" role="group" aria-label="视觉模式筛选"></div>
+    </div>
   </div>
-</header>
+</div>
 
 <main class="container">
   <div id="gallery" class="masonry" aria-live="polite"></div>

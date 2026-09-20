@@ -126,10 +126,15 @@
   }
 
   /* ---------- chunked render ---------- */
-  function cardHtml(f) {
+  function cardHtml(f, idx) {
+    const ratio = (f.w && f.h) ? `aspect-ratio:${f.w} / ${f.h};` : "min-height:170px;";
+    const eager = idx < 24;
+    const imgAttrs = eager ? `src="${f.image}"` : `data-src="${f.image}"`;
     return `
     <article class="card" data-id="${f.id}" tabindex="0" role="button" aria-label="查看 ${escapeHtml(f.title)}">
-      <img class="card-img" src="${f.image}" alt="${escapeHtml(f.title)} Figure 1" loading="lazy" decoding="async">
+      <div class="img-slot" style="${ratio}">
+        <img class="card-img${eager ? " loaded" : ""}" ${imgAttrs} alt="${escapeHtml(f.title)} Figure 1" decoding="async">
+      </div>
       <div class="card-body">
         <div class="card-badges">
           <span class="badge ${f.venue}">${VENUES[f.venue].name}</span>
@@ -143,9 +148,60 @@
     </article>`;
   }
 
+  /* ---------- custom lazy loading (preloads ~2 screens ahead) ---------- */
+  let lazyIO = null;
+  function wireImg(img) {
+    const slot = img.parentElement;
+    function markLoaded() { img.classList.add("loaded"); slot.classList.add("loaded"); }
+    if (img.complete && img.naturalWidth > 0) { markLoaded(); return; }
+    img.addEventListener("load", markLoaded, { once: true });
+    img.addEventListener("error", () => {
+      if (img.dataset.src && !img.dataset.retried) {
+        img.dataset.retried = "1";
+        setTimeout(() => { img.src = img.dataset.src + "?retry=1"; }, 1200);
+      } else if (img.dataset.src) {
+        slot.classList.add("img-failed");
+        slot.addEventListener("click", function once() {
+          slot.classList.remove("img-failed");
+          img.dataset.retried = "";
+          img.src = img.dataset.src;
+        }, { once: true });
+      } else {
+        slot.classList.add("img-failed");
+      }
+    });
+    if ("IntersectionObserver" in window) {
+      if (!lazyIO) {
+        lazyIO = new IntersectionObserver((entries) => {
+          entries.forEach((en) => {
+            if (en.isIntersecting) {
+              const im = en.target;
+              if (im.dataset.src && !im.src) im.src = im.dataset.src;
+              lazyIO.unobserve(im);
+            }
+          });
+        }, { rootMargin: "1800px 0px" });
+      }
+      lazyIO.observe(img);
+    } else if (img.dataset.src) {
+      img.src = img.dataset.src;
+    }
+  }
+  function wireNewCards() {
+    gallery.querySelectorAll(".card-img").forEach(wireImg);
+  }
+
   function appendChunk() {
     const slice = filtered.slice(shown, shown + PAGE);
-    gallery.insertAdjacentHTML("beforeend", slice.map(cardHtml).join(""));
+    gallery.insertAdjacentHTML("beforeend", slice.map((f, i) => cardHtml(f, shown + i)).join(""));
+    wireNewCards();
+    // CSS masonry can place newly appended cards ABOVE the current viewport
+    // (columns fill top-down); start those requests immediately instead of
+    // waiting for an intersection that will never happen.
+    gallery.querySelectorAll(".card-img[data-src]").forEach((im) => {
+      const r = im.getBoundingClientRect();
+      if (r.top < window.innerHeight + 1800) im.src = im.dataset.src;
+    });
     shown += slice.length;
     if (shown >= filtered.length) {
       sentinel.hidden = true;
@@ -176,12 +232,12 @@
   if ("IntersectionObserver" in window) {
     const io = new IntersectionObserver((entries) => {
       if (entries[0].isIntersecting && !sentinel.hidden) appendChunk();
-    }, { rootMargin: "800px" });
+    }, { rootMargin: "1400px" });
     io.observe(sentinel);
   } else {
     window.addEventListener("scroll", () => {
       const r = sentinel.getBoundingClientRect();
-      if (!sentinel.hidden && r.top < window.innerHeight + 800) appendChunk();
+      if (!sentinel.hidden && r.top < window.innerHeight + 1400) appendChunk();
     }, { passive: true });
   }
 
