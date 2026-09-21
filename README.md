@@ -284,3 +284,15 @@ AAAI 论文版权归 AAAI 与作者所有（fair-use 学术参考）。
 | <a href="https://ojs.aaai.org/index.php/AAAI/article/view/29496"><img src="images/aaai/final/aaai2024-29496.jpg" width="230"></a><br><sub>2024 · <a href="https://ojs.aaai.org/index.php/AAAI/article/view/29496">Wavelet Dynamic Selection Network for Inertial Sensor Signal Enhancement</a></sub> | <a href="https://ojs.aaai.org/index.php/AAAI/article/view/33754"><img src="images/aaai/final/aaai2025-33754.jpg" width="230"></a><br><sub>2025 · <a href="https://ojs.aaai.org/index.php/AAAI/article/view/33754">EditBoard: Towards a Comprehensive Evaluation Benchmark for Text-Based Video Editing Models</a></sub> | <a href="https://ojs.aaai.org/index.php/AAAI/article/view/33863"><img src="images/aaai/final/aaai2025-33863.jpg" width="230"></a><br><sub>2025 · <a href="https://ojs.aaai.org/index.php/AAAI/article/view/33863">Enhancing Multivariate Time-Series Domain Adaptation via Contrastive Frequency Graph Discov…</a></sub> |
 
 <sub>图片版权归原作者及出版方所有，点击图片跳转原文。</sub>
+
+## ⭐ Star History
+
+实时 Star 增长曲线，由 [star-history.com](https://star-history.com/#qwdwqfwq/topconf-paper-figure-gallery&Date) 自动更新（点击图片可查看交互式大图）：
+
+<a href="https://star-history.com/#qwdwqfwq/topconf-paper-figure-gallery&Date">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=qwdwqfwq/topconf-paper-figure-gallery&type=Date&theme=dark" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=qwdwqfwq/topconf-paper-figure-gallery&type=Date" />
+    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=qwdwqfwq/topconf-paper-figure-gallery&type=Date" width="720" />
+  </picture>
+</a>
