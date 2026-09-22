@@ -21,9 +21,10 @@
     comparison:   "Comparison",
   };
   const PATTERN_ORDER = ["teaser", "conceptual", "framework", "pipeline", "architecture", "taxonomy", "results", "comparison"];
+  const TIERS = { best: "Best Paper", oral: "Oral", spotlight: "Spotlight" };
   const PAGE = 60;
 
-  const state = { venue: "all", year: "all", pattern: "all", q: "", sort: "venue" };
+  const state = { venue: "all", year: "all", tier: "all", pattern: "all", q: "", sort: "venue" };
   const figures = (window.FIGURES || []).slice();
   let filtered = [];
   let shown = 0;
@@ -35,6 +36,12 @@
   const endHint = $("#end-hint");
   const countEl = $("#result-count");
   $("#total-figures").textContent = figures.length.toLocaleString();
+  const nBest = figures.filter((f) => f.award).length;
+  const nOral = figures.filter((f) => (f.award ? false : f.tier === "oral")).length;
+  const nSpot = figures.filter((f) => (!f.award && f.tier === "spotlight")).length;
+  $("#total-best").textContent = nBest.toLocaleString();
+  $("#total-oral").textContent = nOral.toLocaleString();
+  $("#total-spotlight").textContent = nSpot.toLocaleString();
 
   /* ---------- filter chips ---------- */
   function makeChips(containerId, key, values, labels, counts) {
@@ -67,6 +74,9 @@
     (v) => VENUES[v].name,
     Object.fromEntries(Object.keys(VENUES).map((v) => [v, figures.filter((f) => f.venue === v).length])));
   makeChips("#year-chips", "year", years, (v) => v);
+  makeChips("#tier-chips", "tier", ["best", "oral", "spotlight"],
+    (v) => TIERS[v],
+    { best: nBest, oral: nOral, spotlight: nSpot });
   makeChips("#pattern-chips", "pattern", usedPatterns, (v) => PATTERNS[v] || v);
 
   /* ---------- search ---------- */
@@ -86,7 +96,7 @@
   });
   $("#sort").addEventListener("change", (e) => { state.sort = e.target.value; render(); });
   $("#reset-all").addEventListener("click", () => {
-    state.venue = state.year = state.pattern = "all"; state.q = "";
+    state.venue = state.year = state.tier = state.pattern = "all"; state.q = "";
     searchInput.value = ""; clearBtn.hidden = true;
     document.querySelectorAll(".chips").forEach((b) => {
       b.querySelectorAll(".chip").forEach((c) => c.classList.toggle("active", Object.values(c.dataset)[0] === "all"));
@@ -99,9 +109,14 @@
     if (state.venue !== "all" && f.venue !== state.venue) return false;
     if (state.year !== "all" && String(f.year) !== String(state.year)) return false;
     if (state.pattern !== "all" && f.pattern !== state.pattern) return false;
+    if (state.tier === "best") { if (!f.award) return false; }
+    else if (state.tier === "oral") { if (f.award || f.tier !== "oral") return false; }
+    else if (state.tier === "spotlight") { if (f.award || f.tier !== "spotlight") return false; }
     if (state.q) {
       const hay = [f.title, (f.authors || []).join(" "), VENUES[f.venue].name,
-                   f.year, f.pattern, PATTERNS[f.pattern] || ""].join(" ").toLowerCase();
+                   f.year, f.pattern, PATTERNS[f.pattern] || "",
+                   f.tier ? TIERS[f.tier] : "", f.award ? "best paper award outstanding" : ""]
+        .join(" ").toLowerCase();
       if (!state.q.split(/\s+/).every((tok) => hay.includes(tok))) return false;
     }
     return true;
@@ -126,13 +141,21 @@
   }
 
   /* ---------- chunked render ---------- */
+  function ribbonHtml(f) {
+    if (f.award === "best") return `<span class="ribbon rb-best">★ Best Paper</span>`;
+    if (f.award === "honorable") return `<span class="ribbon rb-honor">Honorable Mention</span>`;
+    if (f.tier === "oral") return `<span class="ribbon rb-oral">● Oral</span>`;
+    if (f.tier === "spotlight") return `<span class="ribbon rb-spotlight">● Spotlight</span>`;
+    return "";
+  }
   function cardHtml(f, idx) {
     const ratio = (f.w && f.h) ? `aspect-ratio:${f.w} / ${f.h};` : "min-height:170px;";
     const eager = idx < 24;
     const imgAttrs = eager ? `src="${f.image}"` : `data-src="${f.image}"`;
     return `
-    <article class="card" data-id="${f.id}" tabindex="0" role="button" aria-label="查看 ${escapeHtml(f.title)}">
+    <article class="card${f.award ? " is-award" : f.tier ? " is-" + f.tier : ""}" data-id="${f.id}" tabindex="0" role="button" aria-label="查看 ${escapeHtml(f.title)}">
       <div class="img-slot" style="${ratio}">
+        ${ribbonHtml(f)}
         <img class="card-img${eager ? " loaded" : ""}" ${imgAttrs} alt="${escapeHtml(f.title)} Figure 1" decoding="async">
       </div>
       <div class="card-body">
@@ -222,6 +245,7 @@
     const active = [
       state.venue !== "all" ? VENUES[state.venue].name : null,
       state.year !== "all" ? state.year : null,
+      state.tier !== "all" ? TIERS[state.tier] : null,
       state.pattern !== "all" ? (PATTERNS[state.pattern] || state.pattern) : null,
     ].filter(Boolean);
     countEl.innerHTML = active.length
@@ -249,6 +273,18 @@
     currentId = f.id;
     $("#lb-img").src = f.image;
     $("#lb-img").alt = f.title;
+    const aBadge = $("#lb-award");
+    if (f.award) {
+      aBadge.hidden = false;
+      aBadge.textContent = f.award === "best" ? "★ Best Paper" : "Honorable Mention";
+      aBadge.className = "badge tier-badge " + (f.award === "best" ? "rb-best" : "rb-honor");
+    } else aBadge.hidden = true;
+    const tBadge = $("#lb-tier");
+    if (f.tier) {
+      tBadge.hidden = false;
+      tBadge.textContent = TIERS[f.tier] || f.tier;
+      tBadge.className = "badge tier-badge " + (f.tier === "oral" ? "rb-oral" : "rb-spotlight");
+    } else tBadge.hidden = true;
     const vBadge = $("#lb-venue");
     vBadge.textContent = VENUES[f.venue].name;
     vBadge.className = "badge " + f.venue;

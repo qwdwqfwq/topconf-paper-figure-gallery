@@ -15,22 +15,28 @@
 
 <header class="hero">
   <div class="hero-inner">
-    <div class="brand">
-      <div class="brand-mark" aria-hidden="true">
-        <span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span>
+    <div class="hero-top">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <span class="dot d1"></span><span class="dot d2"></span><span class="dot d3"></span>
+        </div>
+        <div class="brand-text">
+          <h1>Top-Conf Figure Gallery</h1>
+          <p class="tagline">顶会论文主图灵感画廊 ·
+            <span class="vn iclr">ICLR</span>·<span class="vn icml">ICML</span>·<span class="vn neurips">NeurIPS</span>·<span class="vn cvpr">CVPR</span>·<span class="vn acl">ACL</span>·<span class="vn aaai">AAAI</span>
+            · 2023–2025</p>
+        </div>
       </div>
-      <div class="brand-text">
-        <h1>Top-Conf Figure Gallery</h1>
-        <p class="tagline">顶会论文主图灵感画廊 ·
-          <span class="vn iclr">ICLR</span>·<span class="vn icml">ICML</span>·<span class="vn neurips">NeurIPS</span>·<span class="vn cvpr">CVPR</span>·<span class="vn acl">ACL</span>·<span class="vn aaai">AAAI</span>
-          · 2023–2025</p>
+      <div class="hero-stats" id="hero-stats">
+        <span class="stat-pill"><b id="total-figures">…</b> figures</span>
+        <span class="stat-pill best"><i class="dot-ic">★</i><b id="total-best">–</b>&nbsp;Best</span>
+        <span class="stat-pill oral"><b id="total-oral">–</b>&nbsp;Oral</span>
+        <span class="stat-pill spotlight"><b id="total-spotlight">–</b>&nbsp;Spotlight</span>
       </div>
     </div>
     <p class="intro">
-      <b class="hl-num" id="total-figures">…</b> <b>curated Figure&nbsp;1 / teaser figures</b> from six top ML conferences —
-      <b>conceptual diagrams</b>, <b>system frameworks</b>, <b>pipelines</b> and <b>architectures</b>. Filter by venue, year or visual pattern, or search titles&nbsp;/&nbsp;authors to find layout ideas for <b>your own paper's overview figure</b>.<br>
-      精选六大顶会中真正体现排版与设计功力的 <b>Figure 1 / Teaser</b>：<b>概念示意图</b> · <b>系统框架图</b> · <b>流程图</b> · <b>架构图</b>。
-      按<b>会议 / 年份 / 视觉模式</b>筛选，或直接搜索<b>论文标题与作者</b>，为你自己的论文主图找灵感。
+      <b>Curated Figure&nbsp;1 / teaser figures</b> from six top ML conferences — <b>conceptual diagrams</b>, <b>system frameworks</b>, <b>pipelines</b> &amp; <b>architectures</b>. Filter by venue, year, <b class="t-k">acceptance tier</b> or visual pattern to find layout ideas for <b>your own paper's overview figure</b>.
+      精选六大顶会排版精良的 <b>Figure 1 / Teaser</b>，覆盖<b>概念示意 · 系统框架 · 流程 · 架构</b>，并按 <b style="color:#b8860b">Oral / Spotlight / Best Paper</b> 等级标注，为你的论文主图找灵感。
     </p>
   </div>
 </header>
@@ -54,13 +60,17 @@
       </div>
     </div>
     <div class="filter-row">
-      <span class="filter-label">Venue 会议</span>
+      <span class="filter-label fl-venue">Venue 会议</span>
       <div class="chips" id="venue-chips" role="group" aria-label="会议筛选"></div>
     </div>
-    <div class="filter-row dual">
-      <span class="filter-label">Year 年份</span>
+    <div class="filter-row">
+      <span class="filter-label fl-year">Year 年份</span>
       <div class="chips" id="year-chips" role="group" aria-label="年份筛选"></div>
-      <span class="filter-label sep">Pattern 模式</span>
+      <span class="filter-label fl-tier sep">Tier 等级</span>
+      <div class="chips" id="tier-chips" role="group" aria-label="录取等级筛选"></div>
+    </div>
+    <div class="filter-row">
+      <span class="filter-label fl-pattern">Pattern 模式</span>
       <div class="chips" id="pattern-chips" role="group" aria-label="视觉模式筛选"></div>
     </div>
   </div>
@@ -127,7 +137,7 @@
       <img id="lb-img" src="" alt="">
     </div>
     <div class="lightbox-meta">
-      <div class="lb-badges"><span id="lb-venue" class="badge"></span><span id="lb-year" class="badge year"></span><span id="lb-pattern" class="badge pattern"></span></div>
+      <div class="lb-badges"><span id="lb-award" class="badge tier-badge" hidden></span><span id="lb-tier" class="badge tier-badge" hidden></span><span id="lb-venue" class="badge"></span><span id="lb-year" class="badge year"></span><span id="lb-pattern" class="badge pattern"></span></div>
       <h2 id="lb-title"></h2>
       <p id="lb-authors" class="lb-authors"></p>
       <div class="lb-actions">

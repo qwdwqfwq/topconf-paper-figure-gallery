@@ -8,7 +8,8 @@
 <img src="docs/demo.gif" alt="Search, filter and lightbox demo" width="920">
 
 [![Website](https://img.shields.io/website?down_color=lightgrey&label=Gallery&up_color=blue&up_message=online&url=https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)
-![Figures](https://img.shields.io/badge/figures-2298-orange)
+![Figures](https://img.shields.io/badge/figures-2730-orange)
+![Best/Oral/Spotlight](https://img.shields.io/badge/Best%C2%B7Oral%C2%B7Spotlight-12%C2%B7138%C2%B7472-gold)
 ![Venues](https://img.shields.io/badge/venues-ICLR·ICML·NeurIPS·CVPR·ACL·AAAI-purple)
 ![Years](https://img.shields.io/badge/years-2023--2025-success)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](requirements.txt)
@@ -40,7 +41,8 @@ from six top ML/AI conferences, 2023–2025. It is a reference library for resea
 who want a clearer overview figure — it is not a ranking of papers. Every card links
 back to its source paper and records venue, year, authors and a visual-pattern tag.
 
-- 🗂️ Filter by **venue / year / visual pattern**; infinite-scroll masonry and a lightbox
+- 🗂️ Filter by **venue / year / acceptance tier / visual pattern**; infinite-scroll masonry and a lightbox
+- 🏅 **Oral, Spotlight and Best/Outstanding-paper figures are tagged** (gold / silver / red corner badges) for ICLR, ICML and NeurIPS 2023–2025 — browse the figures the programme committees highlighted most
 - 🔍 Full-text **search over titles and authors** (e.g. `DPO`, `robot`, `gaussian`, `agent`)
 - 🚫 **Every figure is hand-reviewed.** 25+ heuristic rules first discard default
   matplotlib charts, plain tables, GUI screenshots and unlabeled photo dumps; a human then
@@ -86,7 +88,8 @@ Image files remain attributed to their authors and publishers; see
 本仓库把六大顶会 2023–2025 里**真正体现作者排版与设计功力**的 Figure 1 / Teaser
 集中起来，做成一个可检索的集群式画廊：
 
-- 🗂️ 按 **会议 / 年份 / 视觉模式**（概念图、框架图、流程图、架构图、任务全景…）筛选
+- 🗂️ 按 **会议 / 年份 / 录取等级 / 视觉模式**（概念图、框架图、流程图、架构图、任务全景…）筛选
+- 🏅 ICLR / ICML / NeurIPS 2023–2025 的 **Oral / Spotlight / Best（杰出论文）** 主图带金 / 银 / 红角标，一键只看程序委员会最认可的工作
 - 🔍 标题、作者、关键词 **全文搜索**（如 `DPO`、`robot`、`gaussian`、`agent`）
 - 🖼️ 卡片瀑布流 + 点击**灯箱大图**，键盘 ←/→ 翻图，一键跳转原文
 - 🚫 明确**剔除**默认 matplotlib 图表、纯表格、GUI 截图、无标签照片墙——只留有设计的图
@@ -108,22 +111,41 @@ Image files remain attributed to their authors and publishers; see
 
 ## 📊 收录规模 / Coverage
 
-| 会议 | 2023 | 2024 | 2025 | 合计 |
+**Figure counts per venue and year (English readers: columns are venue · 2023 · 2024 · 2025 · total).**
+
+| 会议 / Venue | 2023 | 2024 | 2025 | 合计 Total |
 |---|---:|---:|---:|---:|
-| 🟣 **ICLR** | 68 | 88 | 214 | **370** |
-| 🟢 **ICML** | 51 | 87 | 172 | **310** |
-| 🔴 **NeurIPS** | 206 | 329 | 268 | **803** |
+| 🟣 **ICLR** | 108 | 137 | 276 | **521** |
+| 🟢 **ICML** | 66 | 132 | 217 | **415** |
+| 🔴 **NeurIPS** | 239 | 365 | 375 | **979** |
 | 🟠 **CVPR** | 65 | 64 | 96 | **225** |
 | 🔵 **ACL** | 84 | 74 | 168 | **326** |
 | 🟡 **AAAI** | 59 | 66 | 139 | **264** |
-| | | | **总计 Total** | **2298** |
+| | | | **总计 Total** | **2730** |
+
+### 🏅 高等级论文 / High-tier papers（ML 三大会，2023–2025）
+
+**Tagged acceptance tiers for ICLR / ICML / NeurIPS — columns: Best/Outstanding (incl. Honorable Mention) · Oral · Spotlight · total.**
+
+画廊对 ICLR / ICML / NeurIPS 的 **Oral、Spotlight、Best/Outstanding Paper** 做了完整索引：
+这些论文中凡有 Figure 1 / Teaser 且达到收录标准的，全部带角标入库；纯理论工作正文没有设计型配图，相应位置即为空缺。
+
+| 会议 | Best / Outstanding | Oral | Spotlight | 合计 |
+|---|---:|---:|---:|---:|
+| 🟣 **ICLR** | 6 | 49 | 155 | **210** |
+| 🟢 **ICML** | 3 | 57 | 80 | **140** |
+| 🔴 **NeurIPS** | 3 | 32 | 237 | **272** |
+
+> 角标含义：<b style="color:#be123c">★ 红色 = Best / Outstanding（含 Honorable Mention 描边款）</b>、
+> <b style="color:#c8860a">金色 = Oral</b>、<b style="color:#64748b">银色 = Spotlight</b>。
+> 等级口径以各会议官方名单为准：ICLR 2023 当年未使用 oral/spotlight 命名，
+> 官方 "notable top 5%" 对应 Oral、"notable top 25%" 对应 Spotlight；
+> ICML 2023 只有 OralPoster 一档，记为 Oral。
 
 > 图片均从正式出版 PDF 渲染裁剪（约 180–216 DPI），网页版压缩为 ≤1500px JPEG；
-> 每张图都标注论文标题、全部作者与原文链接。六个会议的每一张候选图都经过人工逐页复核
-> （见 [METHODOLOGY](docs/METHODOLOGY.md)）。各会议数量不设统一指标，只保留达到设计标准的图，
-> 因此数量差异反映的是各会议"设计型主图"的占比，而不是会议水平：
-> NeurIPS 的设计型 overview figure 最多（803）；CVPR 的 Figure 1 常为结果照片墙，入选较少（225）；
-> ACL/AAAI 的框架图文混排占比稳定（326/264）；理论向的 ICML 默认图表更多（310）。
+> 每张图都标注论文标题、全部作者与原文链接。候选图先经过 25+ 条规则初筛，再逐页人工复核
+> （见 [METHODOLOGY](docs/METHODOLOGY.md)）。各会议图量差异源于"设计型主图"的实际占比，
+> 与会议水平无关，画廊也不为任一会议设定数量目标。
 
 ## 🧭 视觉模式分类
 
@@ -195,6 +217,8 @@ python scripts/sheet_qa.py 31
 - [x] 60 张人工精选种子画廊（v0.1）
 - [x] ICLR / ICML / NeurIPS 自动管线扩量（v0.2–v0.3）
 - [x] CVPR / ACL / AAAI（2023–2025）同管线扩展（v0.3）
+- [x] ICLR / ICML / NeurIPS Oral · Spotlight · Best Paper 等级索引与角标筛选（v0.4）
+- [ ] CVPR / ACL / AAAI 的 Oral / Highlight 等级索引（v0.5）
 - [ ] 持续人工复核、清理不合格图片，开放社区 PR 补图机制
 - [ ] CHI / CoRL / RSS / EMNLP 等会议扩展
 - [ ] 相似图推荐、按配色检索、一键导出 BibTeX
@@ -227,16 +251,16 @@ AAAI 论文版权归 AAAI 与作者所有（fair-use 学术参考）。
 }
 ```
 
-## 🖼️ 精选图录（每会议-年份评分最高的 2 张；完整 2298 张请用[在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)）
+## 🖼️ 精选图录（每会议-年份评分最高的 2 张；完整 2730 张请用[在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)）
 
 <br>
 
 **ICLR**
 
 
-| <a href="https://openreview.net/forum?id=qU6NIcpaSi-"><img src="images/iclr/final/iclr2023-1113.jpg" width="230"></a><br><sub>2023 · <a href="https://openreview.net/forum?id=qU6NIcpaSi-">Learning Heterogeneous Interaction Strengths by Trajectory Prediction with Graph Neural Net…</a></sub> | <a href="https://openreview.net/forum?id=VGI9dSmTgPF"><img src="images/iclr/final/iclr2023-0519.jpg" width="230"></a><br><sub>2023 · <a href="https://openreview.net/forum?id=VGI9dSmTgPF">Schema Inference for Interpretable Image Classification</a></sub> | <a href="https://openreview.net/forum?id=NxoFmGgWC9"><img src="images/iclr/final/iclr2024-1145.jpg" width="230"></a><br><sub>2024 · <a href="https://openreview.net/forum?id=NxoFmGgWC9">Unleashing Large-Scale Video Generative Pre-training for Visual Robot Manipulation</a></sub> |
+| <a href="https://openreview.net/forum?id=ApF0dmi1_9K"><img src="images/iclr/final/iclr2023-0420.jpg" width="230"></a><br><sub>2023 · <a href="https://openreview.net/forum?id=ApF0dmi1_9K">NTFields: Neural Time Fields for Physics-Informed Robot Motion Planning</a></sub> | <a href="https://openreview.net/forum?id=qU6NIcpaSi-"><img src="images/iclr/final/iclr2023-1113.jpg" width="230"></a><br><sub>2023 · <a href="https://openreview.net/forum?id=qU6NIcpaSi-">Learning Heterogeneous Interaction Strengths by Trajectory Prediction with Graph Neural Net…</a></sub> | <a href="https://openreview.net/forum?id=CIj1CVbkpr"><img src="images/iclr/final/iclr2024-1909.jpg" width="230"></a><br><sub>2024 · <a href="https://openreview.net/forum?id=CIj1CVbkpr">Online Stabilization of Spiking Neural Networks</a></sub> |
 |---|---|---|
-| <a href="https://openreview.net/forum?id=otHZ8JAIgh"><img src="images/iclr/final/iclr2024-0835.jpg" width="230"></a><br><sub>2024 · <a href="https://openreview.net/forum?id=otHZ8JAIgh">Prototypical Information Bottlenecking and Disentangling for Multimodal Cancer Survival Pre…</a></sub> | <a href="https://openreview.net/forum?id=Y1r9yCMzeA"><img src="images/iclr/final/iclr2025-0844.jpg" width="230"></a><br><sub>2025 · <a href="https://openreview.net/forum?id=Y1r9yCMzeA">GraphArena: Evaluating and Exploring Large Language Models on Graph Computation</a></sub> | <a href="https://openreview.net/forum?id=3E8YNv1HjU"><img src="images/iclr/final/iclr2025-1641.jpg" width="230"></a><br><sub>2025 · <a href="https://openreview.net/forum?id=3E8YNv1HjU">Recite, Reconstruct, Recollect: Memorization in LMs as a Multifaceted Phenomenon</a></sub> |
+| <a href="https://openreview.net/forum?id=NxoFmGgWC9"><img src="images/iclr/final/iclr2024-1145.jpg" width="230"></a><br><sub>2024 · <a href="https://openreview.net/forum?id=NxoFmGgWC9">Unleashing Large-Scale Video Generative Pre-training for Visual Robot Manipulation</a></sub> | <a href="https://openreview.net/forum?id=Y1r9yCMzeA"><img src="images/iclr/final/iclr2025-0844.jpg" width="230"></a><br><sub>2025 · <a href="https://openreview.net/forum?id=Y1r9yCMzeA">GraphArena: Evaluating and Exploring Large Language Models on Graph Computation</a></sub> | <a href="https://openreview.net/forum?id=vzItLaEoDa"><img src="images/iclr/final/iclr2025-1458.jpg" width="230"></a><br><sub>2025 · <a href="https://openreview.net/forum?id=vzItLaEoDa">Open-World Reinforcement Learning over Long Short-Term Imagination</a></sub> |
 
 <br>
 
@@ -254,7 +278,7 @@ AAAI 论文版权归 AAAI 与作者所有（fair-use 学术参考）。
 
 | <a href="https://proceedings.neurips.cc/paper_files/paper/2023/hash/4b0eea69deea512c9e2c469187643dc2-Abstract-Conference.html"><img src="images/neurips/final/neurips2023-1177.jpg" width="230"></a><br><sub>2023 · <a href="https://proceedings.neurips.cc/paper_files/paper/2023/hash/4b0eea69deea512c9e2c469187643dc2-Abstract-Conference.html">SwiftSage: A Generative Agent with Fast and Slow Thinking for Complex Interactive Tasks</a></sub> | <a href="https://proceedings.neurips.cc/paper_files/paper/2023/hash/88a129e44f25a571ae8b838057c46855-Abstract-Conference.html"><img src="images/neurips/final/neurips2023-0665.jpg" width="230"></a><br><sub>2023 · <a href="https://proceedings.neurips.cc/paper_files/paper/2023/hash/88a129e44f25a571ae8b838057c46855-Abstract-Conference.html">LayoutPrompter: Awaken the Design Ability of Large Language Models</a></sub> | <a href="https://proceedings.neurips.cc/paper_files/paper/2024/hash/fe0007fcfd707673660ec0f9014bc48e-Abstract-Datasets_and_Benchmarks_Track.html"><img src="images/neurips/final/neurips2024-2534.jpg" width="230"></a><br><sub>2024 · <a href="https://proceedings.neurips.cc/paper_files/paper/2024/hash/fe0007fcfd707673660ec0f9014bc48e-Abstract-Datasets_and_Benchmarks_Track.html">A survey and benchmark of high-dimensional Bayesian optimization of discrete sequences</a></sub> |
 |---|---|---|
-| <a href="https://proceedings.neurips.cc/paper_files/paper/2024/hash/237ffa9a473eff1c66d085dba7f813ba-Abstract-Datasets_and_Benchmarks_Track.html"><img src="images/neurips/final/neurips2024-4243.jpg" width="230"></a><br><sub>2024 · <a href="https://proceedings.neurips.cc/paper_files/paper/2024/hash/237ffa9a473eff1c66d085dba7f813ba-Abstract-Datasets_and_Benchmarks_Track.html">Task Me Anything</a></sub> | <a href="https://arxiv.org/abs/2509.21927"><img src="images/neurips/final/neurips2025-1405.jpg" width="230"></a><br><sub>2025 · <a href="https://arxiv.org/abs/2509.21927">SingRef6D: Monocular Novel Object Pose Estimation with a Single RGB Reference</a></sub> | <a href="https://arxiv.org/abs/2510.23605"><img src="images/neurips/final/neurips2025-1601.jpg" width="230"></a><br><sub>2025 · <a href="https://arxiv.org/abs/2510.23605">Track, Inpaint, Resplat: Subject-driven 3D and 4D Generation with Progressive Texture Infil…</a></sub> |
+| <a href="https://proceedings.neurips.cc/paper_files/paper/2024/hash/237ffa9a473eff1c66d085dba7f813ba-Abstract-Datasets_and_Benchmarks_Track.html"><img src="images/neurips/final/neurips2024-4243.jpg" width="230"></a><br><sub>2024 · <a href="https://proceedings.neurips.cc/paper_files/paper/2024/hash/237ffa9a473eff1c66d085dba7f813ba-Abstract-Datasets_and_Benchmarks_Track.html">Task Me Anything</a></sub> | <a href="https://arxiv.org/abs/2509.21927"><img src="images/neurips/final/neurips2025-1405.jpg" width="230"></a><br><sub>2025 · <a href="https://arxiv.org/abs/2509.21927">SingRef6D: Monocular Novel Object Pose Estimation with a Single RGB Reference</a></sub> | <a href="https://openreview.net/forum?id=aSfBbhUJAa"><img src="images/neurips/final/neurips2025-3150.jpg" width="230"></a><br><sub>2025 · <a href="https://openreview.net/forum?id=aSfBbhUJAa">RepoMaster: Autonomous Exploration and Understanding of GitHub Repositories for Complex Tas…</a></sub> |
 
 <br>
 

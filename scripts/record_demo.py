@@ -76,7 +76,19 @@ def main():
         page.wait_for_timeout(300)
         click_ready(page, '#venue-chips button[data-venue="all"]')
         page.wait_for_timeout(400)
+        grab(page, 4)
+        # tier filter: Best / Outstanding papers
+        click_ready(page, '#tier-chips button[data-tier="best"]')
+        page.wait_for_timeout(600)
+        grab(page, 8)
+        # switch tier to Oral
+        click_ready(page, '#tier-chips button[data-tier="oral"]')
+        page.wait_for_timeout(600)
         grab(page, 6)
+        # reset tier
+        click_ready(page, '#tier-chips button[data-tier="all"]')
+        page.wait_for_timeout(400)
+        grab(page, 4)
         # search
         type_slowly(page, "#search", "gaussian")
         page.wait_for_timeout(700)

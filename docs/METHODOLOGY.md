@@ -103,9 +103,38 @@
 3. **补位图二轮复核**：重跑选图后新进入画廊的补位图片再做两轮随机抽样联系表检查，
    补掉少量漏网的不合格裁剪后定稿。
 
-最终入选 **2,238 张管线选图 + 60 张 v1 人工底 = 2,298 张**
+v0.3 定稿为 **2,238 张管线选图 + 60 张 v1 人工底 = 2,298 张**
 （ICLR 370 / ICML 310 / NeurIPS 803 / CVPR 225 / ACL 326 / AAAI 264）；
+v0.4 在此基础上扩至 2,730 张（见 §5b）。
 `data/exclude.txt` 累计排除约 1,400 张低质量裁剪。
+
+## 5b. v0.4：高等级论文索引 / Oral · Spotlight · Best tier index
+
+v0.4 对 ICLR / ICML / NeurIPS 2023–2025 的高等级论文做了完整索引，而不是只按视觉分排序：
+
+1. **名单 / Rosters**：以官方接受名单为准，共 3,822 篇 oral / spotlight
+   （OpenReview venue 字段；ICLR 2023 当年未使用 oral/spotlight 命名，
+   官方 *notable top 5%* 记为 Oral、*notable top 25%* 记为 Spotlight；
+   ICML 2023 只有 OralPoster 一档，记为 Oral）。
+2. **奖项 / Awards**：三大会 2023–2025 的 Best / Outstanding Paper 与
+   Honorable Mention 共 66 篇，按官方公告人工核对（个别标题与 OpenReview 记录有出入时，
+   以标题模糊匹配 + 人工确认）。
+3. **宽松补裁 / Rescue pass**：理论/方法论文的 Figure 1 常无标准图注或位于前 6 页，
+   严格裁图会漏图。补裁轮放宽图注字号容差（+10 pt）、扫描前 6 页，
+   无图注时退回页内最大图；下载失败逐篇重试，最终下载失败为 0。
+   仍无图的论文（纯理论正文）不产生卡片，这是内容本身决定的空缺。
+4. **两轮人工 QA**：
+   - 规则软门（"照片墙 / 边缘截断"等指标）会误伤全幅框架图与管线图。
+     1,238 张软拒绝候选拼成 31 页联系表逐页人工判定，保留其中设计完整的
+     框架 / 流程 / 概念图（白名单强制放行，仍经过 dHash 去重与尺寸下限）；
+   - 自动门通过的新增图片再出 8 页联系表逐张复核，剔除漏网的图表页、
+     截图页与结果照片墙。
+5. **角标 / Badges**：卡片左上角与灯箱内显示等级——
+   ★ 红色 = Best / Outstanding（Honorable Mention 为白底红描边）、
+   金色 = Oral、银色 = Spotlight；筛选栏的 Tier 维度与会议 / 年份 / 模式正交。
+
+v0.4 后画廊共 **2,730 张**，其中带等级标识 622 张
+（Best/Outstanding/Honorable 12、Oral 138、Spotlight 472）。
 
 ## 6. 复现 / Reproduce
 

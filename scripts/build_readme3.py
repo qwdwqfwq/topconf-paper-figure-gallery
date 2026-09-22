@@ -24,6 +24,20 @@ for f in figs:
 total = len(figs)
 venue_total = {v: sum(counts[v].values()) for v, _, _ in VENUES}
 venue_badge = "·".join(n for _, n, _ in VENUES)
+n_best = sum(1 for f in figs if f.get("award"))
+n_oral = sum(1 for f in figs if not f.get("award") and f.get("tier") == "oral")
+n_spot = sum(1 for f in figs if not f.get("award") and f.get("tier") == "spotlight")
+n_tier = n_best + n_oral + n_spot
+# per-venue tier table (ML3 only)
+tier_rows = []
+for v, name, ico in VENUES:
+    if v not in ("iclr", "icml", "neurips"):
+        continue
+    b = sum(1 for f in figs if f["venue"] == v and f.get("award"))
+    o = sum(1 for f in figs if f["venue"] == v and not f.get("award") and f.get("tier") == "oral")
+    s = sum(1 for f in figs if f["venue"] == v and not f.get("award") and f.get("tier") == "spotlight")
+    tier_rows.append(f"| {ico} **{name}** | {b} | {o} | {s} | **{b+o+s}** |")
+tier_table = "\n".join(tier_rows)
 
 # featured: top 2 by score per venue-year (deterministic)
 feats = []
@@ -71,6 +85,7 @@ readme = f"""<div align="center">
 
 [![Website](https://img.shields.io/website?down_color=lightgrey&label=Gallery&up_color=blue&up_message=online&url={PAGES})]({PAGES})
 ![Figures](https://img.shields.io/badge/figures-{total}-orange)
+![Best/Oral/Spotlight](https://img.shields.io/badge/Best%C2%B7Oral%C2%B7Spotlight-{n_best}%C2%B7{n_oral}%C2%B7{n_spot}-gold)
 ![Venues](https://img.shields.io/badge/venues-{venue_badge.replace(' ', '%20')}-purple)
 ![Years](https://img.shields.io/badge/years-2023--2025-success)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](requirements.txt)
@@ -102,7 +117,8 @@ from six top ML/AI conferences, 2023–2025. It is a reference library for resea
 who want a clearer overview figure — it is not a ranking of papers. Every card links
 back to its source paper and records venue, year, authors and a visual-pattern tag.
 
-- 🗂️ Filter by **venue / year / visual pattern**; infinite-scroll masonry and a lightbox
+- 🗂️ Filter by **venue / year / acceptance tier / visual pattern**; infinite-scroll masonry and a lightbox
+- 🏅 **Oral, Spotlight and Best/Outstanding-paper figures are tagged** (gold / silver / red corner badges) for ICLR, ICML and NeurIPS 2023–2025 — browse the figures the programme committees highlighted most
 - 🔍 Full-text **search over titles and authors** (e.g. `DPO`, `robot`, `gaussian`, `agent`)
 - 🚫 **Every figure is hand-reviewed.** 25+ heuristic rules first discard default
   matplotlib charts, plain tables, GUI screenshots and unlabeled photo dumps; a human then
@@ -148,7 +164,8 @@ Image files remain attributed to their authors and publishers; see
 本仓库把六大顶会 2023–2025 里**真正体现作者排版与设计功力**的 Figure 1 / Teaser
 集中起来，做成一个可检索的集群式画廊：
 
-- 🗂️ 按 **会议 / 年份 / 视觉模式**（概念图、框架图、流程图、架构图、任务全景…）筛选
+- 🗂️ 按 **会议 / 年份 / 录取等级 / 视觉模式**（概念图、框架图、流程图、架构图、任务全景…）筛选
+- 🏅 ICLR / ICML / NeurIPS 2023–2025 的 **Oral / Spotlight / Best（杰出论文）** 主图带金 / 银 / 红角标，一键只看程序委员会最认可的工作
 - 🔍 标题、作者、关键词 **全文搜索**（如 `DPO`、`robot`、`gaussian`、`agent`）
 - 🖼️ 卡片瀑布流 + 点击**灯箱大图**，键盘 ←/→ 翻图，一键跳转原文
 - 🚫 明确**剔除**默认 matplotlib 图表、纯表格、GUI 截图、无标签照片墙——只留有设计的图
@@ -170,17 +187,34 @@ Image files remain attributed to their authors and publishers; see
 
 ## 📊 收录规模 / Coverage
 
-| 会议 | 2023 | 2024 | 2025 | 合计 |
+**Figure counts per venue and year (English readers: columns are venue · 2023 · 2024 · 2025 · total).**
+
+| 会议 / Venue | 2023 | 2024 | 2025 | 合计 Total |
 |---|---:|---:|---:|---:|
 {rows_table}
 | | | | **总计 Total** | **{total}** |
 
+### 🏅 高等级论文 / High-tier papers（ML 三大会，2023–2025）
+
+**Tagged acceptance tiers for ICLR / ICML / NeurIPS — columns: Best/Outstanding (incl. Honorable Mention) · Oral · Spotlight · total.**
+
+画廊对 ICLR / ICML / NeurIPS 的 **Oral、Spotlight、Best/Outstanding Paper** 做了完整索引：
+这些论文中凡有 Figure 1 / Teaser 且达到收录标准的，全部带角标入库；纯理论工作正文没有设计型配图，相应位置即为空缺。
+
+| 会议 | Best / Outstanding | Oral | Spotlight | 合计 |
+|---|---:|---:|---:|---:|
+{tier_table}
+
+> 角标含义：<b style="color:#be123c">★ 红色 = Best / Outstanding（含 Honorable Mention 描边款）</b>、
+> <b style="color:#c8860a">金色 = Oral</b>、<b style="color:#64748b">银色 = Spotlight</b>。
+> 等级口径以各会议官方名单为准：ICLR 2023 当年未使用 oral/spotlight 命名，
+> 官方 "notable top 5%" 对应 Oral、"notable top 25%" 对应 Spotlight；
+> ICML 2023 只有 OralPoster 一档，记为 Oral。
+
 > 图片均从正式出版 PDF 渲染裁剪（约 180–216 DPI），网页版压缩为 ≤1500px JPEG；
-> 每张图都标注论文标题、全部作者与原文链接。六个会议的每一张候选图都经过人工逐页复核
-> （见 [METHODOLOGY](docs/METHODOLOGY.md)）。各会议数量不设统一指标，只保留达到设计标准的图，
-> 因此数量差异反映的是各会议"设计型主图"的占比，而不是会议水平：
-> NeurIPS 的设计型 overview figure 最多（803）；CVPR 的 Figure 1 常为结果照片墙，入选较少（225）；
-> ACL/AAAI 的框架图文混排占比稳定（326/264）；理论向的 ICML 默认图表更多（310）。
+> 每张图都标注论文标题、全部作者与原文链接。候选图先经过 25+ 条规则初筛，再逐页人工复核
+> （见 [METHODOLOGY](docs/METHODOLOGY.md)）。各会议图量差异源于"设计型主图"的实际占比，
+> 与会议水平无关，画廊也不为任一会议设定数量目标。
 
 ## 🧭 视觉模式分类
 
@@ -252,6 +286,8 @@ python scripts/sheet_qa.py 31
 - [x] 60 张人工精选种子画廊（v0.1）
 - [x] ICLR / ICML / NeurIPS 自动管线扩量（v0.2–v0.3）
 - [x] CVPR / ACL / AAAI（2023–2025）同管线扩展（v0.3）
+- [x] ICLR / ICML / NeurIPS Oral · Spotlight · Best Paper 等级索引与角标筛选（v0.4）
+- [ ] CVPR / ACL / AAAI 的 Oral / Highlight 等级索引（v0.5）
 - [ ] 持续人工复核、清理不合格图片，开放社区 PR 补图机制
 - [ ] CHI / CoRL / RSS / EMNLP 等会议扩展
 - [ ] 相似图推荐、按配色检索、一键导出 BibTeX

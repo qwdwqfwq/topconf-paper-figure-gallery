@@ -2,6 +2,16 @@
 
 本项目的重要变更记录（格式参考 Keep a Changelog）。
 
+## [0.4.0] - 2026-09-21
+
+- **高等级论文索引（ICLR / ICML / NeurIPS，2023–2025）**：完整覆盖三大会官方 Oral / Spotlight 名单（3,822 篇候选）与 Best/Outstanding、Honorable Mention 名单（66 篇，人工核对）。
+- **等级角标与筛选**：卡片左上角与灯箱内显示等级——★ 红色 Best/Outstanding（Honorable Mention 为白底红描边）、金色 Oral、银色 Spotlight；筛选栏新增与会议 / 年份 / 模式正交的 Tier 维度（All / Best Paper / Oral / Spotlight，带计数）。
+- 画廊规模 2,298 → **2,730 张**；其中带等级标识 622 张（Best 系列 12、Oral 138、Spotlight 472）。纯理论获奖论文正文没有设计型配图，相应位置留空（口径见 docs/METHODOLOGY.md §5b）。
+- **宽松补裁**：放宽图注容差、扫描前 6 页、无图注时退回页内最大图；逐篇重试后下载失败为 0；修复一批已裁 PNG 缺少状态记录而从未参与评分的问题（重新下载、重裁并回填状态 433 张）。
+- **两轮人工 QA**：1,238 张被软规则拒绝的候选逐页复核，救回设计完整的框架 / 流程 / 概念图；自动门新增图片再逐张复核，剔除图表页、截图页与结果照片墙。
+- **头部紧凑化**：hero 压缩为两行并在右侧加入实时统计（figures / Best / Oral / Spotlight），粘置工具条三行排布，图片区域成为首屏主体；等级卡片使用彩色边框与角标。
+- README / METHODOLOGY 更新等级口径（含 ICLR 2023 notable 映射、ICML 2023 仅 OralPoster）与 v0.4 复核流程。
+
 ## [0.3.1] - 2026-09-20
 
 - **修复慢网络下图片白块**：原生 loading=lazy 在快速滚动或慢速网络下预取距离不足，且 CSS 瀑布流会把新分页卡片填到视口上方导致永不触发加载。改为自定义 IntersectionObserver（提前 1800px 预取）+ shimmer 骨架占位 + 淡入 + 失败自动重试一次。

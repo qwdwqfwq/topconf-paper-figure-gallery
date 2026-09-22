@@ -301,6 +301,10 @@ def score(r):
     if r["edge_cut"]: sc -= min(8, r["edge_cut"])
     return round(sc, 2)
 
+# ---------- main pipeline (only when executed as a script) ----------
+if __name__ != "__main__":
+    raise SystemExit
+
 kept, rejects = [], []
 for r in rows:
     why = reject(r)
