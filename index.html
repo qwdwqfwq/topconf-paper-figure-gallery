@@ -131,18 +131,24 @@
   <div class="lightbox-backdrop"></div>
   <div class="lightbox-dialog" role="dialog" aria-modal="true" aria-label="图片详情">
     <button class="lightbox-close" id="lb-close" aria-label="关闭">×</button>
-    <button class="lightbox-nav prev" id="lb-prev" aria-label="上一张">‹</button>
-    <button class="lightbox-nav next" id="lb-next" aria-label="下一张">›</button>
-    <div class="lightbox-img-wrap">
-      <img id="lb-img" src="" alt="">
-    </div>
-    <div class="lightbox-meta">
-      <div class="lb-badges"><span id="lb-award" class="badge tier-badge" hidden></span><span id="lb-tier" class="badge tier-badge" hidden></span><span id="lb-venue" class="badge"></span><span id="lb-year" class="badge year"></span><span id="lb-pattern" class="badge pattern"></span></div>
-      <h2 id="lb-title"></h2>
-      <p id="lb-authors" class="lb-authors"></p>
-      <div class="lb-actions">
-        <a id="lb-paper" class="primary-btn" target="_blank" rel="noopener">Open paper ↗</a>
-        <a id="lb-image" class="ghost-btn" target="_blank" rel="noopener">View image alone</a>
+    <button class="lightbox-nav prev" id="lb-prev" aria-label="上一张">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"></path></svg>
+    </button>
+    <button class="lightbox-nav next" id="lb-next" aria-label="下一张">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"></path></svg>
+    </button>
+    <div class="lightbox-content">
+      <div class="lightbox-img-wrap">
+        <img id="lb-img" src="" alt="">
+      </div>
+      <div class="lightbox-meta">
+        <div class="lb-badges"><span id="lb-award" class="badge tier-badge" hidden></span><span id="lb-tier" class="badge tier-badge" hidden></span><span id="lb-venue" class="badge"></span><span id="lb-year" class="badge year"></span><span id="lb-pattern" class="badge pattern"></span></div>
+        <h2 id="lb-title"></h2>
+        <p id="lb-authors" class="lb-authors"></p>
+        <div class="lb-actions">
+          <a id="lb-paper" class="primary-btn" target="_blank" rel="noopener">Open paper ↗</a>
+          <a id="lb-image" class="ghost-btn" target="_blank" rel="noopener">View image alone</a>
+        </div>
       </div>
     </div>
   </div>

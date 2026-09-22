@@ -154,6 +154,7 @@
     const imgAttrs = eager ? `src="${f.image}"` : `data-src="${f.image}"`;
     return `
     <article class="card${f.award ? " is-award" : f.tier ? " is-" + f.tier : ""}" data-id="${f.id}" tabindex="0" role="button" aria-label="查看 ${escapeHtml(f.title)}">
+      <span class="card-close-target" aria-hidden="true"></span>
       <div class="img-slot" style="${ratio}">
         ${ribbonHtml(f)}
         <img class="card-img${eager ? " loaded" : ""}" ${imgAttrs} alt="${escapeHtml(f.title)} Figure 1" decoding="async">
@@ -267,12 +268,39 @@
 
   /* ---------- lightbox with prev/next over the filtered list ---------- */
   const lb = $("#lightbox");
+  const lbImg = $("#lb-img");
+  const lbClose = $("#lb-close");
+  const lbDialog = lb.querySelector(".lightbox-dialog");
+  const lbContent = lb.querySelector(".lightbox-content");
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const transitionParts = {
+    shell: "gallery-card-shell",
+    image: "gallery-card-image",
+    badges: "gallery-card-badges",
+    title: "gallery-card-title",
+    authors: "gallery-card-authors",
+    actions: "gallery-card-actions",
+    close: "gallery-lightbox-close",
+    swap: "gallery-dialog-swap",
+  };
   let currentId = null;
+  let lightboxBusy = false;
+  let opener = null;
+
   function currentIndex() { return filtered.findIndex((x) => x.id === currentId); }
-  function openFigure(f) {
+
+  function positionLightboxNav() {
+    const imageRect = lb.querySelector(".lightbox-img-wrap").getBoundingClientRect();
+    if (!imageRect.height) return;
+    const center = `${imageRect.top + imageRect.height / 2}px`;
+    $("#lb-prev").style.top = center;
+    $("#lb-next").style.top = center;
+  }
+
+  function setFigureContent(f) {
     currentId = f.id;
-    $("#lb-img").src = f.image;
-    $("#lb-img").alt = f.title;
+    lbImg.src = f.image;
+    lbImg.alt = f.title;
     const aBadge = $("#lb-award");
     if (f.award) {
       aBadge.hidden = false;
@@ -298,29 +326,182 @@
     const i = currentIndex();
     $("#lb-prev").style.visibility = i > 0 ? "visible" : "hidden";
     $("#lb-next").style.visibility = i < filtered.length - 1 ? "visible" : "hidden";
-    lb.hidden = false;
-    document.body.style.overflow = "hidden";
   }
-  function step(d) {
+
+  function cardFor(id) {
+    return Array.from(gallery.querySelectorAll(".card")).find((card) => card.dataset.id === id) || null;
+  }
+
+  function isInViewport(element) {
+    if (!element) return false;
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0 && rect.bottom > 0 && rect.right > 0
+      && rect.top < window.innerHeight && rect.left < window.innerWidth;
+  }
+
+  function canTransition() {
+    return typeof document.startViewTransition === "function" && !reducedMotion.matches;
+  }
+
+  async function decodeLightboxImage() {
+    if (typeof lbImg.decode !== "function") return;
+    try { await lbImg.decode(); } catch (_) { /* Keep the existing image error behavior. */ }
+  }
+
+  function componentPairs(card, direction) {
+    const cardParts = card ? {
+      shell: card,
+      image: card.querySelector(".card-img"),
+      badges: card.querySelector(".card-badges"),
+      title: card.querySelector(".card-title"),
+      authors: card.querySelector(".card-authors"),
+      actions: card.querySelector(".card-link"),
+      close: card.querySelector(".card-close-target"),
+    } : {};
+    const dialogParts = {
+      shell: lbDialog,
+      image: lbImg,
+      badges: lbDialog.querySelector(".lb-badges"),
+      title: $("#lb-title"),
+      authors: $("#lb-authors"),
+      actions: lbDialog.querySelector(".lb-actions"),
+      close: lbClose,
+    };
+    return Object.keys(dialogParts).map((key) => ({
+      source: direction === "closing" ? dialogParts[key] : cardParts[key],
+      destination: direction === "closing" ? cardParts[key] : dialogParts[key],
+      name: transitionParts[key],
+    }));
+  }
+
+  async function transitionLightbox(update, options) {
+    const { pairs = [], direction } = options;
+    if (!canTransition()) {
+      await update();
+      return;
+    }
+
+    const activePairs = pairs.reduce((result, pair) => {
+      if (!pair.source || !isInViewport(pair.source)) return result;
+      const destinationVisible = isInViewport(pair.destination);
+      if (direction !== "opening" && !destinationVisible && pair.name !== transitionParts.shell) {
+        return result;
+      }
+      const destination = direction === "opening" || destinationVisible
+        ? pair.destination
+        : null;
+      result.push({ ...pair, destination });
+      return result;
+    }, []);
+    let updated = false;
+    let transition;
+
+    document.documentElement.dataset.figureTransition = direction;
+    activePairs.forEach(({ source, name }) => { source.style.viewTransitionName = name; });
+
+    try {
+      transition = document.startViewTransition(async () => {
+        activePairs.forEach(({ source }) => { source.style.viewTransitionName = ""; });
+        updated = true;
+        await update();
+        activePairs.forEach(({ destination, name }) => {
+          if (destination) destination.style.viewTransitionName = name;
+        });
+      });
+      await transition.finished;
+    } catch (_) {
+      if (!updated) await update();
+    } finally {
+      activePairs.forEach(({ source, destination }) => {
+        source.style.viewTransitionName = "";
+        if (destination) destination.style.viewTransitionName = "";
+      });
+      delete document.documentElement.dataset.figureTransition;
+    }
+  }
+
+  async function openFigure(f, card) {
+    if (lightboxBusy || !lb.hidden) return;
+    lightboxBusy = true;
+    opener = card || document.activeElement;
+    lbDialog.style.height = "";
+    setFigureContent(f);
+    await decodeLightboxImage();
+
+    try {
+      await transitionLightbox(() => {
+        lb.hidden = false;
+        document.body.style.overflow = "hidden";
+        positionLightboxNav();
+      }, {
+        pairs: componentPairs(card, "opening"),
+        direction: "opening",
+      });
+      lbClose.focus({ preventScroll: true });
+    } finally {
+      lightboxBusy = false;
+    }
+  }
+
+  async function step(d) {
+    if (lightboxBusy) return;
     const i = currentIndex();
     const j = i + d;
-    if (j >= 0 && j < filtered.length) openFigure(filtered[j]);
+    if (j < 0 || j >= filtered.length) return;
+
+    lightboxBusy = true;
+    if (!lbDialog.style.height) {
+      lbDialog.style.height = `${lbDialog.getBoundingClientRect().height}px`;
+    }
+    try {
+      await transitionLightbox(async () => {
+        setFigureContent(filtered[j]);
+        await decodeLightboxImage();
+      }, {
+        pairs: [{ source: lbContent, destination: lbContent, name: transitionParts.swap }],
+        direction: d > 0 ? "switch-next" : "switch-prev",
+      });
+    } finally {
+      lightboxBusy = false;
+    }
   }
-  function closeLb() { lb.hidden = true; document.body.style.overflow = ""; }
+
+  async function closeLb() {
+    if (lightboxBusy || lb.hidden) return;
+    lightboxBusy = true;
+    const targetCard = cardFor(currentId);
+    const returnFocus = targetCard || opener;
+
+    try {
+      await transitionLightbox(() => {
+        lb.hidden = true;
+        document.body.style.overflow = "";
+      }, {
+        pairs: componentPairs(targetCard, "closing"),
+        direction: "closing",
+      });
+      if (returnFocus && typeof returnFocus.focus === "function") {
+        returnFocus.focus({ preventScroll: true });
+      }
+    } finally {
+      lbDialog.style.height = "";
+      lightboxBusy = false;
+    }
+  }
 
   gallery.addEventListener("click", (e) => {
     const card = e.target.closest(".card");
     if (card) {
       const f = figures.find((x) => x.id === card.dataset.id);
-      if (f) openFigure(f);
+      if (f) openFigure(f, card);
     }
   });
   gallery.addEventListener("keydown", (e) => {
     if (e.key !== "Enter" && e.key !== " ") return;
     const card = e.target.closest(".card");
-    if (card) { e.preventDefault(); const f = figures.find((x) => x.id === card.dataset.id); if (f) openFigure(f); }
+    if (card) { e.preventDefault(); const f = figures.find((x) => x.id === card.dataset.id); if (f) openFigure(f, card); }
   });
-  $("#lb-close").addEventListener("click", closeLb);
+  lbClose.addEventListener("click", closeLb);
   $("#lb-prev").addEventListener("click", () => step(-1));
   $("#lb-next").addEventListener("click", () => step(1));
   lb.querySelector(".lightbox-backdrop").addEventListener("click", closeLb);
@@ -329,6 +510,9 @@
     if (e.key === "Escape") closeLb();
     else if (e.key === "ArrowLeft") step(-1);
     else if (e.key === "ArrowRight") step(1);
+  });
+  window.addEventListener("resize", () => {
+    if (!lb.hidden && !lightboxBusy) positionLightboxNav();
   });
 
   render();
