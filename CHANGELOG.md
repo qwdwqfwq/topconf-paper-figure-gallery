@@ -4,6 +4,8 @@
 
 ## [0.4.0] - 2026-09-21
 
+> 公开版本对照（public edition）：v0.3 = 画廊第一版（v1，六会议 2,298 张，2026-09-20 首发）；v0.4 = 画廊第二版（v2，新增等级角标，2,730 张）。GitHub 沿用 0.x 语义化版本，宣发中提到的 "v2" 即指本次发布。
+
 - **高等级论文索引（ICLR / ICML / NeurIPS，2023–2025）**：完整覆盖三大会官方 Oral / Spotlight 名单（3,822 篇候选）与 Best/Outstanding、Honorable Mention 名单（66 篇，人工核对）。
 - **等级角标与筛选**：卡片左上角与灯箱内显示等级——★ 红色 Best/Outstanding（Honorable Mention 为白底红描边）、金色 Oral、银色 Spotlight；筛选栏新增与会议 / 年份 / 模式正交的 Tier 维度（All / Best Paper / Oral / Spotlight，带计数）。
 - 画廊规模 2,298 → **2,730 张**；其中带等级标识 622 张（Best 系列 12、Oral 138、Spotlight 472）。纯理论获奖论文正文没有设计型配图，相应位置留空（口径见 docs/METHODOLOGY.md §5b）。

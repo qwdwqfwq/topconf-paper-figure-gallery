@@ -214,6 +214,8 @@ python scripts/sheet_qa.py 31
 
 ## 🗺️ Roadmap
 
+> **Versioning / 版本对照** — GitHub releases follow 0.x semver; public editions are counted by generation: **public v1 = v0.3** (six venues, 2,298 figures, launched 2026-09-20) and **public v2 = v0.4** (acceptance-tier badges, 2,730 figures). 宣发中的 "v2" 即 release v0.4。
+
 - [x] 60 张人工精选种子画廊（v0.1）
 - [x] ICLR / ICML / NeurIPS 自动管线扩量（v0.2–v0.3）
 - [x] CVPR / ACL / AAAI（2023–2025）同管线扩展（v0.3）
