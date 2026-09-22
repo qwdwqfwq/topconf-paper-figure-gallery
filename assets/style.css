@@ -350,7 +350,13 @@ html[data-figure-transition="closing"]::view-transition-group(gallery-card-shell
 ::view-transition-group(gallery-dialog-swap) {
   z-index: 102;
   overflow: clip;
+  border-radius: 18px;
   animation: none;
+}
+::view-transition-image-pair(gallery-dialog-swap) {
+  isolation: isolate;
+  overflow: clip;
+  border-radius: inherit;
 }
 ::view-transition-old(gallery-dialog-swap),
 ::view-transition-new(gallery-dialog-swap) {
