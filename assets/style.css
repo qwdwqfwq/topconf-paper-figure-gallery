@@ -201,6 +201,7 @@ h1 { margin: 0; font-size: 20px; letter-spacing: .2px; font-weight: 800; }
 .ribbon.rb-honor { background: rgba(255,255,255,.94); color: #be123c; border: 1.5px solid #fb7185; }
 .ribbon.rb-oral { background: linear-gradient(135deg, #eab308, #c8860a); box-shadow: 0 3px 12px -2px rgba(202,138,10,.5); }
 .ribbon.rb-spotlight { background: linear-gradient(135deg, #94a3b8, #64748b); }
+.ribbon-target { opacity: 0; pointer-events: none; }
 .card.is-award { border-color: #fda4af; }
 .card.is-award:hover { border-color: #fb7185; }
 .card.is-oral { border-color: #fde68a; }
@@ -230,6 +231,7 @@ h1 { margin: 0; font-size: 20px; letter-spacing: .2px; font-weight: 800; }
 .card-authors { margin: 6px 0 0; font-size: 11.5px; color: #8a93a8;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .card-link { margin-top: 8px; display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 600; }
+.card-link-image, .card-link-paper { display: inline-block; }
 .card:hover .card-link { text-decoration: underline; }
 
 .empty-state { text-align: center; padding: 90px 20px; color: var(--ink-soft); }
@@ -277,7 +279,11 @@ h1 { margin: 0; font-size: 20px; letter-spacing: .2px; font-weight: 800; }
 .lb-badges { display: flex; gap: 7px; flex-wrap: wrap; }
 .lightbox-meta h2 { margin: 0; font-size: 17px; line-height: 1.4; }
 .lb-authors { margin: 0; font-size: 13px; color: var(--ink-soft); }
-.lb-actions { margin-top: auto; display: flex; gap: 10px; flex-wrap: wrap; padding-top: 14px; }
+.lb-actions { position: relative; margin-top: auto; display: flex; gap: 10px; flex-wrap: wrap; padding-top: 14px; }
+.lb-separator-target {
+  position: absolute; transform: translate(-50%, -50%);
+  font-size: 12px; font-weight: 600; opacity: 0; pointer-events: none;
+}
 @media (max-width: 860px) {
   .lightbox { padding: 12px; }
   .lightbox-dialog { max-height: 94vh; }
@@ -337,16 +343,20 @@ html[data-figure-transition] #lb-next {
   border-radius: 18px;
   animation-duration: 620ms;
   animation-timing-function: cubic-bezier(.22, 1, .36, 1);
+  animation-fill-mode: both;
 }
 html[data-figure-transition="opening"]::view-transition-group(gallery-card-shell) {
   animation-name:
     -ua-view-transition-group-anim-gallery-card-shell,
-    gallery-shell-shadow-opening;
+    gallery-shell-shadow-opening,
+    gallery-shell-radius-opening;
 }
 html[data-figure-transition="closing"]::view-transition-group(gallery-card-shell) {
+  border-radius: var(--radius);
   animation-name:
     -ua-view-transition-group-anim-gallery-card-shell,
-    gallery-shell-shadow-closing;
+    gallery-shell-shadow-closing,
+    gallery-shell-radius-closing;
 }
 ::view-transition-image-pair(gallery-card-shell) {
   isolation: isolate;
@@ -368,13 +378,33 @@ html[data-figure-transition="closing"]::view-transition-group(gallery-card-shell
 ::view-transition-group(gallery-card-image),
 ::view-transition-group(gallery-card-badges),
 ::view-transition-group(gallery-card-title),
-::view-transition-group(gallery-card-authors),
-::view-transition-group(gallery-card-actions) {
+::view-transition-group(gallery-card-image-action),
+::view-transition-group(gallery-card-paper-action) {
   z-index: 103;
   animation-duration: 620ms;
   animation-timing-function: cubic-bezier(.22, 1, .36, 1);
 }
-::view-transition-image-pair(gallery-card-image) { isolation: isolate; }
+::view-transition-image-pair(gallery-card-image) {
+  isolation: isolate;
+  overflow: clip;
+  border-radius: inherit;
+}
+::view-transition-group(gallery-card-image) {
+  overflow: clip;
+  border-radius: 8px;
+  animation-fill-mode: both;
+}
+html[data-figure-transition="opening"]::view-transition-group(gallery-card-image) {
+  animation-name:
+    -ua-view-transition-group-anim-gallery-card-image,
+    gallery-image-radius-opening;
+}
+html[data-figure-transition="closing"]::view-transition-group(gallery-card-image) {
+  border-radius: var(--radius) var(--radius) 0 0;
+  animation-name:
+    -ua-view-transition-group-anim-gallery-card-image,
+    gallery-image-radius-closing;
+}
 ::view-transition-old(gallery-card-image),
 ::view-transition-new(gallery-card-image) {
   height: 100%;
@@ -395,15 +425,102 @@ html[data-figure-transition="closing"]::view-transition-group(gallery-card-shell
   opacity: 1;
 }
 
-::view-transition-old(gallery-card-authors),
-::view-transition-old(gallery-card-actions) {
+::view-transition-image-pair(gallery-card-image-action),
+::view-transition-image-pair(gallery-card-paper-action) {
+  isolation: isolate;
+}
+::view-transition-old(gallery-card-image-action) {
+  width: var(--gallery-image-action-from-width);
+  height: var(--gallery-image-action-from-height);
+}
+::view-transition-new(gallery-card-image-action) {
+  width: var(--gallery-image-action-to-width);
+  height: var(--gallery-image-action-to-height);
+}
+::view-transition-old(gallery-card-paper-action) {
+  width: var(--gallery-paper-action-from-width);
+  height: var(--gallery-paper-action-from-height);
+}
+::view-transition-new(gallery-card-paper-action) {
+  width: var(--gallery-paper-action-to-width);
+  height: var(--gallery-paper-action-to-height);
+}
+::view-transition-old(gallery-card-image-action),
+::view-transition-old(gallery-card-paper-action) {
+  object-fit: fill;
   animation: gallery-part-old 620ms cubic-bezier(.22, 1, .36, 1) both;
 }
-::view-transition-new(gallery-card-authors),
-::view-transition-new(gallery-card-actions) {
+::view-transition-new(gallery-card-image-action),
+::view-transition-new(gallery-card-paper-action) {
+  object-fit: fill;
   animation: gallery-part-new 620ms cubic-bezier(.22, 1, .36, 1) both;
 }
-
+html[data-figure-transition="closing"]::view-transition-old(gallery-card-image-action),
+html[data-figure-transition="closing"]::view-transition-old(gallery-card-paper-action) {
+  animation: gallery-action-close-old 620ms linear both;
+}
+html[data-figure-transition="closing"]::view-transition-new(gallery-card-image-action),
+html[data-figure-transition="closing"]::view-transition-new(gallery-card-paper-action) {
+  animation: gallery-action-close-new 620ms linear both;
+}
+::view-transition-group(gallery-card-ribbon) {
+  z-index: 104;
+  animation-duration: 620ms;
+  animation-timing-function: cubic-bezier(.22, 1, .36, 1);
+}
+html[data-figure-transition="opening"]::view-transition-old(gallery-card-ribbon) {
+  animation: gallery-close-out 520ms cubic-bezier(.4, 0, .8, .2) both;
+  transform-origin: center;
+}
+html[data-figure-transition="opening"]::view-transition-new(gallery-card-ribbon),
+html[data-figure-transition="closing"]::view-transition-old(gallery-card-ribbon) {
+  animation: none;
+  opacity: 0;
+}
+html[data-figure-transition="closing"]::view-transition-new(gallery-card-ribbon) {
+  animation: gallery-control-in 360ms 240ms cubic-bezier(.22, 1, .36, 1) both;
+  transform-origin: center;
+}
+::view-transition-group(gallery-card-link-separator) {
+  z-index: 103;
+  animation-duration: 620ms;
+  animation-timing-function: cubic-bezier(.22, 1, .36, 1);
+}
+html[data-figure-transition="opening"]::view-transition-old(gallery-card-link-separator) {
+  animation: gallery-separator-out 620ms linear both;
+}
+html[data-figure-transition="opening"]::view-transition-new(gallery-card-link-separator),
+html[data-figure-transition="closing"]::view-transition-old(gallery-card-link-separator) {
+  animation: none;
+  opacity: 0;
+}
+html[data-figure-transition="closing"]::view-transition-new(gallery-card-link-separator) {
+  animation: gallery-separator-in 620ms linear both;
+}
+/* Move each author's snapshot along the same path, without resizing its text.
+   The destination rests at its final size before the snapshots are removed. */
+::view-transition-group(gallery-card-authors-out) {
+  z-index: 103;
+  width: var(--gallery-author-from-width);
+  height: var(--gallery-author-from-height);
+  animation: gallery-author-move 520ms cubic-bezier(.22, 1, .36, 1) both;
+}
+::view-transition-group(gallery-card-authors-in) {
+  z-index: 103;
+  width: var(--gallery-author-to-width);
+  height: var(--gallery-author-to-height);
+  animation: gallery-author-move 520ms cubic-bezier(.22, 1, .36, 1) both;
+}
+::view-transition-old(gallery-card-authors-out),
+::view-transition-new(gallery-card-authors-in) {
+  width: 100%; height: 100%; object-fit: fill;
+}
+::view-transition-old(gallery-card-authors-out) {
+  animation: gallery-author-out 520ms linear both;
+}
+::view-transition-new(gallery-card-authors-in) {
+  animation: gallery-author-in 520ms linear both;
+}
 ::view-transition-group(gallery-dialog-swap) {
   z-index: 102;
   overflow: clip;
@@ -497,6 +614,22 @@ html[data-figure-transition^="switch-"]::view-transition-new(gallery-lightbox-ne
   from { box-shadow: 0 40px 90px -20px rgba(0, 0, 0, .5); }
   to { box-shadow: var(--shadow); }
 }
+@keyframes gallery-shell-radius-opening {
+  from { border-radius: var(--radius); }
+  to { border-radius: 18px; }
+}
+@keyframes gallery-shell-radius-closing {
+  from { border-radius: 18px; }
+  to { border-radius: var(--radius); }
+}
+@keyframes gallery-image-radius-opening {
+  from { border-radius: var(--radius) var(--radius) 0 0; }
+  to { border-radius: 8px; }
+}
+@keyframes gallery-image-radius-closing {
+  from { border-radius: 8px; }
+  to { border-radius: var(--radius) var(--radius) 0 0; }
+}
 @keyframes gallery-part-old {
   0%, 24% { opacity: 1; }
   52%, 100% { opacity: 0; }
@@ -504,6 +637,34 @@ html[data-figure-transition^="switch-"]::view-transition-new(gallery-lightbox-ne
 @keyframes gallery-part-new {
   0%, 42% { opacity: 0; }
   72%, 100% { opacity: 1; }
+}
+@keyframes gallery-action-close-old {
+  0% { opacity: 1; }
+  30%, 100% { opacity: 0; }
+}
+@keyframes gallery-action-close-new {
+  0%, 45% { opacity: 0; }
+  75%, 100% { opacity: 1; }
+}
+@keyframes gallery-separator-out {
+  0%, 20% { opacity: 1; }
+  52%, 100% { opacity: 0; }
+}
+@keyframes gallery-separator-in {
+  0%, 48% { opacity: 0; }
+  78%, 100% { opacity: 1; }
+}
+@keyframes gallery-author-out {
+  0%, 38% { opacity: 1; }
+  77%, 100% { opacity: 0; }
+}
+@keyframes gallery-author-in {
+  0%, 38% { opacity: 0; }
+  77%, 100% { opacity: 1; }
+}
+@keyframes gallery-author-move {
+  from { transform: translate(var(--gallery-author-from-x), var(--gallery-author-from-y)); }
+  to { transform: translate(var(--gallery-author-to-x), var(--gallery-author-to-y)); }
 }
 @keyframes gallery-control-in {
   from { opacity: 0; transform: scale(.72); }
