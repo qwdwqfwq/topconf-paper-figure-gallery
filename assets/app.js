@@ -141,12 +141,16 @@
   }
 
   /* ---------- chunked render ---------- */
+  function ribbonInfo(f) {
+    if (f.award === "best") return { className: "rb-best", text: "★ Best Paper" };
+    if (f.award === "honorable") return { className: "rb-honor", text: "Honorable Mention" };
+    if (f.tier === "oral") return { className: "rb-oral", text: "● Oral" };
+    if (f.tier === "spotlight") return { className: "rb-spotlight", text: "● Spotlight" };
+    return null;
+  }
   function ribbonHtml(f) {
-    if (f.award === "best") return `<span class="ribbon rb-best">★ Best Paper</span>`;
-    if (f.award === "honorable") return `<span class="ribbon rb-honor">Honorable Mention</span>`;
-    if (f.tier === "oral") return `<span class="ribbon rb-oral">● Oral</span>`;
-    if (f.tier === "spotlight") return `<span class="ribbon rb-spotlight">● Spotlight</span>`;
-    return "";
+    const info = ribbonInfo(f);
+    return info ? `<span class="ribbon ${info.className}">${info.text}</span>` : "";
   }
   function cardHtml(f, idx) {
     const ratio = (f.w && f.h) ? `aspect-ratio:${f.w} / ${f.h};` : "min-height:170px;";
@@ -167,7 +171,7 @@
         </div>
         <h3 class="card-title">${escapeHtml(f.title)}</h3>
         <p class="card-authors">${escapeHtml(authorsText(f))}</p>
-        <span class="card-link">View figure / paper ↗</span>
+        <span class="card-link"><span class="card-link-image">View image</span><span class="card-link-separator">/</span><span class="card-link-paper">paper ↗</span></span>
       </div>
     </article>`;
   }
@@ -278,8 +282,12 @@
     image: "gallery-card-image",
     badges: "gallery-card-badges",
     title: "gallery-card-title",
-    authors: "gallery-card-authors",
-    actions: "gallery-card-actions",
+    authorsOut: "gallery-card-authors-out",
+    authorsIn: "gallery-card-authors-in",
+    imageAction: "gallery-card-image-action",
+    paperAction: "gallery-card-paper-action",
+    separator: "gallery-card-link-separator",
+    ribbon: "gallery-card-ribbon",
     close: "gallery-lightbox-close",
     swap: "gallery-dialog-swap",
   };
@@ -295,6 +303,15 @@
     const center = `${imageRect.top + imageRect.height / 2}px`;
     $("#lb-prev").style.top = center;
     $("#lb-next").style.top = center;
+  }
+
+  function positionLightboxSeparator() {
+    const image = $("#lb-image").getBoundingClientRect();
+    const paper = $("#lb-paper").getBoundingClientRect();
+    const actions = lbDialog.querySelector(".lb-actions").getBoundingClientRect();
+    const target = $("#lb-separator-target");
+    target.style.left = `${(image.right + paper.left) / 2 - actions.left}px`;
+    target.style.top = `${(image.top + image.bottom + paper.top + paper.bottom) / 4 - actions.top}px`;
   }
 
   function setFigureContent(f) {
@@ -319,6 +336,10 @@
     $("#lb-year").textContent = f.year;
     const pBadge = $("#lb-pattern");
     pBadge.textContent = PATTERNS[f.pattern] || f.pattern;
+    const ribbonTarget = $("#lb-ribbon-target");
+    const ribbon = ribbonInfo(f);
+    ribbonTarget.textContent = ribbon ? ribbon.text : "";
+    ribbonTarget.className = `ribbon ribbon-target${ribbon ? " " + ribbon.className : ""}`;
     $("#lb-title").textContent = f.title;
     $("#lb-authors").textContent = (f.authors || []).join(", ");
     $("#lb-paper").href = f.paper || "#";
@@ -349,13 +370,16 @@
   }
 
   function componentPairs(card, direction) {
+    const cardAuthors = card && card.querySelector(".card-authors");
+    const dialogAuthors = $("#lb-authors");
     const cardParts = card ? {
       shell: card,
       image: card.querySelector(".card-img"),
       badges: card.querySelector(".card-badges"),
       title: card.querySelector(".card-title"),
-      authors: card.querySelector(".card-authors"),
-      actions: card.querySelector(".card-link"),
+      imageAction: card.querySelector(".card-link-image"),
+      paperAction: card.querySelector(".card-link-paper"),
+      separator: card.querySelector(".card-link-separator"),
       close: card.querySelector(".card-close-target"),
     } : {};
     const dialogParts = {
@@ -363,15 +387,37 @@
       image: lbImg,
       badges: lbDialog.querySelector(".lb-badges"),
       title: $("#lb-title"),
-      authors: $("#lb-authors"),
-      actions: lbDialog.querySelector(".lb-actions"),
+      imageAction: $("#lb-image"),
+      paperAction: $("#lb-paper"),
+      separator: $("#lb-separator-target"),
       close: lbClose,
     };
-    return Object.keys(dialogParts).map((key) => ({
+    const pairs = Object.keys(dialogParts).map((key) => ({
       source: direction === "closing" ? dialogParts[key] : cardParts[key],
       destination: direction === "closing" ? cardParts[key] : dialogParts[key],
       name: transitionParts[key],
     }));
+    const ribbon = card && card.querySelector(".ribbon");
+    if (ribbon) {
+      pairs.push({
+        source: direction === "opening" ? ribbon : $("#lb-ribbon-target"),
+        destination: direction === "closing" ? ribbon : $("#lb-ribbon-target"),
+        name: transitionParts.ribbon,
+      });
+    }
+    // Single-line card text and wrapping dialog text need separate snapshots.
+    // Neither snapshot should be resized between those two layouts.
+    if (cardAuthors && isInViewport(cardAuthors)) {
+      pairs.push(
+        { source: direction === "closing" ? dialogAuthors : cardAuthors,
+          destination: null, name: transitionParts.authorsOut },
+        { source: null,
+          destination: direction === "closing" ? cardAuthors : dialogAuthors,
+          travelFrom: direction === "closing" ? dialogAuthors : cardAuthors,
+          name: transitionParts.authorsIn },
+      );
+    }
+    return pairs;
   }
 
   async function transitionLightbox(update, options) {
@@ -382,40 +428,82 @@
     }
 
     const activePairs = pairs.reduce((result, pair) => {
-      if (!pair.source || !isInViewport(pair.source)) return result;
+      if (pair.source && !isInViewport(pair.source)) return result;
       const destinationVisible = isInViewport(pair.destination);
-      if (direction !== "opening" && !destinationVisible && pair.name !== transitionParts.shell) {
+      if (direction !== "opening" && !destinationVisible && pair.name !== transitionParts.shell
+          && pair.name !== transitionParts.authorsOut) {
         return result;
       }
       const destination = direction === "opening" || destinationVisible
         ? pair.destination
         : null;
+      if (!pair.source && !destination) return result;
       result.push({ ...pair, destination });
       return result;
     }, []);
+    const authorPair = activePairs.find((pair) => pair.name === transitionParts.authorsIn);
+    const authorStart = authorPair && authorPair.travelFrom
+      ? authorPair.travelFrom.getBoundingClientRect()
+      : null;
+    const actionPairs = activePairs.filter((pair) =>
+      pair.name === transitionParts.imageAction || pair.name === transitionParts.paperAction);
+    const actionStarts = new Map(actionPairs.map((pair) =>
+      [pair.name, pair.source.getBoundingClientRect()]));
     let updated = false;
     let transition;
 
     document.documentElement.dataset.figureTransition = direction;
-    activePairs.forEach(({ source, name }) => { source.style.viewTransitionName = name; });
+    activePairs.forEach(({ source, name }) => {
+      if (source) source.style.viewTransitionName = name;
+    });
 
     try {
       transition = document.startViewTransition(async () => {
-        activePairs.forEach(({ source }) => { source.style.viewTransitionName = ""; });
+        activePairs.forEach(({ source }) => {
+          if (source) source.style.viewTransitionName = "";
+        });
         updated = true;
         await update();
         activePairs.forEach(({ destination, name }) => {
           if (destination) destination.style.viewTransitionName = name;
         });
+        actionPairs.forEach(({ destination, name }) => {
+          if (!destination) return;
+          const key = name === transitionParts.imageAction ? "image-action" : "paper-action";
+          for (const [side, rect] of [["from", actionStarts.get(name)], ["to", destination.getBoundingClientRect()]]) {
+            for (const axis of ["width", "height"]) {
+              document.documentElement.style.setProperty(`--gallery-${key}-${side}-${axis}`, `${rect[axis]}px`);
+            }
+          }
+        });
+        if (authorStart && authorPair.destination) {
+          const authorEnd = authorPair.destination.getBoundingClientRect();
+          for (const [side, rect] of [["from", authorStart], ["to", authorEnd]]) {
+            for (const [axis, value] of [["x", rect.left], ["y", rect.top],
+                                         ["width", rect.width], ["height", rect.height]]) {
+              document.documentElement.style.setProperty(`--gallery-author-${side}-${axis}`, `${value}px`);
+            }
+          }
+        }
       });
       await transition.finished;
     } catch (_) {
       if (!updated) await update();
     } finally {
       activePairs.forEach(({ source, destination }) => {
-        source.style.viewTransitionName = "";
+        if (source) source.style.viewTransitionName = "";
         if (destination) destination.style.viewTransitionName = "";
       });
+      for (const side of ["from", "to"]) {
+        for (const axis of ["x", "y", "width", "height"]) {
+          document.documentElement.style.removeProperty(`--gallery-author-${side}-${axis}`);
+        }
+        for (const key of ["image-action", "paper-action"]) {
+          for (const axis of ["width", "height"]) {
+            document.documentElement.style.removeProperty(`--gallery-${key}-${side}-${axis}`);
+          }
+        }
+      }
       delete document.documentElement.dataset.figureTransition;
     }
   }
@@ -433,6 +521,7 @@
         lb.hidden = false;
         document.body.style.overflow = "hidden";
         positionLightboxNav();
+        positionLightboxSeparator();
       }, {
         pairs: componentPairs(card, "opening"),
         direction: "opening",
@@ -512,7 +601,10 @@
     else if (e.key === "ArrowRight") step(1);
   });
   window.addEventListener("resize", () => {
-    if (!lb.hidden && !lightboxBusy) positionLightboxNav();
+    if (!lb.hidden && !lightboxBusy) {
+      positionLightboxNav();
+      positionLightboxSeparator();
+    }
   });
 
   render();
