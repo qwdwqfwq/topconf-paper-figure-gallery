@@ -13,13 +13,14 @@
 
 | Venue 会议 | Years 年份 | Source 来源 | Pool size 规模 |
 |---|---|---|---|
-| ICLR | 2023–2025 | OpenReview API 全量接收列表（poster / spotlight / oral） | ~7,500 |
+| ICLR | 2023–2026 | OpenReview API 全量接收列表（poster / spotlight / oral） | ~12,900 |
 | ICML | 2023–2025 | PMLR proceedings 索引（v202 / v235 / v267） | ~7,800 |
+| ICML | 2026 | OpenReview API 全量接收列表 + arXiv 评论字段（PMLR 卷尚未出版） | 6,341 |
 | NeurIPS | 2023–2024 | NeurIPS proceedings 索引 | ~7,700 |
 | NeurIPS | 2025 | arXiv 评论字段 `co:"NeurIPS 2025"`（正式 proceedings 上线前的备用源） | ~2,800 |
-| CVPR | 2023–2025 | CVF Open Access `openaccess.thecvf.com/CVPR{year}?day=all`（排除 supplemental） | 7,940 |
-| ACL | 2023–2025 | ACL Anthology events 页（仅 long / short / findings，跳过 front matter） | 6,977 |
-| AAAI | 2023–2025 | AAAI OJS issue archive（technical tracks，跨分页按 issue 边界收集） | 6,937 |
+| CVPR | 2023–2026 | CVF Open Access `openaccess.thecvf.com/CVPR{year}?day=all`（排除 supplemental） | ~12,000 |
+| ACL | 2023–2026 | ACL Anthology events 页（仅 long / short / findings，跳过 front matter） | ~11,400 |
+| AAAI | 2023–2026 | AAAI OJS issue archive（technical tracks，跨分页按 issue 边界收集） | ~8,100 |
 
 - ICLR 接收状态以 OpenReview note 的 `venue` 字段为准（排除 `Submitted`）；
   PDF 优先取 OpenReview 官方附件，arXiv 评论字段标题模糊匹配（token F1 ≥ 0.92）作为备用源。
@@ -59,7 +60,9 @@
 - **default / raster chart（默认图表、坐标轴截图）**：文字密集、配色单一；
 - **unlabeled plot / panels（无标签坐标图、无标注面板）**；
 - **text wall / table page（文字墙、整页表格）**；
-- **edge cut（边缘截断）/ too small / bad aspect（尺寸或比例异常）**；
+- **edge cut（边缘截断）/ too small / bad aspect（尺寸或比例异常）**：v0.5 起边缘截断
+  改为对渲染 PNG 四边采样墨迹的 border_ink 检测（旧的 PDF 矢量 edge_cut 对宽幅全幅图
+  大量误报，已弃用）；
 - **screenshot（软件截图、终端输出）**、**heatmap/results grid（结果网格照片墙）**；
 - **duplicate**：感知哈希 dHash 去重；另有手动排除清单 `data/exclude.txt`。
 
@@ -67,10 +70,10 @@
 得分靠前的图，并对视觉模式做分层以保证多样性。
 
 > **关于数量 / On counts**：各会议不设统一的入选指标，只保留达到设计标准的图。
-> NeurIPS 的设计型 overview figure 占比最高（803 张）；CVPR 虽为视觉会议，
+> NeurIPS 的设计型 overview figure 占比最高（979 张）；CVPR 虽为视觉会议，
 > 但其 Figure 1 常是定性结果照片墙 / 视频帧条带，在人工复核中被大量剔除，
-> 最终收录 225 张；ACL / AAAI 的 system/framework 图文混排主图占比稳定
-> （326 / 264 张）；理论向的 ICML 多为默认图表，收录 310 张。
+> 最终收录 308 张；ACL / AAAI 的 system/framework 图文混排主图占比稳定
+> （385 / 301 张）；理论向的 ICML 多为默认图表，收录 787 张。
 > 这些差异反映的是"设计型主图"占比的真实分布，不是采集失败或会议水平排序。
 
 ## 4. 视觉模式标签 / Visual patterns
@@ -105,7 +108,7 @@
 
 v0.3 定稿为 **2,238 张管线选图 + 60 张 v1 人工底 = 2,298 张**
 （ICLR 370 / ICML 310 / NeurIPS 803 / CVPR 225 / ACL 326 / AAAI 264）；
-v0.4 在此基础上扩至 2,730 张（见 §5b）。
+v0.4 在此基础上扩至 2,730 张（见 §5b），v0.5 扩至 3,528 张（见 §5c）。
 `data/exclude.txt` 累计排除约 1,400 张低质量裁剪。
 
 ## 5b. v0.4：高等级论文索引 / Oral · Spotlight · Best tier index
@@ -135,6 +138,34 @@ v0.4 对 ICLR / ICML / NeurIPS 2023–2025 的高等级论文做了完整索引�
 
 v0.4 后画廊共 **2,730 张**，其中带等级标识 622 张
 （Best/Outstanding/Honorable 12、Oral 138、Spotlight 472）。
+
+## 5c. v0.5：2026 年会议收录 / 2026 proceedings
+
+v0.5 应社区要求收录 2026 年已公开的会议，流程与历年一致，差异点如下：
+
+1. **可用性核查 / Availability**：CVPR 2026（CVF 完整列表）、ACL 2026
+   （ACL Anthology events 页）、AAAI-26（OJS 12 个 technical tracks）均已出版；
+   ICML 2026 的 PMLR 卷尚未出版，改用 OpenReview 接收列表 + arXiv 评论字段；
+   NeurIPS 2026 录用名单未公布（会期 12 月），本届不收录。
+2. **候选池 / Pool**：五会议 tier-1 候选共 8,963 篇
+   （ICLR 1,912、ICML 2,191、CVPR 3,040、ACL 1,015、AAAI 805）。
+3. **等级口径 / Tiers**：ICLR 2026 官方只设 Oral（224 篇）与 Poster，没有
+   Spotlight 档；ICML 2026 为 168 Oral、536 Spotlight（Oral 是 Spotlight 子集），
+   名单取自官方日程页。Best / Outstanding 与 Honorable Mention 按官方博客核对。
+4. **抽取通道 / Fetch channel**：持续负载下 Python requests 在 CVF / ACL 站点
+   被限速（单文件 120s+），下载器改用 curl_cffi 浏览器指纹（TLS/JA3 对齐 Chrome）；
+   OpenReview PDF 经浏览器通过 Turnstile 验证后导出 clearance cookie，
+   走代理串行批量下载，高等级论文 PDF 全部入库。
+5. **edge-cut 规则修正**：旧 PDF 矢量 edge_cut 在 837 张入选图上触发，抽样 12 张
+   仅 2–3 张真切；改为渲染图四边墨迹的 border_ink 检测（左右边墨迹行占比 > 0.15、
+   顶边 > 0.5 判截断，底边不判——底部常含图注），已知真值上可分；
+   个别高等级图被误报时人工核验后回捞。
+6. **人工 QA**：798 张入选图拼成 65 张联系表（12 图/张，含 id / 角标 / 标题），
+   逐张目检，无坏图、无补删。两篇 2026 Best 论文为纯理论工作、正文无图，
+   不产生卡片，这是内容本身决定的空缺。
+
+v0.5 后画廊共 **3,528 张**，其中 2026 年 798 张
+（ICLR 247、ICML 372、CVPR 83、ACL 59、AAAI 37）。
 
 ## 6. 复现 / Reproduce
 

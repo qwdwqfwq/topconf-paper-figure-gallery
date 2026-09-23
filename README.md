@@ -3,15 +3,15 @@
 <img src="docs/banner.jpg" alt="Top-Conf Figure Gallery banner" width="920">
 
 # 🎨 Top-Conf Figure Gallery
-### 顶会论文主图灵感画廊 · ICLR · ICML · NeurIPS · CVPR · ACL · AAAI · 2023–2025
+### 顶会论文主图灵感画廊 · ICLR · ICML · NeurIPS · CVPR · ACL · AAAI · 2023–2026
 
 <img src="docs/demo.gif" alt="Search, filter and lightbox demo" width="920">
 
 [![Website](https://img.shields.io/website?down_color=lightgrey&label=Gallery&up_color=blue&up_message=online&url=https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)
-![Figures](https://img.shields.io/badge/figures-2730-orange)
-![Best/Oral/Spotlight](https://img.shields.io/badge/Best%C2%B7Oral%C2%B7Spotlight-12%C2%B7138%C2%B7472-gold)
+![Figures](https://img.shields.io/badge/figures-3528-orange)
+![Best/Oral/Spotlight](https://img.shields.io/badge/Best%C2%B7Oral%C2%B7Spotlight-19%C2%B7394%C2%B7711-gold)
 ![Venues](https://img.shields.io/badge/venues-ICLR·ICML·NeurIPS·CVPR·ACL·AAAI-purple)
-![Years](https://img.shields.io/badge/years-2023--2025-success)
+![Years](https://img.shields.io/badge/years-2023--2026-success)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](requirements.txt)
 [![License: MIT](https://img.shields.io/badge/code%20license-MIT-green.svg)](LICENSE)
 [![Images license](https://img.shields.io/badge/images-CC%20BY%20(attribution)-yellow.svg)](IMAGES_POLICY.md)
@@ -37,12 +37,12 @@ HTML/CSS/JS, no build step, works offline.
 
 **Top-Conf Figure Gallery** collects visually *designed* Figure 1 / teaser figures
 (conceptual diagrams, system frameworks, pipelines, architectures, benchmark overviews)
-from six top ML/AI conferences, 2023–2025. It is a reference library for researchers
+from six top ML/AI conferences, 2023–2026. It is a reference library for researchers
 who want a clearer overview figure — it is not a ranking of papers. Every card links
 back to its source paper and records venue, year, authors and a visual-pattern tag.
 
 - 🗂️ Filter by **venue / year / acceptance tier / visual pattern**; infinite-scroll masonry and a lightbox
-- 🏅 **Oral, Spotlight and Best/Outstanding-paper figures are tagged** (gold / silver / red corner badges) for ICLR, ICML and NeurIPS 2023–2025 — browse the figures the programme committees highlighted most
+- 🏅 **Oral, Spotlight and Best/Outstanding-paper figures are tagged** (gold / silver / red corner badges) for ICLR, ICML and NeurIPS 2023–2026 — browse the figures the programme committees highlighted most
 - 🔍 Full-text **search over titles and authors** (e.g. `DPO`, `robot`, `gaussian`, `agent`)
 - 🚫 **Every figure is hand-reviewed.** 25+ heuristic rules first discard default
   matplotlib charts, plain tables, GUI screenshots and unlabeled photo dumps; a human then
@@ -75,7 +75,7 @@ The easiest way is to open a **[Suggest a figure](https://github.com/qwdwqfwq/to
 issue with the paper link — no coding required. If you'd like to open a PR,
 [CONTRIBUTING.md](CONTRIBUTING.md) describes the metadata format and the quality bar.
 Community contributions (new papers, better crops, new venues such as CHI / RSS / CoRL)
-are the intended growth path after the 2023–2025 baseline.
+are the intended growth path after the 2023–2026 baseline.
 
 Image files remain attributed to their authors and publishers; see
 [IMAGES_POLICY.md](IMAGES_POLICY.md) for the educational-use and 72-hour takedown policy.
@@ -85,11 +85,11 @@ Image files remain attributed to their authors and publishers; see
 ## ✨ 这是什么
 
 写论文最头疼的不是"画什么图"，而是**想不到主图还能怎么排版、怎么隐喻**。
-本仓库把六大顶会 2023–2025 里**真正体现作者排版与设计功力**的 Figure 1 / Teaser
+本仓库把六大顶会 2023–2026 里**真正体现作者排版与设计功力**的 Figure 1 / Teaser
 集中起来，做成一个可检索的集群式画廊：
 
 - 🗂️ 按 **会议 / 年份 / 录取等级 / 视觉模式**（概念图、框架图、流程图、架构图、任务全景…）筛选
-- 🏅 ICLR / ICML / NeurIPS 2023–2025 的 **Oral / Spotlight / Best（杰出论文）** 主图带金 / 银 / 红角标，一键只看程序委员会最认可的工作
+- 🏅 ICLR / ICML / NeurIPS 2023–2026 的 **Oral / Spotlight / Best（杰出论文）** 主图带金 / 银 / 红角标，一键只看程序委员会最认可的工作
 - 🔍 标题、作者、关键词 **全文搜索**（如 `DPO`、`robot`、`gaussian`、`agent`）
 - 🖼️ 卡片瀑布流 + 点击**灯箱大图**，键盘 ←/→ 翻图，一键跳转原文
 - 🚫 明确**剔除**默认 matplotlib 图表、纯表格、GUI 截图、无标签照片墙——只留有设计的图
@@ -111,17 +111,17 @@ Image files remain attributed to their authors and publishers; see
 
 ## 📊 收录规模 / Coverage
 
-**Figure counts per venue and year (English readers: columns are venue · 2023 · 2024 · 2025 · total).**
+**Figure counts per venue and year (English readers: columns are venue · 2023 · 2024 · 2025 · 2026 · total).**
 
-| 会议 / Venue | 2023 | 2024 | 2025 | 合计 Total |
-|---|---:|---:|---:|---:|
-| 🟣 **ICLR** | 108 | 137 | 276 | **521** |
-| 🟢 **ICML** | 66 | 132 | 217 | **415** |
-| 🔴 **NeurIPS** | 239 | 365 | 375 | **979** |
-| 🟠 **CVPR** | 65 | 64 | 96 | **225** |
-| 🔵 **ACL** | 84 | 74 | 168 | **326** |
-| 🟡 **AAAI** | 59 | 66 | 139 | **264** |
-| | | | **总计 Total** | **2730** |
+| 会议 / Venue | 2023 | 2024 | 2025 | 2026 | 合计 Total |
+|---|---:|---:|---:|---:|---:|
+| 🟣 **ICLR** | 108 | 137 | 276 | 247 | **768** |
+| 🟢 **ICML** | 66 | 132 | 217 | 372 | **787** |
+| 🔴 **NeurIPS** | 239 | 365 | 375 | — | **979** |
+| 🟠 **CVPR** | 65 | 64 | 96 | 83 | **308** |
+| 🔵 **ACL** | 84 | 74 | 168 | 59 | **385** |
+| 🟡 **AAAI** | 59 | 66 | 139 | 37 | **301** |
+| | | | | **总计 Total** | **3528** |
 
 ### 🏅 高等级论文 / High-tier papers（ML 三大会，2023–2025）
 
@@ -132,15 +132,16 @@ Image files remain attributed to their authors and publishers; see
 
 | 会议 | Best / Outstanding | Oral | Spotlight | 合计 |
 |---|---:|---:|---:|---:|
-| 🟣 **ICLR** | 6 | 49 | 155 | **210** |
-| 🟢 **ICML** | 3 | 57 | 80 | **140** |
+| 🟣 **ICLR** | 8 | 193 | 155 | **356** |
+| 🟢 **ICML** | 8 | 152 | 319 | **479** |
 | 🔴 **NeurIPS** | 3 | 32 | 237 | **272** |
 
 > 角标含义：<b style="color:#be123c">★ 红色 = Best / Outstanding（含 Honorable Mention 描边款）</b>、
 > <b style="color:#c8860a">金色 = Oral</b>、<b style="color:#64748b">银色 = Spotlight</b>。
 > 等级口径以各会议官方名单为准：ICLR 2023 当年未使用 oral/spotlight 命名，
 > 官方 "notable top 5%" 对应 Oral、"notable top 25%" 对应 Spotlight；
-> ICML 2023 只有 OralPoster 一档，记为 Oral。
+> ICML 2023 只有 OralPoster 一档，记为 Oral；ICLR 2026 官方只设 Oral 与 Poster、
+> 没有 Spotlight 档；NeurIPS 2026 录用名单尚未公布，本届暂缺。
 
 > 图片均从正式出版 PDF 渲染裁剪（约 180–216 DPI），网页版压缩为 ≤1500px JPEG；
 > 每张图都标注论文标题、全部作者与原文链接。候选图先经过 25+ 条规则初筛，再逐页人工复核
@@ -214,13 +215,15 @@ python scripts/sheet_qa.py 31
 
 ## 🗺️ Roadmap
 
-> **Versioning / 版本对照** — GitHub releases follow 0.x semver; public editions are counted by generation: **public v1 = v0.3** (six venues, 2,298 figures, launched 2026-09-20) and **public v2 = v0.4** (acceptance-tier badges, 2,730 figures). 宣发中的 "v2" 即 release v0.4。
+> **Versioning / 版本对照** — GitHub releases follow 0.x semver; public editions are counted by generation: **public v1 = v0.3** (six venues, 2,298 figures, launched 2026-09-20), **public v2 = v0.4** (acceptance-tier badges, 2,730 figures) and **public v3 = v0.5** (2026 papers, 3,528 figures). 宣发中的 "v2/v3" 分别对应 release v0.4/v0.5。
 
 - [x] 60 张人工精选种子画廊（v0.1）
 - [x] ICLR / ICML / NeurIPS 自动管线扩量（v0.2–v0.3）
 - [x] CVPR / ACL / AAAI（2023–2025）同管线扩展（v0.3）
 - [x] ICLR / ICML / NeurIPS Oral · Spotlight · Best Paper 等级索引与角标筛选（v0.4）
-- [ ] CVPR / ACL / AAAI 的 Oral / Highlight 等级索引（v0.5）
+- [x] 2026 已公开会议（ICLR / ICML / CVPR / ACL / AAAI）主图与等级角标（v0.5）
+- [ ] CVPR / ACL / AAAI 的 Oral / Highlight 等级索引
+- [ ] NeurIPS 2026 录用公布后补全（预计 2026 年 12 月）
 - [ ] 持续人工复核、清理不合格图片，开放社区 PR 补图机制
 - [ ] CHI / CoRL / RSS / EMNLP 等会议扩展
 - [ ] 相似图推荐、按配色检索、一键导出 BibTeX
@@ -247,13 +250,13 @@ AAAI 论文版权归 AAAI 与作者所有（fair-use 学术参考）。
 
 ```bibtex
 @misc{topconf_figure_gallery,
-  title  = {Top-Conf Figure Gallery: A Curated Gallery of Figure 1 / Teaser Designs from ICLR, ICML, NeurIPS, CVPR, ACL and AAAI (2023-2025)},
+  title  = {Top-Conf Figure Gallery: A Curated Gallery of Figure 1 / Teaser Designs from ICLR, ICML, NeurIPS, CVPR, ACL and AAAI (2023-2026)},
   year   = {2026},
   url    = {https://github.com/qwdwqfwq/topconf-paper-figure-gallery}
 }
 ```
 
-## 🖼️ 精选图录（每会议-年份评分最高的 2 张；完整 2730 张请用[在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)）
+## 🖼️ 精选图录（每会议-年份评分最高的 2 张；完整 3528 张请用[在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)）
 
 <br>
 

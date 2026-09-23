@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Top-Conf Figure Gallery · 顶会论文主图灵感画廊 (ICLR / ICML / NeurIPS / CVPR / ACL / AAAI)</title>
-<meta name="description" content="A searchable gallery of well-designed Figure 1 / teaser figures from ICLR, ICML, NeurIPS, CVPR, ACL and AAAI (2023–2025). 精选六大顶会论文主图，按会议、年份、视觉模式分类浏览。">
+<meta name="description" content="A searchable gallery of well-designed Figure 1 / teaser figures from ICLR, ICML, NeurIPS, CVPR, ACL and AAAI (2023–2026). 精选六大顶会论文主图，按会议、年份、视觉模式分类浏览。">
 <meta property="og:title" content="Top-Conf Figure Gallery">
-<meta property="og:description" content="A searchable gallery of well-designed paper Figure 1 / teasers — ICLR · ICML · NeurIPS · CVPR · ACL · AAAI, 2023–2025.">
+<meta property="og:description" content="A searchable gallery of well-designed paper Figure 1 / teasers — ICLR · ICML · NeurIPS · CVPR · ACL · AAAI, 2023–2026.">
 <meta property="og:image" content="docs/social-preview.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%234f46e5'/%3E%3Ccircle cx='36' cy='38' r='10' fill='white'/%3E%3Crect x='28' y='54' width='44' height='7' rx='3.5' fill='%23a5b4fc'/%3E%3Crect x='28' y='67' width='30' height='7' rx='3.5' fill='%23a5b4fc'/%3E%3C/svg%3E">
 <link rel="stylesheet" href="assets/style.css">
@@ -24,7 +24,7 @@
           <h1>Top-Conf Figure Gallery</h1>
           <p class="tagline">顶会论文主图灵感画廊 ·
             <span class="vn iclr">ICLR</span>·<span class="vn icml">ICML</span>·<span class="vn neurips">NeurIPS</span>·<span class="vn cvpr">CVPR</span>·<span class="vn acl">ACL</span>·<span class="vn aaai">AAAI</span>
-            · 2023–2025</p>
+            · 2023–2026</p>
         </div>
       </div>
       <div class="hero-stats" id="hero-stats">
@@ -131,26 +131,18 @@
   <div class="lightbox-backdrop"></div>
   <div class="lightbox-dialog" role="dialog" aria-modal="true" aria-label="图片详情">
     <button class="lightbox-close" id="lb-close" aria-label="关闭">×</button>
-    <span id="lb-ribbon-target" class="ribbon ribbon-target" aria-hidden="true"></span>
-    <button class="lightbox-nav prev" id="lb-prev" aria-label="上一张">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"></path></svg>
-    </button>
-    <button class="lightbox-nav next" id="lb-next" aria-label="下一张">
-      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m9 5 7 7-7 7"></path></svg>
-    </button>
-    <div class="lightbox-content">
-      <div class="lightbox-img-wrap">
-        <img id="lb-img" src="" alt="">
-      </div>
-      <div class="lightbox-meta">
-        <div class="lb-badges"><span id="lb-award" class="badge tier-badge" hidden></span><span id="lb-tier" class="badge tier-badge" hidden></span><span id="lb-venue" class="badge"></span><span id="lb-year" class="badge year"></span><span id="lb-pattern" class="badge pattern"></span></div>
-        <h2 id="lb-title"></h2>
-        <p id="lb-authors" class="lb-authors"></p>
-        <div class="lb-actions">
-          <a id="lb-image" class="ghost-btn" target="_blank" rel="noopener">View image alone</a>
-          <a id="lb-paper" class="primary-btn" target="_blank" rel="noopener">Open paper ↗</a>
-          <span id="lb-separator-target" class="lb-separator-target" aria-hidden="true">/</span>
-        </div>
+    <button class="lightbox-nav prev" id="lb-prev" aria-label="上一张">‹</button>
+    <button class="lightbox-nav next" id="lb-next" aria-label="下一张">›</button>
+    <div class="lightbox-img-wrap">
+      <img id="lb-img" src="" alt="">
+    </div>
+    <div class="lightbox-meta">
+      <div class="lb-badges"><span id="lb-award" class="badge tier-badge" hidden></span><span id="lb-tier" class="badge tier-badge" hidden></span><span id="lb-venue" class="badge"></span><span id="lb-year" class="badge year"></span><span id="lb-pattern" class="badge pattern"></span></div>
+      <h2 id="lb-title"></h2>
+      <p id="lb-authors" class="lb-authors"></p>
+      <div class="lb-actions">
+        <a id="lb-paper" class="primary-btn" target="_blank" rel="noopener">Open paper ↗</a>
+        <a id="lb-image" class="ghost-btn" target="_blank" rel="noopener">View image alone</a>
       </div>
     </div>
   </div>
