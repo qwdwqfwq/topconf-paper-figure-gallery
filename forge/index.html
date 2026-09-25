@@ -361,7 +361,7 @@ const TARGETS = {
 };
 
 /* FALLBACK：manifest 拉取失败（离线）时使用，与 forge/data/manifest.json 同口径 */
-const FALLBACK = {"updated":"2026-09-25","providers":{"ark":{"label":"火山方舟 Ark","base":"https://ark.cn-beijing.volces.com/api/v3","proto":"oai","cors":true,"chat":["doubao-seed-2-1-pro-260628","doubao-seed-2-1-turbo-260628"],"vision":["doubao-seed-2-1-pro-260628","doubao-seed-2-1-turbo-260628"],"image":["doubao-seedream-5-0-pro-260628"]},"sf":{"label":"硅基流动 SiliconFlow","base":"https://api.siliconflow.cn/v1","proto":"oai","cors":true,"chat":["deepseek-ai/DeepSeek-V3","Qwen/Qwen3-235B-A22B"],"vision":["Qwen/Qwen2.5-VL-72B-Instruct"],"image":["black-forest-labs/FLUX.1-schnell","Kwai-Kolors/Kolors"]},"glm":{"label":"智谱 GLM","base":"https://open.bigmodel.cn/api/paas/v4","proto":"oai","cors":true,"chat":["glm-4.5","glm-4.5-air"],"vision":["glm-4v-plus"],"image":["cogview-4"]},"ds":{"label":"DeepSeek","base":"https://api.deepseek.com","proto":"oai","cors":true,"chat":["deepseek-v4-pro","deepseek-flash"],"vision":[],"image":[]},"oai":{"label":"OpenAI","base":"https://api.openai.com/v1","proto":"oai","cors":true,"chat":["gpt-5","gpt-4.1"],"vision":["gpt-5"],"image":["gpt-image-1"]},"kimi":{"label":"Kimi 月之暗面","base":"https://api.moonshot.cn/v1","proto":"oai","cors":true,"chat":["kimi-k3","kimi-k2.6"],"vision":["kimi-k2.6"],"image":[]},"qwen":{"label":"通义千问 Qwen","base":"https://dashscope.aliyuncs.com/compatible-mode/v1","proto":"oai","cors":true,"chat":["qwen-max","qwen-plus"],"vision":["qwen-vl-max"],"image":["qwen-image"]},"hy":{"label":"腾讯混元 Hunyuan","base":"https://api.hunyuan.cloud.tencent.com/v1","proto":"oai","cors":false,"chat":["hunyuan-turbos-latest"],"vision":["hunyuan-vision"],"image":["hy-image-v3.5-preview"]},"claude":{"label":"Anthropic Claude","base":"https://api.anthropic.com","proto":"anthropic","cors":false,"chat":["claude-opus-5-5","claude-sonnet-5","claude-sonnet-4-6"],"vision":["claude-opus-5-5","claude-sonnet-5"],"image":[]},"custom":{"label":"自定义 OpenAI 兼容","base":"","proto":"oai","cors":true,"chat":[],"vision":[],"image":[]}}};
+const FALLBACK = {"updated":"2026-09-25","providers":{"ark":{"label":"火山方舟 Ark","base":"https://ark.cn-beijing.volces.com/api/v3","proto":"oai","cors":true,"chat":["doubao-seed-2-1-pro-260915","doubao-seed-2-1-lite-260915","doubao-seed-2-1-pro-260628","doubao-seed-2-1-turbo-260628","doubao-seed-evolving","doubao-seed-2-0-pro-260215","doubao-seed-2-0-lite-260428","doubao-seed-2-0-mini-260428","doubao-seed-character-260628"],"vision":["doubao-seed-2-1-pro-260915","doubao-seed-2-1-lite-260915","doubao-seed-2-1-pro-260628","doubao-seed-2-1-turbo-260628","doubao-seed-evolving","doubao-seed-2-0-pro-260215","doubao-seed-2-0-lite-260428"],"image":["doubao-seedream-5-0-pro-260628","doubao-seedream-5-0-flash-260915","doubao-seedream-5-0-260128","doubao-seedream-4-5-251128","doubao-seedream-4-0-250828"]},"sf":{"label":"硅基流动 SiliconFlow","base":"https://api.siliconflow.cn/v1","proto":"oai","cors":true,"chat":["deepseek-ai/DeepSeek-V3","Qwen/Qwen3-235B-A22B"],"vision":["Qwen/Qwen2.5-VL-72B-Instruct"],"image":["black-forest-labs/FLUX.1-schnell","Kwai-Kolors/Kolors"]},"glm":{"label":"智谱 GLM","base":"https://open.bigmodel.cn/api/paas/v4","proto":"oai","cors":true,"chat":["glm-4.5","glm-4.5-air"],"vision":["glm-4v-plus"],"image":["cogview-4"]},"ds":{"label":"DeepSeek","base":"https://api.deepseek.com","proto":"oai","cors":true,"chat":["deepseek-v4-pro","deepseek-flash"],"vision":[],"image":[]},"oai":{"label":"OpenAI","base":"https://api.openai.com/v1","proto":"oai","cors":true,"chat":["gpt-5","gpt-4.1"],"vision":["gpt-5"],"image":["gpt-image-1"]},"kimi":{"label":"Kimi 月之暗面","base":"https://api.moonshot.cn/v1","proto":"oai","cors":true,"chat":["kimi-k3","kimi-k2.6"],"vision":["kimi-k2.6"],"image":[]},"qwen":{"label":"通义千问 Qwen","base":"https://dashscope.aliyuncs.com/compatible-mode/v1","proto":"oai","cors":true,"chat":["qwen-max","qwen-plus"],"vision":["qwen-vl-max"],"image":["qwen-image"]},"hy":{"label":"腾讯混元 Hunyuan","base":"https://api.hunyuan.cloud.tencent.com/v1","proto":"oai","cors":false,"chat":["hunyuan-turbos-latest"],"vision":["hunyuan-vision"],"image":["hy-image-v3.5-preview"]},"claude":{"label":"Anthropic Claude","base":"https://api.anthropic.com","proto":"anthropic","cors":false,"chat":["claude-opus-5-5","claude-sonnet-5","claude-sonnet-4-6"],"vision":["claude-opus-5-5","claude-sonnet-5"],"image":[]},"custom":{"label":"自定义 OpenAI 兼容","base":"","proto":"oai","cors":true,"chat":[],"vision":[],"image":[]}}};
 
 /* ---------------- boot: manifest + data + local CLIP ---------------- */
 async function loadManifest(){
@@ -871,24 +871,39 @@ function postJSON(base, path, body, key, extraHeaders, timeoutMs=90000){
     headers:{'Content-Type':'application/json',Authorization:'Bearer '+key,...extraHeaders},
     body:JSON.stringify(body),signal:ac.signal}).finally(()=>clearTimeout(to));
 }
-/* When a POST fails at network level, find out WHY (some providers omit CORS
-   headers on error responses, so the real 401/404 is invisible to the page). */
-async function diagnoseConnection(base, key, modelId){
+/* When a POST fails at network level, find out WHY. Some providers (Ark) do
+   not allow browser CORS on /models, and omit CORS headers on error responses,
+   so the real 401/404 can be invisible to the page. */
+async function diagnoseConnection(base, key, modelId, kind='chat'){
+  // 1) model-list endpoint (works on providers that allow browser CORS on it)
   try{
     const r = await fetch(base+'/models',{headers:{Authorization:'Bearer '+key}});
-    if(!r.ok){
-      if(r.status===401) return 'API Key 无效或已过期，请重新到模型服务商控制台复制 Key 后粘贴。';
-      if(r.status===403) return '服务器拒绝了该 Key（HTTP 403），请确认 Key 权限与账号状态。';
-      return '服务器拒绝了该 Key（HTTP '+r.status+'）。';
+    if(r.ok){
+      let list=[];
+      try{ const d=await r.json(); list=(d.data||d.models||[]).map(x=>x.id||x.model||x.name); }catch{}
+      if(modelId && list.length && !list.includes(modelId))
+        return '你的账号未开通模型「'+modelId+'」。请在下拉框“你的账号已开通”分组里选择，或到服务商控制台开通该模型。';
+      return '';
     }
-    let list=[];
-    try{ const d=await r.json(); list=(d.data||d.models||[]).map(x=>x.id||x.model||x.name); }catch{}
-    if(modelId && list.length && !list.includes(modelId))
-      return '你的账号未开通模型「'+modelId+'」。请在下拉框“你的账号已开通”分组里选择，或到服务商控制台开通该模型。';
-    return '';
-  }catch(e){
-    return '无法连接模型服务器，且浏览器读不到服务器的错误详情（常见原因：Key 错误或过期、账号欠费、网络/代理拦截）。请重新复制 Key、确认账号有余额后再试。';
+    if(r.status===401) return 'API Key 无效或已过期，请重新到模型服务商控制台复制 Key 后粘贴。';
+    if(r.status===403) return '服务器拒绝了该 Key（HTTP 403），请确认 Key 权限与账号状态。';
+  }catch(e){ /* /models unreachable from this browser (e.g. Ark) -> probe below */ }
+  // 2) Ark-style fallback: a minimal chat call against the same model
+  if(kind==='chat' && modelId){
+    try{
+      const probe={model:modelId,max_tokens:1,messages:[{role:'user',content:'hi'}]};
+      if($('#provider').value==='ark') probe.thinking={type:'disabled'};
+      const r=await postJSON(base,'/chat/completions',probe,key);
+      if(r.ok) return '';  // key + model fine; original failure was payload/transient
+      let txt=''; try{ txt=await r.text(); }catch{}
+      if(r.status===401) return 'API Key 无效或已过期，请重新到模型服务商控制台复制 Key 后粘贴。';
+      if(r.status===404) return '你的账号未开通模型「'+modelId+'」（方舟需在控制台“开通”该模型后才能调用）。请到控制台开通，或改选你已开通的模型——例如你已开通 Seedream 5 pro，可切到“AI 位图初稿”模式并选择它直接出图。';
+      return friendlyHttp(r.status,txt);
+    }catch(e){
+      return '无法连接模型服务器，且浏览器读不到错误详情（常见原因：Key 错误或过期、账号欠费、网络/代理拦截）。请重新复制 Key、确认账号有余额后再试。';
+    }
   }
+  return '无法连接模型服务器。若你用的是方舟，请确认已在控制台开通该模型；Key 错误、账号欠费或网络拦截也会出现此提示。';
 }
 
 /* ---------------- generation ---------------- */
@@ -1057,7 +1072,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   try{ r = await postJSON(base,'/images/generations',body,key,undefined,150000); }
   catch(e){
     if(e.name==='TimeoutError') throw new Error('生成超时（已等待约 150 秒），模型可能繁忙，请稍后重试；也可换更快的模型（如硅基流动 FLUX schnell）。');
-    const diag=await diagnoseConnection(base,key,model);
+    const diag=await diagnoseConnection(base,key,model,'image');
     throw new Error(diag || '请求被网络或浏览器拦截，可重试，或勾选“使用中转”填入中转地址。');
   }
   let txt = await r.text();
