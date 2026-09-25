@@ -79,6 +79,28 @@ h1 { margin: 0; font-size: 20px; letter-spacing: .2px; font-weight: 800; }
   background: rgba(79, 70, 229, .09); border-radius: 6px; padding: 1px 7px; margin-right: 2px;
 }
 
+/* ---------- FigureForge entry ---------- */
+.forge-cta {
+  display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+  margin: 13px 0 2px; padding: 13px 20px; border-radius: 14px;
+  background: linear-gradient(92deg, #4f46e5, #6d28d9);
+  color: #fff; text-decoration: none;
+  box-shadow: 0 14px 30px -14px rgba(79, 70, 229, .65);
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.forge-cta:hover { transform: translateY(-1px); color: #fff; box-shadow: 0 18px 38px -14px rgba(79,70,229,.72); text-decoration: none; }
+.forge-cta .fc-ic { font-size: 22px; line-height: 1; }
+.forge-cta .fc-main { flex: 1; min-width: 240px; }
+.forge-cta .fc-t { display: block; font-size: 15px; font-weight: 800; }
+.forge-cta .fc-s { display: block; font-size: 12.5px; font-weight: 500; opacity: .92; margin-top: 2px; }
+.forge-cta .fc-go { font-size: 14px; font-weight: 700; white-space: nowrap; }
+.forge-nav {
+  white-space: nowrap; align-self: center; text-decoration: none;
+  padding: 7px 13px; border-radius: 9px; background: var(--accent); color: #fff;
+  font-size: 12.5px; font-weight: 700;
+}
+.forge-nav:hover { background: #4338ca; color: #fff; text-decoration: none; }
+
 /* ---------- Sticky control bar ---------- */
 .stickbar {
   position: sticky; top: 0; z-index: 40;
