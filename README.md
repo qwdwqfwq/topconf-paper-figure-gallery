@@ -51,28 +51,33 @@ back to its source paper and records venue, year, authors and a visual-pattern t
 - 🔁 Fully open, reproducible pipeline: proceedings index → PDF download → Figure 1 crop
   → design-quality scoring → dHash de-duplication → manual page-by-page review
 
-### 🎓 How to design your own overview figure with FigureForge
+### 🛠️ FigureForge Beta — from browsing to drafting
 
-No more staring at a blank slide — open [FigureForge](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge) and let 3,516 top-conference figures draft yours in five steps:
+FigureForge turns the gallery into a drafting tool: describe your paper, and 3,516 top-conference figures serve as the layout scaffold for your own Figure 1 — no sign-up, no server, everything runs in your browser. **[Try FigureForge →](forge/index.html)** · 11-second walkthrough:
 
-1. **Describe your paper** — paste the title + abstract (or upload the PDF for auto-extraction); state the “input → our method → output” story.
-2. **Pick the right Pattern** — `framework` for multi-agent / system overviews, `pipeline` for end-to-end flows, `architecture` for internal model structure, `conceptual` for visual metaphors.
-3. **Tick 8–10 same-type references** — results are ranked by the **relevance score (top-right of each card)**; tick 8–10 cards of one pattern (e.g. all framework), higher scores first.
+<a href="https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge/demo-forge.mp4"><img src="forge/demo-poster.jpg" alt="FigureForge walkthrough: describe paper, pick references, generate draft" width="880"></a>
+
+1. **Describe your paper** — paste the title + abstract, upload the PDF (title / abstract / method are extracted locally), or just type one sentence; state the “input → our method → output” story. Pre-filter by venue / year / tier / pattern before retrieving.
+2. **Pick the right pattern** — `framework` for multi-agent / system overviews, `pipeline` for end-to-end flows, `architecture` for internal model structure, `conceptual` for visual metaphors (plus `teaser` and `taxonomy`).
+3. **Tick reference figures** — a hybrid **CLIP + BM25** search ranks all 3,516 figures by a relevance score (top-right of each card); tick **8–10 same-pattern cards** for two-stage mode (higher scores first), or just **2–3** for direct mode.
 
    ![Pick references](forge/tutorial/02_pick_refs.png)
 
-4. **Two stages: summarize, then generate** — a vision model first reads the 8–10 figures and distils their shared grammar across **Layout / Elements / Palette / Hierarchy**, auto-selects 2–3 representative figures, and only then generates — so many picks never fight each other.
+4. **Two stages: summarize, then generate** — a vision model first reads your picks and distils their shared grammar across **Layout / Elements / Palette / Hierarchy**, auto-selecting 2–3 representative figures, and only then generates — so many picks never fight each other.
 
    ![Two-stage analysis](forge/tutorial/03_analyze.png)
 
-5. **Choose a mode, add your API key, get the draft**:
-   - **SVG mode (recommended)**: 100% accurate text, editable in Figma / draw.io / Illustrator;
-   - **Bitmap mode**: publication-style layout and narrative; check small English labels in PPT / Figma.
-   - Paste **your own** API key (stored only in your browser): Volcengine Ark, SiliconFlow, Zhipu GLM, DeepSeek, OpenAI, Kimi, Qwen, Tencent Hunyuan, Claude, or any OpenAI-compatible endpoint.
+5. **Choose a mode, add your key, get the draft** — **SVG mode (recommended)**: 100% accurate text, editable in Figma / draw.io / Illustrator; **Bitmap mode**: publication-style layout and narrative, check small English labels in PPT / Figma. Paste **your own** API key (stored only in your browser) and download.
 
 > 💡 **Versus a bare prompt in a general chatbot?** The same prompt yields a “pretty but generic” flowchart from a general text-to-image model; FigureForge uses top-conference figures as a **layout scaffold**, so drafts carry the panel grid, comparative narrative and restrained palette of a paper figure. Honest comparison below (bitmap sets the layout, SVG keeps the text — no dunking):
 >
 > ![Comparison](forge/tutorial/compare.png)
+
+- 🔒 **Everything runs in your browser.** The CLIP text model and gallery index are bundled and run client-side; your paper content and API key stay on your device, and the key is sent only to the provider you choose.
+- 🔑 **Bring your own key.** Ten presets: Volcengine Ark (Seedream / Doubao), SiliconFlow, Zhipu GLM, DeepSeek, OpenAI, Kimi (Moonshot), Qwen (Alibaba), Tencent Hunyuan, Anthropic Claude, plus any custom OpenAI-compatible relay.
+- 🔄 **The model list stays current by itself:** every time the page opens it refreshes the bundled provider manifest and, once your key is entered, pulls the provider's live `/models` list — newly released models show up automatically, no page update needed. (Anthropic has no model-list endpoint; Hunyuan / Anthropic block browser CORS on the official API — for those, tick the relay box and paste an OpenAI-compatible relay URL.)
+- 📐 **Honest scope:** it is a *high-quality first draft* for the narrow Figure-1 genre; text and numbers still need your review before submission.
+- 🤝 **Open source forever — no paid version, ever.** The gallery and FigureForge are MIT-licensed and free; no paid tier is planned (your API key pays the model provider directly). Pull Requests are welcome — new papers, venues, label fixes — and the gallery is refreshed yearly as new proceedings come out.
 
 ### Add a paper or a better figure
 
@@ -84,56 +89,6 @@ are the intended growth path after the 2023–2026 baseline.
 
 Image files remain attributed to their authors and publishers; see
 [IMAGES_POLICY.md](IMAGES_POLICY.md) for the educational-use and 72-hour takedown policy.
-
----
-
-## 🛠️ FigureForge Beta — from browsing to drafting
-
-**[Try FigureForge →](forge/index.html)**
-
-<img src="forge/demo-forge.gif" alt="FigureForge walkthrough: describe paper, pick references, generate draft" width="880">
-
-FigureForge turns the gallery into a drafting tool, in three steps:
-
-1. **Describe your paper** — paste the abstract, upload the PDF (title / abstract / method
-   are extracted locally), or just type a sentence about your work.
-2. **Pick visual references** — a hybrid **CLIP + BM25** search over all 3,516 gallery
-   figures returns the most relevant designs, ranked by score; tick 8–10 same-pattern
-   figures for two-stage mode (2–3 for direct mode), filter by venue / year / tier / pattern.
-3. **Generate in two stages** — a vision model first distils your picks’ shared Layout /
-   Elements / Palette / Hierarchy and auto-selects 2–3 representative figures, then calls
-   **your own** OpenAI-compatible API to return an **editable SVG** or a **bitmap** draft.
-
-- 🔒 **Everything runs in your browser.** The CLIP text model and the gallery index are
-  bundled and run client-side; your API key stays on your device and is sent only to the
-  provider you choose.
-- 🔑 **Bring your own key.** Ten presets: Volcengine Ark (Seedream / Doubao), SiliconFlow,
-  Zhipu GLM, DeepSeek, OpenAI, Kimi (Moonshot), Qwen (Alibaba), Tencent Hunyuan,
-  Anthropic Claude, plus any custom OpenAI-compatible relay.
-- 🔄 **The model list stays current by itself:** every time the page opens it refreshes the
-  bundled provider manifest and, once your key is entered, pulls the provider's live
-  `/models` list — newly released models show up automatically, no page update needed.
-  (Anthropic has no model-list endpoint; Hunyuan / Anthropic block browser CORS on the
-  official API — for those, tick the relay box and paste an OpenAI-compatible relay URL.)
-- 🧭 **Why it beats a bare prompt in a general chatbot:** general models don't know the
-  Figure-1 genre — no panel grid, no flow arrows, no short phrase labels, no restrained
-  palette. The retrieved gallery figures act as a visual blueprint and the figure-type
-  selector injects the right layout instructions, so drafts come back looking like a
-  paper overview instead of an illustration.
-- 📐 **Honest scope:** it is a *high-quality first draft* for the narrow Figure-1 genre;
-  text and numbers still need your review before submission.
-
-**FigureForge 内测版** —— 让画廊从"找灵感"走到"出初稿"，三步完成：
-
-1. **描述你的论文**：粘贴摘要、上传 PDF（本地自动提取标题 / 摘要 / 方法章节），或直接写一句话。
-2. **勾选灵感参考**：**CLIP + BM25 混合检索**全量 3,516 张画廊图片，按相关度评分降序返回；两阶段勾选 8–10 张同类型图（直接模式 2–3 张），支持会议 / 年份 / 等级 / 模式筛选。
-3. **两阶段生成**：视觉模型先归纳所选图的 Layout / Elements / Palette / Hierarchy 共性、自动挑 2–3 张代表图，再调用**你自己的** OpenAI 兼容 API，产出**可编辑 SVG** 或**位图**初稿，一键下载。
-
-- 🔒 **全流程在浏览器本地运行**：CLIP 模型与画廊索引均随仓库打包、本地推理；API Key 不经过任何第三方，只发往你选择的服务商。
-- 🔑 **只需填 Key**：预置火山方舟（Seedream / 豆包）、硅基流动、智谱、DeepSeek、OpenAI、Kimi（月之暗面）、通义千问 Qwen、腾讯混元、Anthropic Claude 及任意 OpenAI 兼容中转，共十家，服务商与模型均为下拉选择。
-- 🔄 **模型列表自动保鲜**：每次打开页面自动刷新内置清单；填入 Key 后实时拉取服务商 `/models`，新发布模型自动出现、无需更新页面。（Anthropic 无模型列表接口；混元 / Anthropic 官方接口不开放浏览器跨域，这两家勾选中转并填入 OpenAI 兼容中转地址即可。）
-- 🧭 **为什么比直接在通用对话框里写 prompt 更靠谱**：通用模型不懂论文主图体裁——没有面板网格、流程箭头、短语标签与克制配色；检索到的画廊图就是视觉蓝图，图型选择器注入版式指令，初稿天然像论文主图而非普通插画。
-- 📐 **能力边界**：面向 Figure 1 这一窄场景的高质量初稿，文字与数字仍需人工核对。
 
 ---
 
@@ -151,28 +106,33 @@ FigureForge turns the gallery into a drafting tool, in three steps:
 - 📦 纯静态页面（HTML/CSS/JS），无需联网、无需构建，`file://` 双击即可打开
 - 🔁 数据管线完全开源：会议索引 → PDF 下载 → Figure 1 裁剪 → 25+ 条规则打分 → dHash 去重 → 逐张人工复核
 
-## 🎓 怎么用 FigureForge 画你自己的主图
+## 🛠️ FigureForge Beta：从「找灵感」到「出初稿」
 
-不用再对着空白 PPT 硬想排版——打开 [FigureForge](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge)，五步让画廊里 3,516 张顶会图帮你出初稿：
+FigureForge 让画廊从「找灵感」走到「出初稿」：描述你的论文，3,516 张顶会主图就会成为你 Figure 1 的版式灵感来源——纯开源、免注册、无服务器，全部在浏览器本地运行。**[立即试用 FigureForge →](forge/index.html)** · 11 秒完整演示（点击播放）：
 
-1. **输入论文内容**：粘贴标题 + 摘要（或直接「上传 PDF」自动提取），一句话讲清「输入 → 我们的方法 → 输出」。
-2. **选对 Pattern 模式**：多智能体 / 系统总览选 `framework`，端到端流程选 `pipeline`，模型内部结构选 `architecture`，概念隐喻选 `conceptual`。
-3. **勾选 8–10 张同类参考图**：检索结果按**相关度评分（卡片右上角分数）从高到低**排好，勾选同类型的 8–10 张（如都选 framework），分数越高越优先。
+<a href="https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge/demo-forge.mp4"><img src="forge/demo-poster.jpg" alt="FigureForge 全流程：输入论文、勾选参考、生成初稿" width="880"></a>
+
+1. **输入论文内容**：粘贴标题 + 摘要、上传 PDF（本地自动提取标题 / 摘要 / 方法章节），或直接写一句话，讲清「输入 → 我们的方法 → 输出」；检索前可先按会议 / 年份 / 等级 / 模式筛选。
+2. **选对 Pattern 模式**：多智能体 / 系统总览选 `framework`，端到端流程选 `pipeline`，模型内部结构选 `architecture`，概念隐喻选 `conceptual`（另有 `teaser` 和 `taxonomy`）。
+3. **勾选参考图**：**CLIP + BM25 混合检索**全量 3,516 张图，按**相关度评分（卡片右上角分数）**降序排列；两阶段模式勾选 **8–10 张同类型图**（如都选 framework，优先高分），直接生成模式精选 **2–3 张**即可。
 
    ![挑选参考图](forge/tutorial/02_pick_refs.png)
 
-4. **两阶段：先归纳、再生成**：视觉模型先读这 8–10 张图，从 **Layout 布局 / Elements 元素 / Palette 配色 / Hierarchy 层级** 四个维度归纳该类版式的共性，并自动挑出 2–3 张代表图，再据此生成——既满足多选，又不会让多张版式互相打架。
+4. **两阶段：先归纳、再生成**：视觉模型先读这些图，从 **Layout 布局 / Elements 元素 / Palette 配色 / Hierarchy 层级** 四个维度归纳该类版式的共性、自动挑出 2–3 张代表图，再据此生成——既满足多选，又不会让多张版式互相打架。
 
    ![两阶段归纳](forge/tutorial/03_analyze.png)
 
-5. **选模式、填 API、出初稿**：
-   - **SVG 模式（推荐）**：文字 100% 准确，可直接在 Figma / draw.io / Illustrator 编辑；
-   - **位图模式**：版式地道、叙事完整，小字号英文请在 PPT / Figma 中核对。
-   - 粘贴**你自己的** API Key（仅保存在本机浏览器、不经过任何第三方），支持火山方舟 / 硅基流动 / 智谱 / DeepSeek / OpenAI / Kimi / 通义千问 / 腾讯混元 / Claude 及任意 OpenAI 兼容接口。
+5. **选模式、填 Key、出初稿**：**SVG 模式（推荐）**文字 100% 准确、可在 Figma / draw.io / Illustrator 编辑；**位图模式**版式地道、叙事完整，小字号英文请在 PPT / Figma 核对。粘贴**你自己的** API Key（仅保存在本机浏览器），一键下载。
 
-> 💡 **和直接在通用对话框里写 prompt 有什么区别？** 同一个 prompt，通用文生图给的是「好看但通用」的流程图；FigureForge 用顶会图当**版式脚手架**，初稿天然带论文的面板网格、对比叙事与克制配色。客观对比见下图（位图定版式、SVG 保文字，不拉踩）：
+> 💡 **和直接在通用对话框里写 prompt 有什么区别？** 同一个 prompt，通用文生图给的是「好看但通用」的流程图；FigureForge 用顶会图当**版式灵感来源**，初稿天然带论文的面板网格、对比叙事与克制配色。客观对比见下图（位图定版式、SVG 保文字，不拉踩）：
 >
 > ![效果对比](forge/tutorial/compare.png)
+
+- 🔒 **全流程在浏览器本地运行**：CLIP 模型与画廊索引均随仓库打包、本地推理；论文内容与 API Key 不离开你的设备，Key 只发往你选择的服务商。
+- 🔑 **只需填 Key**：预置火山方舟（Seedream / 豆包）、硅基流动、智谱、DeepSeek、OpenAI、Kimi（月之暗面）、通义千问 Qwen、腾讯混元、Anthropic Claude 及任意 OpenAI 兼容中转，共十家，服务商与模型均为下拉选择。
+- 🔄 **模型列表自动保鲜**：每次打开页面自动刷新内置清单；填入 Key 后实时拉取服务商 `/models`，新发布模型自动出现、无需更新页面。（Anthropic 无模型列表接口；混元 / Anthropic 官方接口不开放浏览器跨域，这两家勾选中转并填入 OpenAI 兼容中转地址即可。）
+- 📐 **能力边界**：面向 Figure 1 这一窄场景的高质量初稿，文字与数字提交前仍需人工核对。
+- 🤝 **纯开源、永不收费，欢迎一起共建**：画廊与 FigureForge 均为 MIT 许可、免费使用，未来不会推出收费版本（API Key 的费用直接付给模型厂商）；欢迎提 Pull Request 补论文、补会议、修标签，每年顶会主图持续更新，一起把它做得更好用。
 
 ## 📊 收录规模 / Coverage
 
@@ -282,7 +242,7 @@ python scripts/sheet_qa.py 31
 
 ## 🗺️ Roadmap
 
-> **Versioning / 版本对照** — GitHub releases follow 0.x semver; public editions are counted by generation: **public v1 = v0.3** (six venues, 2,298 figures, launched 2026-09-20), **public v2 = v0.4** (acceptance-tier badges, 2,730 figures) and **public v3 = v0.5** (2026 papers, 3,528 figures) and **public v4 = v0.6** (FigureForge, gallery-grounded drafting in the browser; 12 cross-generation duplicates removed, 3,516 figures). 宣发中的 "v2/v3/v4" 分别对应 release v0.4/v0.5/v0.6。
+> **Versioning / 版本对照** — GitHub releases follow 0.x semver: **v0.3** (six venues, 2,298 figures, launched 2026-09-20), **v0.4** (acceptance-tier badges, 2,730 figures), **v0.5** (2026 papers, 3,528 figures), **v0.6** (FigureForge, gallery-grounded drafting in the browser; 12 cross-generation duplicates removed, 3,516 figures). 小红书按发帖计数：**v1 = v0.3、v2 = v0.4、v3 = v0.6**（v0.5 的 2026 更新并入 v3 帖，未单独发帖）。
 
 - [x] 60 张人工精选种子画廊（v0.1）
 - [x] ICLR / ICML / NeurIPS 自动管线扩量（v0.2–v0.3）
