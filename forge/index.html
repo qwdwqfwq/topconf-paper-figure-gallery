@@ -392,8 +392,10 @@ async function boot(){
     data = { ids, figs, bm, IE, TE, N: ids.length };
     bt.textContent = '正在加载本地 CLIP（① tokenizer）…';
     T.env.allowLocalModels = true;
+    T.env.allowRemoteModels = false;
+    T.env.localModelPath = new URL('./models/', import.meta.url).href;
     T.env.backends.onnx.wasm.wasmPaths = new URL('vendor/', document.baseURI).href;
-    const MP = new URL('./models/clip-vit-base-patch32', import.meta.url).href;
+    const MP = 'clip-vit-base-patch32';
     clip.tokenizer = await T.AutoTokenizer.from_pretrained(MP);
     L('tokenizer done');
     bt.textContent = '正在加载本地 CLIP（② 模型本体约 63 MB）…';
