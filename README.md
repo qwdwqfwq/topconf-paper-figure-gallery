@@ -8,8 +8,8 @@
 <img src="docs/demo.gif" alt="Search, filter and lightbox demo" width="920">
 
 [![Website](https://img.shields.io/website?down_color=lightgrey&label=Gallery&up_color=blue&up_message=online&url=https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)
-![Figures](https://img.shields.io/badge/figures-3528-orange)
-![Best/Oral/Spotlight](https://img.shields.io/badge/Best%C2%B7Oral%C2%B7Spotlight-19%C2%B7394%C2%B7711-gold)
+![Figures](https://img.shields.io/badge/figures-3516-orange)
+![Best/Oral/Spotlight](https://img.shields.io/badge/Best%C2%B7Oral%C2%B7Spotlight-26%C2%B7616%C2%B7950-gold)
 ![Venues](https://img.shields.io/badge/venues-ICLR·ICML·NeurIPS·CVPR·ACL·AAAI-purple)
 ![Years](https://img.shields.io/badge/years-2023--2026-success)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](requirements.txt)
@@ -82,6 +82,56 @@ Image files remain attributed to their authors and publishers; see
 
 ---
 
+## 🛠️ FigureForge Beta — from browsing to drafting
+
+**[Try FigureForge →](forge/index.html)**
+
+<img src="forge/demo-forge.gif" alt="FigureForge walkthrough: describe paper, pick references, generate draft" width="880">
+
+FigureForge turns the gallery into a drafting tool, in three steps:
+
+1. **Describe your paper** — paste the abstract, upload the PDF (title / abstract / method
+   are extracted locally), or just type a sentence about your work.
+2. **Pick visual references** — a hybrid **CLIP + BM25** search over all 3,516 gallery
+   figures returns the most relevant designs; choose 1–3 as your visual blueprint and
+   filter by venue / year / tier / pattern.
+3. **Choose the figure type and generate** — overview teaser, architecture, pipeline,
+   results grid, or a custom target; FigureForge calls **your own** OpenAI-compatible API
+   and returns an **editable SVG** or a **bitmap** draft you can download.
+
+- 🔒 **Everything runs in your browser.** The CLIP text model and the gallery index are
+  bundled and run client-side; your API key stays on your device and is sent only to the
+  provider you choose.
+- 🔑 **Bring your own key.** Ten presets: Volcengine Ark (Seedream / Doubao), SiliconFlow,
+  Zhipu GLM, DeepSeek, OpenAI, Kimi (Moonshot), Qwen (Alibaba), Tencent Hunyuan,
+  Anthropic Claude, plus any custom OpenAI-compatible relay.
+- 🔄 **The model list stays current by itself:** every time the page opens it refreshes the
+  bundled provider manifest and, once your key is entered, pulls the provider's live
+  `/models` list — newly released models show up automatically, no page update needed.
+  (Anthropic has no model-list endpoint; Hunyuan / Anthropic block browser CORS on the
+  official API — for those, tick the relay box and paste an OpenAI-compatible relay URL.)
+- 🧭 **Why it beats a bare prompt in a general chatbot:** general models don't know the
+  Figure-1 genre — no panel grid, no flow arrows, no short phrase labels, no restrained
+  palette. The retrieved gallery figures act as a visual blueprint and the figure-type
+  selector injects the right layout instructions, so drafts come back looking like a
+  paper overview instead of an illustration.
+- 📐 **Honest scope:** it is a *high-quality first draft* for the narrow Figure-1 genre;
+  text and numbers still need your review before submission.
+
+**FigureForge 内测版** —— 让画廊从"找灵感"走到"出初稿"，三步完成：
+
+1. **描述你的论文**：粘贴摘要、上传 PDF（本地自动提取标题 / 摘要 / 方法章节），或直接写一句话。
+2. **勾选灵感参考**：**CLIP + BM25 混合检索**全量 3,516 张画廊图片，按相关度返回，勾选 1–3 张作为视觉蓝图，支持会议 / 年份 / 等级 / 模式筛选。
+3. **选择图型并生成**：总览 teaser、架构图、流程图、结果图或自定义目标；调用**你自己的** OpenAI 兼容 API，产出**可编辑 SVG** 或**位图**初稿，一键下载。
+
+- 🔒 **全流程在浏览器本地运行**：CLIP 模型与画廊索引均随仓库打包、本地推理；API Key 不经过任何第三方，只发往你选择的服务商。
+- 🔑 **只需填 Key**：预置火山方舟（Seedream / 豆包）、硅基流动、智谱、DeepSeek、OpenAI、Kimi（月之暗面）、通义千问 Qwen、腾讯混元、Anthropic Claude 及任意 OpenAI 兼容中转，共十家，服务商与模型均为下拉选择。
+- 🔄 **模型列表自动保鲜**：每次打开页面自动刷新内置清单；填入 Key 后实时拉取服务商 `/models`，新发布模型自动出现、无需更新页面。（Anthropic 无模型列表接口；混元 / Anthropic 官方接口不开放浏览器跨域，这两家勾选中转并填入 OpenAI 兼容中转地址即可。）
+- 🧭 **为什么比直接在通用对话框里写 prompt 更靠谱**：通用模型不懂论文主图体裁——没有面板网格、流程箭头、短语标签与克制配色；检索到的画廊图就是视觉蓝图，图型选择器注入版式指令，初稿天然像论文主图而非普通插画。
+- 📐 **能力边界**：面向 Figure 1 这一窄场景的高质量初稿，文字与数字仍需人工核对。
+
+---
+
 ## ✨ 这是什么
 
 写论文最头疼的不是"画什么图"，而是**想不到主图还能怎么排版、怎么隐喻**。
@@ -115,25 +165,26 @@ Image files remain attributed to their authors and publishers; see
 
 | 会议 / Venue | 2023 | 2024 | 2025 | 2026 | 合计 Total |
 |---|---:|---:|---:|---:|---:|
-| 🟣 **ICLR** | 108 | 137 | 276 | 247 | **768** |
-| 🟢 **ICML** | 66 | 132 | 217 | 372 | **787** |
-| 🔴 **NeurIPS** | 239 | 365 | 375 | — | **979** |
+| 🟣 **ICLR** | 108 | 135 | 275 | 247 | **765** |
+| 🟢 **ICML** | 63 | 131 | 217 | 372 | **783** |
+| 🔴 **NeurIPS** | 237 | 364 | 373 | — | **974** |
 | 🟠 **CVPR** | 65 | 64 | 96 | 83 | **308** |
 | 🔵 **ACL** | 84 | 74 | 168 | 59 | **385** |
 | 🟡 **AAAI** | 59 | 66 | 139 | 37 | **301** |
-| | | | | **总计 Total** | **3528** |
+| | | | | **总计 Total** | **3516** |
 
-### 🏅 高等级论文 / High-tier papers（ML 三大会，2023–2025）
+### 🏅 高等级论文 / High-tier papers（ICLR / ICML 2023–2026 · NeurIPS 2023–2025）
 
-**Tagged acceptance tiers for ICLR / ICML / NeurIPS — columns: Best/Outstanding (incl. Honorable Mention) · Oral · Spotlight · total.**
+**Tagged acceptance tiers — columns: Best/Outstanding (incl. Honorable Mention) · Oral · Spotlight · total. ICLR / ICML figures include 2026; NeurIPS 2026 is pending.**
 
 画廊对 ICLR / ICML / NeurIPS 的 **Oral、Spotlight、Best/Outstanding Paper** 做了完整索引：
 这些论文中凡有 Figure 1 / Teaser 且达到收录标准的，全部带角标入库；纯理论工作正文没有设计型配图，相应位置即为空缺。
+ICLR / ICML 的 **2026 等级数据已并入下表**（ICLR 2026 仅 Oral 144 + Best/HM 2、无 Spotlight；ICML 2026 Oral 95 + Best/HM 5、Spotlight 239）。
 
 | 会议 | Best / Outstanding | Oral | Spotlight | 合计 |
 |---|---:|---:|---:|---:|
-| 🟣 **ICLR** | 8 | 193 | 155 | **356** |
-| 🟢 **ICML** | 8 | 152 | 319 | **479** |
+| 🟣 **ICLR** | 10 | 337 | 155 | **502** |
+| 🟢 **ICML** | 13 | 247 | 558 | **818** |
 | 🔴 **NeurIPS** | 3 | 32 | 237 | **272** |
 
 > 角标含义：<b style="color:#be123c">★ 红色 = Best / Outstanding（含 Honorable Mention 描边款）</b>、
@@ -189,6 +240,7 @@ python -m http.server 8000
 │   └── pool/                # 全量候选论文池（复现用）
 ├── scripts/                 # 完整数据管线（见 docs/METHODOLOGY.md）
 ├── docs/                    # 方法文档、banner、演示 GIF
+├── forge/                   # FigureForge：浏览器端检索 + 出初稿（CLIP 本地模型 / vendor / 数据）
 └── .github/workflows/       # GitHub Pages 自动部署
 ```
 
@@ -215,13 +267,14 @@ python scripts/sheet_qa.py 31
 
 ## 🗺️ Roadmap
 
-> **Versioning / 版本对照** — GitHub releases follow 0.x semver; public editions are counted by generation: **public v1 = v0.3** (six venues, 2,298 figures, launched 2026-09-20), **public v2 = v0.4** (acceptance-tier badges, 2,730 figures) and **public v3 = v0.5** (2026 papers, 3,528 figures). 宣发中的 "v2/v3" 分别对应 release v0.4/v0.5。
+> **Versioning / 版本对照** — GitHub releases follow 0.x semver; public editions are counted by generation: **public v1 = v0.3** (six venues, 2,298 figures, launched 2026-09-20), **public v2 = v0.4** (acceptance-tier badges, 2,730 figures) and **public v3 = v0.5** (2026 papers, 3,528 figures) and **public v4 = v0.6** (FigureForge, gallery-grounded drafting in the browser; 12 cross-generation duplicates removed, 3,516 figures). 宣发中的 "v2/v3/v4" 分别对应 release v0.4/v0.5/v0.6。
 
 - [x] 60 张人工精选种子画廊（v0.1）
 - [x] ICLR / ICML / NeurIPS 自动管线扩量（v0.2–v0.3）
 - [x] CVPR / ACL / AAAI（2023–2025）同管线扩展（v0.3）
 - [x] ICLR / ICML / NeurIPS Oral · Spotlight · Best Paper 等级索引与角标筛选（v0.4）
 - [x] 2026 已公开会议（ICLR / ICML / CVPR / ACL / AAAI）主图与等级角标（v0.5）
+- [x] FigureForge：浏览器端 CLIP+BM25 检索画廊参考图，调用自有 API 生成主图初稿（v0.6）
 - [ ] CVPR / ACL / AAAI 的 Oral / Highlight 等级索引
 - [ ] NeurIPS 2026 录用公布后补全（预计 2026 年 12 月）
 - [ ] 持续人工复核、清理不合格图片，开放社区 PR 补图机制
@@ -256,7 +309,7 @@ AAAI 论文版权归 AAAI 与作者所有（fair-use 学术参考）。
 }
 ```
 
-## 🖼️ 精选图录（每会议-年份评分最高的 2 张；完整 3528 张请用[在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)）
+## 🖼️ 精选图录（每会议-年份评分最高的 2 张；完整 3516 张请用[在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)）
 
 <br>
 

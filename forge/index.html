@@ -1,0 +1,850 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>FigureForge · 画廊检索画自己的主图</title>
+<style>
+  :root{
+    --indigo:#4f46e5; --indigo-soft:#eef2ff; --green:#059669; --green-soft:#ecfdf5;
+    --purple:#7c3aed; --purple-soft:#f5f3ff; --orange:#ea580c; --orange-soft:#fff7ed;
+    --red:#dc2626; --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --bg:#f6f7fb;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  [hidden]{display:none !important}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"PingFang SC","Microsoft YaHei",sans-serif;
+       background:var(--bg);color:var(--ink);font-size:14px;line-height:1.55}
+  .wrap{max-width:1260px;margin:0 auto;padding:18px 20px 60px}
+  header.top{display:flex;align-items:center;gap:14px;margin-bottom:16px;flex-wrap:wrap}
+  .logo{width:40px;height:40px;border-radius:11px;background:linear-gradient(135deg,#6366f1,#8b5cf6);
+        display:grid;place-items:center;color:#fff;font-weight:800;font-size:18px;box-shadow:0 6px 16px rgba(79,70,229,.28)}
+  h1{font-size:20px;font-weight:800;letter-spacing:-.2px}
+  .sub{color:var(--muted);font-size:13px}
+  .pill{margin-left:auto;font-size:12px;color:#065f46;background:#d1fae5;border:1px solid #a7f3d0;
+        padding:5px 11px;border-radius:999px;font-weight:600}
+  .card{background:#fff;border:1px solid var(--line);border-radius:15px;padding:18px;margin-bottom:16px;
+        box-shadow:0 1px 2px rgba(17,24,39,.04)}
+  .step{display:flex;align-items:center;gap:9px;font-size:15px;font-weight:750;margin-bottom:13px}
+  .num{width:24px;height:24px;border-radius:8px;background:var(--indigo);color:#fff;display:grid;
+       place-items:center;font-size:13px;font-weight:800}
+  textarea{width:100%;min-height:118px;border:1px solid var(--line);border-radius:11px;padding:12px 13px;
+           font:inherit;resize:vertical;background:#fcfcfd;outline:none}
+  textarea:focus{border-color:#a5b4fc;box-shadow:0 0 0 3px rgba(99,102,241,.13)}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+  .field{display:flex;align-items:center;gap:7px;background:#f9fafb;border:1px solid var(--line);
+         border-radius:10px;padding:6px 10px}
+  .field label{font-size:12px;font-weight:700;color:#374151}
+  select{border:0;background:transparent;font:inherit;font-size:13px;outline:none;cursor:pointer;color:#1f2937;max-width:240px}
+  .f-venue label{color:var(--indigo)} .f-year label{color:var(--green)}
+  .f-tier label{color:var(--purple)} .f-pattern label{color:var(--orange)}
+  button{font:inherit;cursor:pointer;border:0;border-radius:10px}
+  .btn-primary{background:var(--indigo);color:#fff;font-weight:700;padding:10px 22px;box-shadow:0 4px 12px rgba(79,70,229,.25)}
+  .btn-primary:disabled{background:#a5b4fc;box-shadow:none;cursor:not-allowed}
+  .btn-ghost{background:#f3f4f6;color:#374151;font-weight:600;padding:9px 15px}
+  .btn-mini{background:#eef2ff;color:#4338ca;font-weight:700;padding:6px 12px;font-size:12.5px}
+  .btn-tiny{background:transparent;color:var(--muted);font-weight:600;font-size:12px;padding:4px 8px;text-decoration:underline}
+  .hint{color:var(--muted);font-size:12.5px;margin-top:10px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(226px,1fr));gap:14px}
+  .rc{border:1px solid var(--line);border-radius:13px;overflow:hidden;background:#fff;position:relative;
+      transition:transform .12s, box-shadow .12s, border-color .12s}
+  .rc:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(17,24,39,.1)}
+  .rc.sel{border-color:var(--indigo);box-shadow:0 0 0 2px rgba(79,70,229,.35)}
+  .rc .thumb{width:100%;aspect-ratio:4/3;object-fit:cover;background:#f3f4f6;display:block;cursor:pointer}
+  .pick{position:absolute;top:8px;left:8px;background:rgba(255,255,255,.94);border:1px solid var(--line);
+        border-radius:8px;padding:4px 9px;font-size:12px;font-weight:700;color:#374151}
+  .rc.sel .pick{background:var(--indigo);color:#fff;border-color:var(--indigo)}
+  .score{position:absolute;top:8px;right:8px;background:rgba(17,24,39,.72);color:#fff;font-size:11px;
+         border-radius:7px;padding:2px 7px;font-weight:600}
+  .rc .body{padding:10px 11px 11px}
+  .rc h3{font-size:13px;font-weight:700;line-height:1.4;display:-webkit-box;-webkit-line-clamp:2;
+         -webkit-box-orient:vertical;overflow:hidden;min-height:36px}
+  .chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+  .chip{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:999px}
+  .c-venue{background:var(--indigo-soft);color:var(--indigo)}
+  .c-year{background:var(--green-soft);color:var(--green)}
+  .c-pattern{background:var(--orange-soft);color:var(--orange)}
+  .c-oral{background:linear-gradient(90deg,#f59e0b,#d97706);color:#fff}
+  .c-spot{background:linear-gradient(90deg,#94a3b8,#64748b);color:#fff}
+  .c-best{background:linear-gradient(90deg,#ef4444,#b91c1c);color:#fff}
+  .c-hm{background:#dbeafe;color:#1d4ed8}
+  .refs-strip{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:13px}
+  .refmini{display:flex;gap:8px;align-items:center;background:#f9fafb;border:1px solid var(--line);
+           border-radius:10px;padding:6px 10px 6px 6px;font-size:12px;max-width:340px}
+  .refmini img{width:52px;height:39px;object-fit:cover;border-radius:7px}
+  .refmini b{font-weight:700;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px}
+  .refmini span{color:var(--muted)}
+  .refmini .x{margin-left:4px;color:#9ca3af;cursor:pointer;font-weight:700}
+  details.settings{border:1px dashed var(--line);border-radius:11px;padding:10px 13px;margin-bottom:13px;background:#fcfcfd}
+  summary{cursor:pointer;font-weight:700;font-size:13px;color:#374151}
+  .settings .srow{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:11px}
+  .sbox{display:flex;flex-direction:column;gap:4px}
+  .sbox > span{font-size:11.5px;font-weight:700;color:#6b7280}
+  input[type=text],input[type=password]{border:1px solid var(--line);border-radius:9px;padding:9px 11px;
+        font:inherit;font-size:13px;outline:none;background:#fff;min-width:0}
+  input:focus{border-color:#a5b4fc;box-shadow:0 0 0 3px rgba(99,102,241,.1)}
+  #provider{border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:13px;background:#fff;max-width:none}
+  #target{border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:13px;background:#fff;max-width:300px}
+  #model{border:1px solid var(--line);border-radius:9px;padding:8px 10px;font-size:13px;background:#fff;max-width:none;flex:1;min-width:260px}
+  #model optgroup{font-weight:700;color:#374151}
+  .tabs{display:inline-flex;background:#f3f4f6;border-radius:10px;padding:3px;gap:2px}
+  .tabs button{padding:7px 15px;font-size:13px;font-weight:650;color:#4b5563;background:transparent}
+  .tabs button.on{background:#fff;color:var(--indigo);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+  #out{margin-top:14px;border:1px solid var(--line);border-radius:12px;padding:14px;min-height:80px;
+       background:#fcfcfd;display:none}
+  #out iframe{width:100%;min-height:560px;border:0;border-radius:8px;background:#fff}
+  #out img{max-width:100%;border-radius:8px;display:block;margin:0 auto}
+  .dl{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .err{color:var(--red);font-weight:600}
+  .errlist{background:#fef2f2;border:1px solid #fecaca;color:#991b1b;border-radius:10px;
+           padding:9px 12px;margin-top:12px;font-size:13px}
+  .errlist div{margin:2px 0 2px 16px}
+  .guide{font-size:13px;color:#374151}
+  .guide li{margin:6px 0 6px 18px}
+  .guide b{color:var(--ink)}
+  .empty-note{color:var(--muted);text-align:center;padding:34px 0}
+  .spin{color:var(--muted);padding:20px 0;text-align:center}
+  .spin.big::before{content:"";display:inline-block;width:16px;height:16px;border:2px solid #c7d2fe;border-top-color:var(--indigo);
+        border-radius:50%;margin-right:9px;vertical-align:-3px;animation:rot .8s linear infinite}
+  @keyframes rot{to{transform:rotate(360deg)}}
+  #bootBanner{background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;border-radius:11px;
+              padding:9px 13px;margin-bottom:14px;font-size:13px;font-weight:600}
+  .corsnote{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:9px;
+            padding:8px 11px;margin-top:10px;font-size:12.5px}
+  .chkline{display:flex;align-items:center;gap:7px;font-size:12.5px;color:#4b5563;margin-top:10px}
+  @media (max-width:640px){
+    .pill{margin-left:0;width:100%;text-align:center}
+    #model{min-width:0}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="logo">F</div>
+    <div>
+      <h1>FigureForge <span style="color:var(--indigo)">Beta</span></h1>
+      <div class="sub">上传你的论文内容 → 从 3,516 张顶会主图中检索最贴合的参考 → 生成你的主图初稿</div>
+    </div>
+    <div class="pill">浏览器本地运行 · 论文内容不离开你的设备</div>
+  </header>
+
+  <div id="bootBanner"><span class="spin big" style="padding:0"></span><span id="bootText">正在加载检索索引与本地 CLIP 模型（首次约需下载数十 MB）…</span></div>
+
+  <div class="card" id="card1">
+    <div class="step"><span class="num">1</span>输入论文内容</div>
+    <textarea id="paper" placeholder="粘贴论文标题 + 摘要（或方法概述）。例如：&#10;We propose a diffusion-based video editing framework that ... 我们的方法包含三个模块 ..."></textarea>
+    <div class="row">
+      <button class="btn-ghost" id="uploadBtn">上传 PDF 自动提取</button>
+      <input type="file" id="pdfFile" accept="application/pdf" hidden>
+      <span style="font-size:12.5px;color:var(--muted)">没有论文？试试示例：</span>
+      <button class="btn-mini exchip" data-ex="robot">机器人操作</button>
+      <button class="btn-mini exchip" data-ex="video">视频生成</button>
+      <button class="btn-mini exchip" data-ex="llm">LLM 推理</button>
+    </div>
+    <div class="row">
+      <div class="field f-pattern"><label>Pattern 模式</label>
+        <select id="pattern">
+          <option value="all">All</option>
+          <option>teaser</option><option>conceptual</option><option>framework</option>
+          <option>pipeline</option><option>architecture</option><option>taxonomy</option>
+          <option>results</option><option>comparison</option>
+        </select>
+      </div>
+      <div class="field f-venue"><label>Venue 会议</label>
+        <select id="venue">
+          <option value="all">All</option><option>iclr</option><option>icml</option>
+          <option>neurips</option><option>cvpr</option><option>acl</option><option>aaai</option>
+        </select>
+      </div>
+      <div class="field f-year"><label>Year 年份</label>
+        <select id="year">
+          <option value="all">All</option><option>2026</option><option>2025</option>
+          <option>2024</option><option>2023</option>
+        </select>
+      </div>
+      <div class="field f-tier"><label>Tier 等级</label>
+        <select id="tier">
+          <option value="all">All</option><option value="best">Best Paper</option>
+          <option value="oral">Oral</option><option value="spotlight">Spotlight</option>
+        </select>
+      </div>
+      <button class="btn-primary" id="searchBtn">检索参考图</button>
+    </div>
+    <div class="hint">检索同时使用语义向量（CLIP，理解论文主题与图面）和关键词匹配（BM25）；不输入内容时可仅用筛选浏览。</div>
+  </div>
+
+  <div class="card" id="card2">
+    <div class="step"><span class="num">2</span>挑选参考用例
+      <span class="hint" style="margin:0" id="countHint"></span>
+      <button class="btn-tiny" id="clearBtn" hidden>清空选择</button>
+    </div>
+    <div class="grid" id="grid"></div>
+  </div>
+
+  <div class="card" id="card3">
+    <div class="step"><span class="num">3</span>生成你的主图初稿</div>
+    <div class="refs-strip" id="refsStrip"><span class="hint" style="margin:0">尚未选择参考图，请在上方勾选 1–3 张。</span></div>
+
+    <div class="srow" style="margin-top:0;margin-bottom:13px">
+      <div class="sbox">
+        <span>你想生成哪张图</span>
+        <select id="target">
+          <option value="overview">Figure 1 总览 / Teaser（默认）</option>
+          <option value="architecture">方法架构图</option>
+          <option value="pipeline">Pipeline 流程图</option>
+          <option value="results">结果展示图</option>
+          <option value="custom">自定义（手动描述）</option>
+        </select>
+      </div>
+      <div class="sbox" id="targetDescRow" style="flex:1;min-width:260px">
+        <span>具体描述你要的图</span>
+        <input type="text" id="targetDesc" placeholder="例如：画出第 3.2 节解码器结构，包含 cross-attention 与 KV cache">
+      </div>
+    </div>
+
+    <details class="settings" id="settingsBox" open>
+      <summary>模型 / API 设置（选服务商、粘贴 Key；模型每次打开自动实时更新，信息仅保存在本浏览器）</summary>
+
+      <div class="srow">
+        <div class="tabs" id="modeTabs">
+          <button data-mode="svg" class="on">SVG 可编辑初稿（推荐，文字准确）</button>
+          <button data-mode="image">AI 位图初稿（需要图像模型）</button>
+        </div>
+      </div>
+
+      <div class="srow">
+        <div class="sbox">
+          <span>服务商</span>
+          <select id="provider"></select>
+        </div>
+        <div class="sbox" style="flex:1;min-width:220px">
+          <span>API Key</span>
+          <input type="password" id="key" placeholder="粘贴你的 API Key，仅保存在本机浏览器">
+        </div>
+        <div class="sbox">
+          <span>&nbsp;</span>
+          <button class="btn-ghost" id="refreshModels">刷新模型列表</button>
+        </div>
+      </div>
+      <div class="srow" id="modelRow">
+        <div class="sbox" style="flex:1;min-width:260px">
+          <span id="modelLabel">模型（SVG 模式用对话 / 视觉模型）</span>
+          <select id="model"></select>
+        </div>
+      </div>
+      <div class="chkline"><input type="checkbox" id="useRelay"><label for="useRelay">使用中转 / 自定义接入地址（官方接口浏览器直连受限时勾选）</label></div>
+      <div class="srow" id="relayRow" hidden>
+        <div class="sbox" style="flex:1;min-width:260px">
+          <span>接入 Base URL（OpenAI 兼容，如中转网关地址）</span>
+          <input type="text" id="baseOverride" placeholder="例如 https://your-relay.com/v1">
+        </div>
+      </div>
+      <div class="srow" id="customModelRow" hidden>
+        <div class="sbox" style="flex:1;min-width:220px">
+          <span>模型 ID（自定义/中转处的模型名）</span>
+          <input type="text" id="customModel" placeholder="例如 claude-opus-5-5 或 gpt-5">
+        </div>
+      </div>
+      <div class="hint" id="baseHint"></div>
+      <div class="corsnote" id="corsNote" hidden></div>
+      <div class="hint" id="manifestHint"></div>
+    </details>
+
+    <div id="genErr" class="errlist" hidden></div>
+    <button class="btn-primary" id="genBtn">生成初稿</button>
+    <div id="out"></div>
+  </div>
+
+  <div class="card">
+    <div class="step">怎么用好参考图</div>
+    <ul class="guide">
+      <li><b>学布局，不抄内容</b>：看参考图把画布切成几个面板（问题 / 方法 / 结果）、视觉重心放在哪，面板里换成你自己的模块。</li>
+      <li><b>学配色</b>：主色 1 个 + 强调色 1 个，方法模块用同色系深浅区分；顶会主图普遍留白充足、饱和度克制。</li>
+      <li><b>选同类型参考图更准</b>：想画 framework 就优先选带 framework 标签的图，模型通过多模态输入直接"看到"该类版式的共同特征。</li>
+      <li><b>学表达</b>：每个面板一个信息点，箭头表示数据流，标签用短语而非句子；Figure 1 讲清楚“输入→我们的方法→输出/效果”即可。</li>
+      <li>初稿生成后建议在 <b>PPT / Figma / draw.io</b> 里精修文字与对齐，再导出投稿所需格式。</li>
+    </ul>
+  </div>
+</div>
+
+<script src="./vendor/pdf.min.js"></script>
+<script type="module">
+import * as T from './vendor/transformers.min.js';
+
+const $ = s => document.querySelector(s);
+const cleanKey = s => (s||'').replace(/\s+/g,'');
+const esc = s => (s+'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let refs = new Set(), results = [], mode = 'svg';
+let data = { ids:[], figs:[], bm:null, IE:null, TE:null, N:0 };
+let clip = { tokenizer:null, model:null };
+let MAN = null;
+
+const SKIP = /(embed|rerank|tts|speech|asx|transcri|whisper|ocr)/i;
+const IMGRE = /(image|seedream|flux|kolors|dall-e|gpt-image|cogview|sd-|stable-diffusion|imagen|hy-image|wanx|qwen-image)/i;
+const kindOf = id => SKIP.test(id) ? 'skip' : IMGRE.test(id) ? 'image' : 'chat';
+
+const TARGETS = {
+ overview:{label:'Figure 1 总览 / Teaser', img:'Design a publication-quality Figure 1 teaser/overview figure',
+   instr:'一张论文 Figure 1 总览（teaser）图：左侧或顶部为输入示例，中间为我们方法的核心模块（2-4 个方块+箭头表示数据流），右侧或底部为输出/效果。横向布局，每个面板一个信息点。'},
+ architecture:{label:'方法架构图', img:'Design a publication-quality method architecture figure',
+   instr:'一张方法架构图：展示模型内部组件与层次结构（编码器、模块、解码器等），用方块表示组件、箭头表示数据流，标注关键组件名称与维度；体现组件之间的连接关系。'},
+ pipeline:{label:'Pipeline 流程图', img:'Design a publication-quality pipeline/process figure',
+   instr:'一张 pipeline 流程图：按顺序展示从输入到输出的若干阶段（阶段用横向或纵向排列的圆角方块，箭头连接），每个阶段下方用小字标注该阶段。'},
+ results:{label:'结果展示图', img:'Design a publication-quality results figure',
+   instr:'一张结果展示图：以多面板网格对比不同方法/设置的结果，每列一种方法、每行一个样本，面板下方标注方法名与关键指标，坐标轴与图例清晰。'},
+ custom:{label:'自定义', img:'Design a publication-quality scientific figure', instr:''},
+};
+
+/* FALLBACK：manifest 拉取失败（离线）时使用，与 forge/data/manifest.json 同口径 */
+const FALLBACK = {"updated":"2026-09-25","providers":{"ark":{"label":"火山方舟 Ark","base":"https://ark.cn-beijing.volces.com/api/v3","proto":"oai","cors":true,"chat":["doubao-seed-2-1-pro-260628","doubao-seed-2-1-turbo-260628"],"vision":["doubao-seed-1-6-vision-250815"],"image":["doubao-seedream-5-0-pro-260628","doubao-seedream-5-0-flash-260915"]},"sf":{"label":"硅基流动 SiliconFlow","base":"https://api.siliconflow.cn/v1","proto":"oai","cors":true,"chat":["deepseek-ai/DeepSeek-V3","Qwen/Qwen3-235B-A22B"],"vision":["Qwen/Qwen2.5-VL-72B-Instruct"],"image":["black-forest-labs/FLUX.1-schnell","Kwai-Kolors/Kolors"]},"glm":{"label":"智谱 GLM","base":"https://open.bigmodel.cn/api/paas/v4","proto":"oai","cors":true,"chat":["glm-4.5","glm-4.5-air"],"vision":["glm-4v-plus"],"image":["cogview-4"]},"ds":{"label":"DeepSeek","base":"https://api.deepseek.com","proto":"oai","cors":true,"chat":["deepseek-v4-pro","deepseek-flash"],"vision":[],"image":[]},"oai":{"label":"OpenAI","base":"https://api.openai.com/v1","proto":"oai","cors":true,"chat":["gpt-5","gpt-4.1"],"vision":["gpt-5"],"image":["gpt-image-1"]},"kimi":{"label":"Kimi 月之暗面","base":"https://api.moonshot.cn/v1","proto":"oai","cors":true,"chat":["kimi-k3","kimi-k2.6"],"vision":["kimi-k2.6"],"image":[]},"qwen":{"label":"通义千问 Qwen","base":"https://dashscope.aliyuncs.com/compatible-mode/v1","proto":"oai","cors":true,"chat":["qwen-max","qwen-plus"],"vision":["qwen-vl-max"],"image":["qwen-image"]},"hy":{"label":"腾讯混元 Hunyuan","base":"https://api.hunyuan.cloud.tencent.com/v1","proto":"oai","cors":false,"chat":["hunyuan-turbos-latest"],"vision":["hunyuan-vision"],"image":["hy-image-v3.5-preview"]},"claude":{"label":"Anthropic Claude","base":"https://api.anthropic.com","proto":"anthropic","cors":false,"chat":["claude-opus-5-5","claude-sonnet-5","claude-sonnet-4-6"],"vision":["claude-opus-5-5","claude-sonnet-5"],"image":[]},"custom":{"label":"自定义 OpenAI 兼容","base":"","proto":"oai","cors":true,"chat":[],"vision":[],"image":[]}}};
+
+/* ---------------- boot: manifest + data + local CLIP ---------------- */
+async function loadManifest(){
+  try{
+    const r = await fetch('data/manifest.json?ts='+Date.now());
+    if(!r.ok) throw new Error('manifest '+r.status);
+    MAN = await r.json();
+  }catch(e){ MAN = FALLBACK; }
+}
+function loadBin(name){
+  return fetch('data/'+name+'?v='+(MAN.dataVersion||'0')).then(r=>{ if(!r.ok) throw new Error(name+' '+r.status); return r.arrayBuffer();})
+            .then(b=>new Float32Array(b));
+}
+async function boot(){
+  window.__t = window.__t||[]; const L = m => window.__t.push(Math.round(performance.now())+' '+m);
+  const bt = $('#bootText');
+  try{
+    bt.textContent = '正在加载模型清单与检索索引…'; L('start');
+    await loadManifest(); L('manifest');
+    const DV = MAN.dataVersion || '0';
+    const [figs, ids, bm, IE, TE] = await Promise.all([
+      fetch('data/figures.json?v='+DV).then(r=>r.json()),
+      fetch('data/ids.json?v='+DV).then(r=>r.json()),
+      fetch('data/bm25.json?v='+DV).then(r=>r.json()),
+      loadBin('image_emb.bin'), loadBin('text_emb.bin'),
+    ]);
+    L('data done');
+    data = { ids, figs, bm, IE, TE, N: ids.length };
+    bt.textContent = '正在加载本地 CLIP 文本模型（约 65 MB，仅首次）…';
+    T.env.allowLocalModels = true;
+    T.env.backends.onnx.wasm.wasmPaths = new URL('vendor/', document.baseURI).href;
+    const MP = './models/clip-vit-base-patch32';
+    clip.tokenizer = await T.AutoTokenizer.from_pretrained(MP);
+    L('tokenizer done');
+    clip.model = await T.CLIPTextModelWithProjection.from_pretrained(MP, {dtype:'q8'});
+    L('model done');
+    $('#bootBanner').hidden = true;
+  }catch(e){
+    L('ERR '+e.message);
+    bt.innerHTML = '<span style="color:#991b1b">初始化失败：'+esc(e.message)+'。刷新页面重试；若反复失败请检查网络。</span>';
+  }
+}
+async function queryVec(q){
+  if(!clip.model) await boot();
+  const inputs = clip.tokenizer(q, {padding:true, truncation:true});
+  const out = await clip.model(inputs);
+  const v = out.text_embeds.tolist()[0];
+  const n = Math.hypot(...v);
+  return v.map(x=>x/n);
+}
+
+/* ---------------- tokenize + BM25 ---------------- */
+function tokenize(s){
+  const toks = [];
+  (s.toLowerCase().match(/[a-z0-9][a-z0-9\-\.]+/g)||[]).forEach(w=>toks.push(w));
+  const cjk = s.replace(/[^一-鿿]/g,'');
+  for(let i=0;i<cjk.length-1;i++) toks.push(cjk.slice(i,i+2));
+  return toks;
+}
+function bm25Score(qt, docTokens, idf, k1, b, avgdl){
+  const tf = {}; docTokens.forEach(t=>tf[t]=(tf[t]||0)+1);
+  let s = 0, dl = docTokens.length;
+  for(const t of qt){
+    if(!(t in idf) || !tf[t]) continue;
+    s += idf[t] * (tf[t]*(k1+1)) / (tf[t] + k1*(1-b+b*dl/avgdl));
+  }
+  return s;
+}
+
+/* ---------------- search ---------------- */
+function dot(row, v, D=512){
+  let s=0; const base = row*D;
+  for(let j=0;j<D;j++) s += data.IE[base+j]*v[j];
+  return s;
+}
+function dotT(row, v, D=512){
+  let s=0; const base = row*D;
+  for(let j=0;j<D;j++) s += data.TE[base+j]*v[j];
+  return s;
+}
+function matchTier(f, t){
+  if(t==='best') return f.award==='best' || f.award==='honorable';
+  if(t==='oral') return f.tier==='oral' || f.award;
+  if(t==='spotlight') return f.tier==='spotlight' || f.tier==='oral' || f.award;
+  return true;
+}
+async function search(){
+  const q = $('#paper').value.trim();
+  const pv=$('#venue').value, yr=$('#year').value, tt=$('#tier').value, pt=$('#pattern').value;
+  let clipScores = null;
+  if(q){
+    const qv = await queryVec(q);
+    clipScores = new Float32Array(data.N);
+    for(let i=0;i<data.N;i++) clipScores[i]=0.6*dot(i,qv)+0.4*dotT(i,qv);
+  }
+  const qt = q ? tokenize(q) : [];
+  const bm = data.bm;
+  const scored = [];
+  for(let i=0;i<data.N;i++){
+    const f = data.figs[i];
+    if(pv!=='all' && f.venue!==pv) continue;
+    if(yr!=='all' && f.year!=+yr) continue;
+    if(tt!=='all' && !matchTier(f,tt)) continue;
+    if(pt!=='all' && f.pattern!==pt) continue;
+    let s;
+    const bms = qt.length ? bm25Score(qt, bm.docs[i], bm.idf, bm.k1, bm.b, bm.avgdl) : 0;
+    if(clipScores) s = 0.55*clipScores[i] + 0.45*(bms/(bms+4));
+    else s = bms;
+    scored.push({i, s});
+  }
+  scored.sort((a,b)=>b.s-a.s);
+  results = scored.slice(0,30).map(x=>data.figs[x.i]);
+  renderGrid(results);
+  if(!results.length) $('#grid').innerHTML='<div class="empty-note">没有符合条件的图片，试试放宽筛选。</div>';
+}
+
+/* ---------------- render cards ---------------- */
+function tierChip(f){
+  if(f.award==='best') return '<span class="chip c-best">Best Paper</span>';
+  if(f.award==='honorable') return '<span class="chip c-hm">Honorable Mention</span>';
+  if(f.tier==='oral') return '<span class="chip c-oral">Oral</span>';
+  if(f.tier==='spotlight') return '<span class="chip c-spot">Spotlight</span>';
+  return '';
+}
+function renderGrid(list){
+  $('#grid').innerHTML = list.map(f=>{
+    const sel = refs.has(f.id);
+    return `<div class="rc ${sel?'sel':''}" data-id="${esc(f.id)}">
+      <img class="thumb" loading="lazy" src="../${esc(f.image)}" alt="${esc(f.title)}">
+      <div class="pick">${sel?'✓ 已选':'+ 选为参考'}</div>
+      <div class="score">${f.score?f.score.toFixed(1):""}</div>
+      <div class="body">
+        <h3>${esc(f.title)}</h3>
+        <div class="chips">
+          <span class="chip c-venue">${f.venue.toUpperCase()}</span>
+          <span class="chip c-year">${f.year}</span>
+          <span class="chip c-pattern">${esc(f.pattern)}</span>
+          ${tierChip(f)}
+        </div>
+      </div></div>`;
+  }).join('');
+}
+function updateCount(){
+  $('#countHint').textContent = refs.size ? `已选 ${refs.size}/3` : '';
+  $('#clearBtn').hidden = refs.size===0;
+}
+$('#grid').addEventListener('click', e=>{
+  const card = e.target.closest('.rc'); if(!card) return;
+  const id = card.dataset.id;
+  if(refs.has(id)) refs.delete(id);
+  else { if(refs.size>=3){ showErr('最多选 3 张参考图（建议 1–2 张）'); return;} refs.add(id); }
+  renderGrid(results); updateCount(); renderRefsStrip();
+});
+$('#clearBtn').onclick = ()=>{ refs.clear(); renderGrid(results); updateCount(); renderRefsStrip(); };
+function renderRefsStrip(){
+  if(!refs.size){ $('#refsStrip').innerHTML='<span class="hint" style="margin:0">尚未选择参考图，请在上方勾选 1–3 张。</span>'; return; }
+  $('#refsStrip').innerHTML = [...refs].map(id=>{
+    const f = data.figs.find(x=>x.id===id);
+    return `<div class="refmini"><img src="../${esc(f.image)}"><div><b>${esc(f.title)}</b>
+      <span>${f.venue.toUpperCase()} ${f.year} · ${esc(f.pattern)}</span></div>
+      <span class="x" data-id="${esc(f.id)}">✕</span></div>`;
+  }).join('');
+}
+$('#refsStrip').addEventListener('click', e=>{
+  const x = e.target.closest('.x'); if(!x) return;
+  refs.delete(x.dataset.id); renderGrid(results); updateCount(); renderRefsStrip();
+});
+
+/* ---------------- examples ---------------- */
+const EX = {
+ robot:'We propose a diffusion policy for robot manipulation: given a single human demonstration video and the current robot camera observation, our model extracts keypoint trajectories, denoises a sequence of future end-effector actions with a conditional diffusion transformer, and enables a robot arm to perform long-horizon manipulation tasks (opening drawers, pouring, stacking) in cluttered tabletop scenes, outperforming prior imitation learning baselines. 机器人操作 扩散策略 人类演示 动作生成',
+ video:'We present a controllable video generation diffusion transformer: given one or multiple reference images and a text prompt describing camera motion and subject edits, our architecture uses spatio-temporal attention with explicit camera pose conditioning to generate high-fidelity, temporally consistent videos with precise multi-camera control, supporting pan, zoom, orbit and multi-shot transitions. 视频生成 扩散Transformer 相机控制',
+ llm:'We introduce a working memory architecture for large language models: an external hierarchical memory module with fast/slow stores is updated by a lightweight controller, letting the LLM maintain and retrieve long-range context over multi-step reasoning tasks. The model achieves strong results on long-context QA, agent planning and multi-document summarization without increasing context length. 大语言模型 工作记忆 长程推理',
+};
+document.querySelectorAll('.exchip').forEach(b=>b.onclick=()=>{ $('#paper').value=EX[b.dataset.ex]; });
+
+/* ---------------- target selector ---------------- */
+function syncTarget(){
+  const t = $('#target').value;
+  $('#targetDescRow').hidden = t!=='custom';
+  localStorage.setItem('ff_target', t);
+  localStorage.setItem('ff_target_desc', $('#targetDesc').value);
+}
+$('#target').onchange = syncTarget;
+$('#targetDesc').oninput = ()=>localStorage.setItem('ff_target_desc', $('#targetDesc').value);
+(function restoreTarget(){
+  const t = localStorage.getItem('ff_target');
+  if(t){ $('#target').value=t; $('#targetDesc').value=localStorage.getItem('ff_target_desc')||''; }
+  syncTarget();
+})();
+
+/* ---------------- PDF extraction (pdf.js) ---------------- */
+$('#uploadBtn').onclick = ()=>$('#pdfFile').click();
+$('#pdfFile').onchange = async e=>{
+  const file = e.target.files[0]; if(!file) return;
+  const btn = $('#uploadBtn'); btn.disabled=true; btn.textContent='解析中…';
+  try{
+    const buf = await file.arrayBuffer();
+    pdfjsLib.GlobalWorkerOptions.workerSrc = new URL('vendor/pdf.worker.min.js', document.baseURI).href;
+    const pdf = await pdfjsLib.getDocument({data:buf}).promise;
+    const n = Math.min(8, pdf.numPages);
+    const p1 = await pdf.getPage(1);
+    const vp = p1.getViewport({scale:1});
+    const tc = await p1.getTextContent();
+    const top = tc.items.filter(it=>it.transform[5] > 0.6*vp.height && (it.str||'').trim());
+    let title='';
+    if(top.length){
+      const sizes={}; top.forEach(it=>sizes[it.height]=(sizes[it.height]||0)+(it.str||'').length);
+      const big = Object.keys(sizes).sort((a,b)=>b-a)[0];
+      title = top.filter(it=>String(it.height)===big).map(it=>it.str).join(' ');
+      title = title.replace(/^\s*(preprint|accepted|published|under review|arxiv|doi:?|copyright|©|\d{4}\s*ieee).*$/gim,'').trim();
+    }
+    const pages=[];
+    for(let pi=1;pi<=n;pi++){
+      const pg = await pdf.getPage(pi);
+      const cc = await pg.getTextContent();
+      pages.push(cc.items.map(it=>it.str).join(' '));
+    }
+    const full = pages.join('\n');
+    let abstract='';
+    const am = full.match(/abstract[\s—\-:.\n]+(.+?)(?:\n\s*(?:1\.?\s*)?(?:introduction|related work)\b|index terms|keywords)/is);
+    if(am) abstract = am[1].replace(/\s+/g,' ').trim();
+    let method='';
+    const mm = full.match(/^\s*(?:\d{1,2}\s*)?(?:method|methods|methodology|our approach|approach)\s*$([\s\S]+?)(?:^\s*(?:\d{1,2}\s*)?(?:experiments|evaluation|results|conclusion)\s*$)/im);
+    if(mm) method = ('Method excerpt: ' + mm[1].replace(/\s+/g,' ').trim()).slice(0,1600);
+    const parts=[title,abstract,method].filter(Boolean);
+    $('#paper').value = parts.join('\n\n').slice(0,4000);
+    if(!abstract) showErr('未识别到摘要，已填入 PDF 前几页文本，可手动调整。');
+  }catch(err){
+    showErr('PDF 解析失败：'+err.message+'（请确认是可复制文字的 PDF，非扫描图片）');
+  }finally{
+    btn.disabled=false; btn.textContent='上传 PDF 自动提取'; e.target.value='';
+  }
+};
+
+/* ---------------- reference images -> data URI ---------------- */
+function fileToDataURI(blob){
+  return new Promise((resolve,reject)=>{
+    const fr = new FileReader();
+    fr.onload = ()=>resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(blob);
+  });
+}
+async function refDataURIs(){
+  const out = [];
+  for(const id of [...refs]){
+    const f = data.figs.find(x=>x.id===id);
+    const r = await fetch('../'+f.image);
+    if(!r.ok) throw new Error('读取参考图失败：'+f.image);
+    out.push(await fileToDataURI(await r.blob()));
+  }
+  return out;
+}
+function dataURIToParts(uri){
+  const m = uri.match(/^data:(.*?);base64,(.*)$/);
+  return m ? {media:m[1]||'image/jpeg', data:m[2]} : null;
+}
+
+/* ---------------- providers / models (manifest + live) ---------------- */
+function cfg(){ return MAN.providers[$('#provider').value]; }
+function baseURL(){
+  const ov = $('#baseOverride').value.trim();
+  return (ov || cfg().base).replace(/\/+$/,'');
+}
+function fetchOnlineModels(){
+  const key = cleanKey($('#key').value), base = baseURL(), c = cfg();
+  if(!key || !base || c.proto!=='oai') return Promise.resolve([]);
+  return fetch(base+'/models',{headers:{Authorization:'Bearer '+key}})
+    .then(r=>r.ok ? r.json() : {})
+    .then(d=>(d.data||d.models||[]).map(x=>x.id||x.model||x.name).filter(Boolean))
+    .catch(()=>[]);
+}
+function optgroup(label){
+  const g=document.createElement('optgroup'); g.label=label; return g;
+}
+function option(s){
+  const o=document.createElement('option'); o.value=s; o.textContent=s; return o;
+}
+async function populateModels(){
+  const p = $('#provider').value, c = cfg();
+  const s = $('#model'); s.innerHTML='';
+  if(p==='custom'){
+    s.appendChild(optgroup('自定义：请在下方填写模型 ID'));
+  }else if(mode==='svg'){
+    if(c.chat.length){ const g=optgroup('推荐对话模型'); c.chat.forEach(m=>g.appendChild(option(m))); s.appendChild(g); }
+    if(c.vision.length){ const g=optgroup('支持视觉理解（可直接读参考图）'); c.vision.forEach(m=>g.appendChild(option(m))); s.appendChild(g); }
+  }else{
+    if(c.image.length){ const g=optgroup('推荐图像模型'); c.image.forEach(m=>g.appendChild(option(m))); s.appendChild(g); }
+  }
+  const wanted = mode==='svg' ? 'chat' : 'image';
+  const online = await fetchOnlineModels();
+  const yours = online.filter(m=>kindOf(m)===wanted);
+  if(yours.length){
+    const g=optgroup('你的账号已开通（实时拉取 '+new Date().toLocaleDateString()+'）');
+    [...new Set(yours)].forEach(m=>g.appendChild(option(m))); s.appendChild(g);
+  }
+  const saved = localStorage.getItem('ff_model_'+p);
+  if(saved && [...s.options].some(o=>o.value===saved)) s.value=saved;
+}
+function initProviders(){
+  const s = $('#provider');
+  Object.entries(MAN.providers).forEach(([k,v])=>{ const o=option(k); o.textContent=v.label; s.appendChild(o); });
+  s.value = localStorage.getItem('ff_provider')||'ark';
+  restoreProviderState(s.value);
+}
+function restoreProviderState(p){
+  $('#key').value = localStorage.getItem('ff_key_'+p)||'';
+  $('#baseOverride').value = localStorage.getItem('ff_base_'+p)||'';
+  $('#customModel').value = localStorage.getItem('ff_cmodel_'+p)||'';
+  const c = cfg();
+  const needRelay = c.cors===false;
+  $('#useRelay').checked = needRelay || localStorage.getItem('ff_relay_'+p)==='1';
+  $('#relayRow').hidden = !$('#useRelay').checked;
+  $('#customModelRow').hidden = p!=='custom';
+  $('#corsNote').hidden = !needRelay;
+  if(needRelay) $('#corsNote').innerHTML = '⚠ 该服务商官方接口未开放浏览器跨域直连（实测）。两种用法：① 勾选上方中转并填入 OpenAI 兼容中转地址；② 也可直接改用支持 CORS 的服务商（火山方舟 / 硅基流动 / 智谱 / Kimi / Qwen / DeepSeek）。';
+  $('#baseHint').textContent = '接口地址：'+(baseURL()||'（待填写）');
+}
+$('#provider').onchange = async e=>{
+  localStorage.setItem('ff_provider', e.target.value);
+  restoreProviderState(e.target.value);
+  await populateModels();
+};
+$('#key').oninput = e=>{ e.target.value=cleanKey(e.target.value); localStorage.setItem('ff_key_'+$('#provider').value, e.target.value); };
+$('#baseOverride').oninput = e=>{ localStorage.setItem('ff_base_'+$('#provider').value, e.target.value); $('#baseHint').textContent='接口地址：'+(baseURL()||'（待填写）'); };
+$('#customModel').oninput = e=>localStorage.setItem('ff_cmodel_'+$('#provider').value, e.target.value);
+$('#useRelay').onchange = e=>{
+  $('#relayRow').hidden = !e.target.checked;
+  localStorage.setItem('ff_relay_'+$('#provider').value, e.target.checked?'1':'0');
+};
+$('#refreshModels').onclick = populateModels;
+document.querySelectorAll('#modeTabs button').forEach(b=>b.onclick=async ()=>{
+  document.querySelectorAll('#modeTabs button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); mode=b.dataset.mode;
+  $('#modelLabel').textContent = mode==='svg' ? '模型（对话 / 视觉模型）' : '模型（图像模型）';
+  await populateModels();
+});
+$('#model').onchange = e=>localStorage.setItem('ff_model_'+$('#provider').value, e.target.value);
+
+/* ---------------- build prompts ---------------- */
+function buildPrompt(content){
+  const t = $('#target').value;
+  const targetInfo = t==='custom'
+    ? ($('#targetDesc').value.trim() || content)
+    : TARGETS[t].instr;
+  const refLines = [...refs].map((id,idx)=>{
+    const f = data.figs.find(x=>x.id===id);
+    return `参考图${idx+1}：${f.title}（${f.venue.toUpperCase()} ${f.year}，${f.pattern}）——只学习它的版面结构、面板划分与配色风格，内容全部替换为我的论文。`;
+  }).join('\n');
+  return `你是顶尖 ML 论文的配图设计师。我要：${TARGETS[t].label}。
+${targetInfo}
+
+我的论文内容：
+${content}
+
+${refLines}
+
+请输出一张完整的 SVG（viewBox 1600x900，横向，浅色背景，主色一个、强调色一个，留白充足；方块/箭头/文字标签对齐；不得出现 lorem ipsum 或占位数字）。
+硬性要求：SVG 中所有可见文字（面板标题、模块名、坐标轴、图例、注释）必须全部使用英文短语，严禁出现任何中文字符；数字与标签需与论文内容一致。
+Output a complete SVG. ALL visible text (panel headers, module names, axes, legends, annotations) MUST be in English — no Chinese characters anywhere. Output only the <svg> code, no explanation.`;
+}
+const SVG_SYS = 'You are a world-class scientific figure designer. Based on the user paper content and the attached reference figures, output exactly ONE complete, self-contained SVG. White background, flat modern design, clear panels, arrows, short accurate labels taken from the paper. Output SVG markup only, no explanations or code fences.';
+
+/* ---------------- HTTP helpers ---------------- */
+function showErr(msg){
+  const box=$('#genErr'); box.hidden=false; box.innerHTML='<div>'+esc(msg)+'</div>';
+}
+function friendlyHttp(status, txt){
+  let code='';
+  try{ code=JSON.parse(txt).error?.code||''; }catch{}
+  if(code==='AccountOverdueError') return '该服务商账号余额不足或已欠费（无法出图），请前往控制台充值后再试。';
+  if(status===401) return 'API Key 无效或已过期，请检查 Key 是否正确、是否有该模型权限。';
+  if(status===404) return '未找到该模型，请确认服务商处已开通此模型，或在列表中重选。';
+  if(status===429) return '请求过于频繁或额度不足，请稍后重试或检查账户余额。';
+  if(status===403) return '服务商拒绝了请求（HTTP 403）：'+txt.slice(0,200);
+  if(status===400) return '请求被服务商拒绝：'+txt.slice(0,200);
+  return '服务商返回错误（HTTP '+status+'）：'+txt.slice(0,200);
+}
+function postJSON(base, path, body, key, extraHeaders){
+  return fetch(base+path,{method:'POST',
+    headers:{'Content-Type':'application/json',Authorization:'Bearer '+key,...extraHeaders},
+    body:JSON.stringify(body)});
+}
+
+/* ---------------- generation ---------------- */
+$('#genBtn').onclick = async ()=>{
+  $('#genErr').hidden=true; $('#out').style.display='none';
+  const content = $('#paper').value.trim();
+  if(!content){ showErr('请先输入论文内容（粘贴摘要或上传 PDF）。'); return; }
+  if(!refs.size){ showErr('请先在第 2 步勾选 1–3 张参考图。'); return; }
+  const p = $('#provider').value, c = cfg();
+  const key = cleanKey($('#key').value);
+  if(p!=='custom' && !/^[A-Za-z0-9\-_.=]+$/.test(key)){ showErr('API Key 格式不正确（应只含字母、数字与 - _ . =），请重新粘贴。'); return; }
+  const t = $('#target').value;
+  if(t==='custom' && !$('#targetDesc').value.trim()){ showErr('自定义模式请填写"具体描述你要的图"。'); return; }
+  let base, model;
+  if(p==='custom'){
+    base = $('#baseOverride').value.replace(/\/+$/,''); model=$('#customModel').value.trim();
+    if(!base||!model){ showErr('请填写自定义 Base URL 与模型 ID。'); return; }
+  }else{
+    base = baseURL();
+    model = $('#model').value;
+    if(!model){ showErr('请选择模型（若列表为空请粘贴 Key 后点刷新）。'); return; }
+    if(mode==='image' && kindOf(model)!=='image'){ showErr('位图模式需要图像模型，请在列表中选择图像模型。'); return; }
+  }
+  const btn=$('#genBtn'); btn.disabled=true; btn.textContent='生成中…';
+  try{
+    const relay = $('#baseOverride').value.trim();
+    const useAnthropic = c.proto==='anthropic' && !relay;
+    if(mode==='svg'){
+      if(useAnthropic) await genAnthropicSVG(base,model,key,content);
+      else await genOaiSVG(base,model,key,content,p);
+    }else{
+      if(useAnthropic) throw new Error('Claude 为对话模型，不提供图像生成；请切回 SVG 模式或选择图像模型服务商。');
+      await genOaiImage(base,model,key,content,p);
+    }
+  }catch(err){ showErr(err.message); }
+  finally{ btn.disabled=false; btn.textContent='生成初稿'; }
+};
+
+async function genOaiSVG(base,model,key,content,p){
+  const prompt = buildPrompt(content);
+  let body = {model,temperature:0.3}, usedVision=false;
+  if(refs.size && p!=='ds'){
+    const uris = await refDataURIs();
+    const parts = uris.map(u=>({type:'image_url',image_url:{url:u}}));
+    parts.push({type:'text',text:prompt});
+    body.messages=[{role:'system',content:SVG_SYS},{role:'user',content:parts}];
+    usedVision=true;
+  }else{
+    body.messages=[{role:'system',content:SVG_SYS},{role:'user',content:prompt}];
+  }
+  let r;
+  try{ r = await postJSON(base,'/chat/completions',body,key); }
+  catch(e){ throw new Error('无法连接该服务商（CORS 或网络被拦截）。可勾选"使用中转"填入中转地址，或换用其他服务商。'); }
+  let txt = await r.text();
+  if(!r.ok && usedVision){
+    body.messages=[{role:'system',content:SVG_SYS},{role:'user',content:prompt}]; usedVision=false;
+    try{ r = await postJSON(base,'/chat/completions',body,key); txt=await r.text(); }catch(e){}
+  }
+  if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
+  const d = JSON.parse(txt);
+  let svg = d.choices?.[0]?.message?.content||'';
+  const m = svg.match(/<svg[\s\S]+?<\/svg>/);
+  if(!m) throw new Error('模型没有返回可用的 SVG，可重试一次或换用更强的模型。');
+  renderSVG(m[0], usedVision);
+}
+
+async function genAnthropicSVG(base,model,key,content){
+  const prompt = buildPrompt(content);
+  let blocks = [], usedVision=false;
+  if(refs.size){
+    const uris = await refDataURIs();
+    uris.forEach(u=>{
+      const p = dataURIToParts(u);
+      if(p) blocks.push({type:'image',source:{type:'base64',media_type:p.media,data:p.data}});
+    });
+    usedVision = blocks.length>0;
+  }
+  blocks.push({type:'text',text:prompt});
+  let body = {model,max_tokens:8192,temperature:0.3,system:SVG_SYS,messages:[{role:'user',content:blocks}]};
+  let r;
+  try{
+    r = await fetch(base.replace(/\/+$/,'')+'/v1/messages',{method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
+      body:JSON.stringify(body)});
+  }catch(e){ throw new Error('无法连接 Claude 接口（官方不支持浏览器跨域，请勾选中转并填入 OpenAI 兼容中转地址）。'); }
+  let txt = await r.text();
+  if(!r.ok && usedVision){
+    body.messages=[{role:'user',content:prompt}]; usedVision=false;
+    try{
+      r = await fetch(base.replace(/\/+$/,'')+'/v1/messages',{method:'POST',
+        headers:{'Content-Type':'application/json','x-api-key':key,'anthropic-version':'2023-06-01'},
+        body:JSON.stringify(body)});
+      txt=await r.text();
+    }catch(e){}
+  }
+  if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
+  const d = JSON.parse(txt);
+  const out = (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+  const m = out.match(/<svg[\s\S]+?<\/svg>/);
+  if(!m) throw new Error('Claude 没有返回可用的 SVG，可重试一次。');
+  renderSVG(m[0], usedVision);
+}
+function renderSVG(svg, usedVision){
+  const blob = new Blob([svg],{type:'image/svg+xml'});
+  const url = URL.createObjectURL(blob);
+  $('#out').style.display='block';
+  $('#out').innerHTML = `<iframe src="${url}"></iframe>
+    <div class="dl"><a class="btn-primary" href="${url}" download="figure-forge-draft.svg">下载 SVG</a>
+    <span class="hint">SVG 可用 Figma / draw.io / Illustrator 打开精修；${usedVision?`参考图（${refs.size} 张）已作为图像输入。`:'参考图以文字方式注入。'}</span></div>`;
+}
+
+async function genOaiImage(base,model,key,content,p){
+  const tg = TARGETS[$('#target').value] || TARGETS.overview;
+  const imgPrompt = `${tg.img}. White background, flat modern scientific illustration style, elegant layout, minimal accurate labels. Paper content: ${content.slice(0,2000)}`;
+  const body = {model, prompt:imgPrompt};
+  if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
+  else if(p==='sf'){ body.image_size='1024x1024'; body.batch_size=1; }
+  else if(p==='glm'){ body.size='1024x1024'; }
+  else if(p==='oai'){ body.size='1536x1024'; }
+  let usedRefs=false;
+  if(refs.size && p!=='glm'){
+    const uris = await refDataURIs();
+    body.image = (p==='sf') ? uris[0] : uris;
+    usedRefs=true;
+  }
+  let r;
+  try{ r = await postJSON(base,'/images/generations',body,key); }
+  catch(e){ throw new Error('无法连接该服务商（CORS 或网络被拦截）。可勾选中转，或换用火山方舟 / 硅基流动。'); }
+  let txt = await r.text();
+  if(!r.ok && usedRefs){
+    delete body.image; usedRefs=false;
+    try{ r = await postJSON(base,'/images/generations',body,key); txt=await r.text(); }catch(e){}
+  }
+  if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
+  const d = JSON.parse(txt);
+  const item = d.data?.[0] || d.images?.[0];
+  if(!item) throw new Error('图像接口返回格式异常：'+txt.slice(0,200));
+  const imgSrc = item.url || ('data:image/png;base64,'+item.b64_json);
+  $('#out').style.display='block';
+  $('#out').innerHTML = `<img src="${esc(imgSrc)}" alt="draft">
+    <div class="dl"><button class="btn-primary" id="dlImg">下载图片</button>
+    <span class="hint">位图为 AI 初稿${usedRefs?'，参考图已作为多图参考输入':''}；文字与数字请在 PPT / Figma 中核对修正。</span></div>`;
+  $('#dlImg').onclick = async ()=>{
+    try{
+      const rr = await fetch(imgSrc); const blob = await rr.blob();
+      const u = URL.createObjectURL(blob);
+      const a=document.createElement('a');
+      const ext = blob.type.includes('webp')?'webp':blob.type.includes('jpeg')||blob.type.includes('jpg')?'jpg':'png';
+      a.href=u; a.download='figure-forge-draft.'+ext; a.click();
+    }catch(e){ window.open(imgSrc,'_blank'); }
+  };
+}
+
+$('#searchBtn').onclick = async ()=>{
+  const btn=$('#searchBtn'); btn.disabled=true; btn.textContent='检索中…';
+  try{ await search(); $('#card2').scrollIntoView({behavior:'smooth'}); }
+  catch(e){ showErr(e.message); }
+  finally{ btn.disabled=false; btn.textContent='检索参考图'; }
+};
+
+/* ---------------- go ---------------- */
+await boot();
+initProviders();
+populateModels();
+$('#manifestHint').textContent = '模型清单更新于 '+MAN.updated+'：每次打开自动检查清单更新；填入 Key 后实时拉取账号已开通模型，新模型发布即自动出现，无需更新页面。';
+</script>
+</body>
+</html>

@@ -27830,30 +27830,6 @@
   "tier": "oral"
  },
  {
-  "id": "iclr2024-23",
-  "venue": "iclr",
-  "year": 2024,
-  "title": "LRM: Large Reconstruction Model for Single Image to 3D",
-  "authors": [
-   "Yicong Hong",
-   "Kai Zhang",
-   "Jiuxiang Gu",
-   "Sai Bi",
-   "Yang Zhou",
-   "Difan Liu",
-   "Feng Liu",
-   "Kalyan Sunkavalli",
-   "Trung Bui",
-   "Hao Tan"
-  ],
-  "pattern": "pipeline",
-  "image": "images/iclr/final/iclr2024-23.jpg",
-  "paper": "https://openreview.net/forum?id=sllU8vvsFF",
-  "pdf_source": "https://arxiv.org/pdf/2311.04400",
-  "w": 1201,
-  "h": 640
- },
- {
   "id": "iclr2024-24",
   "venue": "iclr",
   "year": 2024,
@@ -27924,26 +27900,6 @@
   "pdf_source": "https://arxiv.org/pdf/2310.00426",
   "w": 1154,
   "h": 1835
- },
- {
-  "id": "iclr2024-32",
-  "venue": "iclr",
-  "year": 2024,
-  "title": "RAPTOR: Recursive Abstractive Processing for Tree-Organized Retrieval",
-  "authors": [
-   "Parth Sarthi",
-   "Salman Abdullah",
-   "Aditi Tuli",
-   "Shubh Khanna",
-   "Anna Goldie",
-   "Christopher D Manning"
-  ],
-  "pattern": "conceptual",
-  "image": "images/iclr/final/iclr2024-32.jpg",
-  "paper": "https://openreview.net/forum?id=GN921JHCRw",
-  "pdf_source": "https://arxiv.org/pdf/2401.18059",
-  "w": 1023,
-  "h": 593
  },
  {
   "id": "iclr2024-33",
@@ -33897,28 +33853,6 @@
   "pdf_source": "https://arxiv.org/pdf/2405.14573",
   "w": 1172,
   "h": 486
- },
- {
-  "id": "iclr2025-43",
-  "venue": "iclr",
-  "year": 2025,
-  "title": "GaussianAnything: Interactive Point Cloud Flow Matching for 3D Generation",
-  "authors": [
-   "Yushi LAN",
-   "Shangchen Zhou",
-   "Zhaoyang Lyu",
-   "Fangzhou Hong",
-   "Shuai Yang",
-   "Bo Dai",
-   "Xingang Pan",
-   "Chen Change Loy"
-  ],
-  "pattern": "pipeline",
-  "image": "images/iclr/final/iclr2025-43.jpg",
-  "paper": "https://openreview.net/forum?id=P4DbTSDQFu",
-  "pdf_source": "https://arxiv.org/pdf/2411.08033",
-  "w": 1296,
-  "h": 422
  },
  {
   "id": "iclr2025-44",
@@ -40138,25 +40072,6 @@
   "h": 544
  },
  {
-  "id": "icml2023-04",
-  "venue": "icml",
-  "year": 2023,
-  "title": "Compositional Exemplars for In-context Learning",
-  "authors": [
-   "Jiacheng Ye",
-   "Zhiyong Wu",
-   "Jiangtao Feng",
-   "Tao Yu",
-   "Lingpeng Kong"
-  ],
-  "pattern": "framework",
-  "image": "images/icml/final/icml2023-04.jpg",
-  "paper": "https://proceedings.mlr.press/v202/ye23c.html",
-  "pdf_source": "https://proceedings.mlr.press/v202/ye23c/ye23c.pdf",
-  "w": 1288,
-  "h": 601
- },
- {
   "id": "icml2023-0404",
   "venue": "icml",
   "year": 2023,
@@ -40505,26 +40420,6 @@
   "tier": "oral"
  },
  {
-  "id": "icml2023-09",
-  "venue": "icml",
-  "year": 2023,
-  "title": "Multi-View Masked World Models for Visual Robotic Manipulation",
-  "authors": [
-   "Younggyo Seo",
-   "Junsu Kim",
-   "Stephen James",
-   "Kimin Lee",
-   "Jinwoo Shin",
-   "Pieter Abbeel"
-  ],
-  "pattern": "architecture",
-  "image": "images/icml/final/icml2023-09.jpg",
-  "paper": "https://proceedings.mlr.press/v202/seo23a.html",
-  "pdf_source": "https://proceedings.mlr.press/v202/seo23a/seo23a.pdf",
-  "w": 1469,
-  "h": 553
- },
- {
   "id": "icml2023-0988",
   "venue": "icml",
   "year": 2023,
@@ -40638,30 +40533,6 @@
   "score": 55.28,
   "w": 1361,
   "h": 395
- },
- {
-  "id": "icml2023-12",
-  "venue": "icml",
-  "year": 2023,
-  "title": "VIMA: Robot Manipulation with Multimodal Prompts",
-  "authors": [
-   "Yunfan Jiang",
-   "Agrim Gupta",
-   "Zichen Zhang",
-   "Guanzhi Wang",
-   "Yongqiang Dou",
-   "Yanjun Chen",
-   "Li Fei-Fei",
-   "Anima Anandkumar",
-   "Yuke Zhu",
-   "Linxi Fan"
-  ],
-  "pattern": "teaser",
-  "image": "images/icml/final/icml2023-12.jpg",
-  "paper": "https://proceedings.mlr.press/v202/jiang23b.html",
-  "pdf_source": "https://proceedings.mlr.press/v202/jiang23b/jiang23b.pdf",
-  "w": 1468,
-  "h": 741
  },
  {
   "id": "icml2023-1258",
@@ -42722,26 +42593,6 @@
   "pdf_source": "https://raw.githubusercontent.com/mlresearch/v235/main/assets/schiff24a/schiff24a.pdf",
   "w": 1289,
   "h": 565
- },
- {
-  "id": "icml2024-17",
-  "venue": "icml",
-  "year": 2024,
-  "title": "Diffusion Language Models Are Versatile Protein Learners",
-  "authors": [
-   "Xinyou Wang",
-   "Zaixiang Zheng",
-   "Fei Ye",
-   "Dongyu Xue",
-   "Shujian Huang",
-   "Quanquan Gu"
-  ],
-  "pattern": "pipeline",
-  "image": "images/icml/final/icml2024-17.jpg",
-  "paper": "https://proceedings.mlr.press/v235/wang24ct.html",
-  "pdf_source": "https://raw.githubusercontent.com/mlresearch/v235/main/assets/wang24ct/wang24ct.pdf",
-  "w": 1399,
-  "h": 891
  },
  {
   "id": "icml2024-1707",
@@ -57165,26 +57016,6 @@
   "h": 447
  },
  {
-  "id": "neurips2023-05",
-  "venue": "neurips",
-  "year": 2023,
-  "title": "HuggingGPT: Solving AI Tasks with ChatGPT and its Friends in Hugging Face",
-  "authors": [
-   "Shen, Yongliang",
-   "Song, Kaitao",
-   "Tan, Xu",
-   "Li, Dongsheng",
-   "Lu, Weiming",
-   "Zhuang, Yueting"
-  ],
-  "pattern": "framework",
-  "image": "images/neurips/final/neurips2023-05.jpg",
-  "paper": "https://proceedings.neurips.cc/paper_files/paper/2023/hash/77c33e6a367922d003ff102ffb92b658-Abstract-Conference.html",
-  "pdf_source": "https://proceedings.neurips.cc/paper_files/paper/2023/file/77c33e6a367922d003ff102ffb92b658-Paper-Conference.pdf",
-  "w": 1202,
-  "h": 538
- },
- {
   "id": "neurips2023-0501",
   "venue": "neurips",
   "year": 2023,
@@ -58797,29 +58628,6 @@
   "w": 1010,
   "h": 307,
   "tier": "spotlight"
- },
- {
-  "id": "neurips2023-12",
-  "venue": "neurips",
-  "year": 2023,
-  "title": "SwiftSage: A Generative Agent with Fast and Slow Thinking for Complex Interactive Tasks",
-  "authors": [
-   "Lin, Bill Yuchen",
-   "Fu, Yicheng",
-   "Yang, Karina",
-   "Brahman, Faeze",
-   "Huang, Shiyu",
-   "Bhagavatula, Chandra",
-   "Ammanabrolu, Prithviraj",
-   "Choi, Yejin",
-   "Ren, Xiang"
-  ],
-  "pattern": "framework",
-  "image": "images/neurips/final/neurips2023-12.jpg",
-  "paper": "https://proceedings.neurips.cc/paper_files/paper/2023/hash/4b0eea69deea512c9e2c469187643dc2-Abstract-Conference.html",
-  "pdf_source": "https://proceedings.neurips.cc/paper_files/paper/2023/file/4b0eea69deea512c9e2c469187643dc2-Paper-Conference.pdf",
-  "w": 1183,
-  "h": 546
  },
  {
   "id": "neurips2023-1209",
@@ -64512,25 +64320,6 @@
   "score": 69.07,
   "w": 1012,
   "h": 418
- },
- {
-  "id": "neurips2024-19",
-  "venue": "neurips",
-  "year": 2024,
-  "title": "HippoRAG: Neurobiologically Inspired Long-Term Memory for Large Language Models",
-  "authors": [
-   "Gutiérrez, Bernal J.",
-   "Shu, Yiheng",
-   "Gu, Yu",
-   "Yasunaga, Michihiro",
-   "Su, Yu"
-  ],
-  "pattern": "conceptual",
-  "image": "images/neurips/final/neurips2024-19.jpg",
-  "paper": "https://proceedings.neurips.cc/paper_files/paper/2024/hash/6ddc001d07ca4f319af96a3024f6dbd1-Abstract-Conference.html",
-  "pdf_source": "https://proceedings.neurips.cc/paper_files/paper/2024/file/6ddc001d07ca4f319af96a3024f6dbd1-Paper-Conference.pdf",
-  "w": 1150,
-  "h": 632
  },
  {
   "id": "neurips2024-1905",
@@ -76381,44 +76170,6 @@
   "pdf_source": "https://arxiv.org/pdf/2511.05299",
   "w": 1212,
   "h": 546
- },
- {
-  "id": "neurips2025-46",
-  "venue": "neurips",
-  "year": 2025,
-  "title": "Neurosymbolic Diffusion Models",
-  "authors": [
-   "van Krieken, Emile",
-   "Minervini, Pasquale",
-   "Ponti, Edoardo",
-   "Vergari, Antonio"
-  ],
-  "pattern": "conceptual",
-  "image": "images/neurips/final/neurips2025-46.jpg",
-  "paper": "https://arxiv.org/abs/2505.13138",
-  "pdf_source": "https://arxiv.org/pdf/2505.13138",
-  "w": 1256,
-  "h": 555
- },
- {
-  "id": "neurips2025-48",
-  "venue": "neurips",
-  "year": 2025,
-  "title": "Robot-R1: Reinforcement Learning for Enhanced Embodied Reasoning in Robotics",
-  "authors": [
-   "Kim, Dongyoung",
-   "Park, Sumin",
-   "Jang, Huiwon",
-   "Shin, Jinwoo",
-   "Kim, Jaehyung",
-   "Seo, Younggyo"
-  ],
-  "pattern": "framework",
-  "image": "images/neurips/final/neurips2025-48.jpg",
-  "paper": "https://arxiv.org/abs/2506.00070",
-  "pdf_source": "https://arxiv.org/pdf/2506.00070",
-  "w": 1205,
-  "h": 580
  },
  {
   "id": "neurips2025-50",
