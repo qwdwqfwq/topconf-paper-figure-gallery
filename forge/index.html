@@ -111,6 +111,46 @@
   .corsnote{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:9px;
             padding:8px 11px;margin-top:10px;font-size:12.5px}
   .chkline{display:flex;align-items:center;gap:7px;font-size:12.5px;color:#4b5563;margin-top:10px}
+
+  /* ===== two-stage pipeline ===== */
+  .pass-tabs{display:inline-flex;background:#f3f4f6;border-radius:11px;padding:3px;gap:2px;margin-bottom:4px}
+  .pass-tabs button{padding:8px 17px;font-size:13px;font-weight:650;color:#4b5563;background:transparent;border-radius:9px;transition:all .18s}
+  .pass-tabs button .subtag{display:block;font-size:10.5px;font-weight:500;color:#9ca3af}
+  .pass-tabs button.on{background:#fff;color:var(--indigo);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+  .pass-tabs button.on .subtag{color:#818cf8}
+  .stepper{display:flex;align-items:flex-start;margin:4px 0 16px}
+  .stp{display:flex;flex-direction:column;align-items:center;gap:6px;position:relative;z-index:2}
+  .stp .ball{width:30px;height:30px;border-radius:50%;background:#e5e7eb;color:#9ca3af;display:grid;place-items:center;font-weight:800;font-size:14px;transition:all .3s}
+  .stp .lbl{font-size:11.5px;font-weight:650;color:#9ca3af;white-space:nowrap;transition:color .3s}
+  .stp.active .ball{background:var(--indigo);color:#fff}
+  .stp.active .lbl{color:var(--indigo)}
+  .stp.done .ball{background:var(--green);color:#fff}
+  .stp.done .lbl{color:var(--green)}
+  .stline{flex:1;height:3px;background:#e5e7eb;margin:14px 6px 0;border-radius:2px;position:relative;overflow:hidden;min-width:46px}
+  .stline .fill{position:absolute;inset:0;width:0;background:var(--green);transition:width .55s ease;border-radius:2px}
+  .stline.active .fill{width:100%}
+  @keyframes pulseRing{0%{box-shadow:0 0 0 0 rgba(79,70,229,.4)}70%{box-shadow:0 0 0 9px rgba(79,70,229,0)}100%{box-shadow:0 0 0 0 rgba(79,70,229,0)}}
+  .stp.active .ball{animation:pulseRing 1.4s ease-out infinite}
+  .analyze-box{border:1px solid var(--line);border-radius:12px;background:linear-gradient(180deg,#fafbff,#fff);padding:13px 15px;margin-bottom:14px}
+  .analyze-box h4{font-size:13px;font-weight:800;color:var(--indigo);margin-bottom:9px;display:flex;align-items:center;gap:7px}
+  .analyze-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(195px,1fr));gap:9px}
+  .az{background:#f9fafb;border:1px solid var(--line);border-radius:9px;padding:8px 11px}
+  .az b{display:block;font-size:10.5px;letter-spacing:.4px;color:#9ca3af;font-weight:700;margin-bottom:3px}
+  .az span{font-size:12px;color:#374151}
+  .rep-strip{display:flex;gap:8px;margin-top:11px;flex-wrap:wrap;align-items:center}
+  .rep-strip b{font-size:11.5px;color:var(--muted)}
+  .rep-chip{display:flex;align-items:center;gap:6px;background:var(--indigo-soft);border:1px solid #c7d2fe;border-radius:8px;padding:3px 9px 3px 3px;font-size:11.5px;font-weight:700;color:var(--indigo)}
+  .rep-chip img{width:34px;height:26px;object-fit:cover;border-radius:5px}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  .analyze-box,#out{animation:fadeUp .35s ease}
+  .rc{user-select:none}
+  .rc .pick{transition:all .15s}
+  @keyframes pop{0%{transform:scale(.85)}55%{transform:scale(1.08)}100%{transform:scale(1)}}
+  .rc.sel .pick{animation:pop .22s ease}
+  .refmini{animation:fadeIn .25s ease}
+  .flow-note{font-size:12px;color:var(--muted);background:#f9fafb;border-left:3px solid var(--indigo);padding:7px 11px;border-radius:0 8px 8px 0;margin-bottom:12px}
+  #analyzeProgress{margin-top:6px}
   @media (max-width:640px){
     .pill{margin-left:0;width:100%;text-align:center}
     #model{min-width:0}
@@ -178,12 +218,24 @@
       <span class="hint" style="margin:0" id="countHint"></span>
       <button class="btn-tiny" id="clearBtn" hidden>清空选择</button>
     </div>
+    <div class="flow-note" id="pickNote">两阶段模式：勾选 <b>8–10 张同类型</b>图（如都选 framework）；直接生成模式：精选 <b>2–3 张</b>即可。</div>
     <div class="grid" id="grid"></div>
   </div>
 
   <div class="card" id="card3">
     <div class="step"><span class="num">3</span>生成你的主图初稿</div>
-    <div class="refs-strip" id="refsStrip"><span class="hint" style="margin:0">尚未选择参考图，请在上方勾选 1–3 张。</span></div>
+    <div class="refs-strip" id="refsStrip"><span class="hint" style="margin:0">尚未选择参考图，请在上方勾选参考图。</span></div>
+
+    <div class="pass-tabs" id="passTabs">
+      <button data-pass="direct">直接生成<span class="subtag">精选 2–3 张 · 一步出图</span></button>
+      <button data-pass="two" class="on">两阶段归纳<span class="subtag">多选 8–10 张 · 先提炼共性再生成</span></button>
+    </div>
+    <div class="stepper" id="stepper" hidden>
+      <div class="stp" id="stp1"><div class="ball">1</div><div class="lbl">分析参考图</div></div>
+      <div class="stline" id="stline1"><div class="fill"></div></div>
+      <div class="stp" id="stp2"><div class="ball">2</div><div class="lbl">生成主图</div></div>
+    </div>
+    <div id="analyzeBox"></div>
 
     <div class="srow" style="margin-top:0;margin-bottom:13px">
       <div class="sbox">
@@ -232,6 +284,12 @@
           <select id="model"></select>
         </div>
       </div>
+      <div class="srow" id="analyzeModelRow" hidden>
+        <div class="sbox" style="flex:1;min-width:260px">
+          <span>归纳用视觉理解模型（两阶段第一步，需能看图）</span>
+          <select id="analyzeModel"></select>
+        </div>
+      </div>
       <div class="chkline"><input type="checkbox" id="useRelay"><label for="useRelay">使用中转 / 自定义接入地址（官方接口浏览器直连受限时勾选）</label></div>
       <div class="srow" id="relayRow" hidden>
         <div class="sbox" style="flex:1;min-width:260px">
@@ -260,10 +318,16 @@
     <ul class="guide">
       <li><b>学布局，不抄内容</b>：看参考图把画布切成几个面板（问题 / 方法 / 结果）、视觉重心放在哪，面板里换成你自己的模块。</li>
       <li><b>学配色</b>：主色 1 个 + 强调色 1 个，方法模块用同色系深浅区分；顶会主图普遍留白充足、饱和度克制。</li>
-      <li><b>选同类型参考图更准</b>：想画 framework 就优先选带 framework 标签的图，模型通过多模态输入直接"看到"该类版式的共同特征。</li>
+      <li><b>两阶段归纳，多选更稳</b>：想画 framework 就勾选 8–10 张带 framework 标签的图，视觉模型先归纳该类版式共性、自动挑出 2–3 张代表图再生成——既满足多选，又避免多张版式互相打架。</li>
       <li><b>学表达</b>：每个面板一个信息点，箭头表示数据流，标签用短语而非句子；Figure 1 讲清楚“输入→我们的方法→输出/效果”即可。</li>
       <li>初稿生成后建议在 <b>PPT / Figma / draw.io</b> 里精修文字与对齐，再导出投稿所需格式。</li>
     </ul>
+    <div style="margin-top:16px">
+      <div class="step" style="margin-bottom:8px">① 勾选 8–10 张同类参考图（结果按评分降序）</div>
+      <img src="tutorial/02_pick_refs.png" alt="勾选8-10张同类参考图" style="width:100%;border:1px solid var(--line);border-radius:11px;margin-bottom:16px">
+      <div class="step" style="margin-bottom:8px">② 同一个 prompt，FigureForge vs 通用文生图</div>
+      <img src="tutorial/compare.png" alt="同一个prompt两种结果" style="width:100%;border:1px solid var(--line);border-radius:11px">
+    </div>
   </div>
 </div>
 
@@ -275,6 +339,7 @@ const $ = s => document.querySelector(s);
 const cleanKey = s => (s||'').replace(/\s+/g,'');
 const esc = s => (s+'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let refs = new Set(), results = [], mode = 'svg';
+let passMode = 'two'; const MAX_REFS = 10; let analysis = null;
 let data = { ids:[], figs:[], bm:null, IE:null, TE:null, N:0 };
 let clip = { tokenizer:null, model:null };
 let MAN = null;
@@ -296,7 +361,7 @@ const TARGETS = {
 };
 
 /* FALLBACK：manifest 拉取失败（离线）时使用，与 forge/data/manifest.json 同口径 */
-const FALLBACK = {"updated":"2026-09-25","providers":{"ark":{"label":"火山方舟 Ark","base":"https://ark.cn-beijing.volces.com/api/v3","proto":"oai","cors":true,"chat":["doubao-seed-2-1-pro-260628","doubao-seed-2-1-turbo-260628"],"vision":["doubao-seed-1-6-vision-250815"],"image":["doubao-seedream-5-0-pro-260628","doubao-seedream-5-0-flash-260915"]},"sf":{"label":"硅基流动 SiliconFlow","base":"https://api.siliconflow.cn/v1","proto":"oai","cors":true,"chat":["deepseek-ai/DeepSeek-V3","Qwen/Qwen3-235B-A22B"],"vision":["Qwen/Qwen2.5-VL-72B-Instruct"],"image":["black-forest-labs/FLUX.1-schnell","Kwai-Kolors/Kolors"]},"glm":{"label":"智谱 GLM","base":"https://open.bigmodel.cn/api/paas/v4","proto":"oai","cors":true,"chat":["glm-4.5","glm-4.5-air"],"vision":["glm-4v-plus"],"image":["cogview-4"]},"ds":{"label":"DeepSeek","base":"https://api.deepseek.com","proto":"oai","cors":true,"chat":["deepseek-v4-pro","deepseek-flash"],"vision":[],"image":[]},"oai":{"label":"OpenAI","base":"https://api.openai.com/v1","proto":"oai","cors":true,"chat":["gpt-5","gpt-4.1"],"vision":["gpt-5"],"image":["gpt-image-1"]},"kimi":{"label":"Kimi 月之暗面","base":"https://api.moonshot.cn/v1","proto":"oai","cors":true,"chat":["kimi-k3","kimi-k2.6"],"vision":["kimi-k2.6"],"image":[]},"qwen":{"label":"通义千问 Qwen","base":"https://dashscope.aliyuncs.com/compatible-mode/v1","proto":"oai","cors":true,"chat":["qwen-max","qwen-plus"],"vision":["qwen-vl-max"],"image":["qwen-image"]},"hy":{"label":"腾讯混元 Hunyuan","base":"https://api.hunyuan.cloud.tencent.com/v1","proto":"oai","cors":false,"chat":["hunyuan-turbos-latest"],"vision":["hunyuan-vision"],"image":["hy-image-v3.5-preview"]},"claude":{"label":"Anthropic Claude","base":"https://api.anthropic.com","proto":"anthropic","cors":false,"chat":["claude-opus-5-5","claude-sonnet-5","claude-sonnet-4-6"],"vision":["claude-opus-5-5","claude-sonnet-5"],"image":[]},"custom":{"label":"自定义 OpenAI 兼容","base":"","proto":"oai","cors":true,"chat":[],"vision":[],"image":[]}}};
+const FALLBACK = {"updated":"2026-09-25","providers":{"ark":{"label":"火山方舟 Ark","base":"https://ark.cn-beijing.volces.com/api/v3","proto":"oai","cors":true,"chat":["doubao-seed-2-1-pro-260628","doubao-seed-2-1-turbo-260628"],"vision":["doubao-seed-2-1-pro-260628","doubao-seed-2-1-turbo-260628"],"image":["doubao-seedream-5-0-pro-260628"]},"sf":{"label":"硅基流动 SiliconFlow","base":"https://api.siliconflow.cn/v1","proto":"oai","cors":true,"chat":["deepseek-ai/DeepSeek-V3","Qwen/Qwen3-235B-A22B"],"vision":["Qwen/Qwen2.5-VL-72B-Instruct"],"image":["black-forest-labs/FLUX.1-schnell","Kwai-Kolors/Kolors"]},"glm":{"label":"智谱 GLM","base":"https://open.bigmodel.cn/api/paas/v4","proto":"oai","cors":true,"chat":["glm-4.5","glm-4.5-air"],"vision":["glm-4v-plus"],"image":["cogview-4"]},"ds":{"label":"DeepSeek","base":"https://api.deepseek.com","proto":"oai","cors":true,"chat":["deepseek-v4-pro","deepseek-flash"],"vision":[],"image":[]},"oai":{"label":"OpenAI","base":"https://api.openai.com/v1","proto":"oai","cors":true,"chat":["gpt-5","gpt-4.1"],"vision":["gpt-5"],"image":["gpt-image-1"]},"kimi":{"label":"Kimi 月之暗面","base":"https://api.moonshot.cn/v1","proto":"oai","cors":true,"chat":["kimi-k3","kimi-k2.6"],"vision":["kimi-k2.6"],"image":[]},"qwen":{"label":"通义千问 Qwen","base":"https://dashscope.aliyuncs.com/compatible-mode/v1","proto":"oai","cors":true,"chat":["qwen-max","qwen-plus"],"vision":["qwen-vl-max"],"image":["qwen-image"]},"hy":{"label":"腾讯混元 Hunyuan","base":"https://api.hunyuan.cloud.tencent.com/v1","proto":"oai","cors":false,"chat":["hunyuan-turbos-latest"],"vision":["hunyuan-vision"],"image":["hy-image-v3.5-preview"]},"claude":{"label":"Anthropic Claude","base":"https://api.anthropic.com","proto":"anthropic","cors":false,"chat":["claude-opus-5-5","claude-sonnet-5","claude-sonnet-4-6"],"vision":["claude-opus-5-5","claude-sonnet-5"],"image":[]},"custom":{"label":"自定义 OpenAI 兼容","base":"","proto":"oai","cors":true,"chat":[],"vision":[],"image":[]}}};
 
 /* ---------------- boot: manifest + data + local CLIP ---------------- */
 async function loadManifest(){
@@ -325,12 +390,13 @@ async function boot(){
     ]);
     L('data done');
     data = { ids, figs, bm, IE, TE, N: ids.length };
-    bt.textContent = '正在加载本地 CLIP 文本模型（约 65 MB，仅首次）…';
+    bt.textContent = '正在加载本地 CLIP（① tokenizer）…';
     T.env.allowLocalModels = true;
     T.env.backends.onnx.wasm.wasmPaths = new URL('vendor/', document.baseURI).href;
-    const MP = './models/clip-vit-base-patch32';
+    const MP = new URL('./models/clip-vit-base-patch32', import.meta.url).href;
     clip.tokenizer = await T.AutoTokenizer.from_pretrained(MP);
     L('tokenizer done');
+    bt.textContent = '正在加载本地 CLIP（② 模型本体约 63 MB）…';
     clip.model = await T.CLIPTextModelWithProjection.from_pretrained(MP, {dtype:'q8'});
     L('model done');
     $('#bootBanner').hidden = true;
@@ -408,7 +474,9 @@ async function search(){
     scored.push({i, s});
   }
   scored.sort((a,b)=>b.s-a.s);
-  results = scored.slice(0,30).map(x=>data.figs[x.i]);
+  const hasQ = !!clipScores;
+  results = scored.slice(0,30).map(x=>{const f=data.figs[x.i];
+    f.matchScore = hasQ ? Math.max(0,Math.min(100,Math.round(x.s*100))) : null; return f;});
   renderGrid(results);
   if(!results.length) $('#grid').innerHTML='<div class="empty-note">没有符合条件的图片，试试放宽筛选。</div>';
 }
@@ -427,7 +495,7 @@ function renderGrid(list){
     return `<div class="rc ${sel?'sel':''}" data-id="${esc(f.id)}">
       <img class="thumb" loading="lazy" src="../${esc(f.image)}" alt="${esc(f.title)}">
       <div class="pick">${sel?'✓ 已选':'+ 选为参考'}</div>
-      <div class="score">${f.score?f.score.toFixed(1):""}</div>
+      <div class="score">${f.matchScore!=null?f.matchScore:''}</div>
       <div class="body">
         <h3>${esc(f.title)}</h3>
         <div class="chips">
@@ -440,19 +508,19 @@ function renderGrid(list){
   }).join('');
 }
 function updateCount(){
-  $('#countHint').textContent = refs.size ? `已选 ${refs.size}/3` : '';
+  $('#countHint').textContent = refs.size ? `已选 ${refs.size}/${MAX_REFS}` : '';
   $('#clearBtn').hidden = refs.size===0;
 }
 $('#grid').addEventListener('click', e=>{
   const card = e.target.closest('.rc'); if(!card) return;
   const id = card.dataset.id;
   if(refs.has(id)) refs.delete(id);
-  else { if(refs.size>=3){ showErr('最多选 3 张参考图（建议 1–2 张）'); return;} refs.add(id); }
+  else { if(refs.size>=MAX_REFS){ showErr('最多选 '+MAX_REFS+' 张参考图（两阶段建议 8–10 张同类型，直接生成 2–3 张）'); return;} refs.add(id); }
   renderGrid(results); updateCount(); renderRefsStrip();
 });
 $('#clearBtn').onclick = ()=>{ refs.clear(); renderGrid(results); updateCount(); renderRefsStrip(); };
 function renderRefsStrip(){
-  if(!refs.size){ $('#refsStrip').innerHTML='<span class="hint" style="margin:0">尚未选择参考图，请在上方勾选 1–3 张。</span>'; return; }
+  if(!refs.size){ $('#refsStrip').innerHTML='<span class="hint" style="margin:0">尚未选择参考图，请在上方勾选（两阶段 8–10 张 / 直接 2–3 张）。</span>'; return; }
   $('#refsStrip').innerHTML = [...refs].map(id=>{
     const f = data.figs.find(x=>x.id===id);
     return `<div class="refmini"><img src="../${esc(f.image)}"><div><b>${esc(f.title)}</b>
@@ -541,9 +609,9 @@ function fileToDataURI(blob){
     fr.readAsDataURL(blob);
   });
 }
-async function refDataURIs(){
+async function refDataURIs(refIds){
   const out = [];
-  for(const id of [...refs]){
+  for(const id of (refIds||[...refs])){
     const f = data.figs.find(x=>x.id===id);
     const r = await fetch('../'+f.image);
     if(!r.ok) throw new Error('读取参考图失败：'+f.image);
@@ -562,13 +630,14 @@ function baseURL(){
   const ov = $('#baseOverride').value.trim();
   return (ov || cfg().base).replace(/\/+$/,'');
 }
+const key_present = ()=>!!cleanKey($('#key').value);
 function fetchOnlineModels(){
   const key = cleanKey($('#key').value), base = baseURL(), c = cfg();
-  if(!key || !base || c.proto!=='oai') return Promise.resolve([]);
+  if(!key || !base || c.proto!=='oai') return Promise.resolve({ok:false,list:[]});
   return fetch(base+'/models',{headers:{Authorization:'Bearer '+key}})
-    .then(r=>r.ok ? r.json() : {})
-    .then(d=>(d.data||d.models||[]).map(x=>x.id||x.model||x.name).filter(Boolean))
-    .catch(()=>[]);
+    .then(r=>r.ok ? r.json() : Promise.reject(new Error('http '+r.status)))
+    .then(d=>({ok:true,list:(d.data||d.models||[]).map(x=>x.id||x.model||x.name).filter(Boolean)}))
+    .catch(()=>({ok:false,list:[]}));
 }
 function optgroup(label){
   const g=document.createElement('optgroup'); g.label=label; return g;
@@ -588,15 +657,34 @@ async function populateModels(){
     if(c.image.length){ const g=optgroup('推荐图像模型'); c.image.forEach(m=>g.appendChild(option(m))); s.appendChild(g); }
   }
   const wanted = mode==='svg' ? 'chat' : 'image';
-  const online = await fetchOnlineModels();
+  const res = await fetchOnlineModels();
+  const online = res.list;
   const yours = online.filter(m=>kindOf(m)===wanted);
   if(yours.length){
     const g=optgroup('你的账号已开通（实时拉取 '+new Date().toLocaleDateString()+'）');
     [...new Set(yours)].forEach(m=>g.appendChild(option(m))); s.appendChild(g);
+  }else if(key_present() && !res.ok){
+    const g=optgroup('该服务商未开放浏览器查询 · 已用托管清单');
+    const o=option('（托管清单随仓库更新，新模型打开即见）'); o.disabled=true; g.appendChild(o); s.appendChild(g);
   }
   const saved = localStorage.getItem('ff_model_'+p);
   if(saved && [...s.options].some(o=>o.value===saved)) s.value=saved;
+  if(mode==='image' && passMode==='two') populateAnalyzeModels();
 }
+async function populateAnalyzeModels(){
+  const c=cfg(), s=$('#analyzeModel'); s.innerHTML='';
+  if(c.vision.length){ const g=optgroup('视觉理解模型（可看图归纳）'); c.vision.forEach(m=>g.appendChild(option(m))); s.appendChild(g); }
+  const res = await fetchOnlineModels();
+  const vis = res.list.filter(m=>kindOf(m)==='chat' && /(vision|vl|visual|multimodal|seed-1-6|seed-2|gpt-5|kimi-k|sonnet|opus)/i.test(m));
+  if(vis.length){ const g=optgroup('账号已开通（实时）'); [...new Set(vis)].forEach(m=>g.appendChild(option(m))); s.appendChild(g); }
+  else if(key_present() && !res.ok && !c.vision.length){
+    const g=optgroup('未开放浏览器查询 · 已用托管清单');
+    const o=option('（托管清单随仓库更新）'); o.disabled=true; g.appendChild(o); s.appendChild(g);
+  }
+  const saved = localStorage.getItem('ff_amodel_'+$('#provider').value);
+  if(saved && [...s.options].some(o=>o.value===saved)) s.value=saved;
+}
+$('#analyzeModel').onchange = e=>localStorage.setItem('ff_amodel_'+$('#provider').value, e.target.value);
 function initProviders(){
   const s = $('#provider');
   Object.entries(MAN.providers).forEach(([k,v])=>{ const o=option(k); o.textContent=v.label; s.appendChild(o); });
@@ -634,28 +722,112 @@ document.querySelectorAll('#modeTabs button').forEach(b=>b.onclick=async ()=>{
   b.classList.add('on'); mode=b.dataset.mode;
   $('#modelLabel').textContent = mode==='svg' ? '模型（对话 / 视觉模型）' : '模型（图像模型）';
   await populateModels();
+  syncPassUI();
+});
+function syncPassUI(){
+  $('#analyzeModelRow').hidden = !(mode==='image' && passMode==='two');
+}
+document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
+  $('#genErr').hidden=true;
+  document.querySelectorAll('#passTabs button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on'); passMode=b.dataset.pass;
+  syncPassUI();
+  if(passMode==='two' && refs.size && refs.size<4) showErr('两阶段建议勾选 8–10 张同类型参考图。');
+  if(passMode==='direct' && refs.size>4) showErr('直接生成建议精选 2–3 张；当前选了 '+refs.size+' 张，版式可能互相干扰。');
 });
 $('#model').onchange = e=>localStorage.setItem('ff_model_'+$('#provider').value, e.target.value);
 
+/* ---------------- pass 1: analyze references ---------------- */
+const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference overview figures of the SAME target visual type. Extract their shared layout grammar and return STRICT JSON only.';
+function buildAnalyzePrompt(n){
+  return `Here are ${n} top-conference paper figures, all of the target visual type for the figure I want to design.
+Analyze their COMMON design grammar and return one JSON object with EXACTLY these keys:
+{"layout":"how the canvas is divided (number/arrangement of panels) and reading direction",
+"elements":"recurring visual elements: box styles, arrow types, icon/illustration conventions",
+"palette":"color rules: number of main/accent colors, background, typical fills",
+"hierarchy":"information hierarchy: title, panel headers, labels, what is emphasized",
+"representative":[indices (1-based) of the 2-3 most typical, highest-quality figures among these],
+"refinedPrompt":"a detailed self-contained English layout description fusing the common grammar, ready to drive generation"}
+Rules: output JSON only, no markdown or commentary. representative must hold 2-3 integer indices. refinedPrompt should be 120-200 concrete English words about panels, arrows, palette and hierarchy.`;
+}
+function extractJSON(txt){
+  const m = txt.match(/\{[\s\S]*\}/);
+  if(!m) throw new Error('归纳模型未返回有效结果，可重试或更换视觉理解模型。');
+  try{ return JSON.parse(m[0]); }catch(e){ throw new Error('归纳结果解析失败，可重试。'); }
+}
+async function analyzeReferences(){
+  const ordered=[...refs];
+  const uris=await refDataURIs();
+  const c=cfg(), relay=$('#baseOverride').value.trim();
+  const useAnthropic=c.proto==='anthropic'&&!relay;
+  let txt;
+  if(useAnthropic){
+    const blocks=uris.map(u=>{const p=dataURIToParts(u);return {type:'image',source:{type:'base64',media_type:p.media,data:p.data}};});
+    blocks.push({type:'text',text:buildAnalyzePrompt(ordered.length)});
+    const body={model:$('#analyzeModel').value||$('#model').value,max_tokens:3000,system:ANALYZE_SYS,messages:[{role:'user',content:blocks}]};
+    const r=await fetch(baseURL()+'/v1/messages',{method:'POST',headers:{'Content-Type':'application/json','x-api-key':cleanKey($('#key').value),'anthropic-version':'2023-06-01'},body:JSON.stringify(body)});
+    txt=await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
+    const d=JSON.parse(txt); txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+  }else{
+    const am = (mode==='image'&&passMode==='two') ? $('#analyzeModel').value : $('#model').value;
+    if(!am) throw new Error('请选择归纳用的视觉理解模型（位图两阶段需在下方"归纳模型"中选择）。');
+    const parts=uris.map(u=>({type:'image_url',image_url:{url:u}}));
+    parts.push({type:'text',text:buildAnalyzePrompt(ordered.length)});
+    const body={model:am,temperature:0.2,messages:[{role:'system',content:ANALYZE_SYS},{role:'user',content:parts}]};
+    if($('#provider').value==='ark') body.thinking={type:'disabled'};
+    let r;
+    try{ r=await postJSON(baseURL(),'/chat/completions',body,cleanKey($('#key').value)); }
+    catch(e){ throw new Error(e.name==='TimeoutError'?'归纳超时（已等待 90 秒），请稍后重试或换用更快的视觉模型。':'无法连接归纳模型（CORS/网络）。可勾选中转，或确认已开通视觉理解模型。'); }
+    txt=await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
+    const d=JSON.parse(txt); txt=d.choices?.[0]?.message?.content||'';
+  }
+  const j=extractJSON(txt);
+  let reps=(j.representative||[]).map(x=>ordered[Math.max(0,Math.min(ordered.length-1,(+x)-1))]).filter(Boolean);
+  reps=[...new Set(reps)].slice(0,3);
+  if(reps.length<2) reps=ordered.slice(0,3);
+  analysis={j,repIds:reps,refinedPrompt:j.refinedPrompt||''};
+  renderAnalyze(ordered);
+  return analysis;
+}
+function renderAnalyze(ordered){
+  const j=analysis.j;
+  const repHtml=analysis.repIds.map(id=>{const f=data.figs.find(x=>x.id===id);return `<span class="rep-chip"><img src="../${esc(f.image)}">代表图</span>`;}).join('');
+  $('#analyzeBox').innerHTML=`<div class="analyze-box">
+    <h4>✓ 第一步完成：已从 ${ordered.length} 张图提炼共性版式</h4>
+    <div class="analyze-grid">
+      <div class="az"><b>Layout 布局</b><span>${esc(j.layout||'–')}</span></div>
+      <div class="az"><b>Elements 元素</b><span>${esc(j.elements||'–')}</span></div>
+      <div class="az"><b>Palette 配色</b><span>${esc(j.palette||'–')}</span></div>
+      <div class="az"><b>Hierarchy 层级</b><span>${esc(j.hierarchy||'–')}</span></div>
+    </div>
+    <div class="rep-strip"><b>自动选定代表图：</b>${repHtml}</div>
+  </div>`;
+}
+
 /* ---------------- build prompts ---------------- */
-function buildPrompt(content){
+function buildPrompt(content, layoutGuide, refIds){
   const t = $('#target').value;
   const targetInfo = t==='custom'
     ? ($('#targetDesc').value.trim() || content)
     : TARGETS[t].instr;
-  const refLines = [...refs].map((id,idx)=>{
+  const useIds = refIds || [...refs];
+  const refLines = useIds.map((id,idx)=>{
     const f = data.figs.find(x=>x.id===id);
     return `参考图${idx+1}：${f.title}（${f.venue.toUpperCase()} ${f.year}，${f.pattern}）——只学习它的版面结构、面板划分与配色风格，内容全部替换为我的论文。`;
   }).join('\n');
+  const guide = layoutGuide
+    ? `## 版式规范（已从画廊 ${refs.size} 张同类图中归纳，请严格遵循其面板划分、箭头用法、配色与信息层级）\n${layoutGuide}\n\n`
+    : '';
   return `你是顶尖 ML 论文的配图设计师。我要：${TARGETS[t].label}。
-${targetInfo}
+${guide}${targetInfo}
 
 我的论文内容：
 ${content}
 
 ${refLines}
 
-请输出一张完整的 SVG（viewBox 1600x900，横向，浅色背景，主色一个、强调色一个，留白充足；方块/箭头/文字标签对齐；不得出现 lorem ipsum 或占位数字）。
+请输出一张极简、完整、可编辑的 SVG（viewBox 1600x900，横向，白色背景，主色一个、强调色一个，留白充足；方块/箭头/文字标签对齐；不得出现 lorem ipsum 或占位数字）。
+只画一个清晰的主面板：聚焦“我们的方法”核心 pipeline（标题 + 若干模块方块 + 箭头表示数据流），不要画 baseline 对比、不要多个子面板、不要重复图形；把重复样式放进 <defs> 复用，总代码尽量短，务必在一次输出内以 </svg> 正常结尾。
 硬性要求：SVG 中所有可见文字（面板标题、模块名、坐标轴、图例、注释）必须全部使用英文短语，严禁出现任何中文字符；数字与标签需与论文内容一致。
 Output a complete SVG. ALL visible text (panel headers, module names, axes, legends, annotations) MUST be in English — no Chinese characters anywhere. Output only the <svg> code, no explanation.`;
 }
@@ -676,18 +848,25 @@ function friendlyHttp(status, txt){
   if(status===400) return '请求被服务商拒绝：'+txt.slice(0,200);
   return '服务商返回错误（HTTP '+status+'）：'+txt.slice(0,200);
 }
-function postJSON(base, path, body, key, extraHeaders){
+function postJSON(base, path, body, key, extraHeaders, timeoutMs=90000){
+  const ac=new AbortController();
+  const to=setTimeout(()=>ac.abort(new DOMException('timeout','TimeoutError')),timeoutMs);
   return fetch(base+path,{method:'POST',
     headers:{'Content-Type':'application/json',Authorization:'Bearer '+key,...extraHeaders},
-    body:JSON.stringify(body)});
+    body:JSON.stringify(body),signal:ac.signal}).finally(()=>clearTimeout(to));
 }
 
 /* ---------------- generation ---------------- */
+function setStep(n,state){
+  const stp=$('#stp'+n);
+  stp.classList.remove('active','done'); if(state) stp.classList.add(state);
+  if(n===1 && state==='done') $('#stline1').classList.add('active');
+}
 $('#genBtn').onclick = async ()=>{
   $('#genErr').hidden=true; $('#out').style.display='none';
   const content = $('#paper').value.trim();
   if(!content){ showErr('请先输入论文内容（粘贴摘要或上传 PDF）。'); return; }
-  if(!refs.size){ showErr('请先在第 2 步勾选 1–3 张参考图。'); return; }
+  if(!refs.size){ showErr('请先在第 2 步勾选参考图。'); return; }
   const p = $('#provider').value, c = cfg();
   const key = cleanKey($('#key').value);
   if(p!=='custom' && !/^[A-Za-z0-9\-_.=]+$/.test(key)){ showErr('API Key 格式不正确（应只含字母、数字与 - _ . =），请重新粘贴。'); return; }
@@ -703,26 +882,40 @@ $('#genBtn').onclick = async ()=>{
     if(!model){ showErr('请选择模型（若列表为空请粘贴 Key 后点刷新）。'); return; }
     if(mode==='image' && kindOf(model)!=='image'){ showErr('位图模式需要图像模型，请在列表中选择图像模型。'); return; }
   }
-  const btn=$('#genBtn'); btn.disabled=true; btn.textContent='生成中…';
+  const btn=$('#genBtn'); btn.disabled=true;
+  let refIds=[...refs], layoutGuide='';
   try{
     const relay = $('#baseOverride').value.trim();
     const useAnthropic = c.proto==='anthropic' && !relay;
+    if(passMode==='two'){
+      if(refs.size<4){ showErr('两阶段建议勾选 8–10 张同类型参考图（当前 '+refs.size+' 张）。'); return; }
+      $('#stepper').hidden=false; $('#analyzeBox').innerHTML='';
+      setStep(1,'active'); btn.textContent='① 正在分析 '+refs.size+' 张参考图…';
+      const a = await analyzeReferences();
+      refIds=a.repIds; layoutGuide=a.refinedPrompt;
+      setStep(1,'done'); setStep(2,'active'); btn.textContent='② 正在生成主图…';
+    }else{
+      $('#stepper').hidden=true; btn.textContent='生成中…';
+    }
     if(mode==='svg'){
-      if(useAnthropic) await genAnthropicSVG(base,model,key,content);
-      else await genOaiSVG(base,model,key,content,p);
+      if(useAnthropic) await genAnthropicSVG(base,model,key,content,refIds,layoutGuide);
+      else await genOaiSVG(base,model,key,content,p,refIds,layoutGuide);
     }else{
       if(useAnthropic) throw new Error('Claude 为对话模型，不提供图像生成；请切回 SVG 模式或选择图像模型服务商。');
-      await genOaiImage(base,model,key,content,p);
+      await genOaiImage(base,model,key,content,p,refIds,layoutGuide);
     }
+    if(passMode==='two') setStep(2,'done');
   }catch(err){ showErr(err.message); }
   finally{ btn.disabled=false; btn.textContent='生成初稿'; }
 };
 
-async function genOaiSVG(base,model,key,content,p){
-  const prompt = buildPrompt(content);
-  let body = {model,temperature:0.3}, usedVision=false;
-  if(refs.size && p!=='ds'){
-    const uris = await refDataURIs();
+async function genOaiSVG(base,model,key,content,p,refIds,layoutGuide){
+  const useIds = refIds||[...refs];
+  const prompt = buildPrompt(content,layoutGuide,useIds);
+  let body = {model,temperature:0.3,max_tokens:8192}, usedVision=false;
+  if(p==='ark') body.thinking={type:'disabled'};
+  if(useIds.length && p!=='ds'){
+    const uris = await refDataURIs(useIds);
     const parts = uris.map(u=>({type:'image_url',image_url:{url:u}}));
     parts.push({type:'text',text:prompt});
     body.messages=[{role:'system',content:SVG_SYS},{role:'user',content:parts}];
@@ -732,7 +925,7 @@ async function genOaiSVG(base,model,key,content,p){
   }
   let r;
   try{ r = await postJSON(base,'/chat/completions',body,key); }
-  catch(e){ throw new Error('无法连接该服务商（CORS 或网络被拦截）。可勾选"使用中转"填入中转地址，或换用其他服务商。'); }
+  catch(e){ throw new Error(e.name==='TimeoutError'?'生成超时（已等待 90 秒），模型可能繁忙，请稍后重试或换更快的模型。':'无法连接该服务商（CORS 或网络被拦截）。可勾选“使用中转”填入中转地址，或换用其他服务商。'); }
   let txt = await r.text();
   if(!r.ok && usedVision){
     body.messages=[{role:'system',content:SVG_SYS},{role:'user',content:prompt}]; usedVision=false;
@@ -741,16 +934,22 @@ async function genOaiSVG(base,model,key,content,p){
   if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
   const d = JSON.parse(txt);
   let svg = d.choices?.[0]?.message?.content||'';
-  const m = svg.match(/<svg[\s\S]+?<\/svg>/);
-  if(!m) throw new Error('模型没有返回可用的 SVG，可重试一次或换用更强的模型。');
-  renderSVG(m[0], usedVision);
+  let code = (svg.match(/<svg[\s\S]*?<\/svg>/)||[])[0] || '';
+  let truncated=false;
+  if(!code){
+    const s2 = svg.match(/<svg[\s\S]*$/);
+    if(s2){ code = s2[0].replace(/```[\s\S]*$/,'').trim()+'</svg>'; truncated=true; }
+  }
+  if(!code) throw new Error('模型没有返回可用的 SVG，可重试一次或换用更强的模型。');
+  renderSVG(code, usedVision, useIds, truncated);
 }
 
-async function genAnthropicSVG(base,model,key,content){
-  const prompt = buildPrompt(content);
+async function genAnthropicSVG(base,model,key,content,refIds,layoutGuide){
+  const useIds = refIds||[...refs];
+  const prompt = buildPrompt(content,layoutGuide,useIds);
   let blocks = [], usedVision=false;
-  if(refs.size){
-    const uris = await refDataURIs();
+  if(useIds.length){
+    const uris = await refDataURIs(useIds);
     uris.forEach(u=>{
       const p = dataURIToParts(u);
       if(p) blocks.push({type:'image',source:{type:'base64',media_type:p.media,data:p.data}});
@@ -778,40 +977,50 @@ async function genAnthropicSVG(base,model,key,content){
   if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
   const d = JSON.parse(txt);
   const out = (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
-  const m = out.match(/<svg[\s\S]+?<\/svg>/);
-  if(!m) throw new Error('Claude 没有返回可用的 SVG，可重试一次。');
-  renderSVG(m[0], usedVision);
+  let code = (out.match(/<svg[\s\S]*?<\/svg>/)||[])[0] || '';
+  let truncated=false;
+  if(!code){
+    const s2 = out.match(/<svg[\s\S]*$/);
+    if(s2){ code = s2[0].replace(/```[\s\S]*$/,'').trim()+'</svg>'; truncated=true; }
+  }
+  if(!code) throw new Error('Claude 没有返回可用的 SVG，可重试一次。');
+  renderSVG(code, usedVision, useIds, truncated);
 }
-function renderSVG(svg, usedVision){
+function renderSVG(svg, usedVision, useIds, truncated){
   const blob = new Blob([svg],{type:'image/svg+xml'});
   const url = URL.createObjectURL(blob);
+  const n = (useIds||[...refs]).length;
   $('#out').style.display='block';
   $('#out').innerHTML = `<iframe src="${url}"></iframe>
     <div class="dl"><a class="btn-primary" href="${url}" download="figure-forge-draft.svg">下载 SVG</a>
-    <span class="hint">SVG 可用 Figma / draw.io / Illustrator 打开精修；${usedVision?`参考图（${refs.size} 张）已作为图像输入。`:'参考图以文字方式注入。'}</span></div>`;
+    <span class="hint">SVG 可用 Figma / draw.io / Illustrator 打开精修；${usedVision?`代表图（${n} 张）已作为图像输入。`:'参考图以文字方式注入。'}${truncated?' ⚠ 本次输出过长被截断、已自动补全闭合，请检查末尾或精简需求后重试。':''}</span></div>`;
 }
 
-async function genOaiImage(base,model,key,content,p){
+async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
+  const useIds = refIds||[...refs];
   const tg = TARGETS[$('#target').value] || TARGETS.overview;
-  const imgPrompt = `${tg.img}. White background, flat modern scientific illustration style, elegant layout, minimal accurate labels. Paper content: ${content.slice(0,2000)}`;
+  const guide = layoutGuide
+    ? `Follow this gallery-derived layout style guide precisely (panel division, arrows, palette, hierarchy):\n${layoutGuide}\n\n`
+    : '';
+  const imgPrompt = `${guide}${tg.img}. White background, flat modern scientific illustration style, elegant layout, minimal accurate labels. Paper content: ${content.slice(0,2000)}`;
   const body = {model, prompt:imgPrompt};
   if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
   else if(p==='sf'){ body.image_size='1024x1024'; body.batch_size=1; }
   else if(p==='glm'){ body.size='1024x1024'; }
   else if(p==='oai'){ body.size='1536x1024'; }
   let usedRefs=false;
-  if(refs.size && p!=='glm'){
-    const uris = await refDataURIs();
+  if(useIds.length && p!=='glm'){
+    const uris = await refDataURIs(useIds);
     body.image = (p==='sf') ? uris[0] : uris;
     usedRefs=true;
   }
   let r;
-  try{ r = await postJSON(base,'/images/generations',body,key); }
-  catch(e){ throw new Error('无法连接该服务商（CORS 或网络被拦截）。可勾选中转，或换用火山方舟 / 硅基流动。'); }
+  try{ r = await postJSON(base,'/images/generations',body,key,undefined,150000); }
+  catch(e){ throw new Error(e.name==='TimeoutError'?'生成超时（已等待约 150 秒），模型可能繁忙，请稍后重试；也可换更快的模型（如硅基流动 FLUX schnell）。':'无法连接该服务商（CORS 或网络被拦截）。可勾选中转，或换用火山方舟 / 硅基流动。'); }
   let txt = await r.text();
   if(!r.ok && usedRefs){
     delete body.image; usedRefs=false;
-    try{ r = await postJSON(base,'/images/generations',body,key); txt=await r.text(); }catch(e){}
+    try{ r = await postJSON(base,'/images/generations',body,key,undefined,150000); txt=await r.text(); }catch(e){}
   }
   if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
   const d = JSON.parse(txt);
@@ -821,7 +1030,7 @@ async function genOaiImage(base,model,key,content,p){
   $('#out').style.display='block';
   $('#out').innerHTML = `<img src="${esc(imgSrc)}" alt="draft">
     <div class="dl"><button class="btn-primary" id="dlImg">下载图片</button>
-    <span class="hint">位图为 AI 初稿${usedRefs?'，参考图已作为多图参考输入':''}；文字与数字请在 PPT / Figma 中核对修正。</span></div>`;
+    <span class="hint">位图为 AI 初稿${usedRefs?'，'+useIds.length+' 张代表图已作为多图参考输入':''}；文字与数字请在 PPT / Figma 中核对修正。</span></div>`;
   $('#dlImg').onclick = async ()=>{
     try{
       const rr = await fetch(imgSrc); const blob = await rr.blob();

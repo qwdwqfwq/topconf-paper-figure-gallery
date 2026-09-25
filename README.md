@@ -51,23 +51,28 @@ back to its source paper and records venue, year, authors and a visual-pattern t
 - 🔁 Fully open, reproducible pipeline: proceedings index → PDF download → Figure 1 crop
   → design-quality scoring → dHash de-duplication → manual page-by-page review
 
-### 🎓 How to use this gallery to design your own overview figure
+### 🎓 How to design your own overview figure with FigureForge
 
-1. **Write the one-sentence story first** — input → transformation → output. Everything
-   in the figure should serve that sentence.
-2. **Pick a reading direction that matches the story**: left-to-right for a pipeline,
-   centre-out for a system/framework, top-to-bottom for a hierarchy or taxonomy.
-3. **Give each stage one visual verb and one accent colour** — boxes for modules, arrows
-   for data flow, icons for data types. Use a neutral background; reserve colour for what
-   matters (your contribution, the novel path, the output).
-4. **Steal hierarchy and spacing, not artwork.** Filter `framework` / `pipeline` /
-   `architecture` / `conceptual` and study how 8–12 similar papers align modules to a
-   grid, size labels, and separate "what exists" from "what is new" (dashed/grey vs
-   coloured/full).
-5. **Label at paper width.** Export, then view the figure at the width of a two-column
-   page: any label you cannot read must be enlarged, moved, or deleted.
-6. **One figure, one message.** If a reviewer should remember a single claim, the figure's
-   visual centre must already state it — results belong in Figure 2, not the teaser.
+No more staring at a blank slide — open [FigureForge](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge) and let 3,516 top-conference figures draft yours in five steps:
+
+1. **Describe your paper** — paste the title + abstract (or upload the PDF for auto-extraction); state the “input → our method → output” story.
+2. **Pick the right Pattern** — `framework` for multi-agent / system overviews, `pipeline` for end-to-end flows, `architecture` for internal model structure, `conceptual` for visual metaphors.
+3. **Tick 8–10 same-type references** — results are ranked by the **relevance score (top-right of each card)**; tick 8–10 cards of one pattern (e.g. all framework), higher scores first.
+
+   ![Pick references](forge/tutorial/02_pick_refs.png)
+
+4. **Two stages: summarize, then generate** — a vision model first reads the 8–10 figures and distils their shared grammar across **Layout / Elements / Palette / Hierarchy**, auto-selects 2–3 representative figures, and only then generates — so many picks never fight each other.
+
+   ![Two-stage analysis](forge/tutorial/03_analyze.png)
+
+5. **Choose a mode, add your API key, get the draft**:
+   - **SVG mode (recommended)**: 100% accurate text, editable in Figma / draw.io / Illustrator;
+   - **Bitmap mode**: publication-style layout and narrative; check small English labels in PPT / Figma.
+   - Paste **your own** API key (stored only in your browser): Volcengine Ark, SiliconFlow, Zhipu GLM, DeepSeek, OpenAI, Kimi, Qwen, Tencent Hunyuan, Claude, or any OpenAI-compatible endpoint.
+
+> 💡 **Versus a bare prompt in a general chatbot?** The same prompt yields a “pretty but generic” flowchart from a general text-to-image model; FigureForge uses top-conference figures as a **layout scaffold**, so drafts carry the panel grid, comparative narrative and restrained palette of a paper figure. Honest comparison below (bitmap sets the layout, SVG keeps the text — no dunking):
+>
+> ![Comparison](forge/tutorial/compare.png)
 
 ### Add a paper or a better figure
 
@@ -93,11 +98,11 @@ FigureForge turns the gallery into a drafting tool, in three steps:
 1. **Describe your paper** — paste the abstract, upload the PDF (title / abstract / method
    are extracted locally), or just type a sentence about your work.
 2. **Pick visual references** — a hybrid **CLIP + BM25** search over all 3,516 gallery
-   figures returns the most relevant designs; choose 1–3 as your visual blueprint and
-   filter by venue / year / tier / pattern.
-3. **Choose the figure type and generate** — overview teaser, architecture, pipeline,
-   results grid, or a custom target; FigureForge calls **your own** OpenAI-compatible API
-   and returns an **editable SVG** or a **bitmap** draft you can download.
+   figures returns the most relevant designs, ranked by score; tick 8–10 same-pattern
+   figures for two-stage mode (2–3 for direct mode), filter by venue / year / tier / pattern.
+3. **Generate in two stages** — a vision model first distils your picks’ shared Layout /
+   Elements / Palette / Hierarchy and auto-selects 2–3 representative figures, then calls
+   **your own** OpenAI-compatible API to return an **editable SVG** or a **bitmap** draft.
 
 - 🔒 **Everything runs in your browser.** The CLIP text model and the gallery index are
   bundled and run client-side; your API key stays on your device and is sent only to the
@@ -121,8 +126,8 @@ FigureForge turns the gallery into a drafting tool, in three steps:
 **FigureForge 内测版** —— 让画廊从"找灵感"走到"出初稿"，三步完成：
 
 1. **描述你的论文**：粘贴摘要、上传 PDF（本地自动提取标题 / 摘要 / 方法章节），或直接写一句话。
-2. **勾选灵感参考**：**CLIP + BM25 混合检索**全量 3,516 张画廊图片，按相关度返回，勾选 1–3 张作为视觉蓝图，支持会议 / 年份 / 等级 / 模式筛选。
-3. **选择图型并生成**：总览 teaser、架构图、流程图、结果图或自定义目标；调用**你自己的** OpenAI 兼容 API，产出**可编辑 SVG** 或**位图**初稿，一键下载。
+2. **勾选灵感参考**：**CLIP + BM25 混合检索**全量 3,516 张画廊图片，按相关度评分降序返回；两阶段勾选 8–10 张同类型图（直接模式 2–3 张），支持会议 / 年份 / 等级 / 模式筛选。
+3. **两阶段生成**：视觉模型先归纳所选图的 Layout / Elements / Palette / Hierarchy 共性、自动挑 2–3 张代表图，再调用**你自己的** OpenAI 兼容 API，产出**可编辑 SVG** 或**位图**初稿，一键下载。
 
 - 🔒 **全流程在浏览器本地运行**：CLIP 模型与画廊索引均随仓库打包、本地推理；API Key 不经过任何第三方，只发往你选择的服务商。
 - 🔑 **只需填 Key**：预置火山方舟（Seedream / 豆包）、硅基流动、智谱、DeepSeek、OpenAI、Kimi（月之暗面）、通义千问 Qwen、腾讯混元、Anthropic Claude 及任意 OpenAI 兼容中转，共十家，服务商与模型均为下拉选择。
@@ -146,18 +151,28 @@ FigureForge turns the gallery into a drafting tool, in three steps:
 - 📦 纯静态页面（HTML/CSS/JS），无需联网、无需构建，`file://` 双击即可打开
 - 🔁 数据管线完全开源：会议索引 → PDF 下载 → Figure 1 裁剪 → 25+ 条规则打分 → dHash 去重 → 逐张人工复核
 
-## 🎓 怎么用这个画廊画你自己的主图
+## 🎓 怎么用 FigureForge 画你自己的主图
 
-1. **先写一句话故事**——输入 → 变换 → 输出，图上每个元素都要服务这句话。
-2. **按故事选阅读方向**：流程用从左到右，系统/框架用由中心向外，层级/全景用自上而下。
-3. **每个阶段只给一种视觉动词、一个强调色**：方框=模块，箭头=数据流，图标=数据类型；
-   背景保持克制，颜色只留给重点（你的贡献、新路径、输出）。
-4. **抄信息层级与留白，不抄画风**：用 `framework` / `pipeline` / `architecture` /
-   `conceptual` 筛选，看 8–12 张同类图如何对齐网格、分配字号、区分"已有部分"
-   （虚线/灰色）与"本文新增"（彩色/实心）。
-5. **按论文成图宽度检查可读性**：导出后缩到双栏论文里的实际宽度，看不清的标签放大、挪位或删掉。
-6. **一图一主旨**：如果希望审稿人只记住一个结论，图的视觉中心就必须直接说出它；
-   结果对比留给 Figure 2，不要塞进 teaser。
+不用再对着空白 PPT 硬想排版——打开 [FigureForge](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge)，五步让画廊里 3,516 张顶会图帮你出初稿：
+
+1. **输入论文内容**：粘贴标题 + 摘要（或直接「上传 PDF」自动提取），一句话讲清「输入 → 我们的方法 → 输出」。
+2. **选对 Pattern 模式**：多智能体 / 系统总览选 `framework`，端到端流程选 `pipeline`，模型内部结构选 `architecture`，概念隐喻选 `conceptual`。
+3. **勾选 8–10 张同类参考图**：检索结果按**相关度评分（卡片右上角分数）从高到低**排好，勾选同类型的 8–10 张（如都选 framework），分数越高越优先。
+
+   ![挑选参考图](forge/tutorial/02_pick_refs.png)
+
+4. **两阶段：先归纳、再生成**：视觉模型先读这 8–10 张图，从 **Layout 布局 / Elements 元素 / Palette 配色 / Hierarchy 层级** 四个维度归纳该类版式的共性，并自动挑出 2–3 张代表图，再据此生成——既满足多选，又不会让多张版式互相打架。
+
+   ![两阶段归纳](forge/tutorial/03_analyze.png)
+
+5. **选模式、填 API、出初稿**：
+   - **SVG 模式（推荐）**：文字 100% 准确，可直接在 Figma / draw.io / Illustrator 编辑；
+   - **位图模式**：版式地道、叙事完整，小字号英文请在 PPT / Figma 中核对。
+   - 粘贴**你自己的** API Key（仅保存在本机浏览器、不经过任何第三方），支持火山方舟 / 硅基流动 / 智谱 / DeepSeek / OpenAI / Kimi / 通义千问 / 腾讯混元 / Claude 及任意 OpenAI 兼容接口。
+
+> 💡 **和直接在通用对话框里写 prompt 有什么区别？** 同一个 prompt，通用文生图给的是「好看但通用」的流程图；FigureForge 用顶会图当**版式脚手架**，初稿天然带论文的面板网格、对比叙事与克制配色。客观对比见下图（位图定版式、SVG 保文字，不拉踩）：
+>
+> ![效果对比](forge/tutorial/compare.png)
 
 ## 📊 收录规模 / Coverage
 

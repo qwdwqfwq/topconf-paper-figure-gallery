@@ -1,14 +1,14 @@
 {
   "updated": "2026-09-25",
-  "dataVersion": "2026-09-25-1",
-  "note": "FigureForge 模型清单：页面每次打开自动拉取本文件（推荐名单），并实时调用服务商 /models（你的账号已开通模型）。新模型发布后更新本文件即可，用户无需任何操作。",
+  "dataVersion": "2026-09-25-3",
+  "note": "FigureForge 模型清单：页面每次打开自动拉取本文件（cache-bust，推荐名单），并尝试实时调用服务商 /models（你的账号已开通模型）。模型 ID 已按各服务商官方文档核实（2026-09）。注意：火山方舟 /models 查询端点未开放浏览器跨域（OPTIONS 404），方舟以本托管清单为准，新模型发布后更新本文件用户打开即见；生成端点（chat/images）浏览器可直连。Anthropic 无模型列表接口，混元 / Anthropic 官方接口不开放浏览器跨域，这两家请勾选中转并填入 OpenAI 兼容中转地址。",
   "providers": {
     "ark": {
       "label": "火山方舟 Ark", "base": "https://ark.cn-beijing.volces.com/api/v3",
       "proto": "oai", "cors": true,
-      "chat": ["doubao-seed-2-1-pro-260628", "doubao-seed-2-1-turbo-260628", "doubao-seed-evolving"],
-      "vision": ["doubao-seed-1-6-vision-250815", "doubao-1.5-vision-pro-250328"],
-      "image": ["doubao-seedream-5-0-pro-260628", "doubao-seedream-5-0-flash-260915", "doubao-seedream-5-0-260128"]
+      "chat": ["doubao-seed-2-1-pro-260628", "doubao-seed-2-1-turbo-260628"],
+      "vision": ["doubao-seed-2-1-pro-260628", "doubao-seed-2-1-turbo-260628"],
+      "image": ["doubao-seedream-5-0-pro-260628"]
     },
     "sf": {
       "label": "硅基流动 SiliconFlow", "base": "https://api.siliconflow.cn/v1",
@@ -20,28 +20,28 @@
     "glm": {
       "label": "智谱 GLM", "base": "https://open.bigmodel.cn/api/paas/v4",
       "proto": "oai", "cors": true,
-      "chat": ["glm-4.5", "glm-4.5-air", "glm-4-plus"],
-      "vision": ["glm-4v-plus", "glm-4v"],
-      "image": ["cogview-4", "cogview-3-plus"]
+      "chat": ["glm-5.3", "glm-4.6", "glm-4.5", "glm-4.5-air"],
+      "vision": ["glm-4.6v", "glm-4v-plus"],
+      "image": ["cogview-4", "cogview-3-flash"]
     },
     "ds": {
       "label": "DeepSeek", "base": "https://api.deepseek.com",
       "proto": "oai", "cors": true,
-      "chat": ["deepseek-v4-pro", "deepseek-flash", "deepseek-chat", "deepseek-reasoner"],
+      "chat": ["deepseek-v4-pro", "deepseek-flash"],
       "vision": [], "image": []
     },
     "oai": {
       "label": "OpenAI", "base": "https://api.openai.com/v1",
       "proto": "oai", "cors": true,
-      "chat": ["gpt-5", "gpt-5-mini", "gpt-4.1", "gpt-4o"],
+      "chat": ["gpt-5", "gpt-4.1", "gpt-4o"],
       "vision": ["gpt-5", "gpt-4o"],
       "image": ["gpt-image-1", "dall-e-3"]
     },
     "kimi": {
       "label": "Kimi 月之暗面", "base": "https://api.moonshot.cn/v1",
       "proto": "oai", "cors": true,
-      "chat": ["kimi-k3", "kimi-k2.6", "kimi-k2.5"],
-      "vision": ["kimi-k2.6", "kimi-k2.5"],
+      "chat": ["kimi-k3", "kimi-k2.6", "kimi-k2.7-code"],
+      "vision": ["kimi-k3", "kimi-k2.6"],
       "image": []
     },
     "qwen": {
@@ -49,20 +49,20 @@
       "proto": "oai", "cors": true,
       "chat": ["qwen-max", "qwen-plus", "qwen-turbo", "qwen3-235b-a22b"],
       "vision": ["qwen-vl-max", "qwen-vl-plus"],
-      "image": ["qwen-image", "wanx2.1-t2i-turbo"]
+      "image": ["qwen-image-3.0-pro", "qwen-image-3.0", "qwen-image-2.0-pro"]
     },
     "hy": {
       "label": "腾讯混元 Hunyuan", "base": "https://api.hunyuan.cloud.tencent.com/v1",
       "proto": "oai", "cors": false,
-      "chat": ["hunyuan-turbos-latest", "hunyuan-large", "hunyuan-standard"],
+      "chat": ["hunyuan-turbos-latest", "hunyuan-turbo", "hunyuan-pro", "hunyuan-standard"],
       "vision": ["hunyuan-vision"],
-      "image": ["hy-image-v3.5-preview", "hy-image-v3"]
+      "image": ["hy-image-v3", "hy-image-v3.5-preview"]
     },
     "claude": {
       "label": "Anthropic Claude", "base": "https://api.anthropic.com",
       "proto": "anthropic", "cors": false,
-      "chat": ["claude-opus-5-5", "claude-sonnet-5", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
-      "vision": ["claude-opus-5-5", "claude-sonnet-5", "claude-opus-4-6", "claude-sonnet-4-6", "claude-haiku-4-5-20251001"],
+      "chat": ["claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
+      "vision": ["claude-opus-5-5", "claude-fable-5-1", "claude-sonnet-5", "claude-haiku-4-5-20251001"],
       "image": []
     },
     "custom": {
