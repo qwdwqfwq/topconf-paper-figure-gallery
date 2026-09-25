@@ -609,13 +609,25 @@ function fileToDataURI(blob){
     fr.readAsDataURL(blob);
   });
 }
+async function blobToShrunkURI(blob, maxSide=1280){
+  if(blob.type==='image/gif' || blob.type==='image/svg+xml') return fileToDataURI(blob);
+  try{
+    const bmp = await createImageBitmap(blob);
+    const s = Math.min(1, maxSide/Math.max(bmp.width,bmp.height));
+    const w=Math.max(1,Math.round(bmp.width*s)), h=Math.max(1,Math.round(bmp.height*s));
+    const cv=document.createElement('canvas'); cv.width=w; cv.height=h;
+    cv.getContext('2d').drawImage(bmp,0,0,w,h);
+    bmp.close && bmp.close();
+    return cv.toDataURL('image/jpeg',0.82);
+  }catch(e){ return fileToDataURI(blob); }
+}
 async function refDataURIs(refIds){
   const out = [];
   for(const id of (refIds||[...refs])){
     const f = data.figs.find(x=>x.id===id);
     const r = await fetch('../'+f.image);
     if(!r.ok) throw new Error('读取参考图失败：'+f.image);
-    out.push(await fileToDataURI(await r.blob()));
+    out.push(await blobToShrunkURI(await r.blob()));
   }
   return out;
 }
@@ -777,7 +789,11 @@ async function analyzeReferences(){
     if($('#provider').value==='ark') body.thinking={type:'disabled'};
     let r;
     try{ r=await postJSON(baseURL(),'/chat/completions',body,cleanKey($('#key').value)); }
-    catch(e){ throw new Error(e.name==='TimeoutError'?'归纳超时（已等待 90 秒），请稍后重试或换用更快的视觉模型。':'无法连接归纳模型（CORS/网络）。可勾选中转，或确认已开通视觉理解模型。'); }
+    catch(e){
+      if(e.name==='TimeoutError') throw new Error('归纳超时（已等待 90 秒），请稍后重试或换用更快的视觉模型。');
+      const diag=await diagnoseConnection(baseURL(),cleanKey($('#key').value),am);
+      throw new Error(diag || '归纳请求被网络或浏览器拦截，可重试，或勾选“使用中转”填入中转地址。');
+    }
     txt=await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
     const d=JSON.parse(txt); txt=d.choices?.[0]?.message?.content||'';
   }
@@ -855,6 +871,25 @@ function postJSON(base, path, body, key, extraHeaders, timeoutMs=90000){
     headers:{'Content-Type':'application/json',Authorization:'Bearer '+key,...extraHeaders},
     body:JSON.stringify(body),signal:ac.signal}).finally(()=>clearTimeout(to));
 }
+/* When a POST fails at network level, find out WHY (some providers omit CORS
+   headers on error responses, so the real 401/404 is invisible to the page). */
+async function diagnoseConnection(base, key, modelId){
+  try{
+    const r = await fetch(base+'/models',{headers:{Authorization:'Bearer '+key}});
+    if(!r.ok){
+      if(r.status===401) return 'API Key 无效或已过期，请重新到模型服务商控制台复制 Key 后粘贴。';
+      if(r.status===403) return '服务器拒绝了该 Key（HTTP 403），请确认 Key 权限与账号状态。';
+      return '服务器拒绝了该 Key（HTTP '+r.status+'）。';
+    }
+    let list=[];
+    try{ const d=await r.json(); list=(d.data||d.models||[]).map(x=>x.id||x.model||x.name); }catch{}
+    if(modelId && list.length && !list.includes(modelId))
+      return '你的账号未开通模型「'+modelId+'」。请在下拉框“你的账号已开通”分组里选择，或到服务商控制台开通该模型。';
+    return '';
+  }catch(e){
+    return '无法连接模型服务器，且浏览器读不到服务器的错误详情（常见原因：Key 错误或过期、账号欠费、网络/代理拦截）。请重新复制 Key、确认账号有余额后再试。';
+  }
+}
 
 /* ---------------- generation ---------------- */
 function setStep(n,state){
@@ -925,7 +960,11 @@ async function genOaiSVG(base,model,key,content,p,refIds,layoutGuide){
   }
   let r;
   try{ r = await postJSON(base,'/chat/completions',body,key); }
-  catch(e){ throw new Error(e.name==='TimeoutError'?'生成超时（已等待 90 秒），模型可能繁忙，请稍后重试或换更快的模型。':'无法连接该服务商（CORS 或网络被拦截）。可勾选“使用中转”填入中转地址，或换用其他服务商。'); }
+  catch(e){
+    if(e.name==='TimeoutError') throw new Error('生成超时（已等待 90 秒），模型可能繁忙，请稍后重试或换更快的模型。');
+    const diag=await diagnoseConnection(base,key,model);
+    throw new Error(diag || '请求被网络或浏览器拦截，可重试，或勾选“使用中转”填入中转地址。');
+  }
   let txt = await r.text();
   if(!r.ok && usedVision){
     body.messages=[{role:'system',content:SVG_SYS},{role:'user',content:prompt}]; usedVision=false;
@@ -1016,7 +1055,11 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   }
   let r;
   try{ r = await postJSON(base,'/images/generations',body,key,undefined,150000); }
-  catch(e){ throw new Error(e.name==='TimeoutError'?'生成超时（已等待约 150 秒），模型可能繁忙，请稍后重试；也可换更快的模型（如硅基流动 FLUX schnell）。':'无法连接该服务商（CORS 或网络被拦截）。可勾选中转，或换用火山方舟 / 硅基流动。'); }
+  catch(e){
+    if(e.name==='TimeoutError') throw new Error('生成超时（已等待约 150 秒），模型可能繁忙，请稍后重试；也可换更快的模型（如硅基流动 FLUX schnell）。');
+    const diag=await diagnoseConnection(base,key,model);
+    throw new Error(diag || '请求被网络或浏览器拦截，可重试，或勾选“使用中转”填入中转地址。');
+  }
   let txt = await r.text();
   if(!r.ok && usedRefs){
     delete body.image; usedRefs=false;
