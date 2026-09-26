@@ -60,6 +60,18 @@ FigureForge turns the gallery into a drafting tool: describe your paper, and 3,5
   <img src="forge/demo-forge.gif" alt="FigureForge walkthrough: describe paper, retrieve references, generate bitmap draft" width="560">
 </p>
 
+#### 🎬 Demo video / 演示视频
+
+Watch the complete FigureForge workflow, from entering a paper description to retrieving references and generating a draft. / 查看从输入论文内容、检索参考图到生成初稿的完整流程：
+
+<p align="center">
+  <video controls preload="metadata" width="760" src="assets/figureforge-demo.mp4">
+    <a href="assets/figureforge-demo.mp4">▶️ Open the demo video / 打开演示视频</a>
+  </video>
+</p>
+
+If your GitHub client does not show the embedded player, use the direct link: [▶️ Open the FigureForge demo video / 打开 FigureForge 演示视频](assets/figureforge-demo.mp4).
+
 1. **Describe your paper** — paste the title + abstract, upload the PDF (title / abstract / method are extracted locally), or just type one sentence; state the “input → our method → output” story. Pre-filter by venue / year / tier / pattern before retrieving.
 2. **Pick the right pattern** — `framework` for multi-agent / system overviews, `pipeline` for end-to-end flows, `architecture` for internal model structure, `conceptual` for visual metaphors (plus `teaser` and `taxonomy`).
 3. **Tick reference figures** — a hybrid **CLIP + BM25** search ranks all 3,516 figures by a relevance score (top-right of each card); tick **8–10 same-pattern cards** for two-stage mode (higher scores first), or just **2–3** for direct mode.
