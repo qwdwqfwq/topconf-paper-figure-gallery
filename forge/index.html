@@ -168,7 +168,7 @@
     <div class="pill">浏览器本地运行 · 论文内容不离开你的设备</div>
   </header>
 
-  <div id="bootBanner"><span class="spin big" style="padding:0"></span><span id="bootText">正在加载检索索引与本地 CLIP 模型（首次约需下载数十 MB）…</span></div>
+  <div id="bootBanner"><span class="spin big" style="padding:0"></span><span id="bootText">正在加载检索索引与本地 CLIP 模型（首次下载，之后优先使用本机缓存）…</span></div>
 
   <div class="card" id="card1">
     <div class="step"><span class="num">1</span>输入论文内容</div>
@@ -342,6 +342,14 @@ let refs = new Set(), results = [], mode = 'svg';
 let passMode = 'two'; const MAX_REFS = 10; let analysis = null;
 let data = { ids:[], figs:[], bm:null, IE:null, TE:null, N:0 };
 let clip = { tokenizer:null, model:null };
+let bootPromise = null;
+const CLIP_CACHE_HINT = 'figureforge.clip.cache.v1';
+function hasClipCacheHint(){
+  try { return localStorage.getItem(CLIP_CACHE_HINT) === 'ready'; } catch { return false; }
+}
+function markClipCacheReady(){
+  try { localStorage.setItem(CLIP_CACHE_HINT, 'ready'); } catch { /* private mode or blocked storage */ }
+}
 let MAN = null;
 
 const SKIP = /(embed|rerank|tts|speech|asx|transcri|whisper|ocr)/i;
@@ -376,6 +384,9 @@ function loadBin(name){
             .then(b=>new Float32Array(b));
 }
 async function boot(){
+  if(clip.model && clip.tokenizer) return;
+  if(bootPromise) return bootPromise;
+  bootPromise = (async()=>{
   window.__t = window.__t||[]; const L = m => window.__t.push(Math.round(performance.now())+' '+m);
   const bt = $('#bootText');
   try{
@@ -390,22 +401,30 @@ async function boot(){
     ]);
     L('data done');
     data = { ids, figs, bm, IE, TE, N: ids.length };
-    bt.textContent = '正在加载本地 CLIP（① tokenizer）…';
+    const cached = hasClipCacheHint();
+    bt.textContent = cached ? '正在从本机缓存恢复本地 CLIP（① tokenizer）…' : '正在加载本地 CLIP（首次下载，① tokenizer）…';
     T.env.allowLocalModels = true;
     T.env.allowRemoteModels = false;
+    // Transformers.js stores model responses in the browser Cache API. This
+    // keeps the local model on this origin after a reload; only the in-memory
+    // ONNX session has to be recreated for a new page.
+    T.env.useBrowserCache = true;
     T.env.localModelPath = new URL('./models/', import.meta.url).href;
     T.env.backends.onnx.wasm.wasmPaths = new URL('vendor/', document.baseURI).href;
     const MP = 'clip-vit-base-patch32';
     clip.tokenizer = await T.AutoTokenizer.from_pretrained(MP);
     L('tokenizer done');
-    bt.textContent = '正在加载本地 CLIP（② 模型本体约 63 MB）…';
+    bt.textContent = cached ? '正在从本机缓存恢复本地 CLIP（② 初始化模型）…' : '正在加载本地 CLIP（首次下载，② 模型本体约 63 MB）…';
     clip.model = await T.CLIPTextModelWithProjection.from_pretrained(MP, {dtype:'q8'});
     L('model done');
+    markClipCacheReady();
     $('#bootBanner').hidden = true;
   }catch(e){
     L('ERR '+e.message);
     bt.innerHTML = '<span style="color:#991b1b">初始化失败：'+esc(e.message)+'。刷新页面重试；若反复失败请检查网络。</span>';
   }
+  })();
+  try { await bootPromise; } finally { bootPromise = null; }
 }
 async function queryVec(q){
   if(!clip.model) await boot();
