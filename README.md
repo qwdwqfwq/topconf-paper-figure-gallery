@@ -55,6 +55,10 @@ back to its source paper and records venue, year, authors and a visual-pattern t
 
 FigureForge turns the gallery into a drafting tool: describe your paper, and 3,516 top-conference figures serve as the layout scaffold for your own Figure 1 — no sign-up, no server, everything runs in your browser. **[Try FigureForge →](forge/index.html)**
 
+<p align="center">
+  <img src="forge/demo-forge.gif" alt="FigureForge walkthrough: describe paper, retrieve references, generate bitmap draft" width="560">
+</p>
+
 1. **Describe your paper** — paste the title + abstract, upload the PDF (title / abstract / method are extracted locally), or just type one sentence; state the “input → our method → output” story. Pre-filter by venue / year / tier / pattern before retrieving.
 2. **Pick the right pattern** — `framework` for multi-agent / system overviews, `pipeline` for end-to-end flows, `architecture` for internal model structure, `conceptual` for visual metaphors (plus `teaser` and `taxonomy`).
 3. **Tick reference figures** — a hybrid **CLIP + BM25** search ranks all 3,516 figures by a relevance score (top-right of each card); tick **8–10 same-pattern cards** for two-stage mode (higher scores first), or just **2–3** for direct mode.
@@ -107,6 +111,10 @@ Image files remain attributed to their authors and publishers; see
 ## 🛠️ FigureForge Beta：从「找灵感」到「出初稿」
 
 FigureForge 让画廊从「找灵感」走到「出初稿」：描述你的论文，3,516 张顶会主图就会成为你 Figure 1 的版式灵感来源——纯开源、免注册、无服务器，全部在浏览器本地运行。**[立即试用 FigureForge →](forge/index.html)**
+
+<p align="center">
+  <img src="forge/demo-forge.gif" alt="FigureForge 流程演示：输入论文、检索参考图、生成位图初稿" width="560">
+</p>
 
 1. **输入论文内容**：粘贴标题 + 摘要、上传 PDF（本地自动提取标题 / 摘要 / 方法章节），或直接写一句话，讲清「输入 → 我们的方法 → 输出」；检索前可先按会议 / 年份 / 等级 / 模式筛选。
 2. **选对 Pattern 模式**：多智能体 / 系统总览选 `framework`，端到端流程选 `pipeline`，模型内部结构选 `architecture`，概念隐喻选 `conceptual`（另有 `teaser` 和 `taxonomy`）。
