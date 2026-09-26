@@ -89,6 +89,16 @@
   .tabs{display:inline-flex;background:#f3f4f6;border-radius:10px;padding:3px;gap:2px}
   .tabs button{padding:7px 15px;font-size:13px;font-weight:650;color:#4b5563;background:transparent}
   .tabs button.on{background:#fff;color:var(--indigo);box-shadow:0 1px 3px rgba(0,0,0,.1)}
+  .mode-row{display:flex;align-items:flex-start;gap:14px}
+  .bitmap-matrix{flex:1;min-width:380px;max-height:196px;overflow:auto;border:1px solid #dbe4ff;border-radius:10px;background:#fff}
+  .bitmap-matrix-title{padding:7px 10px;background:#eef2ff;color:#3730a3;font-size:11.5px;font-weight:800;position:sticky;top:0;z-index:1}
+  .bitmap-matrix table{width:100%;border-collapse:collapse;font-size:11px;line-height:1.35}
+  .bitmap-matrix th,.bitmap-matrix td{padding:5px 8px;text-align:left;vertical-align:top;border-top:1px solid #eef2f7}
+  .bitmap-matrix th{color:#6b7280;font-weight:700;white-space:nowrap}
+  .bitmap-matrix td:first-child{font-weight:700;white-space:nowrap;color:#374151}
+  .bitmap-matrix code{font-size:10.5px;color:#4338ca;word-break:break-word}
+  .bitmap-matrix .none{color:#9ca3af}
+  @media(max-width:900px){.mode-row{flex-direction:column}.bitmap-matrix{width:100%;min-width:0;max-height:240px}}
   #out{margin-top:14px;border:1px solid var(--line);border-radius:12px;padding:14px;min-height:80px;
        background:#fcfcfd;display:none}
   #out iframe{width:100%;min-height:560px;border:0;border-radius:8px;background:#fff}
@@ -257,11 +267,12 @@
     <details class="settings" id="settingsBox" open>
       <summary>模型 / API 设置（选服务商、粘贴 Key；模型每次打开自动实时更新，信息仅保存在本浏览器）</summary>
 
-      <div class="srow">
+      <div class="srow mode-row">
         <div class="tabs" id="modeTabs">
           <button data-mode="svg" class="on">SVG 可编辑初稿（推荐，文字准确）</button>
           <button data-mode="image">AI 位图初稿（需要图像模型）</button>
         </div>
+        <div class="bitmap-matrix" id="bitmapMatrix" hidden></div>
       </div>
       <div class="hint" id="modeHint" style="margin-top:-4px;margin-bottom:12px">
         SVG 模式使用对话/视觉模型生成可编辑矢量图；AI 位图模式只使用专门的图像生成模型。请先确认你购买的 API 是否包含图像模型。
@@ -684,6 +695,17 @@ function option(s){
 function disabledOption(text){
   const o=option(text); o.disabled=true; o.value=''; return o;
 }
+function renderBitmapMatrix(){
+  const box=$('#bitmapMatrix');
+  if(!box || !MAN?.providers) return;
+  const rows=Object.entries(MAN.providers)
+    .filter(([k])=>k!=='custom')
+    .map(([k,c])=>{
+      const models=(c.image||[]).map(m=>`<code>${esc(m)}</code>`).join('、');
+      return `<tr><td>${esc(c.label||k)}</td><td class="${models?'':'none'}">${models||'暂无位图模型'}</td></tr>`;
+    }).join('');
+  box.innerHTML=`<div class="bitmap-matrix-title">位图模型速查（图像模型才能生成位图）</div><table><thead><tr><th>服务商</th><th>位图模型</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
 // Keep the API identifier in option.value, but expose the provider's human
 // model name in the picker. DeepSeek's current API deliberately uses the
 // stable identifier `deepseek-flash`; the service routes it to V4.1-Flash.
@@ -771,6 +793,7 @@ $('#refreshModels').onclick = populateModels;
 document.querySelectorAll('#modeTabs button').forEach(b=>b.onclick=async ()=>{
   document.querySelectorAll('#modeTabs button').forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); mode=b.dataset.mode;
+  $('#bitmapMatrix').hidden = mode!=='image';
   $('#modelLabel').textContent = mode==='svg' ? '模型（对话 / 视觉模型）' : '模型（图像模型）';
   $('#modeHint').textContent = mode==='svg'
     ? 'SVG 模式使用对话/视觉模型生成可编辑矢量图，文字更准确；AI 位图模式只使用专门的图像生成模型。请先确认你购买的 API 类型。'
@@ -1180,6 +1203,7 @@ $('#searchBtn').onclick = async ()=>{
 /* ---------------- go ---------------- */
 await boot();
 initProviders();
+renderBitmapMatrix();
 populateModels();
 $('#manifestHint').textContent = '模型清单更新于 '+MAN.updated+'：每次打开自动检查清单更新；填入 Key 后实时拉取账号已开通模型，新模型发布即自动出现，无需更新页面。';
 </script>
