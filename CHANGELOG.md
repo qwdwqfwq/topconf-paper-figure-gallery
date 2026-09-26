@@ -6,6 +6,11 @@
 
 > 公开版本对照（public edition）：v0.3 = 画廊第一版（v1，六会议 2,298 张，2026-09-20 首发）；v0.4 = 画廊第二版（v2，新增等级角标，2,730 张）；v0.5 = 画廊第三版（v3，收录 2026 年已公开会议，3,528 张）；v0.6 = 画廊第四版（v4，FigureForge 纯静态化并去重，3,516 张）。宣发中提到的 "v4" 即指本次发布。
 
+
+- **社区贡献（[@timelic](https://github.com/timelic)，[#2](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/pull/2)）**：采纳灯箱共享元素过渡动画；卡片图片 / 标题 / 等级角标通过 View Transitions API 平滑进入灯箱，灯箱翻页使用滑入滑出效果，并为不支持该 API 的浏览器和“减少动态效果”设置保留兼容回退。
+- **社区贡献（[@timelic](https://github.com/timelic)，[#3](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/pull/3)）**：继续打磨灯箱过渡；作者名单、查看图片 / 论文链接、等级角标、卡片圆角和分隔符在单行 / 换行布局与窗口缩放时保持连续过渡。
+- **贡献记录补记**：上述两项 PR 已分别于 2026-09-22 和 2026-09-23 合并。此前版本整合 2026 proceedings 时遗漏了对应 changelog 条目，现补回以保留贡献者署名和完整变更记录（见 [issue #4](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/issues/4)）。
+
 - **FigureForge 纯静态化**：画图工具从内测服务端版改为纯静态页面，全部在浏览器本地运行（CLIP 文本模型随仓库打包、本地推理），无后端、双击即开，可直接托管在 GitHub Pages。
 - **两阶段生成（核心）**：参考图勾选上限由 3 提升到 10，默认勾选 8–10 张同类型图。Pass 1 视觉模型（关闭深度思考，约 20 秒）通读全部参考图，从 Layout / Elements / Palette / Hierarchy 四维度归纳版式共性、自动挑 2–3 张代表图并产出 refinedPrompt；Pass 2 再用归纳结果 + 代表图生成——多选也不会让版式互相打架。直接模式可精选 2–3 张、跳过归纳。
 - **参考图真正作为图像输入**：SVG 路径把参考图以多模态消息（base64 图像）发送给视觉模型；位图路径对火山方舟 Seedream 使用多图参考参数（5.0 Pro 最多 10 张，硅基流动单图参考，失败自动降级为无参考 / 纯文本）。模型不支持视觉时自动降级为参考图文字标签注入。
