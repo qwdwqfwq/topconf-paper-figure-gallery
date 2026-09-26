@@ -1,5 +1,5 @@
 {
-  "updated": "2026-09-26",
+  "updated": "2026-09-27",
   "dataVersion": "2026-09-25-3",
   "note": "FigureForge 模型清单：页面每次打开自动拉取本文件（cache-bust，推荐名单），并尝试实时调用服务商 /models（你的账号已开通模型）。模型 ID 已按各服务商官方文档核实（2026-09）。注意：火山方舟 /models 查询端点未开放浏览器跨域（OPTIONS 404），方舟以本托管清单为准，新模型发布后更新本文件用户打开即见；生成端点（chat/images）浏览器可直连。Anthropic 无模型列表接口，混元 / Anthropic 官方接口不开放浏览器跨域，这两家请勾选中转并填入 OpenAI 兼容中转地址。",
   "providers": {
@@ -28,7 +28,7 @@
       "label": "DeepSeek", "base": "https://api.deepseek.com",
       "proto": "oai", "cors": true,
       "chat": ["deepseek-v4-pro", "deepseek-flash"],
-      "vision": [], "image": []
+      "vision": ["deepseek-flash"], "image": []
     },
     "oai": {
       "label": "OpenAI", "base": "https://api.openai.com/v1",

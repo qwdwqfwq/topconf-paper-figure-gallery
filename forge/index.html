@@ -361,7 +361,7 @@ const TARGETS = {
 };
 
 /* FALLBACK：manifest 拉取失败（离线）时使用，与 forge/data/manifest.json 同口径 */
-const FALLBACK = {"updated":"2026-09-25","providers":{"ark":{"label":"火山方舟 Ark","base":"https://ark.cn-beijing.volces.com/api/v3","proto":"oai","cors":true,"chat":["doubao-seed-2-1-pro-260915","doubao-seed-2-1-lite-260915","doubao-seed-2-1-pro-260628","doubao-seed-2-1-turbo-260628","doubao-seed-evolving","doubao-seed-2-0-pro-260215","doubao-seed-2-0-lite-260428","doubao-seed-2-0-mini-260428","doubao-seed-character-260628"],"vision":["doubao-seed-2-1-pro-260915","doubao-seed-2-1-lite-260915","doubao-seed-2-1-pro-260628","doubao-seed-2-1-turbo-260628","doubao-seed-evolving","doubao-seed-2-0-pro-260215","doubao-seed-2-0-lite-260428"],"image":["doubao-seedream-5-0-pro-260628","doubao-seedream-5-0-flash-260915","doubao-seedream-5-0-260128","doubao-seedream-4-5-251128","doubao-seedream-4-0-250828"]},"sf":{"label":"硅基流动 SiliconFlow","base":"https://api.siliconflow.cn/v1","proto":"oai","cors":true,"chat":["deepseek-ai/DeepSeek-V3","Qwen/Qwen3-235B-A22B"],"vision":["Qwen/Qwen2.5-VL-72B-Instruct"],"image":["black-forest-labs/FLUX.1-schnell","Kwai-Kolors/Kolors"]},"glm":{"label":"智谱 GLM","base":"https://open.bigmodel.cn/api/paas/v4","proto":"oai","cors":true,"chat":["glm-4.5","glm-4.5-air"],"vision":["glm-4v-plus"],"image":["cogview-4"]},"ds":{"label":"DeepSeek","base":"https://api.deepseek.com","proto":"oai","cors":true,"chat":["deepseek-v4-pro","deepseek-flash"],"vision":[],"image":[]},"oai":{"label":"OpenAI","base":"https://api.openai.com/v1","proto":"oai","cors":true,"chat":["gpt-5","gpt-4.1"],"vision":["gpt-5"],"image":["gpt-image-1"]},"kimi":{"label":"Kimi 月之暗面","base":"https://api.moonshot.cn/v1","proto":"oai","cors":true,"chat":["kimi-k3","kimi-k2.6"],"vision":["kimi-k2.6"],"image":[]},"qwen":{"label":"通义千问 Qwen","base":"https://dashscope.aliyuncs.com/compatible-mode/v1","proto":"oai","cors":true,"chat":["qwen-max","qwen-plus"],"vision":["qwen-vl-max"],"image":["qwen-image"]},"hy":{"label":"腾讯混元 Hunyuan","base":"https://api.hunyuan.cloud.tencent.com/v1","proto":"oai","cors":false,"chat":["hunyuan-turbos-latest"],"vision":["hunyuan-vision"],"image":["hy-image-v3.5-preview"]},"claude":{"label":"Anthropic Claude","base":"https://api.anthropic.com","proto":"anthropic","cors":false,"chat":["claude-opus-5-5","claude-sonnet-5","claude-sonnet-4-6"],"vision":["claude-opus-5-5","claude-sonnet-5"],"image":[]},"custom":{"label":"自定义 OpenAI 兼容","base":"","proto":"oai","cors":true,"chat":[],"vision":[],"image":[]}}};
+const FALLBACK = {"updated":"2026-09-27","providers":{"ark":{"label":"火山方舟 Ark","base":"https://ark.cn-beijing.volces.com/api/v3","proto":"oai","cors":true,"chat":["doubao-seed-2-1-pro-260915","doubao-seed-2-1-lite-260915","doubao-seed-2-1-pro-260628","doubao-seed-2-1-turbo-260628","doubao-seed-evolving","doubao-seed-2-0-pro-260215","doubao-seed-2-0-lite-260428","doubao-seed-2-0-mini-260428","doubao-seed-character-260628"],"vision":["doubao-seed-2-1-pro-260915","doubao-seed-2-1-lite-260915","doubao-seed-2-1-pro-260628","doubao-seed-2-1-turbo-260628","doubao-seed-evolving","doubao-seed-2-0-pro-260215","doubao-seed-2-0-lite-260428"],"image":["doubao-seedream-5-0-pro-260628","doubao-seedream-5-0-flash-260915","doubao-seedream-5-0-260128","doubao-seedream-4-5-251128","doubao-seedream-4-0-250828"]},"sf":{"label":"硅基流动 SiliconFlow","base":"https://api.siliconflow.cn/v1","proto":"oai","cors":true,"chat":["deepseek-ai/DeepSeek-V3","Qwen/Qwen3-235B-A22B"],"vision":["Qwen/Qwen2.5-VL-72B-Instruct"],"image":["black-forest-labs/FLUX.1-schnell","Kwai-Kolors/Kolors"]},"glm":{"label":"智谱 GLM","base":"https://open.bigmodel.cn/api/paas/v4","proto":"oai","cors":true,"chat":["glm-4.5","glm-4.5-air"],"vision":["glm-4v-plus"],"image":["cogview-4"]},"ds":{"label":"DeepSeek","base":"https://api.deepseek.com","proto":"oai","cors":true,"chat":["deepseek-v4-pro","deepseek-flash"],"vision":["deepseek-flash"],"image":[]},"oai":{"label":"OpenAI","base":"https://api.openai.com/v1","proto":"oai","cors":true,"chat":["gpt-5","gpt-4.1"],"vision":["gpt-5"],"image":["gpt-image-1"]},"kimi":{"label":"Kimi 月之暗面","base":"https://api.moonshot.cn/v1","proto":"oai","cors":true,"chat":["kimi-k3","kimi-k2.6"],"vision":["kimi-k2.6"],"image":[]},"qwen":{"label":"通义千问 Qwen","base":"https://dashscope.aliyuncs.com/compatible-mode/v1","proto":"oai","cors":true,"chat":["qwen-max","qwen-plus"],"vision":["qwen-vl-max"],"image":["qwen-image"]},"hy":{"label":"腾讯混元 Hunyuan","base":"https://api.hunyuan.cloud.tencent.com/v1","proto":"oai","cors":false,"chat":["hunyuan-turbos-latest"],"vision":["hunyuan-vision"],"image":["hy-image-v3.5-preview"]},"claude":{"label":"Anthropic Claude","base":"https://api.anthropic.com","proto":"anthropic","cors":false,"chat":["claude-opus-5-5","claude-sonnet-5","claude-sonnet-4-6"],"vision":["claude-opus-5-5","claude-sonnet-5"],"image":[]},"custom":{"label":"自定义 OpenAI 兼容","base":"","proto":"oai","cors":true,"chat":[],"vision":[],"image":[]}}};
 
 /* ---------------- boot: manifest + data + local CLIP ---------------- */
 async function loadManifest(){
@@ -657,7 +657,15 @@ function optgroup(label){
   const g=document.createElement('optgroup'); g.label=label; return g;
 }
 function option(s){
-  const o=document.createElement('option'); o.value=s; o.textContent=s; return o;
+  const o=document.createElement('option'); o.value=s; o.textContent=modelDisplayName(s); return o;
+}
+// Keep the API identifier in option.value, but expose the provider's human
+// model name in the picker. DeepSeek's current API deliberately uses the
+// stable identifier `deepseek-flash`; the service routes it to V4.1-Flash.
+function modelDisplayName(id){
+  if($('#provider')?.value==='ds' && id==='deepseek-flash') return 'deepseek-flash（DeepSeek-V4.1-Flash）';
+  if($('#provider')?.value==='ds' && id==='deepseek-v4-pro') return 'deepseek-v4-pro（DeepSeek-V4-Pro）';
+  return id;
 }
 async function populateModels(){
   const p = $('#provider').value, c = cfg();
@@ -788,7 +796,7 @@ async function analyzeReferences(){
     const parts=uris.map(u=>({type:'image_url',image_url:{url:u}}));
     parts.push({type:'text',text:buildAnalyzePrompt(ordered.length)});
     const body={model:am,temperature:0.2,messages:[{role:'system',content:ANALYZE_SYS},{role:'user',content:parts}]};
-    if($('#provider').value==='ark') body.thinking={type:'disabled'};
+    if(['ark','ds'].includes($('#provider').value)) body.thinking={type:'disabled'};
     let r;
     try{ r=await postJSON(baseURL(),'/chat/completions',body,cleanKey($('#key').value)); }
     catch(e){
@@ -894,7 +902,7 @@ async function diagnoseConnection(base, key, modelId, kind='chat'){
   if(kind==='chat' && modelId){
     try{
       const probe={model:modelId,max_tokens:1,messages:[{role:'user',content:'hi'}]};
-      if($('#provider').value==='ark') probe.thinking={type:'disabled'};
+      if(['ark','ds'].includes($('#provider').value)) probe.thinking={type:'disabled'};
       const r=await postJSON(base,'/chat/completions',probe,key);
       if(r.ok) return '';  // key + model fine; original failure was payload/transient
       let txt=''; try{ txt=await r.text(); }catch{}
@@ -964,9 +972,9 @@ $('#genBtn').onclick = async ()=>{
 async function genOaiSVG(base,model,key,content,p,refIds,layoutGuide){
   const useIds = refIds||[...refs];
   const prompt = buildPrompt(content,layoutGuide,useIds);
-  let body = {model,temperature:0.3,max_tokens:8192}, usedVision=false;
-  if(p==='ark') body.thinking={type:'disabled'};
-  if(useIds.length && p!=='ds'){
+  let body = {model,temperature:0.3,max_tokens:p==='ds'?16384:8192}, usedVision=false;
+  if(p==='ark'||p==='ds') body.thinking={type:'disabled'};
+  if(useIds.length){
     const uris = await refDataURIs(useIds);
     const parts = uris.map(u=>({type:'image_url',image_url:{url:u}}));
     parts.push({type:'text',text:prompt});
@@ -989,15 +997,43 @@ async function genOaiSVG(base,model,key,content,p,refIds,layoutGuide){
   }
   if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
   const d = JSON.parse(txt);
-  let svg = d.choices?.[0]?.message?.content||'';
-  let code = (svg.match(/<svg[\s\S]*?<\/svg>/)||[])[0] || '';
-  let truncated=false;
-  if(!code){
-    const s2 = svg.match(/<svg[\s\S]*$/);
-    if(s2){ code = s2[0].replace(/```[\s\S]*$/,'').trim()+'</svg>'; truncated=true; }
+  const message = d.choices?.[0]?.message || {};
+  // Some OpenAI-compatible gateways return content as an array, and DeepSeek
+  // may wrap a long answer in a markdown fence or a JSON string. Normalize all
+  // of those forms before checking for SVG instead of requiring a single exact
+  // response shape.
+  const raw = [message.content, message.output_text, d.output_text, message.reasoning_content]
+    .filter(x=>x!==undefined && x!==null).map(x=>Array.isArray(x)
+      ? x.map(part=>typeof part==='string'?part:(part?.text||part?.content||'')).join('')
+      : String(x)).join('\n');
+  const parsed = extractSVG(raw);
+  if(!parsed.code){
+    const finish = d.choices?.[0]?.finish_reason || 'unknown';
+    throw new Error('模型已返回文本，但没有检测到完整 SVG（finish_reason='+finish+'）。请重试；若仍失败，请关闭思考模式或减少参考图数量。');
   }
-  if(!code) throw new Error('模型没有返回可用的 SVG，可重试一次或换用更强的模型。');
+  const {code, truncated} = parsed;
   renderSVG(code, usedVision, useIds, truncated);
+}
+
+function extractSVG(raw){
+  let text=(raw||'').replace(/^\uFEFF/,'').replace(/<think>[\s\S]*?<\/think>/gi,'').trim();
+  // Models occasionally JSON-escape the markup or put it in a `svg` field.
+  for(let i=0;i<2;i++){
+    try{
+      const j=JSON.parse(text);
+      const candidate = typeof j==='string' ? j : (j.svg||j.code||j.content||j.output||'');
+      if(candidate && candidate!==text){ text=Array.isArray(candidate)?candidate.join(''):String(candidate); continue; }
+    }catch{}
+    break;
+  }
+  const complete=text.match(/<svg\b[\s\S]*?<\/svg>/i);
+  if(complete) return {code:complete[0].trim(),truncated:false};
+  const open=text.match(/<svg\b[\s\S]*$/i);
+  if(open) return {code:open[0].replace(/```[\s\S]*$/,'').trim()+'</svg>',truncated:true};
+  // Last chance for HTML-escaped output from a relay.
+  const ta=document.createElement('textarea'); ta.innerHTML=text;
+  const decoded=ta.value.match(/<svg\b[\s\S]*?<\/svg>/i);
+  return decoded ? {code:decoded[0].trim(),truncated:false} : {code:'',truncated:false};
 }
 
 async function genAnthropicSVG(base,model,key,content,refIds,layoutGuide){
