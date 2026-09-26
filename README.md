@@ -15,6 +15,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](requirements.txt)
 [![License: MIT](https://img.shields.io/badge/code%20license-MIT-green.svg)](LICENSE)
 [![Images license](https://img.shields.io/badge/images-CC%20BY%20(attribution)-yellow.svg)](IMAGES_POLICY.md)
+[![Metadata policy](https://img.shields.io/badge/metadata-citation%20required-blue.svg)](DATA_LICENSE.md)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 ![Last commit](https://img.shields.io/github/last-commit/qwdwqfwq/topconf-paper-figure-gallery)
 ![Stars](https://img.shields.io/github/stars/qwdwqfwq/topconf-paper-figure-gallery?style=social)
@@ -27,7 +28,7 @@ HTML/CSS/JS, no build step, works offline.
 一个可搜索、可筛选的 Figure 1 / Teaser 画廊，纯静态、零构建、双击即开。
 
 [🌐 Live gallery 在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/) · [🛠️ FigureForge 画图](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge) · [📚 Methodology 数据与方法](docs/METHODOLOGY.md) ·
-[⚖️ Image policy 版权 / 下架](IMAGES_POLICY.md) · [🤝 Contributing 贡献指南](CONTRIBUTING.md)
+[⚖️ Image policy 版权 / 下架](IMAGES_POLICY.md) · [🗃️ Metadata policy 元数据许可](DATA_LICENSE.md) · [🤝 Contributing 贡献指南](CONTRIBUTING.md)
 
 </div>
 
@@ -90,7 +91,7 @@ Community contributions (new papers, better crops, new venues such as CHI / RSS 
 are the intended growth path after the 2023–2026 baseline.
 
 Image files remain attributed to their authors and publishers; see
-[IMAGES_POLICY.md](IMAGES_POLICY.md) for the educational-use and 72-hour takedown policy.
+[IMAGES_POLICY.md](IMAGES_POLICY.md) for the educational-use and 72-hour takedown policy. If you use this project's metadata, curated index, labels, or derived data in research, teaching, benchmarks, model-training corpora, or a paper, you must cite the repository and acknowledge the gallery in the paper's acknowledgements section. Include the repository URL and the original paper/proceedings sources; see [DATA_LICENSE.md](DATA_LICENSE.md).
 
 ---
 
@@ -274,7 +275,7 @@ Issue，贴上论文链接和你推荐的图即可，维护者会处理。提 PR
 ICLR / ICML(PMLR) / NeurIPS / CVPR(CVF) / ACL Anthology 正式出版论文多为 CC BY 4.0，
 AAAI 论文版权归 AAAI 与作者所有（fair-use 学术参考）。
 版权方若要求下架，请提 Issue 或邮件 **939123836@qq.com**，核实后 72 小时内删除。
-详见 [IMAGES_POLICY.md](IMAGES_POLICY.md)。
+详见 [IMAGES_POLICY.md](IMAGES_POLICY.md)。如果在科研、教学、基准测试、模型训练语料或论文中使用本项目的元数据、精选索引、标签、筛选结果或衍生数据，必须引用本项目，并在论文致谢中注明使用了本画廊；同时注明仓库链接和相关原始论文/会议出版来源，具体要求见 [DATA_LICENSE.md](DATA_LICENSE.md)。
 
 ## 📌 引用
 
