@@ -39,11 +39,15 @@ Suggested acknowledgement / 建议致谢：
 
 > 本研究使用了 Top-Conf Figure Gallery 整理的元数据与主图索引（https://github.com/qwdwqfwq/topconf-paper-figure-gallery）；相关记录均回链至原始会议论文及出版来源。
 
-## Scope and authorship / 使用范围与作者资格
+## Collaboration invitation / 合作邀请
 
-This requirement asks for project citation and acknowledgement. Use of the metadata alone does not create co-authorship. Co-authorship should be discussed only when the curator makes a substantial intellectual contribution to the research design, analysis, interpretation, or manuscript.
+If you plan to use the metadata for a paper and would like the maintainer to participate in data annotation, quality review, label design, or related research work, please contact the maintainer privately through GitHub or by email at `939123836@qq.com` before the work begins. Please describe the papers, records, and annotation or analysis tasks for which you would like help.
 
-本要求是项目引用与论文致谢要求。仅使用元数据本身不会自动产生共同作者资格；只有在维护者进一步参与研究设计、实验分析、结果解释或论文写作并形成实质性智力贡献时，才应根据实际贡献协商共同作者。
+如果你计划使用本项目元数据开展论文工作，并希望维护者参与数据标注、质量复核、标签设计或相关研究工作，可以在开始工作前通过 GitHub 私信或邮件 `939123836@qq.com` 联系维护者。联系时请说明涉及的论文、数据记录，以及希望维护者参与的标注或分析任务。
+
+Any authorship discussion should follow the actual contributions to the research and manuscript and the rules of the target venue. The required project citation and acknowledgement apply whether or not a collaboration is formed.
+
+是否列为共同作者，应根据维护者对研究和论文的实际贡献以及目标会议或期刊的作者规则协商决定。无论是否形成合作，项目引用和论文致谢要求都适用。
 
 The website and code are licensed separately under the repository [LICENSE](LICENSE). This file does not replace the license of the original papers, figures, or publishers, and it does not grant permission to redistribute copyrighted figures.
 
