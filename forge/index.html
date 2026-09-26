@@ -263,6 +263,9 @@
           <button data-mode="image">AI 位图初稿（需要图像模型）</button>
         </div>
       </div>
+      <div class="hint" id="modeHint" style="margin-top:-4px;margin-bottom:12px">
+        SVG 模式使用对话/视觉模型生成可编辑矢量图；AI 位图模式只使用专门的图像生成模型。请先确认你购买的 API 是否包含图像模型。
+      </div>
 
       <div class="srow">
         <div class="sbox">
@@ -678,6 +681,9 @@ function optgroup(label){
 function option(s){
   const o=document.createElement('option'); o.value=s; o.textContent=modelDisplayName(s); return o;
 }
+function disabledOption(text){
+  const o=option(text); o.disabled=true; o.value=''; return o;
+}
 // Keep the API identifier in option.value, but expose the provider's human
 // model name in the picker. DeepSeek's current API deliberately uses the
 // stable identifier `deepseek-flash`; the service routes it to V4.1-Flash.
@@ -707,6 +713,10 @@ async function populateModels(){
   }else if(key_present() && !res.ok){
     const g=optgroup('该服务商未开放浏览器查询 · 已用托管清单');
     const o=option('（托管清单随仓库更新，新模型打开即见）'); o.disabled=true; g.appendChild(o); s.appendChild(g);
+  }
+  if(mode==='image' && !c.image.length && !yours.length){
+    const g=optgroup('该服务商没有可用图像模型');
+    g.appendChild(disabledOption('无图像模型：请切回 SVG，或更换图像模型服务商')); s.appendChild(g);
   }
   const saved = localStorage.getItem('ff_model_'+p);
   if(saved && [...s.options].some(o=>o.value===saved)) s.value=saved;
@@ -762,6 +772,9 @@ document.querySelectorAll('#modeTabs button').forEach(b=>b.onclick=async ()=>{
   document.querySelectorAll('#modeTabs button').forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); mode=b.dataset.mode;
   $('#modelLabel').textContent = mode==='svg' ? '模型（对话 / 视觉模型）' : '模型（图像模型）';
+  $('#modeHint').textContent = mode==='svg'
+    ? 'SVG 模式使用对话/视觉模型生成可编辑矢量图，文字更准确；AI 位图模式只使用专门的图像生成模型。请先确认你购买的 API 类型。'
+    : 'AI 位图模式必须使用图像生成模型（例如 Seedream、FLUX、CogView、GPT Image、Qwen-Image、Hunyuan Image）；对话模型只能生成 SVG，因此不会出现在下方列表。';
   await populateModels();
   syncPassUI();
 });
