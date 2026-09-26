@@ -358,7 +358,9 @@ let passMode = 'two'; const MAX_REFS = 10; let analysis = null;
 let data = { ids:[], figs:[], bm:null, IE:null, TE:null, N:0 };
 let clip = { tokenizer:null, model:null };
 let bootPromise = null;
-const CLIP_CACHE_NAME = 'figureforge-clip-v2';
+// Reuse Transformers.js' original bucket so users who already downloaded the
+// model keep their existing files across this cache implementation upgrade.
+const CLIP_CACHE_NAME = 'transformers-cache';
 const CLIP_CACHE_HINT = 'figureforge.clip.cache.v2';
 const clipCache = {
   async match(request){
