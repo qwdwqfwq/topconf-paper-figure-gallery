@@ -90,6 +90,7 @@
   .tabs button{padding:7px 15px;font-size:13px;font-weight:650;color:#4b5563;background:transparent}
   .tabs button.on{background:#fff;color:var(--indigo);box-shadow:0 1px 3px rgba(0,0,0,.1)}
   .mode-row{display:flex;align-items:flex-start;gap:14px}
+  .mode-hint{margin-top:-4px;margin-bottom:12px;padding:9px 12px;border:1px solid #fb923c;border-left:4px solid #f97316;border-radius:9px;background:#fff7ed;color:#9a3412;font-size:12px;line-height:1.5;font-weight:700}
   .bitmap-matrix{flex:1;min-width:380px;max-height:196px;overflow:auto;border:1px solid #dbe4ff;border-radius:10px;background:#fff}
   .bitmap-matrix-title{padding:7px 10px;background:#eef2ff;color:#3730a3;font-size:11.5px;font-weight:800;position:sticky;top:0;z-index:1}
   .bitmap-matrix table{width:100%;border-collapse:collapse;font-size:11px;line-height:1.35}
@@ -274,7 +275,7 @@
         </div>
         <div class="bitmap-matrix" id="bitmapMatrix" hidden></div>
       </div>
-      <div class="hint" id="modeHint" style="margin-top:-4px;margin-bottom:12px">
+      <div class="mode-hint" id="modeHint">
         SVG 模式使用对话/视觉模型生成可编辑矢量图；AI 位图模式只使用专门的图像生成模型。请先确认你购买的 API 是否包含图像模型。
       </div>
 
@@ -357,9 +358,26 @@ let passMode = 'two'; const MAX_REFS = 10; let analysis = null;
 let data = { ids:[], figs:[], bm:null, IE:null, TE:null, N:0 };
 let clip = { tokenizer:null, model:null };
 let bootPromise = null;
-const CLIP_CACHE_HINT = 'figureforge.clip.cache.v1';
-function hasClipCacheHint(){
-  try { return localStorage.getItem(CLIP_CACHE_HINT) === 'ready'; } catch { return false; }
+const CLIP_CACHE_NAME = 'figureforge-clip-v2';
+const CLIP_CACHE_HINT = 'figureforge.clip.cache.v2';
+const clipCache = {
+  async match(request){
+    if(!('caches' in window)) return undefined;
+    return (await caches.open(CLIP_CACHE_NAME)).match(request);
+  },
+  async put(request,response){
+    if(!('caches' in window)) return;
+    return (await caches.open(CLIP_CACHE_NAME)).put(request,response.clone());
+  }
+};
+async function hasClipCache(){
+  try{
+    if(!('caches' in window)) return false;
+    const cache=await caches.open(CLIP_CACHE_NAME);
+    const base=new URL('./models/clip-vit-base-patch32/', import.meta.url);
+    const files=['tokenizer.json','onnx/text_model_quantized.onnx'];
+    return (await Promise.all(files.map(f=>cache.match(new URL(f,base))))).every(Boolean);
+  }catch{return false;}
 }
 function markClipCacheReady(){
   try { localStorage.setItem(CLIP_CACHE_HINT, 'ready'); } catch { /* private mode or blocked storage */ }
@@ -415,14 +433,15 @@ async function boot(){
     ]);
     L('data done');
     data = { ids, figs, bm, IE, TE, N: ids.length };
-    const cached = hasClipCacheHint();
+    const cached = await hasClipCache();
     bt.textContent = cached ? '正在从本机缓存恢复本地 CLIP（① tokenizer）…' : '正在加载本地 CLIP（首次下载，① tokenizer）…';
     T.env.allowLocalModels = true;
     T.env.allowRemoteModels = false;
-    // Transformers.js stores model responses in the browser Cache API. This
-    // keeps the local model on this origin after a reload; only the in-memory
-    // ONNX session has to be recreated for a new page.
-    T.env.useBrowserCache = true;
+    // Use an explicit Cache Storage bucket so local model files survive reloads
+    // and the UI can verify the real cache instead of trusting a flag alone.
+    T.env.useBrowserCache = false;
+    T.env.useCustomCache = true;
+    T.env.customCache = clipCache;
     T.env.localModelPath = new URL('./models/', import.meta.url).href;
     T.env.backends.onnx.wasm.wasmPaths = new URL('vendor/', document.baseURI).href;
     const MP = 'clip-vit-base-patch32';
