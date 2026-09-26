@@ -27,7 +27,7 @@ HTML/CSS/JS, no build step, works offline.
 **做论文配图前，先看看顶会里最会画图的人是怎么画的。**
 一个可搜索、可筛选的 Figure 1 / Teaser 画廊，纯静态、零构建、双击即开。
 
-[🌐 Live gallery 在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/) · [🛠️ FigureForge 画图](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge) · [🎬 Demo video 演示视频](docs/demo.html) · [📚 Methodology 数据与方法](docs/METHODOLOGY.md) ·
+[🌐 Live gallery 在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/) · [🛠️ FigureForge 画图](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge) · [🎬 Demo video 演示视频](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html) · [📚 Methodology 数据与方法](docs/METHODOLOGY.md) ·
 [⚖️ Image policy 版权 / 下架](IMAGES_POLICY.md) · [🗃️ Metadata policy 元数据许可](DATA_LICENSE.md) · [🤝 Contributing 贡献指南](CONTRIBUTING.md)
 
 </div>
