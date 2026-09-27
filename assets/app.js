@@ -297,6 +297,24 @@
 
   function currentIndex() { return filtered.findIndex((x) => x.id === currentId); }
 
+  function lightboxControls() {
+    return Array.from(lbDialog.querySelectorAll("a[href], button:not([disabled])"))
+      .filter((element) => getComputedStyle(element).visibility !== "hidden");
+  }
+
+  function trapLightboxFocus(e) {
+    if (e.key !== "Tab" || lb.hidden) return;
+    const controls = lightboxControls();
+    if (!controls.length) { e.preventDefault(); return; }
+    const first = controls[0];
+    const last = controls[controls.length - 1];
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault(); last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault(); first.focus();
+    }
+  }
+
   function positionLightboxNav() {
     const imageRect = lb.querySelector(".lightbox-img-wrap").getBoundingClientRect();
     if (!imageRect.height) return;
@@ -596,6 +614,7 @@
   lb.querySelector(".lightbox-backdrop").addEventListener("click", closeLb);
   document.addEventListener("keydown", (e) => {
     if (lb.hidden) return;
+    trapLightboxFocus(e);
     if (e.key === "Escape") closeLb();
     else if (e.key === "ArrowLeft") step(-1);
     else if (e.key === "ArrowRight") step(1);
