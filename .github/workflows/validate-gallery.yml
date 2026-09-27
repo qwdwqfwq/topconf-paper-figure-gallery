@@ -1,0 +1,35 @@
+name: Validate gallery data
+
+on:
+  pull_request:
+    paths:
+      - "data/**"
+      - "assets/figures.js"
+      - "images/**"
+      - "scripts/validate_gallery.py"
+      - ".github/workflows/validate-gallery.yml"
+  push:
+    branches: [main]
+    paths:
+      - "data/**"
+      - "assets/figures.js"
+      - "images/**"
+      - "scripts/validate_gallery.py"
+      - ".github/workflows/validate-gallery.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Validate gallery metadata and images
+        run: python scripts/validate_gallery.py
