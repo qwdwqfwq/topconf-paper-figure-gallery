@@ -46,8 +46,9 @@
   .hint{color:var(--muted);font-size:12.5px;margin-top:10px}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(226px,1fr));gap:14px}
   .rc{border:1px solid var(--line);border-radius:13px;overflow:hidden;background:#fff;position:relative;
-      transition:transform .12s, box-shadow .12s, border-color .12s}
+      transition:transform .12s, box-shadow .12s, border-color .12s;cursor:pointer}
   .rc:hover{transform:translateY(-2px);box-shadow:0 10px 24px rgba(17,24,39,.1)}
+  .rc:focus-visible{outline:3px solid rgba(79,70,229,.55);outline-offset:2px}
   .rc.sel{border-color:var(--indigo);box-shadow:0 0 0 2px rgba(79,70,229,.35)}
   .rc .thumb{width:100%;aspect-ratio:4/3;object-fit:cover;background:#f3f4f6;display:block;cursor:pointer}
   .pick{position:absolute;top:8px;left:8px;background:rgba(255,255,255,.94);border:1px solid var(--line);
@@ -548,7 +549,7 @@ function tierChip(f){
 function renderGrid(list){
   $('#grid').innerHTML = list.map(f=>{
     const sel = refs.has(f.id);
-    return `<div class="rc ${sel?'sel':''}" data-id="${esc(f.id)}">
+    return `<div class="rc ${sel?'sel':''}" data-id="${esc(f.id)}" role="button" tabindex="0" aria-pressed="${sel}" aria-label="${sel?'取消选择':'选择'}参考图：${esc(f.title)}">
       <img class="thumb" loading="lazy" src="../${esc(f.image)}" alt="${esc(f.title)}">
       <div class="pick">${sel?'✓ 已选':'+ 选为参考'}</div>
       <div class="score">${f.matchScore!=null?f.matchScore:''}</div>
@@ -573,6 +574,11 @@ $('#grid').addEventListener('click', e=>{
   if(refs.has(id)) refs.delete(id);
   else { if(refs.size>=MAX_REFS){ showErr('最多选 '+MAX_REFS+' 张参考图（两阶段建议 8–10 张同类型，直接生成 2–3 张）'); return;} refs.add(id); }
   renderGrid(results); updateCount(); renderRefsStrip();
+});
+$('#grid').addEventListener('keydown', e=>{
+  if(e.key!=='Enter' && e.key!==' ') return;
+  const card=e.target.closest('.rc'); if(!card) return;
+  e.preventDefault(); card.click();
 });
 $('#clearBtn').onclick = ()=>{ refs.clear(); renderGrid(results); updateCount(); renderRefsStrip(); };
 function renderRefsStrip(){
