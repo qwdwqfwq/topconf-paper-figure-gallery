@@ -297,6 +297,9 @@
 
   function render() {
     filtered = sorted(figures.filter(matches));
+    // Filter/sort/search changes rewrite the query only; the figure hash, if the
+    // lightbox happens to be open, is carried through untouched.
+    writeUrl("replaceState", location.hash);
     gallery.innerHTML = "";
     shown = 0;
     empty.hidden = filtered.length > 0;
@@ -324,6 +327,55 @@
     }, { passive: true });
   }
 
+  /* ---------- shareable URL state (filters in the query, figure in the hash) ----------
+     Filters and the search box live in ?v=&y=&t=&p=&q=&s=, the open figure lives in
+     #f=<id>. Hash-only writes never reload GitHub Pages, so switching figures or
+     clearing the hash costs nothing. */
+  const URL_KEYS = ["v", "y", "t", "p", "q", "s"];
+  let internalUrlWrite = false;
+
+  function validFilter(key, value) {
+    if (key === "v") return value === "all" || Object.prototype.hasOwnProperty.call(VENUES, value);
+    if (key === "y") return value === "all" || years.some((x) => String(x) === value);
+    if (key === "t") return value === "all" || Object.prototype.hasOwnProperty.call(TIERS, value);
+    if (key === "p") return value === "all" || Object.prototype.hasOwnProperty.call(PATTERNS, value);
+    if (key === "s") return ["venue", "year", "title"].indexOf(value) !== -1;
+    if (key === "q") return true;
+    return false;
+  }
+
+  // Unknown params are preserved so this never strips somebody else's tracking
+  // link (?utm_source=…) off a shared URL.
+  function queryString() {
+    const params = new URLSearchParams(location.search);
+    URL_KEYS.forEach((key) => params.delete(key));
+    if (state.venue !== "all") params.set("v", state.venue);
+    if (state.year !== "all") params.set("y", state.year);
+    if (state.tier !== "all") params.set("t", state.tier);
+    if (state.pattern !== "all") params.set("p", state.pattern);
+    if (state.q) params.set("q", state.q);
+    if (state.sort !== "venue") params.set("s", state.sort);
+    return params.toString();
+  }
+
+  function writeUrl(method, hash) {
+    const query = queryString();
+    const url = location.pathname + (query ? "?" + query : "") + (hash || "");
+    internalUrlWrite = true;
+    try {
+      history[method](history.state, "", url);
+    } catch (_) {
+      location.hash = hash || "";
+    } finally {
+      internalUrlWrite = false;
+    }
+  }
+
+  function figureHash() {
+    const match = /^#f=([A-Za-z0-9._-]+)$/.exec(location.hash);
+    return match ? match[1] : null;
+  }
+
   /* ---------- lightbox with prev/next over the filtered list ---------- */
   const lb = $("#lightbox");
   const lbImg = $("#lb-img");
@@ -348,6 +400,9 @@
   let currentId = null;
   let lightboxBusy = false;
   let opener = null;
+  // Set while a router-driven open/close runs, so the transition's own state
+  // changes are not mistaken for a user navigation.
+  let routerBusy = false;
 
   function currentIndex() { return filtered.findIndex((x) => x.id === currentId); }
 
@@ -519,8 +574,13 @@
       : null;
     const actionPairs = activePairs.filter((pair) =>
       pair.name === transitionParts.imageAction || pair.name === transitionParts.paperAction);
-    const actionStarts = new Map(actionPairs.map((pair) =>
-      [pair.name, pair.source.getBoundingClientRect()]));
+    // A shared link opens the dialog with no originating card, so `source` can be
+    // undefined. Skipping those pairs keeps the transition working instead of
+    // throwing, which used to abort the open and leave the dialog hidden.
+    const rectOf = (element) => (element ? element.getBoundingClientRect() : null);
+    const actionStarts = new Map(actionPairs
+      .filter((pair) => rectOf(pair.source) && rectOf(pair.destination))
+      .map((pair) => [pair.name, pair.source.getBoundingClientRect()]));
     let updated = false;
     let transition;
 
@@ -542,7 +602,12 @@
         actionPairs.forEach(({ destination, name }) => {
           if (!destination) return;
           const key = name === transitionParts.imageAction ? "image-action" : "paper-action";
-          for (const [side, rect] of [["from", actionStarts.get(name)], ["to", destination.getBoundingClientRect()]]) {
+          const startRect = actionStarts.get(name);
+          const endRect = destination.getBoundingClientRect();
+          // No originating card (cold start from a shared link): there is nothing
+          // to morph from, so the destination simply keeps its own layout.
+          if (!startRect) return;
+          for (const [side, rect] of [["from", startRect], ["to", endRect]]) {
             for (const axis of ["width", "height"]) {
               document.documentElement.style.setProperty(`--gallery-${key}-${side}-${axis}`, `${rect[axis]}px`);
             }
@@ -582,6 +647,10 @@
 
   async function openFigure(f, card) {
     if (lightboxBusy || !lb.hidden) return;
+    // Written before the transition so a share taken mid-animation already has
+    // the right URL. pushState keeps one history entry so Back returns to the grid.
+    if (!card) writeUrl("replaceState", "#f=" + f.id);
+    else writeUrl("pushState", "#f=" + f.id);
     lightboxBusy = true;
     opener = card || document.activeElement;
     lbDialog.style.height = "";
@@ -611,6 +680,9 @@
     if (j < 0 || j >= filtered.length) return;
 
     lightboxBusy = true;
+    // Stepping replaces the entry instead of stacking one per figure, so Back
+    // always returns to the grid rather than walking through the whole list.
+    writeUrl("replaceState", "#f=" + filtered[j].id);
     if (!lbDialog.style.height) {
       lbDialog.style.height = `${lbDialog.getBoundingClientRect().height}px`;
     }
@@ -648,7 +720,95 @@
       lbDialog.style.height = "";
       lightboxBusy = false;
     }
+    // After the flags are cleared so the URL write cannot race the close.
+    writeUrl("replaceState", "");
   }
+
+  /* ---------- URL -> UI ---------- */
+  function syncUiFromState() {
+    const keyByBox = { "venue-chips": "venue", "year-chips": "year", "tier-chips": "tier", "pattern-chips": "pattern" };
+    document.querySelectorAll(".chips").forEach((box) => {
+      const key = keyByBox[box.id];
+      if (!key) return;
+      box.querySelectorAll(".chip").forEach((chip) => {
+        chip.classList.toggle("active", chip.dataset.val === state[key]);
+      });
+    });
+    searchInput.value = state.q;
+    clearBtn.hidden = !state.q;
+    $("#sort").value = state.sort;
+  }
+
+  function readUrlState() {
+    const params = new URLSearchParams(location.search);
+    ["v", "y", "t", "p", "s", "q"].forEach((key) => {
+      if (!params.has(key)) return;
+      const value = params.get(key);
+      if (!validFilter(key, value)) return;
+      if (key === "v") state.venue = value;
+      else if (key === "y") state.year = value;
+      else if (key === "t") state.tier = value;
+      else if (key === "p") state.pattern = value;
+      else if (key === "s") state.sort = value;
+      else if (key === "q") state.q = value.trim().toLowerCase();
+    });
+  }
+
+  // The only place the lightbox is opened or closed without a click.
+  async function applyHashToLightbox() {
+    const id = figureHash();
+    if (id === currentId) return;
+    if (id === null) {
+      if (!lb.hidden) await closeLb();
+      return;
+    }
+    if (!lb.hidden) {
+      // Another entry for a figure already on screen (Back/Forward): swap in place.
+      const openF = filtered.find((x) => x.id === id);
+      if (openF) {
+        setFigureContent(openF);
+        await decodeLightboxImage();
+      }
+      return;
+    }
+    const f = figures.find((x) => x.id === id);
+    if (!f) return; // unknown or stale id: leave the grid alone
+    if (!filtered.some((x) => x.id === id)) {
+      // The link carries filters that hide its own target — drop only what gets
+      // in the way, then re-render, so a shared figure is actually visible.
+      if (state.venue !== "all" && f.venue !== state.venue) state.venue = "all";
+      if (state.year !== "all" && String(f.year) !== String(state.year)) state.year = "all";
+      if (state.tier !== "all" && !matches(f)) state.tier = "all";
+      if (state.pattern !== "all" && f.pattern !== state.pattern) state.pattern = "all";
+      if (state.q && !matches(f)) state.q = "";
+      syncUiFromState();
+      render();
+    }
+    await openFigure(f, null);
+  }
+
+  async function applyUrlToUi() {
+    const before = JSON.stringify(state);
+    readUrlState();
+    if (JSON.stringify(state) !== before) {
+      syncUiFromState();
+      render();
+    }
+    await applyHashToLightbox();
+  }
+
+  function handleUrlChange() {
+    if (internalUrlWrite || routerBusy) return;
+    routerBusy = true;
+    applyUrlToUi()
+      .catch(() => { /* keep the grid usable if a transition fails */ })
+      .then(() => { routerBusy = false; });
+  }
+
+  window.addEventListener("popstate", handleUrlChange);
+  // hashchange is a backstop for engines where a hash-only popstate does not
+  // fire; applyHashToLightbox is a no-op when the id already matches.
+  window.addEventListener("hashchange", handleUrlChange);
 
   gallery.addEventListener("click", (e) => {
     const card = e.target.closest(".card");
@@ -701,5 +861,14 @@
 
   syncToggle();
   GAL_I18N.apply();
+  // Filters from the URL must be in state before the first render, otherwise the
+  // grid paints the unfiltered list for one frame.
+  readUrlState();
+  syncUiFromState();
   render();
+  // Cold start: `#f=<id>` from a shared link opens that figure, which also warms
+  // the 60-card chunk it lives in whenever the filters still include it.
+  // `window.__tcLastError` records a failed cold start for debugging; it is never
+  // user-visible and never blocks the grid.
+  applyHashToLightbox().catch((err) => { window.__tcLastError = String((err && err.stack) || err); });
 })();
