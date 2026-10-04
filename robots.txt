@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://qwdwqfwq.github.io/topconf-paper-figure-gallery/sitemap.xml
