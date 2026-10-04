@@ -787,7 +787,7 @@
     await openFigure(f, null);
   }
 
-  async function applyUrlToUi() {
+  async function runUrlChange() {
     const before = JSON.stringify(state);
     readUrlState();
     if (JSON.stringify(state) !== before) {
@@ -798,11 +798,24 @@
   }
 
   function handleUrlChange() {
-    if (internalUrlWrite || routerBusy) return;
+    if (internalUrlWrite) return;
     routerBusy = true;
-    applyUrlToUi()
-      .catch(() => { /* keep the grid usable if a transition fails */ })
-      .then(() => { routerBusy = false; });
+    const attempt = (tries) => {
+      // Opening and closing run an image decode plus a View Transition, so
+      // lightboxBusy can still be set when Back arrives. Returning immediately
+      // used to drop the navigation entirely: the hash cleared but the dialog
+      // stayed open and the page stayed scroll-locked, which reads as "Back does
+      // nothing". Wait for the in-flight transition instead of discarding it.
+      if (lightboxBusy && tries < 40) {
+        setTimeout(() => attempt(tries + 1), 120);
+        return;
+      }
+      if (lightboxBusy) { routerBusy = false; return; }
+      runUrlChange()
+        .catch(() => { /* keep the grid usable if a transition fails */ })
+        .then(() => { routerBusy = false; });
+    };
+    attempt(0);
   }
 
   window.addEventListener("popstate", handleUrlChange);
