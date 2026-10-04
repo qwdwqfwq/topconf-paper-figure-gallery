@@ -1399,17 +1399,28 @@ document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
 $('#model').onchange = e=>localStorage.setItem('ff_model_'+$('#provider').value, e.target.value);
 
 /* ---------------- pass 1: analyze references ---------------- */
-const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference overview figures of the SAME target visual type. Extract their shared layout grammar and return STRICT JSON only.';
-function buildAnalyzePrompt(n){
+const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference overview figures of the SAME target visual type. Extract their shared layout grammar as a CONCRETE design contract: exact hex colours, panel rectangles as numbers on a 1600x900 canvas, a numeric type scale and stroke widths. Return STRICT JSON only.';
+function buildAnalyzePrompt(n, idList){
+  const ids = (idList||[]).join(', ');
   return `Here are ${n} top-conference paper figures, all of the target visual type for the figure I want to design.
 Analyze their COMMON design grammar and return one JSON object with EXACTLY these keys:
 {"layout":"how the canvas is divided (number/arrangement of panels) and reading direction",
-"elements":"recurring visual elements: box styles, arrow types, icon/illustration conventions",
-"palette":"color rules: number of main/accent colors, background, typical fills",
-"hierarchy":"information hierarchy: title, panel headers, labels, what is emphasized",
-"representative":[indices (1-based) of the 2-3 most typical, highest-quality figures among these],
-"refinedPrompt":"a detailed self-contained English layout description fusing the common grammar, ready to drive generation"}
-Rules: output JSON only, no markdown or commentary. representative must hold 2-3 integer indices. refinedPrompt should be 120-200 concrete English words about panels, arrows, palette and hierarchy.`;
+ "panels":[{"name":"panel name","role":"what this panel shows","x":0,"y":0,"w":0,"h":0}],
+ "palette":{"background":"#hex","primary":"#hex","accent":"#hex","neutral":"#hex","others":["#hex"]},
+ "typography":{"title":0,"panelHeader":0,"label":0,"note":0},
+ "strokes":{"box":0,"arrow":0,"connector":0},
+ "elements":"recurring visual elements: box styles, arrow types, icon/illustration conventions",
+ "hierarchy":"information hierarchy: what is emphasised and how",
+ "representative":["ids of the 2-3 most typical, highest-quality figures among these"],
+ "refinedPrompt":"a detailed self-contained English layout description fusing the common grammar, ready to drive generation"}
+Rules: output JSON only, no markdown or commentary.
+panels: 2-6 entries. x/y/w/h are integers in a 1600x900 coordinate space with the origin at the top-left; they must not overlap and must stay inside 1600x900.
+palette: every value MUST be a real #rrggbb hex string.
+typography: integer pixel sizes for a 1600x900 canvas (title 36-56, panelHeader 26-36, label 20-30, note 16-22).
+strokes: integer pixel widths (box 2-4, arrow 2-4, connector 1-3).
+representative: use the figure ids EXACTLY as listed below, 2-3 of them, no indices.
+Available figure ids: ${ids}
+refinedPrompt should be 120-200 concrete English words about panels, arrows, palette and hierarchy.`;
 }
 function extractJSON(txt){
   const m = txt.match(/\{[\s\S]*\}/);
@@ -1424,7 +1435,7 @@ async function analyzeReferences(){
   let txt;
   if(useAnthropic){
     const blocks=uris.map(u=>{const p=dataURIToParts(u);return {type:'image',source:{type:'base64',media_type:p.media,data:p.data}};});
-    blocks.push({type:'text',text:buildAnalyzePrompt(ordered.length)});
+    blocks.push({type:'text',text:buildAnalyzePrompt(ordered.length, ordered)});
     const body={model:$('#analyzeModel').value||$('#model').value,max_tokens:3000,system:ANALYZE_SYS,messages:[{role:'user',content:blocks}]};
     const r=await fetch(baseURL()+'/v1/messages',{method:'POST',headers:anthropicHeaders(cleanKey($('#key').value)),body:JSON.stringify(body)});
     txt=await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
@@ -1433,7 +1444,7 @@ async function analyzeReferences(){
     const am = (mode==='image'&&passMode==='two') ? $('#analyzeModel').value : $('#model').value;
     if(!am) throw new Error(tt('analyze.needmodel'));
     const parts=uris.map(u=>({type:'image_url',image_url:{url:u}}));
-    parts.push({type:'text',text:buildAnalyzePrompt(ordered.length)});
+    parts.push({type:'text',text:buildAnalyzePrompt(ordered.length, ordered)});
     const body={model:am,temperature:0.2,messages:[{role:'system',content:ANALYZE_SYS},{role:'user',content:parts}]};
     if($('#provider').value==='ark') body.thinking={type:'disabled'};
     let r;
@@ -1447,10 +1458,23 @@ async function analyzeReferences(){
     const d=JSON.parse(txt); txt=d.choices?.[0]?.message?.content||'';
   }
   const j=extractJSON(txt);
-  let reps=(j.representative||[]).map(x=>ordered[Math.max(0,Math.min(ordered.length-1,(+x)-1))]).filter(Boolean);
+  // Representative figures may come back as ids (preferred, unambiguous) or as
+  // 1-based indices (older models). Accept either, but only ids that really exist
+  // in the analysed set, so a miscount can no longer silently pick the wrong figure.
+  const validIds = ordered.filter(id=>data.figs.some(f=>f.id===id));
+  let reps = (j.representative||[]).map(x=>{
+    const s = String(x).trim();
+    if(validIds.includes(s)) return s;
+    const n = +s;
+    if(isFinite(n) && n>=1 && n<=ordered.length) return ordered[n-1];
+    return null;
+  }).filter(Boolean);
   reps=[...new Set(reps)].slice(0,3);
   if(reps.length<2) reps=ordered.slice(0,3);
-  analysis={j,repIds:reps,refinedPrompt:j.refinedPrompt||''};
+  // The generation prompt gets the numbers from the contract plus the prose.
+  const contract = designContractText(j);
+  const guideParts = [contract, j.refinedPrompt||''].filter(s=>s && s.trim());
+  analysis={j,repIds:reps,refinedPrompt:guideParts.join('\n\n')};
   renderAnalyze(ordered);
   return analysis;
 }
@@ -1470,6 +1494,47 @@ function renderAnalyze(ordered){
 }
 
 /* ---------------- build prompts ---------------- */
+
+/* Turn the analysis result into a compact, checkable design contract. Prose like
+   "restrained palette, clear hierarchy" leaves every concrete decision to the
+   generator, which is where style drift comes from; exact values pin it down. */
+function designContractText(j){
+  if(!j) return '';
+  const rows = [];
+  if(j.layout) rows.push(`- canvas & panel division: ${j.layout}`);
+  if(Array.isArray(j.panels) && j.panels.length){
+    const panels = j.panels.slice(0,8).map(p=>{
+      const bits = [p.name, p.role].filter(Boolean).join(' / ');
+      const geo = (p.x!=null && p.y!=null && p.w!=null && p.h!=null)
+        ? ` x=${p.x} y=${p.y} w=${p.w} h=${p.h}` : '';
+      return `${bits}${geo}`;
+    });
+    rows.push(`- panel geometry (canvas 1600x900, origin top-left): ${panels.join(' | ')}`);
+  }
+  const pal = j.palette;
+  if(pal){
+    if(Array.isArray(pal)) rows.push(`- palette (use these exact hex values): ${pal.join(', ')}`);
+    else if(typeof pal === 'object'){
+      const used = ['background','primary','accent','neutral'].filter(k=>pal[k]).map(k=>`${k}=${pal[k]}`);
+      const extra = Array.isArray(pal.others) ? pal.others.join(', ') : '';
+      rows.push(`- palette (use these exact hex values): ${used.concat(extra?[extra]:[]).join(', ')}`);
+    } else rows.push(`- palette: ${pal}`);
+  }
+  const ty = j.typography;
+  if(ty && typeof ty === 'object'){
+    const t = ['title','panelHeader','label','note'].filter(k=>ty[k]!=null).map(k=>`${k} ${ty[k]}px`);
+    if(t.length) rows.push(`- type scale (px, on a 1600x900 canvas): ${t.join(', ')}`);
+  }
+  const st = j.strokes;
+  if(st && typeof st === 'object'){
+    const s = ['box','arrow','connector'].filter(k=>st[k]!=null).map(k=>`${k} ${st[k]}px`);
+    if(s.length) rows.push(`- stroke widths: ${s.join(', ')}`);
+  }
+  if(j.elements) rows.push(`- recurring elements: ${j.elements}`);
+  if(j.hierarchy) rows.push(`- information hierarchy: ${j.hierarchy}`);
+  return rows.join('\n');
+}
+
 function buildPrompt(content, layoutGuide, refIds){
   const t = $('#target').value;
   const targetInfo = t==='custom'
@@ -1478,10 +1543,12 @@ function buildPrompt(content, layoutGuide, refIds){
   const useIds = refIds || [...refs];
   const refLines = useIds.map((id,idx)=>{
     const f = data.figs.find(x=>x.id===id);
-    return `参考图${idx+1}：${f.title}（${f.venue.toUpperCase()} ${f.year}，${f.pattern}）——只学习它的版面结构、面板划分与配色风格，内容全部替换为我的论文。`;
+    // Follows the UI language; this was hardcoded Chinese, so an English session
+    // still injected Chinese instructions into an English-generation prompt.
+    return tt('ref.note',{i:idx+1, t:f.title, v:f.venue.toUpperCase(), y:f.year, p:f.pattern, id:f.id});
   }).join('\n');
   const guide = layoutGuide
-    ? `## 版式规范（已从画廊 ${refs.size} 张同类图中归纳，请严格遵循其面板划分、箭头用法、配色与信息层级）\n${layoutGuide}\n\n`
+    ? `## Design contract (merged from ${refs.size} same-type gallery figures — follow the panel division, arrows, palette and hierarchy strictly)\n${layoutGuide}\n\n`
     : '';
   return `你是顶尖 ML 论文的配图设计师。我要：${TARGETS[t].label}。
 ${guide}${targetInfo}
@@ -1492,7 +1559,9 @@ ${content}
 ${refLines}
 
 请输出一张极简、完整、可编辑的 SVG（viewBox 1600x900，横向，白色背景，主色一个、强调色一个，留白充足；方块/箭头/文字标签对齐；不得出现 lorem ipsum 或占位数字）。
+若上面的设计契约给出了面板坐标与字号，请直接按其数值排版，不要自行改变比例。
 只画一个清晰的主面板：聚焦“我们的方法”核心 pipeline（标题 + 若干模块方块 + 箭头表示数据流），不要画 baseline 对比、不要多个子面板、不要重复图形；把重复样式放进 <defs> 复用，总代码尽量短，务必在一次输出内以 </svg> 正常结尾。
+布局硬性要求（会自动检查）：所有可见文字必须完全落在 x=0..1600、y=0..900 之内；任何标签的文字宽度不得超过它所处方块的宽度（放不下就缩短文字、减小字号或加宽方块）；不同标签的文字包围盒不得相互重叠。
 硬性要求：SVG 中所有可见文字（面板标题、模块名、坐标轴、图例、注释）必须全部使用英文短语，严禁出现任何中文字符；数字与标签需与论文内容一致。
 Output a complete SVG. ALL visible text (panel headers, module names, axes, legends, annotations) MUST be in English — no Chinese characters anywhere. Output only the <svg> code, no explanation.`;
 }
