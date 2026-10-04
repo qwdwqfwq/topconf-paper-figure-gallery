@@ -118,6 +118,14 @@
   .forge-lb-nav.prev{left:18px}.forge-lb-nav.next{right:18px}.forge-lb-nav:disabled{opacity:.35;cursor:not-allowed}
   .forge-lb-meta{padding:12px 4px 2px}.forge-lb-meta h2{font-size:16px;line-height:1.4}.forge-lb-meta p{color:var(--muted);font-size:12px;margin-top:4px}
   .forge-lb-links{display:flex;gap:8px;margin-top:9px}.forge-lb-links a{color:var(--indigo);font-weight:700;font-size:12px;text-decoration:none}
+  .forge-lb-similar{margin-top:14px;padding-top:11px;border-top:1px solid var(--line)}
+  .sim-label{display:block;font-size:11.5px;font-weight:700;color:var(--muted);margin-bottom:8px}
+  .forge-lb-similar{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start}
+  .forge-lb-similar .sim-label{width:100%}
+  .sim-item{width:104px;padding:0;border:1px solid var(--line);border-radius:9px;background:#fff;cursor:pointer;overflow:hidden;transition:transform .16s ease,border-color .16s ease}
+  .sim-item:hover{transform:translateY(-2px);border-color:var(--indigo)}
+  .sim-item img{display:block;width:100%;height:64px;object-fit:cover;background:#f3f4f6}
+  .sim-meta{display:block;font-size:10.5px;color:var(--muted);padding:4px 5px}
   @keyframes lbIn{from{opacity:0;transform:scale(.94) translateY(10px)}to{opacity:1;transform:none}}
   @keyframes lbSwapNext{from{opacity:.25;transform:translateX(28px)}to{opacity:1;transform:none}}
   @keyframes lbSwapPrev{from{opacity:.25;transform:translateX(-28px)}to{opacity:1;transform:none}}
@@ -511,6 +519,7 @@
     <img id="forgeLbImg" src="" alt="">
     <div class="forge-lb-meta"><h2 id="forgeLbTitle"></h2><p id="forgeLbMeta"></p>
       <div class="forge-lb-links"><a id="forgeLbImage" target="_blank" rel="noopener" data-i18n="lb.image"></a><a id="forgeLbPaper" target="_blank" rel="noopener" data-i18n="lb.paper"></a></div>
+      <div class="forge-lb-similar" id="forgeLbSimilar" hidden></div>
     </div>
   </div>
   <button class="forge-lb-nav prev" id="forgeLbPrev" data-i18n-aria="lb.prev">‹</button>
@@ -879,6 +888,41 @@ function updateForgeLightbox(){
   const paper = $('#forgeLbPaper'); paper.href = f.paper || '#'; paper.hidden = !f.paper;
   $('#forgeLbPrev').disabled = forgeLbIndex <= 0;
   $('#forgeLbNext').disabled = forgeLbIndex >= results.length - 1;
+  renderSimilarFigures(f);
+}
+
+/* Similar figures use the image embedding that already ships with the gallery
+   (one unit-normalised row per figure), so a dot product is the cosine
+   similarity. Results are restricted to what is already on screen, so picking a
+   similar card can never navigate outside the current search. */
+const SIMILAR_COUNT = 6;
+function similarFigures(f, count){
+  if(!data.IE || !data.ids.length) return [];
+  const row = data.ids.indexOf(f.id);
+  if(row < 0) return [];
+  const D = 512, base = row * D, out = [];
+  for(let i=0;i<data.ids.length;i++){
+    if(i === row) continue;
+    let s = 0; const b = i * D;
+    for(let j=0;j<D;j++) s += data.IE[base+j] * data.IE[b+j];
+    out.push({id:data.ids[i], score:s});
+  }
+  out.sort((a,b)=>b.score-a.score);
+  const allowed = new Set(results.map(r=>r.id));
+  return out.filter(x=>allowed.has(x.id)).slice(0, count || SIMILAR_COUNT)
+            .map(x=>data.figs.find(g=>g.id===x.id)).filter(Boolean);
+}
+
+function renderSimilarFigures(f){
+  const box = $('#forgeLbSimilar');
+  if(!box) return;
+  const list = similarFigures(f);
+  if(!list.length){ box.hidden = true; box.innerHTML = ''; return; }
+  box.hidden = false;
+  box.innerHTML = `<span class="sim-label">${tt('lb.similar')}</span>` + list.map(function(g){
+    return `<button type="button" class="sim-item" data-id="${g.id}" title="${esc(g.title)}">`+
+           `<img src="../${esc(g.image)}" alt="" loading="lazy"><span class="sim-meta">${esc(g.venue.toUpperCase())} ${g.year}</span></button>`;
+  }).join('');
 }
 function openForgeLightbox(id){
   const i = results.findIndex(f=>f.id===id); if(i<0) return;
@@ -895,6 +939,11 @@ $('#forgeLbClose').onclick=closeForgeLightbox;
 $('#forgeLbPrev').onclick=()=>stepForgeLightbox(-1);
 $('#forgeLbNext').onclick=()=>stepForgeLightbox(1);
 forgeLb.addEventListener('click',e=>{ if(e.target===forgeLb) closeForgeLightbox(); });
+$('#forgeLbSimilar').addEventListener('click',e=>{
+  const btn = e.target.closest('.sim-item'); if(!btn) return;
+  const next = results.findIndex(f=>f.id===btn.dataset.id); if(next<0) return;
+  forgeLbIndex = next; updateForgeLightbox();
+});
 document.addEventListener('keydown',e=>{
   if(forgeLb.hidden) return;
   if(e.key==='Escape') closeForgeLightbox();
