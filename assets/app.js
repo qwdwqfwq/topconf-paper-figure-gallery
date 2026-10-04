@@ -199,7 +199,7 @@
     if (f.award === "best") return { className: "rb-best", key: "rib.best" };
     if (f.award === "honorable") return { className: "rb-honor", key: "rib.honor" };
     if (f.tier === "oral") return { className: "rb-oral", key: "rib.oral" };
-    if (f.tier === "spotlight") return { className: "rb-spot", key: "rib.spot" };
+    if (f.tier === "spotlight") return { className: "rb-spotlight", key: "rib.spot" };
     return null;
   }
   function ribbonHtml(f) {
