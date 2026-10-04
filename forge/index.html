@@ -1670,7 +1670,9 @@ async function genOaiSVG(base,model,key,content,p,refIds,layoutGuide){
     if(s2){ code = s2[0].replace(/```[\s\S]*$/,'').trim()+'</svg>'; truncated=true; }
   }
   if(!code) throw new Error(tt('svg.none'));
-  renderSVG(code, usedVision, useIds, truncated);
+  const auditRes = await auditAndRepair(code, {base, model, key, provider:p, anthropic:false},
+    (r,n)=>setGenNote(tt('audit.repairing',{r:r, n:n})));
+  renderSVG(auditRes.svg, usedVision, useIds, truncated, auditRes);
 }
 
 async function genAnthropicSVG(base,model,key,content,refIds,layoutGuide){
@@ -1713,16 +1715,234 @@ async function genAnthropicSVG(base,model,key,content,refIds,layoutGuide){
     if(s2){ code = s2[0].replace(/```[\s\S]*$/,'').trim()+'</svg>'; truncated=true; }
   }
   if(!code) throw new Error(tt('svg.claudeNone'));
-  renderSVG(code, usedVision, useIds, truncated);
+  const auditRes = await auditAndRepair(code, {base, model, key, provider:'claude', anthropic:true},
+    (r,n)=>setGenNote(tt('audit.repairing',{r:r, n:n})));
+  renderSVG(auditRes.svg, usedVision, useIds, truncated, auditRes);
 }
-function renderSVG(svg, usedVision, useIds, truncated){
+/* ---------------- geometry audit: measure the draft before showing it ----------------
+   The generator has no idea whether its own coordinates fit the canvas, and nothing
+   checked: overflowing labels, text spilling out of its panel and colliding labels all
+   shipped silently. This renders the SVG at the real canvas size off-screen and
+   measures every label, so defects are facts rather than guesses. */
+const AUDIT_TOLERANCE = 2;      // px of slack before something counts as outside
+const OVERLAP_MIN = 12;         // px of intersection before labels count as colliding
+const MAX_DEFECTS = 10;         // cap the repair instruction length
+const MAX_REPAIR_ROUNDS = 2;
+
+function readViewBox(svgEl){
+  const vb = (svgEl.getAttribute('viewBox')||'').trim().split(/[\s,]+/).map(Number);
+  if(vb.length===4 && vb.every(n=>isFinite(n)) && vb[2]>0 && vb[3]>0) return {x:vb[0],y:vb[1],w:vb[2],h:vb[3]};
+  const w = parseFloat(svgEl.getAttribute('width'))||0, h = parseFloat(svgEl.getAttribute('height'))||0;
+  if(w>0 && h>0) return {x:0,y:0,w:w,h:h};
+  return null;
+}
+
+/* The box a label visually belongs to: the smallest painted rect on the canvas
+   whose area contains the label's centre. Implemented by geometry rather than by
+   ancestor lookup because generators emit both nested (<g><rect/><text/></g>) and
+   flat (<rect/><text/> as siblings) structures, and an ancestor-only search finds
+   nothing in the flat case. */
+function panelBoxFor(node, labelBox, canvas){
+  const cx = labelBox.x + labelBox.width/2;
+  const cy = labelBox.y + labelBox.height/2;
+  let best = null, bestArea = Infinity;
+  [...canvas.querySelectorAll('rect')].forEach(rect=>{
+    let b; try{ b = rect.getBBox(); }catch(e){ return; }
+    if(!b || b.width<=2 || b.height<=2) return;
+    if(b.width >= canvas.clientWidth - 1 && b.height >= canvas.clientHeight - 1) return;  // page background
+    const pad = 2;
+    if(cx < b.x+pad || cx > b.x+b.width-pad || cy < b.y+pad || cy > b.y+b.height-pad) return;
+    const area = b.width*b.height;
+    if(area < bestArea){ bestArea = area; best = {rect, box:b}; }
+  });
+  return best;
+}
+
+function auditGeometry(svgText){
+  const defects = [];
+  const stats = {texts:0, overflow:0, panel:0, overlap:0, panelsFound:0, panelSkipped:0, viewBox:null};
+  let host=null;
+  try{
+    const doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+    if(doc.querySelector('parsererror')) return {defects:[{kind:'parse', detail:'SVG could not be parsed'}], stats, broken:true, svgText};
+    const root = doc.documentElement;
+    if(!root || root.tagName.toLowerCase()!=='svg') return {defects:[{kind:'parse', detail:'root element is not <svg>'}], stats, broken:true, svgText};
+    const vb = readViewBox(root);
+    if(!vb) return {defects:[{kind:'parse', detail:'no usable viewBox or width/height'}], stats, broken:true, svgText};
+
+    host = document.createElement('div');
+    host.setAttribute('aria-hidden','true');
+    host.style.cssText = `position:fixed;left:-100000px;top:0;width:${vb.w}px;height:${vb.h}px;overflow:hidden;pointer-events:none;`;
+    const live = document.importNode(root, true);
+    live.setAttribute('width', vb.w);
+    live.setAttribute('height', vb.h);
+    host.appendChild(live);
+    document.body.appendChild(host);
+
+    // Only <text> is measured: a <text> that contains <tspan> children already
+    // covers them, and counting both would report phantom collisions.
+    const nodes = [...host.querySelectorAll('text')].filter(n=>{
+      const s = getComputedStyle(n);
+      if(s.display==='none' || s.visibility==='hidden' || parseFloat(s.opacity)===0) return false;
+      return (n.textContent||'').trim().length>0;
+    });
+    stats.texts = nodes.length;
+
+    const boxes = [];
+    nodes.forEach(n=>{
+      let box;
+      try{ box = n.getBBox(); }catch(e){ return; }   // <text> with no glyphs throws in some engines
+      if(!box || box.width<=0 || box.height<=0) return;
+      const label = (n.textContent||'').trim().replace(/\s+/g,' ').slice(0,42);
+      boxes.push({box, label});
+
+      const outL = vb.x - (box.x - AUDIT_TOLERANCE);
+      const outT = vb.y - (box.y - AUDIT_TOLERANCE);
+      const outR = (box.x + box.width) - (vb.x + vb.w) - AUDIT_TOLERANCE;
+      const outB = (box.y + box.height) - (vb.y + vb.h) - AUDIT_TOLERANCE;
+      if(outL>0 || outT>0 || outR>0 || outB>0){
+        stats.overflow++;
+        const parts = [];
+        if(outL>0) parts.push(`left by ${Math.round(outL)}px`);
+        if(outR>0) parts.push(`right by ${Math.round(outR)}px`);
+        if(outT>0) parts.push(`top by ${Math.round(outT)}px`);
+        if(outB>0) parts.push(`bottom by ${Math.round(outB)}px`);
+        defects.push({kind:'overflow', label,
+          detail:`label "${label}" runs past the canvas ${parts.join(' and ')}`,
+          fix:`shorten this label or move/shrink it so it stays inside x=0..${Math.round(vb.w)}, y=0..${Math.round(vb.h)}`});
+      }
+
+      const panel = panelBoxFor(n, box, live);
+      if(panel){
+        stats.panelsFound++;
+        const over = (box.x + box.width) - (panel.box.x + panel.box.width);
+        if(over > AUDIT_TOLERANCE*3){
+          stats.panel++;
+          defects.push({kind:'panel', label,
+            detail:`label "${label}" is ${Math.round(over)}px wider than the box it belongs to`,
+            fix:`shorten this label, reduce its font-size, or widen that box so the text fits with padding`});
+        }
+      }
+    });
+
+    // Label collisions. Vertical overlap must be substantial, else an axis tick
+    // and a caption that merely share a band would be reported.
+    for(let i=0;i<boxes.length;i++){
+      for(let j=i+1;j<boxes.length;j++){
+        const a=boxes[i].box, b=boxes[j].box;
+        const ox = Math.min(a.x+a.width, b.x+b.width) - Math.max(a.x, b.x);
+        const oy = Math.min(a.y+a.height, b.y+b.height) - Math.max(a.y, b.y);
+        if(ox>OVERLAP_MIN && oy>Math.min(a.height,b.height)*0.35){
+          stats.overlap++;
+          defects.push({kind:'overlap', label:boxes[i].label,
+            detail:`"${boxes[i].label}" overlaps "${boxes[j].label}" by ${Math.round(ox)}x${Math.round(oy)}px`,
+            fix:`separate these two labels (move, shorten or shrink) so they do not overlap`});
+        }
+      }
+    }
+
+    stats.viewBox = vb;
+    return {defects:defects.slice(0, MAX_DEFECTS), stats, broken:false, svgText:new XMLSerializer().serializeToString(live)};
+  }catch(e){
+    return {defects:[{kind:'audit', detail:'audit failed: '+e.message}], stats, broken:false, svgText};
+  }finally{
+    if(host && host.parentNode) host.parentNode.removeChild(host);
+  }
+}
+
+function setGenNote(text){
+  const btn = $('#genBtn');
+  if(btn && text) btn.textContent = text;
+}
+
+async function repairSVG(svgText, defects, req){
+  const list = defects.map((d,i)=>`${i+1}. ${d.detail} -> ${d.fix}`).join('\n');
+  const instruction =
+`Fix ONLY the defects listed below. Change as little as possible: keep every panel, arrow, colour, position and label that is not named here.
+Do not redesign, do not rename labels that are already correct, do not add or remove elements.
+${list}
+
+Return the complete corrected SVG only, no explanation, no code fences. Start with <svg and end with </svg>.`;
+  const {base, model, key, provider} = req;
+  if(req.anthropic){
+    const body = {model, max_tokens:8192, temperature:0.1, system:SVG_SYS,
+      messages:[{role:'user',content:[{type:'text',text:svgText},{type:'text',text:instruction}]}]};
+    const r = await fetch(base.replace(/\/+$/,'')+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(body)});
+    const txt = await r.text();
+    if(!r.ok) throw new Error(friendlyHttp(r.status, txt));
+    const d = JSON.parse(txt);
+    return (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+  }
+  const body = {model, temperature:0.1, max_tokens:8192,
+    messages:[{role:'system',content:SVG_SYS},{role:'user',content:svgText+'\n\n'+instruction}]};
+  if(provider==='ark') body.thinking={type:'disabled'};
+  const r = await postJSON(base,'/chat/completions',body,key);
+  const txt = await r.text();
+  if(!r.ok) throw new Error(friendlyHttp(r.status, txt));
+  const d = JSON.parse(txt);
+  return d.choices?.[0]?.message?.content||'';
+}
+
+function extractSvgCode(raw){
+  const code = (raw.match(/<svg[\s\S]*?<\/svg>/)||[])[0] || '';
+  if(code) return {code, truncated:false, unterminated:false};
+  const s2 = raw.match(/<svg[\s\S]*$/);
+  if(s2) return {code:s2[0].replace(/```[\s\S]*$/,'').trim(), truncated:true, unterminated:true};
+  return {code:'', truncated:false, unterminated:false};
+}
+
+/* Audit, then optionally repair. The current draft is kept unless a repair
+   measurably reduces the defect count, so a bad repair cannot make things worse. */
+async function auditAndRepair(svgText, req, onProgress){
+  let current = svgText;
+  let report = auditGeometry(current);
+  const first = report.defects.length;
+  let rounds = 0, repaired = 0;
+  const log = [{round:0, defects:first, kinds:report.defects.map(d=>d.kind)}];
+
+  while(report.defects.length && !report.broken && rounds < MAX_REPAIR_ROUNDS){
+    if(onProgress) onProgress(rounds+1, report.defects.length);
+    rounds++;
+    let candidateText = '';
+    try{
+      candidateText = await repairSVG(current, report.defects, req);
+    }catch(e){
+      log.push({round:rounds, error:String(e.message||e).slice(0,160)});
+      break;
+    }
+    const extracted = extractSvgCode(candidateText);
+    if(!extracted.code || extracted.unterminated){
+      log.push({round:rounds, error:'repair returned no complete SVG'});
+      break;
+    }
+    const candidate = auditGeometry(extracted.code);
+    log.push({round:rounds, defects:candidate.defects.length, kinds:candidate.defects.map(d=>d.kind)});
+    if(candidate.broken || candidate.defects.length >= report.defects.length) break;
+    current = extracted.code;
+    report = candidate;
+    repaired = rounds;
+  }
+  return {svg:current, audit:report, rounds, repaired, first, log};
+}
+
+function auditSummaryText(res){
+  if(!res) return '';
+  const left = res.audit.defects.length;
+  if(res.first===0) return tt('audit.clean');
+  if(res.repaired>0) return tt('audit.fixed',{a:res.first, b:left, r:res.repaired});
+  if(left>0) return tt('audit.left',{n:left});
+  return '';
+}
+
+function renderSVG(svg, usedVision, useIds, truncated, auditRes){
   const blob = new Blob([svg],{type:'image/svg+xml'});
   const url = URL.createObjectURL(blob);
   const n = (useIds||[...refs]).length;
+  const auditNote = auditRes ? auditSummaryText(auditRes) : '';
   $('#out').style.display='block';
   $('#out').innerHTML = `<iframe sandbox src="${url}"></iframe>
     <div class="dl"><a class="btn-primary" href="${url}" download="figure-forge-draft.svg">${tt('svg.download')}</a>
-    <span class="hint">${usedVision?tt('svg.hint1',{n:n}):tt('svg.hint2')}${truncated?tt('svg.trunc'):''}</span></div>`;
+    <span class="hint">${usedVision?tt('svg.hint1',{n:n}):tt('svg.hint2')}${truncated?tt('svg.trunc'):''}${auditNote}</span></div>`;
 }
 
 async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
