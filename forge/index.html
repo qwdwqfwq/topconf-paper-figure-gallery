@@ -1731,17 +1731,12 @@ async function genOaiSVG(base,model,key,content,p,refIds,layoutGuide){
   }
   if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
   const d = JSON.parse(txt);
-  let svg = d.choices?.[0]?.message?.content||'';
-  let code = (svg.match(/<svg[\s\S]*?<\/svg>/)||[])[0] || '';
-  let truncated=false;
-  if(!code){
-    const s2 = svg.match(/<svg[\s\S]*$/);
-    if(s2){ code = s2[0].replace(/```[\s\S]*$/,'').trim()+'</svg>'; truncated=true; }
-  }
+  const parsed = extractSvgCode(d.choices?.[0]?.message?.content||'', true);
+  const code = parsed.code;
   if(!code) throw new Error(tt('svg.none'));
   const auditRes = await auditAndRepair(code, {base, model, key, provider:p, anthropic:false},
-    (r,n)=>setGenNote(tt('audit.repairing',{r:r, n:n})));
-  renderSVG(auditRes.svg, usedVision, useIds, truncated, auditRes);
+    (r,n)=>setGenNote(tt('audit.repairing',{r:r, n:n})), parsed.truncated);
+  renderSVG(auditRes.svg, usedVision, useIds, parsed.truncated, auditRes);
 }
 
 async function genAnthropicSVG(base,model,key,content,refIds,layoutGuide){
@@ -1777,16 +1772,12 @@ async function genAnthropicSVG(base,model,key,content,refIds,layoutGuide){
   if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
   const d = JSON.parse(txt);
   const out = (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
-  let code = (out.match(/<svg[\s\S]*?<\/svg>/)||[])[0] || '';
-  let truncated=false;
-  if(!code){
-    const s2 = out.match(/<svg[\s\S]*$/);
-    if(s2){ code = s2[0].replace(/```[\s\S]*$/,'').trim()+'</svg>'; truncated=true; }
-  }
+  const parsed = extractSvgCode(out, true);
+  const code = parsed.code;
   if(!code) throw new Error(tt('svg.claudeNone'));
   const auditRes = await auditAndRepair(code, {base, model, key, provider:'claude', anthropic:true},
-    (r,n)=>setGenNote(tt('audit.repairing',{r:r, n:n})));
-  renderSVG(auditRes.svg, usedVision, useIds, truncated, auditRes);
+    (r,n)=>setGenNote(tt('audit.repairing',{r:r, n:n})), parsed.truncated);
+  renderSVG(auditRes.svg, usedVision, useIds, parsed.truncated, auditRes);
 }
 /* ---------------- geometry audit: measure the draft before showing it ----------------
    The generator has no idea whether its own coordinates fit the canvas, and nothing
@@ -1952,24 +1943,39 @@ Return the complete corrected SVG only, no explanation, no code fences. Start wi
   return d.choices?.[0]?.message?.content||'';
 }
 
-function extractSvgCode(raw){
+/* Extract the SVG from a model reply.
+   When the reply was cut off, the old behaviour was to chop at the cut and glue a
+   literal `</svg>` on, which often left a half-finished tag and a structurally
+   broken document. Completing only the root element instead produces something
+   well-formed: whatever partial element is dangling can no longer swallow the rest
+   of the document, and the geometry audit then measures the real result. */
+function extractSvgCode(raw, autoClose){
   const code = (raw.match(/<svg[\s\S]*?<\/svg>/)||[])[0] || '';
-  if(code) return {code, truncated:false, unterminated:false};
+  if(code) return {code, truncated:false, completed:false};
   const s2 = raw.match(/<svg[\s\S]*$/);
-  if(s2) return {code:s2[0].replace(/```[\s\S]*$/,'').trim(), truncated:true, unterminated:true};
-  return {code:'', truncated:false, unterminated:false};
+  if(!s2) return {code:'', truncated:false, completed:false};
+  let body = s2[0].replace(/```[\s\S]*$/,'').trim();
+  if(autoClose){
+    // Drop a trailing partial tag so the closing root element is valid markup.
+    body = body.replace(/<[^>]*$/,'').trimEnd();
+    body += '</svg>';
+    return {code:body, truncated:true, completed:true};
+  }
+  return {code:body, truncated:true, completed:false};
 }
 
 /* Audit, then optionally repair. The current draft is kept unless a repair
-   measurably reduces the defect count, so a bad repair cannot make things worse. */
-async function auditAndRepair(svgText, req, onProgress){
+   measurably reduces the defect count, so a bad repair cannot make things worse.
+   A cut-off draft is measured but not repaired: a truncated figure is incomplete
+   by definition, so the useful action is to say so, not to polish it. */
+async function auditAndRepair(svgText, req, onProgress, wasTruncated){
   let current = svgText;
   let report = auditGeometry(current);
   const first = report.defects.length;
   let rounds = 0, repaired = 0;
   const log = [{round:0, defects:first, kinds:report.defects.map(d=>d.kind)}];
 
-  while(report.defects.length && !report.broken && rounds < MAX_REPAIR_ROUNDS){
+  while(!wasTruncated && report.defects.length && !report.broken && rounds < MAX_REPAIR_ROUNDS){
     if(onProgress) onProgress(rounds+1, report.defects.length);
     rounds++;
     let candidateText = '';
@@ -1979,8 +1985,8 @@ async function auditAndRepair(svgText, req, onProgress){
       log.push({round:rounds, error:String(e.message||e).slice(0,160)});
       break;
     }
-    const extracted = extractSvgCode(candidateText);
-    if(!extracted.code || extracted.unterminated){
+    const extracted = extractSvgCode(candidateText, false);
+    if(!extracted.code || !extracted.completed && extracted.truncated){
       log.push({round:rounds, error:'repair returned no complete SVG'});
       break;
     }
@@ -1991,7 +1997,8 @@ async function auditAndRepair(svgText, req, onProgress){
     report = candidate;
     repaired = rounds;
   }
-  return {svg:current, audit:report, rounds, repaired, first, log};
+  // `truncated` here means "unfinished draft", regardless of which pass produced it.
+  return {svg:current, audit:report, rounds, repaired, first, truncated:!!wasTruncated, log};
 }
 
 function auditSummaryText(res){
