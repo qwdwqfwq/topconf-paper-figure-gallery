@@ -1341,7 +1341,7 @@
  ],
  "icml2024-0571": [
   "Marvin Schmitt",
-  "Ivanova, Desi R.",
+  "Desi R. Ivanova",
   "Daniel Habermann",
   "Ullrich Köthe",
   "Paul‐Christian Bürkner",
@@ -1424,7 +1424,7 @@
   "Fanqing Meng",
   "Jin Wang",
   "Zhiqian Li",
-  "Lin, Han",
+  "Han Lin",
   "Yue Yang",
   "Hao Zhang",
   "Wenbo Zhang",
@@ -1525,12 +1525,12 @@
   "Cheng-Yu Hsieh",
   "Yaqing Wang",
   "Yiling Jia",
-  "Li, Gen",
-  "Jaiswal, Ajay",
+  "Gen Li",
+  "Ajay Jaiswal",
   "Mykola Pechenizkiy",
   "Liang Yi",
-  "Bendersky, Michael",
-  "Wang, Zhangyang",
+  "Michael Bendersky",
+  "Zhangyang Wang",
   "Shiwei Liu"
  ],
  "icml2024-0720": [
@@ -1655,7 +1655,7 @@
   "Weizhe Yuan",
   "Richard Yuanzhe Pang",
   "Kyunghyun Cho",
-  "Li, Xian",
+  "Xian Li",
   "Sainbayar Sukhbaatar",
   "Jing Xu",
   "Jason Weston"
@@ -1703,7 +1703,7 @@
   "Daiki Miwa",
   "Teruyuki Katsuoka",
   "Vo Nguyen Le Duy",
-  "Taji, Kouichi",
+  "Kouichi Taji",
   "Ichiro Takeuchi"
  ],
  "icml2024-0970": [
@@ -1755,7 +1755,7 @@
   "Xiao-Shan Gao"
  ],
  "icml2024-1040": [
-  "Lee, Deokjae",
+  "Deokjae Lee",
   "Hyun Oh Song",
   "Kyunghyun Cho"
  ],
@@ -1797,12 +1797,12 @@
   "Lifan Yuan",
   "Ning Ding",
   "Guanming Yao",
-  "He, Bingxiang",
+  "Bingxiang He",
   "Wei Zhu",
   "Yuan Ni",
   "Guotong Xie",
-  "Xie, Ruobing",
-  "Lin, Yankai",
+  "Ruobing Xie",
+  "Yankai Lin",
   "Zhiyuan Liu",
   "Maosong Sun"
  ],
@@ -1820,7 +1820,7 @@
   "Jinglong Yang",
   "Qifeng Chen",
   "Nan Duan",
-  "Zhang, Jianguo"
+  "Jianguo Zhang"
  ],
  "icml2024-1102": [
   "Guangzhi Sun",
@@ -1955,10 +1955,10 @@
  ],
  "icml2025-0061": [
   "Wenhao Shen",
-  "Yin, Wanqi",
+  "Wanqi Yin",
   "Xiaofeng Yang",
   "Cheng Chen",
-  "Song, Chaoyue",
+  "Chaoyue Song",
   "Zhongang Cai",
   "Lei Yang",
   "Hao Wang",
@@ -3190,7 +3190,7 @@
  "icml2025-0143": [
   "Jun Wu",
   "Jiangtao Wen",
-  "Han, Yuxing"
+  "Yuxing Han"
  ],
  "icml2025-0163": [
   "Yifan Zhang",
@@ -3253,9 +3253,9 @@
  "icml2025-0231": [
   "Ni Mu",
   "Hao Hu",
-  "Hu, Xiao",
+  "Xiao Hu",
   "Yiqin Yang",
-  "Xu, Bo",
+  "Bo Xu",
   "Qing‐Shan Jia"
  ],
  "icml2025-0232": [
@@ -3290,7 +3290,7 @@
  ],
  "icml2025-0256": [
   "Qiyao Liang",
-  "Qian, Daoyuan",
+  "Daoyuan Qian",
   "Liu Ziyin",
   "Ila Fiete"
  ],
@@ -3302,8 +3302,8 @@
  ],
  "icml2025-0261": [
   "Charles O’Neill",
-  "Gumran, Alim",
-  "Klindt, David"
+  "Alim Gumran",
+  "David Klindt"
  ],
  "icml2025-0285": [
   "B. Li",
@@ -3329,31 +3329,31 @@
   "Bohan Zhou",
   "Junpeng Yue",
   "Jiechuan Jiang",
-  "Li, Yewen",
-  "An, Ruyi",
-  "Qin, Molei",
-  "Zong, Chuqiao",
+  "Yewen Li",
+  "Ruyi An",
+  "Molei Qin",
+  "Chuqiao Zong",
   "Longtao Zheng",
-  "Wu, Yujie",
-  "Chai, Xiaoqiang",
+  "Yujie Wu",
+  "Xiaoqiang Chai",
   "Yifei Bi",
-  "Xie, Tianbao",
+  "Tianbao Xie",
   "Pengjie Gu",
-  "Li, Xiyun",
-  "Zhang, Ceyao",
-  "Tian, Long",
-  "Wang, Chaojie",
+  "Xiyun Li",
+  "Ceyao Zhang",
+  "Long Tian",
+  "Chaojie Wang",
   "Xinrun Wang",
   "Börje F. Karlsson",
   "Bo An",
-  "Yan, Shuicheng",
+  "Shuicheng Yan",
   "Zongqing Lu"
  ],
  "icml2025-0307": [
   "Zicheng Lin",
   "Liang Tian",
   "Jiahao Xu",
-  "Lin, Qiuzhi",
+  "Qiuzhi Lin",
   "Xing Wang",
   "Ruilin Luo",
   "Chufan Shi",
@@ -3394,7 +3394,7 @@
  "icml2025-0323": [
   "Daoyuan Chen",
   "Haibin Wang",
-  "Huang, Yilun",
+  "Yilun Huang",
   "Ce Ge",
   "Yaliang Li",
   "Bolin Ding",
@@ -3414,8 +3414,8 @@
  ],
  "icml2025-0345": [
   "Edward Yeo",
-  "Tong, Yuxuan",
-  "Niu, Morry",
+  "Yuxuan Tong",
+  "Morry Niu",
   "Graham Neubig",
   "Xiang Yue"
  ],
@@ -3429,7 +3429,7 @@
   "Weimin Huang",
   "Yuxin Zhang",
   "Xiawu Zheng",
-  "Chao, Fei",
+  "Fei Chao",
   "Rongrong Ji"
  ],
  "icml2025-0361": [
@@ -3506,12 +3506,12 @@
   "Tat‐Seng Chua"
  ],
  "icml2025-0431": [
-  "Wang, Xun",
-  "Xu, Jing",
-  "Boenisch, Franziska",
-  "Backes, Michael",
-  "Choquette-Choo, Christopher A.",
-  "Dziedzic, Adam"
+  "Xun Wang",
+  "Jing Xu",
+  "Franziska Boenisch",
+  "Michael Backes",
+  "Christopher A. Choquette-Choo",
+  "Adam Dziedzic"
  ],
  "icml2025-0436": [
   "Jaehyeon Kim",
@@ -3530,7 +3530,7 @@
   "Suhyun Kim"
  ],
  "icml2025-0452": [
-  "Hsieh, Cheng-Yen",
+  "Cheng-Yen Hsieh",
   "Xinyou Wang",
   "D. H. Zhang",
   "Dongyu Xue",
@@ -3544,18 +3544,18 @@
   "Hanyang Chen",
   "Junyu Zhang",
   "Mark Zhao",
-  "Qian, Cheng",
+  "Cheng Qian",
   "Kangrui Wang",
   "Qineng Wang",
   "Teja Venkat Koripella",
-  "Movahedi, Marziyeh",
+  "Marziyeh Movahedi",
   "Manling Li",
   "Heng Ji",
   "Huan Zhang",
   "Tong Zhang"
  ],
  "icml2025-0458": [
-  "Yang, Yukang",
+  "Yukang Yang",
   "Declan Campbell",
   "Kaixuan Huang",
   "Mengdi Wang",
@@ -3571,7 +3571,7 @@
  ],
  "icml2025-0467": [
   "Heng Dong",
-  "Duan, Kefei",
+  "Kefei Duan",
   "Chenxiao Zhang"
  ],
  "icml2025-0469": [
@@ -3601,8 +3601,8 @@
  ],
  "icml2025-0481": [
   "Yuxuan Zhou",
-  "Liu, Xien",
-  "Yan, Chenwei",
+  "Xien Liu",
+  "Chenwei Yan",
   "Chen Ning",
   "Xiao Zhang",
   "Boxun Li",
@@ -3615,13 +3615,13 @@
  "icml2025-0482": [
   "Zhen Wang",
   "Yilei Jiang",
-  "Zheng, Dong",
+  "Dong Zheng",
   "Jun Xiao",
   "Long Chen"
  ],
  "icml2025-0483": [
   "Zheyang Xiong",
-  "Cai, Ziyang",
+  "Ziyang Cai",
   "John Cooper",
   "Albert Ge",
   "Vasilis Papageorgiou",
@@ -3655,7 +3655,7 @@
   "Xiu-Shen Wei",
   "Yifan Sun",
   "Yuxin Song",
-  "Yuan, Tao",
+  "Tao Yuan",
   "Jian Jin",
   "Heyang Xu",
   "Yazhou Yao",
@@ -3745,12 +3745,12 @@
   "Weidong Ren",
   "Tianyu Li",
   "Hong Liu",
-  "He, Xingsheng",
+  "Xingsheng He",
   "Xiaoxiao Xu"
  ],
  "icml2025-0628": [
-  "Koblischke, Nolan",
-  "Jang, Hyunseok",
+  "Nolan Koblischke",
+  "Hyunseok Jang",
   "Kristen Menou",
   "Mohamad Ali-Dib"
  ],
@@ -3771,13 +3771,13 @@
   "Marwa El Halabi",
   "Wonpyo Park",
   "Clemens Schaefer",
-  "Lee, Deokjae",
+  "Deokjae Lee",
   "Yeonhong Park",
   "Jae Wook Lee",
   "Hyun Oh Song"
  ],
  "icml2025-0646": [
-  "Lin, Tianwei",
+  "Tianwei Lin",
   "Wenqiao Zhang",
   "Sijing Li",
   "Yuqian Yuan",
@@ -3802,11 +3802,11 @@
   "Quan Vuong",
   "James Tanner",
   "Anna Walling",
-  "Wang, Haohuan",
+  "Haohuan Wang",
   "Niccolo Fusai",
   "Adrian Li-Bell",
   "Danny Driess",
-  "Groom, Lachy",
+  "Lachy Groom",
   "Sergey Levine",
   "Chelsea Finn"
  ],
@@ -3832,7 +3832,7 @@
  ],
  "icml2025-0683": [
   "Ming-Jie Sun",
-  "Yin, Yida",
+  "Yida Yin",
   "Zeshui Xu",
   "J. Zico Kolter",
   "Zhuang Liu"
@@ -3890,13 +3890,13 @@
   "Sergey Levine"
  ],
  "icml2025-0834": [
-  "Liu, Zihang",
+  "Zihang Liu",
   "Tianyu Pang",
   "Oleg Balabanov",
   "Chaoqun Yang",
   "Tianjin Huang",
   "Lu Yin",
-  "Yang, Yaoqing",
+  "Yaoqing Yang",
   "Shiwei Liu"
  ],
  "icml2025-0837": [
@@ -3937,7 +3937,7 @@
  "icml2025-0857": [
   "Zhuoran Zhang",
   "Yongxiang Li",
-  "Kan, Zijian",
+  "Zijian Kan",
   "Keyuan Cheng",
   "Lijie Hu",
   "Di Wang"
@@ -3954,7 +3954,7 @@
   "Cong Wang",
   "Junyao Gao",
   "Qin Guo",
-  "Dang, Jisheng",
+  "Jisheng Dang",
   "Jinhui Tang",
   "Tat-Seng Chua"
  ],
@@ -3964,7 +3964,7 @@
   "Yudong Chen"
  ],
  "icml2025-0872": [
-  "Zhou, Zikai",
+  "Zikai Zhou",
   "Qizheng Zhang",
   "Hermann Kumbong",
   "Kunle Olukotun"
@@ -3995,7 +3995,7 @@
   "Sarah Perrin",
   "Daniel Hennes",
   "Jeremy Shar",
-  "Lewis, Cannada",
+  "Cannada Lewis",
   "Anian Ruoss",
   "Tom Zahavy",
   "Petar Veličković",
@@ -4017,7 +4017,7 @@
   "Runzhe Wang",
   "Yue Wu",
   "Ming Yin",
-  "Tang, Shange",
+  "Shange Tang",
   "Yangsibo Huang",
   "Chi Jin",
   "Xinyun Chen",
@@ -4025,16 +4025,16 @@
   "Mengdi Wang"
  ],
  "icml2025-0903": [
-  "Zheng, Xinyue",
+  "Xinyue Zheng",
   "Haowei Lin",
-  "He, Kaichen",
+  "Kaichen He",
   "Zihao Wang",
-  "Zheng, Zilong",
+  "Zilong Zheng",
   "Yitao Liang"
  ],
  "icml2025-0906": [
   "Phillip Guo",
-  "Syed, Aaquib",
+  "Aaquib Syed",
   "Abhay Sheshadri",
   "Aidan Ewart",
   "Gintare Karolina Dziugaite"
@@ -4079,7 +4079,7 @@
  "icml2025-0949": [
   "Yuhuan Yang",
   "Chaofan Ma",
-  "Mao, Zhenjie",
+  "Zhenjie Mao",
   "Jiangchao Yao",
   "Ya Zhang",
   "Yanfeng Wang"
@@ -12841,676 +12841,2133 @@
   "Hang Li"
  ],
  "neurips2023-0045": [
-  "Zhang, Xingyuan",
-  "Becker-Ehmck, Philip",
-  "van der Smagt, Patrick",
-  "Karl, Maximilian"
+  "Xingyuan Zhang",
+  "Philip Becker-Ehmck",
+  "Patrick van der Smagt",
+  "Maximilian Karl"
  ],
  "neurips2023-0270": [
-  "Weng, Tingyu",
-  "Xiao, Jun",
-  "Jiang, Haiyong"
+  "Tingyu Weng",
+  "Jun Xiao",
+  "Haiyong Jiang"
  ],
  "neurips2023-0273": [
-  "Ling, Zhan",
-  "Fang, Yunhao",
-  "Li, Xuanlin",
-  "Huang, Zhiao",
-  "Lee, Mingu",
-  "Memisevic, Roland",
-  "Su, Hao"
+  "Zhan Ling",
+  "Yunhao Fang",
+  "Xuanlin Li",
+  "Zhiao Huang",
+  "Mingu Lee",
+  "Roland Memisevic",
+  "Hao Su"
  ],
  "neurips2023-0312": [
-  "Yan, Xin",
-  "Fang, Hui",
-  "He, Qiang"
+  "Xin Yan",
+  "Hui Fang",
+  "Qiang He"
  ],
  "neurips2023-0372": [
-  "Wang, Haochen",
-  "Fan, Junsong",
-  "Wang, Yuxi",
-  "Song, Kaiyou",
-  "Wang, Tong",
-  "ZHANG, ZHAO-XIANG"
+  "Haochen Wang",
+  "Junsong Fan",
+  "Yuxi Wang",
+  "Kaiyou Song",
+  "Tong Wang",
+  "ZHAO-XIANG ZHANG"
  ],
  "neurips2023-0559": [
-  "Dong, Peiyan",
-  "Kong, Zhenglun",
-  "Meng, Xin",
-  "Yu, Pinrui",
-  "Gong, Yifan",
-  "Yuan, Geng",
-  "Tang, Hao",
-  "Wang, Yanzhi"
+  "Peiyan Dong",
+  "Zhenglun Kong",
+  "Xin Meng",
+  "Pinrui Yu",
+  "Yifan Gong",
+  "Geng Yuan",
+  "Hao Tang",
+  "Yanzhi Wang"
  ],
  "neurips2023-0654": [
-  "Brooks, Ethan",
-  "Walls, Logan",
-  "Lewis, Richard L",
-  "Singh, Satinder"
+  "Ethan Brooks",
+  "Logan Walls",
+  "Richard L Lewis",
+  "Satinder Singh"
  ],
  "neurips2023-0670": [
-  "Yue, Zihao",
-  "Hu, Anwen",
-  "Zhang, Liang",
-  "Jin, Qin"
+  "Zihao Yue",
+  "Anwen Hu",
+  "Liang Zhang",
+  "Qin Jin"
  ],
  "neurips2023-0739": [
-  "Huang, Guoxi",
-  "Fu, Hongtao",
-  "Bors, Adrian G."
+  "Guoxi Huang",
+  "Hongtao Fu",
+  "Adrian G. Bors"
  ],
  "neurips2023-0774": [
-  "Du, weitao",
-  "Chen, Jiujiu",
-  "Zhang, Xuecang",
-  "Ma, Zhi-Ming",
-  "Liu, Shengchao"
+  "weitao Du",
+  "Jiujiu Chen",
+  "Xuecang Zhang",
+  "Zhi-Ming Ma",
+  "Shengchao Liu"
  ],
  "neurips2023-0822": [
-  "Chen, Jinbiao",
-  "Zhang, Zizhen",
-  "Cao, Zhiguang",
-  "Wu, Yaoxin",
-  "Ma, Yining",
-  "Ye, Te",
-  "Wang, Jiahai"
+  "Jinbiao Chen",
+  "Zizhen Zhang",
+  "Zhiguang Cao",
+  "Yaoxin Wu",
+  "Yining Ma",
+  "Te Ye",
+  "Jiahai Wang"
  ],
  "neurips2023-0928": [
-  "Chen, Jiacheng",
-  "Deng, Ruizhi",
-  "Furukawa, Yasutaka"
+  "Jiacheng Chen",
+  "Ruizhi Deng",
+  "Yasutaka Furukawa"
  ],
  "neurips2023-1076": [
-  "Lim, Sungbin",
-  "YOON, EUN BI",
-  "Byun, Taehyun",
-  "Kang, Taewon",
-  "Kim, Seungwoo",
-  "Lee, Kyungjae",
-  "Choi, Sungjoon"
+  "Sungbin Lim",
+  "EUN BI YOON",
+  "Taehyun Byun",
+  "Taewon Kang",
+  "Seungwoo Kim",
+  "Kyungjae Lee",
+  "Sungjoon Choi"
  ],
  "neurips2023-1093": [
-  "Schaeffer, Rylan",
-  "Khona, Mikail",
-  "Ma, Tzuhsuan",
-  "Eyzaguirre, Cristobal",
-  "Koyejo, Sanmi",
-  "Fiete, Ila"
+  "Rylan Schaeffer",
+  "Mikail Khona",
+  "Tzuhsuan Ma",
+  "Cristobal Eyzaguirre",
+  "Sanmi Koyejo",
+  "Ila Fiete"
  ],
  "neurips2023-1268": [
-  "Li, Jiahui",
-  "Kuang, Kun",
-  "Wang, Baoxiang",
-  "Li, Xingchen",
-  "Wu, Fei",
-  "Xiao, Jun",
-  "Chen, Long"
+  "Jiahui Li",
+  "Kun Kuang",
+  "Baoxiang Wang",
+  "Xingchen Li",
+  "Fei Wu",
+  "Jun Xiao",
+  "Long Chen"
  ],
  "neurips2023-1722": [
-  "Auer, Andreas",
-  "Gauch, Martin",
-  "Klotz, Daniel",
-  "Hochreiter, Sepp"
+  "Andreas Auer",
+  "Martin Gauch",
+  "Daniel Klotz",
+  "Sepp Hochreiter"
  ],
  "neurips2023-1751": [
-  "Miehling, Erik",
-  "Nair, Rahul",
-  "Daly, Elizabeth",
-  "Natesan Ramamurthy, Karthikeyan",
-  "Redmond, Robert"
+  "Erik Miehling",
+  "Rahul Nair",
+  "Elizabeth Daly",
+  "Karthikeyan Natesan Ramamurthy",
+  "Robert Redmond"
  ],
  "neurips2023-1778": [
-  "Zhang, Zheng",
-  "Wang, Junxiang",
-  "Zhao, Liang"
+  "Zheng Zhang",
+  "Junxiang Wang",
+  "Liang Zhao"
  ],
  "neurips2023-1841": [
-  "Chen, Xiangzhi",
-  "Wu, Le",
-  "Liu, Fei",
-  "Chen, Lei",
-  "Zhang, Kun",
-  "Hong, Richang",
-  "Wang, Meng"
+  "Xiangzhi Chen",
+  "Le Wu",
+  "Fei Liu",
+  "Lei Chen",
+  "Kun Zhang",
+  "Richang Hong",
+  "Meng Wang"
  ],
  "neurips2023-1893": [
-  "Xu, Xilie",
-  "ZHANG, Jingfeng",
-  "Liu, Feng",
-  "Sugiyama, Masashi",
-  "Kankanhalli, Mohan S."
+  "Xilie Xu",
+  "Jingfeng ZHANG",
+  "Feng Liu",
+  "Masashi Sugiyama",
+  "Mohan S. Kankanhalli"
  ],
  "neurips2023-2081": [
-  "Tworkowski, Szymon",
-  "Staniszewski, Konrad",
-  "Pacek, Mikołaj",
-  "Wu, Yuhuai",
-  "Michalewski, Henryk",
-  "Miłoś, Piotr"
+  "Szymon Tworkowski",
+  "Konrad Staniszewski",
+  "Mikołaj Pacek",
+  "Yuhuai Wu",
+  "Henryk Michalewski",
+  "Piotr Miłoś"
  ],
  "neurips2023-2247": [
-  "Chen, Wei",
-  "Miao, Zichen",
-  "Qiu, Qiang"
+  "Wei Chen",
+  "Zichen Miao",
+  "Qiang Qiu"
  ],
  "neurips2023-2349": [
-  "Paulus, Max",
-  "Krause, Andreas"
+  "Max Paulus",
+  "Andreas Krause"
  ],
  "neurips2023-2703": [
-  "Shi, Mingjia",
-  "Zhou, Yuhao",
-  "Wang, Kai",
-  "Zhang, Huaizheng",
-  "Huang, Shudong",
-  "Ye, Qing",
-  "Lv, Jiancheng"
+  "Mingjia Shi",
+  "Yuhao Zhou",
+  "Kai Wang",
+  "Huaizheng Zhang",
+  "Shudong Huang",
+  "Qing Ye",
+  "Jiancheng Lv"
  ],
  "neurips2023-2762": [
-  "Yan, Haonan",
-  "Zhang, Wenjing",
-  "Chen, Qian",
-  "Li, Xiaoguang",
-  "Sun, Wenhai",
-  "LI, HUI",
-  "Lin, Xiaodong"
+  "Haonan Yan",
+  "Wenjing Zhang",
+  "Qian Chen",
+  "Xiaoguang Li",
+  "Wenhai Sun",
+  "HUI LI",
+  "Xiaodong Lin"
  ],
  "neurips2023-2897": [
-  "Adam, Hammaad",
-  "Yin, Fan",
-  "Hu, Huibin",
-  "Tenenholtz, Neil",
-  "Crawford, Lorin",
-  "Mackey, Lester",
-  "Koenecke, Allison"
+  "Hammaad Adam",
+  "Fan Yin",
+  "Huibin Hu",
+  "Neil Tenenholtz",
+  "Lorin Crawford",
+  "Lester Mackey",
+  "Allison Koenecke"
  ],
  "neurips2023-2995": [
-  "Lee, Hyun Dong",
-  "Warrington, Andrew",
-  "Glaser, Joshua",
-  "Linderman, Scott"
+  "Hyun Dong Lee",
+  "Andrew Warrington",
+  "Joshua Glaser",
+  "Scott Linderman"
  ],
  "neurips2023-3170": [
-  "Jin, Wengong",
-  "Sarkizova, Siranush",
-  "Chen, Xun",
-  "HaCohen, Nir",
-  "Uhler, Caroline"
+  "Wengong Jin",
+  "Siranush Sarkizova",
+  "Xun Chen",
+  "Nir HaCohen",
+  "Caroline Uhler"
  ],
  "neurips2023-3174": [
-  "Wang, Senzhang",
-  "Yin, Jun",
-  "Li, Chaozhuo",
-  "Xie, Xing",
-  "Wang, Jianxin"
+  "Senzhang Wang",
+  "Jun Yin",
+  "Chaozhuo Li",
+  "Xing Xie",
+  "Jianxin Wang"
  ],
  "neurips2024-0003": [
-  "Zhang, Liyuan",
-  "Hui, Le",
-  "Liu, Qi",
-  "Li, Bo",
-  "Dai, Yuchao"
+  "Liyuan Zhang",
+  "Le Hui",
+  "Qi Liu",
+  "Bo Li",
+  "Yuchao Dai"
  ],
  "neurips2024-0106": [
-  "Li, Jin",
-  "He, Ziqiang",
-  "Luo, Anwei",
-  "Hu, Jian-Fang",
-  "Wang, Z. Jane",
-  "Kang, Xiangui"
+  "Jin Li",
+  "Ziqiang He",
+  "Anwei Luo",
+  "Jian-Fang Hu",
+  "Z. Jane Wang",
+  "Xiangui Kang"
  ],
  "neurips2024-0198": [
-  "Su, Kefan",
-  "Huo, Yusen",
-  "Zhang, Zhilin",
-  "Dou, Shuai",
-  "Yu, Chuan",
-  "Xu, Jian",
-  "Lu, Zongqing",
-  "Zheng, Bo"
+  "Kefan Su",
+  "Yusen Huo",
+  "Zhilin Zhang",
+  "Shuai Dou",
+  "Chuan Yu",
+  "Jian Xu",
+  "Zongqing Lu",
+  "Bo Zheng"
  ],
  "neurips2024-0230": [
-  "Ren, Yuchen",
-  "Chen, Zhiyuan",
-  "Qiao, Lifeng",
-  "Jing, Hongtai",
-  "Cai, Yuchen",
-  "Xu, Sheng",
-  "Ye, Peng",
-  "Ma, Xinzhu",
-  "Sun, Siqi",
-  "Yan, Hongliang",
-  "Yuan, Dong",
-  "Ouyang, Wanli",
-  "Liu, Xihui"
+  "Yuchen Ren",
+  "Zhiyuan Chen",
+  "Lifeng Qiao",
+  "Hongtai Jing",
+  "Yuchen Cai",
+  "Sheng Xu",
+  "Peng Ye",
+  "Xinzhu Ma",
+  "Siqi Sun",
+  "Hongliang Yan",
+  "Dong Yuan",
+  "Wanli Ouyang",
+  "Xihui Liu"
  ],
  "neurips2024-0419": [
-  "Cohen-Wang, Benjamin",
-  "Shah, Harshay",
-  "Georgiev, Kristian",
-  "Mądry, Aleksander"
+  "Benjamin Cohen-Wang",
+  "Harshay Shah",
+  "Kristian Georgiev",
+  "Aleksander Mądry"
  ],
  "neurips2024-0455": [
-  "Shekarforoush, Shayan",
-  "Lindell, David",
-  "Brubaker, Marcus A.",
-  "Fleet, David J."
+  "Shayan Shekarforoush",
+  "David Lindell",
+  "Marcus A. Brubaker",
+  "David J. Fleet"
  ],
  "neurips2024-0476": [
-  "Zhang, Zhehao",
-  "Chen, Jiaao",
-  "Yang, Diyi"
+  "Zhehao Zhang",
+  "Jiaao Chen",
+  "Diyi Yang"
  ],
  "neurips2024-0503": [
-  "Hu, Lianyu",
-  "Shi, Tongkai",
-  "Feng, Wei",
-  "Shang, Fanhua",
-  "Wan, Liang"
+  "Lianyu Hu",
+  "Tongkai Shi",
+  "Wei Feng",
+  "Fanhua Shang",
+  "Liang Wan"
  ],
  "neurips2024-0542": [
-  "Seminara, Luigi",
-  "Farinella, Giovanni Maria",
-  "Furnari, Antonino"
+  "Luigi Seminara",
+  "Giovanni Maria Farinella",
+  "Antonino Furnari"
  ],
  "neurips2024-0630": [
-  "Zhao, Qingsong",
-  "Wang, Yi",
-  "Xu, Jilan",
-  "He, Yinan",
-  "Song, Zifan",
-  "Wang, Limin",
-  "Qiao, Yu",
-  "Zhao, Cairong"
+  "Qingsong Zhao",
+  "Yi Wang",
+  "Jilan Xu",
+  "Yinan He",
+  "Zifan Song",
+  "Limin Wang",
+  "Yu Qiao",
+  "Cairong Zhao"
  ],
  "neurips2024-0771": [
-  "Zhao, Rui",
-  "Yuan, Hangjie",
-  "Wei, Yujie",
-  "Zhang, Shiwei",
-  "Gu, Yuchao",
-  "Ran, Lingmin",
-  "Wang, Xiang",
-  "Wu, Zhangjie",
-  "Zhang, Junhao",
-  "Zhang, Yingya",
-  "Shou, Mike Z."
+  "Rui Zhao",
+  "Hangjie Yuan",
+  "Yujie Wei",
+  "Shiwei Zhang",
+  "Yuchao Gu",
+  "Lingmin Ran",
+  "Xiang Wang",
+  "Zhangjie Wu",
+  "Junhao Zhang",
+  "Yingya Zhang",
+  "Mike Z. Shou"
  ],
  "neurips2024-0947": [
-  "Wei, Yanbin",
-  "Fu, Shuai",
-  "Jiang, Weisen",
-  "Zhang, Zejian",
-  "Zeng, Zhixiong",
-  "Wu, Qi",
-  "Kwok, James",
-  "Zhang, Yu"
+  "Yanbin Wei",
+  "Shuai Fu",
+  "Weisen Jiang",
+  "Zejian Zhang",
+  "Zhixiong Zeng",
+  "Qi Wu",
+  "James Kwok",
+  "Yu Zhang"
  ],
  "neurips2024-0957": [
-  "Patil, Shishir G.",
-  "Zhang, Tianjun",
-  "Wang, Xin",
-  "Gonzalez, Joseph E."
+  "Shishir G. Patil",
+  "Tianjun Zhang",
+  "Xin Wang",
+  "Joseph E. Gonzalez"
  ],
  "neurips2024-0967": [
-  "Kerber, Michael",
-  "Russold, Florian"
+  "Michael Kerber",
+  "Florian Russold"
  ],
  "neurips2024-1155": [
-  "Du, Yingjun",
-  "Sun, Wenfang",
-  "Snoek, Cees"
+  "Yingjun Du",
+  "Wenfang Sun",
+  "Cees Snoek"
  ],
  "neurips2024-1276": [
-  "Ramamoorthy, Aditya",
-  "Meng, Ruoyu",
-  "Girimaji, Vrinda S."
+  "Aditya Ramamoorthy",
+  "Ruoyu Meng",
+  "Vrinda S. Girimaji"
  ],
  "neurips2024-1323": [
-  "Li, Bowen",
-  "Li, Zhaoyu",
-  "Du, Qiwei",
-  "Luo, Jinqi",
-  "Wang, Wenshan",
-  "Xie, Yaqi",
-  "Stepputtis, Simon",
-  "Wang, Chen",
-  "Sycara, Katia",
-  "Ravikumar, Pradeep",
-  "Gray, Alexander",
-  "Si, Xujie",
-  "Scherer, Sebastian"
+  "Bowen Li",
+  "Zhaoyu Li",
+  "Qiwei Du",
+  "Jinqi Luo",
+  "Wenshan Wang",
+  "Yaqi Xie",
+  "Simon Stepputtis",
+  "Chen Wang",
+  "Katia Sycara",
+  "Pradeep Ravikumar",
+  "Alexander Gray",
+  "Xujie Si",
+  "Sebastian Scherer"
  ],
  "neurips2024-1436": [
-  "Ouyang, Song",
-  "Cai, Huiyu",
-  "Luo, Yong",
-  "Su, Kehua",
-  "Zhang, Lefei",
-  "Du, Bo"
+  "Song Ouyang",
+  "Huiyu Cai",
+  "Yong Luo",
+  "Kehua Su",
+  "Lefei Zhang",
+  "Bo Du"
  ],
  "neurips2024-1623": [
-  "Nam, Jaehyun",
-  "Kim, Kyuyoung",
-  "Oh, Seunghyuk",
-  "Tack, Jihoon",
-  "Kim, Jaehyung",
-  "Shin, Jinwoo"
+  "Jaehyun Nam",
+  "Kyuyoung Kim",
+  "Seunghyuk Oh",
+  "Jihoon Tack",
+  "Jaehyung Kim",
+  "Jinwoo Shin"
  ],
  "neurips2024-1777": [
-  "Soo, Wayne W.",
-  "Battista, Aldo",
-  "Radmard, Puria",
-  "Wang, Xiao-Jing"
+  "Wayne W. Soo",
+  "Aldo Battista",
+  "Puria Radmard",
+  "Xiao-Jing Wang"
  ],
  "neurips2024-1790": [
-  "Wu, Zhengxuan",
-  "Arora, Aryaman",
-  "Wang, Zheng",
-  "Geiger, Atticus",
-  "Jurafsky, Dan",
-  "Manning, Christopher D.",
-  "Potts, Christopher"
+  "Zhengxuan Wu",
+  "Aryaman Arora",
+  "Zheng Wang",
+  "Atticus Geiger",
+  "Dan Jurafsky",
+  "Christopher D. Manning",
+  "Christopher Potts"
  ],
  "neurips2024-1864": [
-  "Guan, Zhenyu",
-  "Kong, Xiangyu",
-  "Zhong, Fangwei",
-  "Wang, Yizhou"
+  "Zhenyu Guan",
+  "Xiangyu Kong",
+  "Fangwei Zhong",
+  "Yizhou Wang"
  ],
  "neurips2024-1915": [
-  "Wang, Yunnan",
-  "Li, Ziqiang",
-  "Zhang, Wenyao",
-  "Zhang, Zequn",
-  "Xie, Baao",
-  "Liu, Xihui",
-  "Zeng, Wenjun",
-  "Jin, Xin"
+  "Yunnan Wang",
+  "Ziqiang Li",
+  "Wenyao Zhang",
+  "Zequn Zhang",
+  "Baao Xie",
+  "Xihui Liu",
+  "Wenjun Zeng",
+  "Xin Jin"
  ],
  "neurips2024-1925": [
-  "Williams, Christopher",
-  "Campbell, Andrew",
-  "Doucet, Arnaud",
-  "Syed, Saifuddin"
+  "Christopher Williams",
+  "Andrew Campbell",
+  "Arnaud Doucet",
+  "Saifuddin Syed"
  ],
  "neurips2024-2145": [
-  "Kim, Hee Jae",
-  "Sengupta, Kathakoli",
-  "Kuribayashi, Masaki",
-  "Kacorri, Hernisa",
-  "Ohn-Bar, Eshed"
+  "Hee Jae Kim",
+  "Kathakoli Sengupta",
+  "Masaki Kuribayashi",
+  "Hernisa Kacorri",
+  "Eshed Ohn-Bar"
  ],
  "neurips2024-2184": [
-  "Panchal, Kunjal",
-  "Parikh, Nisarg",
-  "Choudhary, Sunav",
-  "Zhang, Lijun",
-  "Brun, Yuriy",
-  "Guan, Hui"
+  "Kunjal Panchal",
+  "Nisarg Parikh",
+  "Sunav Choudhary",
+  "Lijun Zhang",
+  "Yuriy Brun",
+  "Hui Guan"
  ],
  "neurips2024-2281": [
-  "Du, Zhengxiao",
-  "Zeng, Aohan",
-  "Dong, Yuxiao",
-  "Tang, Jie"
+  "Zhengxiao Du",
+  "Aohan Zeng",
+  "Yuxiao Dong",
+  "Jie Tang"
  ],
  "neurips2024-2292": [
-  "Koshizuka, Takeshi",
-  "Fujisawa, Masahiro",
-  "Tanaka, Yusuke",
-  "Sato, Issei"
+  "Takeshi Koshizuka",
+  "Masahiro Fujisawa",
+  "Yusuke Tanaka",
+  "Issei Sato"
  ],
  "neurips2024-2322": [
-  "Wang, Xianlong",
-  "Li, Minghui",
-  "Liu, Wei",
-  "Zhang, Hangtao",
-  "Hu, Shengshan",
-  "Zhang, Yechao",
-  "Zhou, Ziqi",
-  "Jin, Hai"
+  "Xianlong Wang",
+  "Minghui Li",
+  "Wei Liu",
+  "Hangtao Zhang",
+  "Shengshan Hu",
+  "Yechao Zhang",
+  "Ziqi Zhou",
+  "Hai Jin"
  ],
  "neurips2024-2389": [
-  "Gao, Shenyuan",
-  "Yang, Jiazhi",
-  "Chen, Li",
-  "Chitta, Kashyap",
-  "Qiu, Yihang",
-  "Geiger, Andreas",
-  "Zhang, Jun",
-  "Li, Hongyang"
+  "Shenyuan Gao",
+  "Jiazhi Yang",
+  "Li Chen",
+  "Kashyap Chitta",
+  "Yihang Qiu",
+  "Andreas Geiger",
+  "Jun Zhang",
+  "Hongyang Li"
  ],
  "neurips2024-2452": [
-  "Zhang, Yi-Kai",
-  "Lu, Shiyin",
-  "Li, Yang",
-  "Ma, Yanqing",
-  "Chen, Qing-Guo",
-  "Xu, Zhao",
-  "Luo, Weihua",
-  "Zhang, Kaifu",
-  "Zhan, De-Chuan",
-  "Ye, Han-Jia"
+  "Yi-Kai Zhang",
+  "Shiyin Lu",
+  "Yang Li",
+  "Yanqing Ma",
+  "Qing-Guo Chen",
+  "Zhao Xu",
+  "Weihua Luo",
+  "Kaifu Zhang",
+  "De-Chuan Zhan",
+  "Han-Jia Ye"
  ],
  "neurips2024-2471": [
-  "Lou, Hanyue",
-  "Liang, Jinxiu",
-  "Teng, Minggui",
-  "Fan, Bin",
-  "Xu, Yong",
-  "Shi, Boxin"
+  "Hanyue Lou",
+  "Jinxiu Liang",
+  "Minggui Teng",
+  "Bin Fan",
+  "Yong Xu",
+  "Boxin Shi"
  ],
  "neurips2024-2604": [
-  "Huang, Chen",
-  "Seto, Skyler",
-  "Abnar, Samira",
-  "Grangier, David",
-  "Jaitly, Navdeep",
-  "Susskind, Josh"
+  "Chen Huang",
+  "Skyler Seto",
+  "Samira Abnar",
+  "David Grangier",
+  "Navdeep Jaitly",
+  "Josh Susskind"
  ],
  "neurips2024-2627": [
-  "Li, Dong",
-  "Zhang, Aijia",
-  "Gao, Junqi",
-  "Qi, Biqing"
+  "Dong Li",
+  "Aijia Zhang",
+  "Junqi Gao",
+  "Biqing Qi"
  ],
  "neurips2024-2653": [
-  "Franzen, Jannik",
-  "Winklmayr, Claudia",
-  "Guarino, Vanessa E.",
-  "Karg, Christoph",
-  "Yu, Xiaoyan",
-  "Koreuber, Nora",
-  "Albrecht, Jan P.",
-  "Bischoff, Philip",
-  "Kainmueller, Dagmar"
+  "Jannik Franzen",
+  "Claudia Winklmayr",
+  "Vanessa E. Guarino",
+  "Christoph Karg",
+  "Xiaoyan Yu",
+  "Nora Koreuber",
+  "Jan P. Albrecht",
+  "Philip Bischoff",
+  "Dagmar Kainmueller"
  ],
  "neurips2024-2779": [
-  "Zhao, Yiyang",
-  "Liu, Yunzhuo",
-  "Jiang, Bo",
-  "Guo, Tian"
+  "Yiyang Zhao",
+  "Yunzhuo Liu",
+  "Bo Jiang",
+  "Tian Guo"
  ],
  "neurips2024-2788": [
-  "Liu, Xinhang",
-  "Tai, Yu-Wing",
-  "Tang, Chi-Keung"
+  "Xinhang Liu",
+  "Yu-Wing Tai",
+  "Chi-Keung Tang"
  ],
  "neurips2024-2794": [
-  "Huang, Siyuan",
-  "Song, Yunchong",
-  "Zhou, Jiayue",
-  "Lin, Zhouhan"
+  "Siyuan Huang",
+  "Yunchong Song",
+  "Jiayue Zhou",
+  "Zhouhan Lin"
  ],
  "neurips2024-2813": [
-  "Gross, Jason",
-  "Agrawal, Rajashree",
-  "Kwa, Thomas",
-  "Ong, Euan",
-  "Yip, Chun Hei",
-  "Gibson, Alex",
-  "Noubir, Soufiane",
-  "Chan, Lawrence"
+  "Jason Gross",
+  "Rajashree Agrawal",
+  "Thomas Kwa",
+  "Euan Ong",
+  "Chun Hei Yip",
+  "Alex Gibson",
+  "Soufiane Noubir",
+  "Lawrence Chan"
  ],
  "neurips2024-2954": [
-  "Gat, Itai",
-  "Remez, Tal",
-  "Shaul, Neta",
-  "Kreuk, Felix",
-  "Chen, Ricky T. Q.",
-  "Synnaeve, Gabriel",
-  "Adi, Yossi",
-  "Lipman, Yaron"
+  "Itai Gat",
+  "Tal Remez",
+  "Neta Shaul",
+  "Felix Kreuk",
+  "Ricky T. Q. Chen",
+  "Gabriel Synnaeve",
+  "Yossi Adi",
+  "Yaron Lipman"
  ],
  "neurips2024-2974": [
-  "Guo, Siyuan",
-  "Zhang, Chi",
-  "Mohan, Karthika",
-  "Huszár, Ferenc",
-  "Schölkopf, Bernhard"
+  "Siyuan Guo",
+  "Chi Zhang",
+  "Karthika Mohan",
+  "Ferenc Huszár",
+  "Bernhard Schölkopf"
  ],
  "neurips2024-3177": [
-  "Chen, Jialin",
-  "Lenssen, Jan Eric",
-  "Feng, Aosong",
-  "Hu, Weihua",
-  "Fey, Matthias",
-  "Tassiulas, Leandros",
-  "Leskovec, Jure",
-  "Ying, Rex"
+  "Jialin Chen",
+  "Jan Eric Lenssen",
+  "Aosong Feng",
+  "Weihua Hu",
+  "Matthias Fey",
+  "Leandros Tassiulas",
+  "Jure Leskovec",
+  "Rex Ying"
  ],
  "neurips2024-3255": [
-  "Ma, Shijie",
-  "Zhu, Fei",
-  "Zhong, Zhun",
-  "Liu, Wenzhuo",
-  "Zhang, Xu-Yao",
-  "Liu, Cheng-Lin"
+  "Shijie Ma",
+  "Fei Zhu",
+  "Zhun Zhong",
+  "Wenzhuo Liu",
+  "Xu-Yao Zhang",
+  "Cheng-Lin Liu"
  ],
  "neurips2024-3359": [
-  "Yuan, Xiaosong",
-  "Shen, Chen",
-  "Yan, Shaotian",
-  "Zhang, Xiaofeng",
-  "Xie, Liang",
-  "Wang, Wenxiao",
-  "Guan, Renchu",
-  "Wang, Ying",
-  "Ye, Jieping"
+  "Xiaosong Yuan",
+  "Chen Shen",
+  "Shaotian Yan",
+  "Xiaofeng Zhang",
+  "Liang Xie",
+  "Wenxiao Wang",
+  "Renchu Guan",
+  "Ying Wang",
+  "Jieping Ye"
  ],
  "neurips2024-3390": [
-  "Hao, Xiaoshuai",
-  "Wei, Mengchuan",
-  "Yang, Yifan",
-  "Zhao, Haimei",
-  "Zhang, Hui",
-  "Zhou, Yi",
-  "Wang, Qiang",
-  "Li, Weiming",
-  "Kong, Lingdong",
-  "Zhang, Jing"
+  "Xiaoshuai Hao",
+  "Mengchuan Wei",
+  "Yifan Yang",
+  "Haimei Zhao",
+  "Hui Zhang",
+  "Yi Zhou",
+  "Qiang Wang",
+  "Weiming Li",
+  "Lingdong Kong",
+  "Jing Zhang"
  ],
  "neurips2024-3393": [
-  "Chen, Xi",
-  "Qin, Chuan",
-  "Fang, Chuyu",
-  "Wang, Chao",
-  "Zhu, Chen",
-  "Zhuang, Fuzhen",
-  "Zhu, Hengshu",
-  "Xiong, Hui"
+  "Xi Chen",
+  "Chuan Qin",
+  "Chuyu Fang",
+  "Chao Wang",
+  "Chen Zhu",
+  "Fuzhen Zhuang",
+  "Hengshu Zhu",
+  "Hui Xiong"
  ],
  "neurips2024-3451": [
-  "Nath, Vaskar",
-  "Slack, Dylan",
-  "Da, Jeff",
-  "Ma, Yuntao",
-  "Zhang, Hugh",
-  "Whitehead, Spencer",
-  "Hendryx, Sean"
+  "Vaskar Nath",
+  "Dylan Slack",
+  "Jeff Da",
+  "Yuntao Ma",
+  "Hugh Zhang",
+  "Spencer Whitehead",
+  "Sean Hendryx"
  ],
  "neurips2024-3592": [
-  "Le, Minh",
-  "Nguyen, An",
-  "Nguyen, Huy",
-  "Nguyen, Trang",
-  "Pham, Trang",
-  "Van Ngo, Linh",
-  "Ho, Nhat"
+  "Minh Le",
+  "An Nguyen",
+  "Huy Nguyen",
+  "Trang Nguyen",
+  "Trang Pham",
+  "Linh Van Ngo",
+  "Nhat Ho"
  ],
  "neurips2024-3598": [
-  "Qiao, Lifeng",
-  "Ye, Peng",
-  "Ren, Yuchen",
-  "Bai, Weiqiang",
-  "Liang, Chaoqi",
-  "Ma, Xinzhu",
-  "Dong, Nanqing",
-  "Ouyang, Wanli"
+  "Lifeng Qiao",
+  "Peng Ye",
+  "Yuchen Ren",
+  "Weiqiang Bai",
+  "Chaoqi Liang",
+  "Xinzhu Ma",
+  "Nanqing Dong",
+  "Wanli Ouyang"
  ],
  "neurips2024-3922": [
-  "De Silva, Ashwin",
-  "Ramesh, Rahul",
-  "Yang, Rubing",
-  "Yu, Siyu",
-  "Vogelstein, Joshua T.",
-  "Chaudhari, Pratik"
+  "Ashwin De Silva",
+  "Rahul Ramesh",
+  "Rubing Yang",
+  "Siyu Yu",
+  "Joshua T. Vogelstein",
+  "Pratik Chaudhari"
  ],
  "neurips2024-4016": [
-  "Chen, Ziang",
-  "Liu, Jialin",
-  "Chen, Xiaohan",
-  "Wang, Xinshang",
-  "Yin, Wotao"
+  "Ziang Chen",
+  "Jialin Liu",
+  "Xiaohan Chen",
+  "Xinshang Wang",
+  "Wotao Yin"
  ],
  "neurips2024-4127": [
-  "Muschalik, Maximilian",
-  "Baniecki, Hubert",
-  "Fumagalli, Fabian",
-  "Kolpaczki, Patrick",
-  "Hammer, Barbara",
-  "Hüllermeier, Eyke"
+  "Maximilian Muschalik",
+  "Hubert Baniecki",
+  "Fabian Fumagalli",
+  "Patrick Kolpaczki",
+  "Barbara Hammer",
+  "Eyke Hüllermeier"
  ],
  "neurips2024-4150": [
-  "Cheng, Zelei",
-  "Wu, Xian",
-  "Yu, Jiahao",
-  "Han, Shuo",
-  "Cai, Xin-Qiang",
-  "Xing, Xinyu"
+  "Zelei Cheng",
+  "Xian Wu",
+  "Jiahao Yu",
+  "Shuo Han",
+  "Xin-Qiang Cai",
+  "Xinyu Xing"
  ],
  "neurips2024-4335": [
-  "Morafah, Mahdi",
-  "Kungurtsev, Vyacheslav",
-  "Chang, Hojin",
-  "Chen, Chen",
-  "Lin, Bill"
+  "Mahdi Morafah",
+  "Vyacheslav Kungurtsev",
+  "Hojin Chang",
+  "Chen Chen",
+  "Bill Lin"
  ],
  "neurips2024-4445": [
-  "Davies, Sami",
-  "Vassilvitskii, Sergei",
-  "Wang, Yuyan"
+  "Sami Davies",
+  "Sergei Vassilvitskii",
+  "Yuyan Wang"
  ],
  "neurips2024-4456": [
-  "Pham, Tuan Anh",
-  "Garg, Vikas"
+  "Tuan Anh Pham",
+  "Vikas Garg"
  ],
  "neurips2024-4478": [
-  "Zhang, Yushun",
-  "Chen, Congliang",
-  "Ding, Tian",
-  "Li, Ziniu",
-  "Sun, Ruoyu",
-  "Luo, Zhi-Quan"
+  "Yushun Zhang",
+  "Congliang Chen",
+  "Tian Ding",
+  "Ziniu Li",
+  "Ruoyu Sun",
+  "Zhi-Quan Luo"
  ],
  "neurips2024-4490": [
-  "Guo, Junfeng",
-  "Li, Yiming",
-  "Chen, Ruibo",
-  "Wu, Yihan",
-  "Liu, Chenxi",
-  "Huang, Heng"
+  "Junfeng Guo",
+  "Yiming Li",
+  "Ruibo Chen",
+  "Yihan Wu",
+  "Chenxi Liu",
+  "Heng Huang"
+ ],
+ "icml2023-0023": [
+  "Zhixuan Liang",
+  "Yao Mu",
+  "Mingyu Ding",
+  "Fei Ni",
+  "Masayoshi Tomizuka",
+  "Ping Luo"
+ ],
+ "icml2023-0027": [
+  "Chumeng Liang",
+  "Xiaoyu Wu",
+  "Yang Hua",
+  "Jiaru Zhang",
+  "Yiming Xue",
+  "Tao Song",
+  "Zhengui Xue",
+  "Ruhui Ma",
+  "Haibing Guan"
+ ],
+ "icml2023-0064": [
+  "Taebum Kim",
+  "Hyoungjoo Kim",
+  "Gyeong-In Yu",
+  "Byung-Gon Chun"
+ ],
+ "icml2023-0065": [
+  "Huan Ma",
+  "Qingyang Zhang",
+  "Changqing Zhang",
+  "Bingzhe Wu",
+  "Huazhu Fu",
+  "Joey Tianyi Zhou",
+  "Qinghua Hu"
+ ],
+ "icml2023-0122": [
+  "Eric Mitchell",
+  "Yoonho Lee",
+  "Alexander Khazatsky",
+  "Christopher D Manning",
+  "Chelsea Finn"
+ ],
+ "icml2023-0153": [
+  "Kevin Gmelin",
+  "Shikhar Bahl",
+  "Russell Mendonca",
+  "Deepak Pathak"
+ ],
+ "icml2023-0236": [
+  "Jakob Bauer",
+  "Kate Baumli",
+  "Feryal Behbahani",
+  "Avishkar Bhoopchand",
+  "Nathalie Bradley-Schmieg",
+  "Michael Chang",
+  "Natalie Clay",
+  "Adrian Collister",
+  "Vibhavari Dasagi",
+  "Lucy Gonzalez",
+  "Karol Gregor",
+  "Edward Hughes",
+  "Sheleem Kashem",
+  "Maria Loks-Thompson",
+  "Hannah Openshaw",
+  "Jack Parker-Holder",
+  "Shreya Pathak",
+  "Nicolas Perez-Nieves",
+  "Nemanja Rakicevic",
+  "Tim Rocktäschel",
+  "Yannick Schroecker",
+  "Satinder Singh",
+  "Jakub Sygnowski",
+  "Karl Tuyls",
+  "Sarah York",
+  "Alexander Zacherl",
+  "Lei M Zhang"
+ ],
+ "icml2023-0336": [
+  "Yong Cheng",
+  "Yu Zhang",
+  "Melvin Johnson",
+  "Wolfgang Macherey",
+  "Ankur Bapna"
+ ],
+ "icml2023-0442": [
+  "Jack Brady",
+  "Roland S. Zimmermann",
+  "Yash Sharma",
+  "Bernhard Schölkopf",
+  "Julius Von Kügelgen",
+  "Wieland Brendel"
+ ],
+ "icml2023-0493": [
+  "Xunyi Zhao",
+  "Théotime Le Hellard",
+  "Lionel Eyraud-Dubois",
+  "Julia Gusak",
+  "Olivier Beaumont"
+ ],
+ "icml2023-0755": [
+  "Sanyuan Chen",
+  "Yu Wu",
+  "Chengyi Wang",
+  "Shujie Liu",
+  "Daniel Tompkins",
+  "Zhuo Chen",
+  "Wanxiang Che",
+  "Xiangzhan Yu",
+  "Furu Wei"
+ ],
+ "icml2023-0868": [
+  "Junhong Shen",
+  "Liam Li",
+  "Lucio M. Dery",
+  "Corey Staten",
+  "Mikhail Khodak",
+  "Graham Neubig",
+  "Ameet Talwalkar"
+ ],
+ "icml2023-0988": [
+  "Aviv Navon",
+  "Aviv Shamsian",
+  "Idan Achituve",
+  "Ethan Fetaya",
+  "Gal Chechik",
+  "Haggai Maron"
+ ],
+ "icml2023-1376": [
+  "Zhi Zhou",
+  "Lan-Zhe Guo",
+  "Lin-Han Jia",
+  "Dingchu Zhang",
+  "Yu-Feng Li"
+ ],
+ "icml2023-1802": [
+  "Hang Wang",
+  "Sen Lin",
+  "Junshan Zhang"
+ ],
+ "icml2024-0027": [
+  "Letian Fu",
+  "Gaurav Datta",
+  "Huang Huang",
+  "William Chung-Ho Panitch",
+  "Jaimyn Drake",
+  "Joseph Ortiz",
+  "Mustafa Mukadam",
+  "Mike Lambeta",
+  "Roberto Calandra",
+  "Ken Goldberg"
+ ],
+ "icml2024-0081": [
+  "Bowen Zhao",
+  "Hannaneh Hajishirzi",
+  "Qingqing Cao"
+ ],
+ "icml2024-0095": [
+  "Kaihang Pan",
+  "Siliang Tang",
+  "Juncheng Li",
+  "Zhaoyu Fan",
+  "Wei Chow",
+  "Shuicheng Yan",
+  "Tat-Seng Chua",
+  "Yueting Zhuang",
+  "Hanwang Zhang"
+ ],
+ "icml2024-0106": [
+  "Haotian Sun",
+  "Yuchen Zhuang",
+  "Wei Wei",
+  "Chao Zhang",
+  "Bo Dai"
+ ],
+ "icml2024-0126": [
+  "Xin Du",
+  "Lixin Xiu",
+  "Kumiko Tanaka-Ishii"
+ ],
+ "icml2024-0163": [
+  "David Venuto",
+  "Mohammad Sami Nur Islam",
+  "Martin Klissarov",
+  "Doina Precup",
+  "Sherry Yang",
+  "Ankit Anand"
+ ],
+ "icml2024-0226": [
+  "Bairu Hou",
+  "Yujian Liu",
+  "Kaizhi Qian",
+  "Jacob Andreas",
+  "Shiyu Chang",
+  "Yang Zhang"
+ ],
+ "icml2024-0278": [
+  "Yanda Chen",
+  "Ruiqi Zhong",
+  "Narutatsu Ri",
+  "Chen Zhao",
+  "He He",
+  "Jacob Steinhardt",
+  "Zhou Yu",
+  "Kathleen Mckeown"
+ ],
+ "icml2024-0312": [
+  "Lirui Luo",
+  "Guoxi Zhang",
+  "Hongming Xu",
+  "Yaodong Yang",
+  "Cong Fang",
+  "Qing Li"
+ ],
+ "icml2024-0337": [
+  "Fei Liu",
+  "Tong Xialiang",
+  "Mingxuan Yuan",
+  "Xi Lin",
+  "Fu Luo",
+  "Zhenkun Wang",
+  "Zhichao Lu",
+  "Qingfu Zhang"
+ ],
+ "icml2024-0343": [
+  "Kexin Pei",
+  "Weichen Li",
+  "Qirui Jin",
+  "Shuyang Liu",
+  "Scott Geng",
+  "Lorenzo Cavallaro",
+  "Junfeng Yang",
+  "Suman Jana"
+ ],
+ "icml2024-0366": [
+  "Jiayi Chen",
+  "Aidong Zhang"
+ ],
+ "icml2024-0381": [
+  "Ruisi Cai",
+  "Saurav Muralidharan",
+  "Greg Heinrich",
+  "Hongxu Yin",
+  "Zhangyang Wang",
+  "Jan Kautz",
+  "Pavlo Molchanov"
+ ],
+ "icml2024-0413": [
+  "Jake Bruce",
+  "Michael D Dennis",
+  "Ashley Edwards",
+  "Jack Parker-Holder",
+  "Yuge Shi",
+  "Edward Hughes",
+  "Matthew Lai",
+  "Aditi Mavalankar",
+  "Richie Steigerwald",
+  "Chris Apps",
+  "Yusuf Aytar",
+  "Sarah Maria Elisabeth Bechtle",
+  "Feryal Behbahani",
+  "Stephanie C.Y. Chan",
+  "Nicolas Heess",
+  "Lucy Gonzalez",
+  "Simon Osindero",
+  "Sherjil Ozair",
+  "Scott Reed",
+  "Jingwei Zhang",
+  "Konrad Zolna",
+  "Jeff Clune",
+  "Nando De Freitas",
+  "Satinder Singh",
+  "Tim Rocktäschel"
+ ],
+ "icml2024-0504": [
+  "Xudong Li",
+  "Runze Hu",
+  "Jingyuan Zheng",
+  "Yan Zhang",
+  "Shengchuan Zhang",
+  "Xiawu Zheng",
+  "Ke Li",
+  "Yunhang Shen",
+  "Yutao Liu",
+  "Pingyang Dai",
+  "Rongrong Ji"
+ ],
+ "icml2024-0509": [
+  "Wei Zhang",
+  "Chaoqun Wan",
+  "Yonggang Zhang",
+  "Yiu-Ming Cheung",
+  "Xinmei Tian",
+  "Xu Shen",
+  "Jieping Ye"
+ ],
+ "icml2024-0599": [
+  "Shiming Ge",
+  "Weijia Guo",
+  "Chenyu Li",
+  "Zhang Junzheng",
+  "Yong Li",
+  "Dan Zeng"
+ ],
+ "icml2024-0608": [
+  "Sangjun Park",
+  "Jinyeong Bak"
+ ],
+ "icml2024-0653": [
+  "Zeqian Ju",
+  "Yuancheng Wang",
+  "Kai Shen",
+  "Xu Tan",
+  "Detai Xin",
+  "Dongchao Yang",
+  "Eric Liu",
+  "Yichong Leng",
+  "Kaitao Song",
+  "Siliang Tang",
+  "Zhizheng Wu",
+  "Tao Qin",
+  "Xiangyang Li",
+  "Wei Ye",
+  "Shikun Zhang",
+  "Jiang Bian",
+  "Lei He",
+  "Jinyu Li",
+  "Sheng Zhao"
+ ],
+ "icml2024-0695": [
+  "Qiankun Zhang",
+  "Aocheng Shen",
+  "Boyu Zhang",
+  "Hanrui Jiang",
+  "Bingqian Du"
+ ],
+ "icml2024-0748": [
+  "Subbarao Kambhampati",
+  "Karthik Valmeekam",
+  "Lin Guan",
+  "Mudit Verma",
+  "Kaya Stechly",
+  "Siddhant Bhambri",
+  "Lucas Paul Saldyt",
+  "Anil B Murthy"
+ ],
+ "icml2024-0768": [
+  "Charlie Hou",
+  "Akshat Shrivastava",
+  "Hongyuan Zhan",
+  "Rylan Conway",
+  "Trang Le",
+  "Adithya Sagar",
+  "Giulia Fanti",
+  "Daniel Lazar"
+ ],
+ "icml2024-0820": [
+  "Alexander Wettig",
+  "Aatmik Gupta",
+  "Saumya Malik",
+  "Danqi Chen"
+ ],
+ "icml2024-0841": [
+  "Lang Feng",
+  "Pengjie Gu",
+  "Bo An",
+  "Gang Pan"
+ ],
+ "icml2024-0853": [
+  "Yuzhu Wang",
+  "Lechao Cheng",
+  "Chaowei Fang",
+  "Dingwen Zhang",
+  "Manni Duan",
+  "Meng Wang"
+ ],
+ "icml2024-0879": [
+  "Minji Lee",
+  "Luiz Felipe Vecchietti",
+  "Hyunkyu Jung",
+  "Hyun Joo Ro",
+  "Meeyoung Cha",
+  "Ho Min Kim"
+ ],
+ "icml2024-0910": [
+  "Xianghe Pang",
+  "Shuo Tang",
+  "Rui Ye",
+  "Yuxin Xiong",
+  "Bolun Zhang",
+  "Yanfeng Wang",
+  "Siheng Chen"
+ ],
+ "icml2024-0986": [
+  "Yujia Huang",
+  "Adishree Ghatare",
+  "Yuanzhe Liu",
+  "Ziniu Hu",
+  "Qinsheng Zhang",
+  "Chandramouli Shama Sastry",
+  "Siddharth Gururani",
+  "Sageev Oore",
+  "Yisong Yue"
+ ],
+ "icml2024-1015": [
+  "Sai Shankar Narasimhan",
+  "Shubhankar Agarwal",
+  "Oguzhan Akcin",
+  "Sujay Sanghavi",
+  "Sandeep P. Chinchali"
+ ],
+ "icml2024-1084": [
+  "Kevin Frans",
+  "Seohong Park",
+  "Pieter Abbeel",
+  "Sergey Levine"
+ ],
+ "icml2024-1101": [
+  "Hao Fei",
+  "Shengqiong Wu",
+  "Wei Ji",
+  "Hanwang Zhang",
+  "Meishan Zhang",
+  "Mong-Li Lee",
+  "Wynne Hsu"
+ ],
+ "icml2024-1103": [
+  "Dan Kondratyuk",
+  "Lijun Yu",
+  "Xiuye Gu",
+  "Jose Lezama",
+  "Jonathan Huang",
+  "Grant Schindler",
+  "Rachel Hornung",
+  "Vighnesh Birodkar",
+  "Jimmy Yan",
+  "Ming-Chang Chiu",
+  "Krishna Somandepalli",
+  "Hassan Akbari",
+  "Yair Alon",
+  "Yong Cheng",
+  "Joshua V. Dillon",
+  "Agrim Gupta",
+  "Meera Hahn",
+  "Anja Hauth",
+  "David Hendon",
+  "Alonso Martinez",
+  "David Minnen",
+  "Mikhail Sirotenko",
+  "Kihyuk Sohn",
+  "Xuan Yang",
+  "Hartwig Adam",
+  "Ming-Hsuan Yang",
+  "Irfan Essa",
+  "Huisheng Wang",
+  "David A Ross",
+  "Bryan Seybold",
+  "Lu Jiang"
+ ],
+ "icml2024-1139": [
+  "Zhihai Wang",
+  "Lei Chen",
+  "Jie Wang",
+  "Yinqi Bai",
+  "Xing Li",
+  "Xijun Li",
+  "Mingxuan Yuan",
+  "Jianye Hao",
+  "Yongdong Zhang",
+  "Feng Wu"
+ ],
+ "icml2024-1179": [
+  "Maude Lizaire",
+  "Michael Rizvi-Martel",
+  "Marawan Gamal",
+  "Guillaume Rabusseau"
+ ],
+ "icml2024-1199": [
+  "Tianying Ji",
+  "Yongyuan Liang",
+  "Yan Zeng",
+  "Yu Luo",
+  "Guowei Xu",
+  "Jiawei Guo",
+  "Ruijie Zheng",
+  "Furong Huang",
+  "Fuchun Sun",
+  "Huazhe Xu"
+ ],
+ "icml2024-1432": [
+  "Zhengqi Pei",
+  "Anran Zhang",
+  "Shuhui Wang",
+  "Xiangyang Ji",
+  "Qingming Huang"
+ ],
+ "icml2024-1753": [
+  "Barna Saha",
+  "Christopher Ye"
+ ],
+ "icml2024-1821": [
+  "Haocheng Xi",
+  "Yuxiang Chen",
+  "Kang Zhao",
+  "Kai Jun Teh",
+  "Jianfei Chen",
+  "Jun Zhu"
+ ],
+ "icml2024-1920": [
+  "Li Sun",
+  "Zhenhao Huang",
+  "Hao Peng",
+  "Yujie Wang",
+  "Chunyang Liu",
+  "Philip S. Yu"
+ ],
+ "icml2024-1982": [
+  "Hongbin Pei",
+  "Yu Li",
+  "Huiqi Deng",
+  "Jingxin Hai",
+  "Pinghui Wang",
+  "Jie Ma",
+  "Jing Tao",
+  "Yuheng Xiong",
+  "Xiaohong Guan"
+ ],
+ "icml2024-2033": [
+  "Yu Luo",
+  "Tianying Ji",
+  "Fuchun Sun",
+  "Jianwei Zhang",
+  "Huazhe Xu",
+  "Xianyuan Zhan"
+ ],
+ "icml2024-2164": [
+  "Cynthia Rudin",
+  "Chudi Zhong",
+  "Lesia Semenova",
+  "Margo Seltzer",
+  "Ronald Parr",
+  "Jiachang Liu",
+  "Srikar Katta",
+  "Jon Donnelly",
+  "Harry Chen",
+  "Zachery Boner"
+ ],
+ "icml2024-2200": [
+  "Minyoung Huh",
+  "Brian Cheung",
+  "Tongzhou Wang",
+  "Phillip Isola"
+ ],
+ "icml2024-2363": [
+  "Jayesh Singla",
+  "Ananye Agarwal",
+  "Deepak Pathak"
+ ],
+ "icml2024-2420": [
+  "Saul José Rodrigues Dos Santos",
+  "Vlad Niculae",
+  "Daniel C Mcnamee",
+  "Andre Martins"
+ ],
+ "icml2025-0047": [
+  "Tin Dizdarević",
+  "Ravi Hammond",
+  "Tobias Gessler",
+  "Anisoara Calinescu",
+  "Jonathan Cook",
+  "Matteo Gallici",
+  "Andrei Lupu",
+  "Jakob Nicolaus Foerster"
+ ],
+ "icml2025-0049": [
+  "Jintao Tong",
+  "Ran Ma",
+  "Yixiong Zou",
+  "Guangyao Chen",
+  "Yuhua Li",
+  "Ruixuan Li"
+ ],
+ "icml2025-0219": [
+  "Yiyang Fang",
+  "Jian Liang",
+  "Wenke Huang",
+  "He Li",
+  "Kehua Su",
+  "Mang Ye"
+ ],
+ "icml2025-0290": [
+  "Shiqing Gao",
+  "Jiaxin Ding",
+  "Luoyi Fu",
+  "Xinbing Wang"
+ ],
+ "icml2025-0384": [
+  "Yujin Oh",
+  "Pengfei Jin",
+  "Sangjoon Park",
+  "Sekeun Kim",
+  "Siyeop Yoon",
+  "Jin Sung Kim",
+  "Kyungsang Kim",
+  "Xiang Li",
+  "Quanzheng Li"
+ ],
+ "icml2025-0432": [
+  "Junchao Zhou",
+  "Yao Lu",
+  "Jie Wen",
+  "Guangming Lu"
+ ],
+ "icml2025-0573": [
+  "Guibin Zhang",
+  "Yanwei Yue",
+  "Xiangguo Sun",
+  "Guancheng Wan",
+  "Miao Yu",
+  "Junfeng Fang",
+  "Kun Wang",
+  "Tianlong Chen",
+  "Dawei Cheng"
+ ],
+ "icml2025-0619": [
+  "Xianghua Zeng",
+  "Hang Su",
+  "Zhengyi Wang",
+  "Zhiyuan Lin"
+ ],
+ "icml2025-0721": [
+  "Yuanhong Zhang",
+  "Muyao Yuan",
+  "Weizhan Zhang",
+  "Tieliang Gong",
+  "Wen Wen",
+  "Jiangyong Ying",
+  "Weijie Shi"
+ ],
+ "icml2025-0778": [
+  "Amber Xie",
+  "Oleh Rybkin",
+  "Dorsa Sadigh",
+  "Chelsea Finn"
+ ],
+ "icml2025-0856": [
+  "Paul Mcvay",
+  "Sergio Arnaud",
+  "Ada Martin",
+  "Arjun Majumdar",
+  "Krishna Murthy Jatavallabhula",
+  "Phillip Thomas",
+  "Ruslan Partsey",
+  "Daniel Dugas",
+  "Abha Gejji",
+  "Alexander Sax",
+  "Vincent-Pierre Berges",
+  "Mikael Henaff",
+  "Ayush Jain",
+  "Ang Cao",
+  "Ishita Prasad",
+  "Mrinal Kalakrishnan",
+  "Michael Rabbat",
+  "Nicolas Ballas",
+  "Mido Assran",
+  "Oleksandr Maksymets",
+  "Aravind Rajeswaran",
+  "Franziska Meier"
+ ],
+ "icml2025-0869": [
+  "Haotian Wu",
+  "Gongpu Chen",
+  "Pier Luigi Dragotti",
+  "Deniz Gunduz"
+ ],
+ "icml2025-0918": [
+  "Jeffrey A Chan Santiago",
+  "Praveen Tirupattur",
+  "Gaurav Kumar Nayak",
+  "Gaowen Liu",
+  "Mubarak Shah"
+ ],
+ "icml2025-0930": [
+  "Linxi Zhao",
+  "Yihe Deng",
+  "Weitong Zhang",
+  "Quanquan Gu"
+ ],
+ "icml2025-0938": [
+  "Zhicheng Zhang",
+  "Wuyou Xia",
+  "Chenxi Zhao",
+  "Zhou Yan",
+  "Xiaoqiang Liu",
+  "Yongjie Zhu",
+  "Wenyu Qin",
+  "Pengfei Wan",
+  "Di Zhang",
+  "Jufeng Yang"
+ ],
+ "icml2025-1231": [
+  "Shuting He",
+  "Guangquan Jie",
+  "Changshuo Wang",
+  "Yun Zhou",
+  "Shuming Hu",
+  "Guanbin Li",
+  "Henghui Ding"
+ ],
+ "icml2025-1264": [
+  "Wenbin Wang",
+  "Yongcheng Jing",
+  "Liang Ding",
+  "Yingjie Wang",
+  "Li Shen",
+  "Yong Luo",
+  "Bo Du",
+  "Dacheng Tao"
+ ],
+ "icml2025-1268": [
+  "Shuai Yi",
+  "Yixiong Zou",
+  "Yuhua Li",
+  "Ruixuan Li"
+ ],
+ "icml2025-1420": [
+  "Yichi Zhang",
+  "Siyuan Zhang",
+  "Yao Huang",
+  "Zeyu Xia",
+  "Zhengwei Fang",
+  "Xiao Yang",
+  "Ranjie Duan",
+  "Dong Yan",
+  "Yinpeng Dong",
+  "Jun Zhu"
+ ],
+ "icml2025-1422": [
+  "Hao Li",
+  "Qi Lv",
+  "Rui Shao",
+  "Xiang Deng",
+  "Yinchuan Li",
+  "Jianye Hao",
+  "Liqiang Nie"
+ ],
+ "icml2025-1463": [
+  "Gaotang Li",
+  "Yuzhong Chen",
+  "Hanghang Tong"
+ ],
+ "icml2025-1648": [
+  "Rina Bao",
+  "Shilong Dong",
+  "Zhenfang Chen",
+  "Sheng He",
+  "Ellen Grant",
+  "Yangming Ou"
+ ],
+ "icml2025-1672": [
+  "Dong Xiao",
+  "Guangyao Chen",
+  "Peixi Peng",
+  "Yangru Huang",
+  "Yifan Zhao",
+  "Yongxing Dai",
+  "Yonghong Tian"
+ ],
+ "icml2025-1675": [
+  "Shaokun Zhang",
+  "Ming Yin",
+  "Jieyu Zhang",
+  "Jiale Liu",
+  "Zhiguang Han",
+  "Jingyang Zhang",
+  "Beibin Li",
+  "Chi Wang",
+  "Huazheng Wang",
+  "Yiran Chen",
+  "Qingyun Wu"
+ ],
+ "icml2025-1899": [
+  "Mingjun Wang",
+  "Yihan Wen",
+  "Bin Sun",
+  "Jianan Mu",
+  "Juan Li",
+  "Xiaoyi Wang",
+  "Jing Justin Ye",
+  "Bei Yu",
+  "Huawei Li"
+ ],
+ "icml2025-1996": [
+  "Siyuan Duan",
+  "Wenyuan Wu",
+  "Peng Hu",
+  "Zhenwen Ren",
+  "Dezhong Peng",
+  "Yuan Sun"
+ ],
+ "icml2025-2089": [
+  "Liang Yang",
+  "Yuwei Liu",
+  "Jiaming Zhuo",
+  "Di Jin",
+  "Chuan Wang",
+  "Zhen Wang",
+  "Xiaochun Cao"
+ ],
+ "icml2025-2155": [
+  "Alessandro Palma",
+  "Sergei Rybakov",
+  "Leon Hetzel",
+  "Stephan Günnemann",
+  "Fabian J Theis"
+ ],
+ "icml2025-2228": [
+  "Chi-Ning Chou",
+  "Hang Le",
+  "Yichen Wang",
+  "Sueyeon Chung"
+ ],
+ "icml2025-2269": [
+  "Zhijing Wan",
+  "Zhixiang Wang",
+  "Zheng Wang",
+  "Xin Xu",
+  "Shin’Ichi Satoh"
+ ],
+ "icml2025-2324": [
+  "Longzhu He",
+  "Chaozhuo Li",
+  "Peng Tang",
+  "Sen Su"
+ ],
+ "icml2025-2334": [
+  "Shashwat Goel",
+  "Joschka Strüber",
+  "Ilze Amanda Auzina",
+  "Karuna K Chandra",
+  "Ponnurangam Kumaraguru",
+  "Douwe Kiela",
+  "Ameya Prabhu",
+  "Matthias Bethge",
+  "Jonas Geiping"
+ ],
+ "icml2025-2335": [
+  "Matthew Ashman",
+  "Cristiana Diaconu",
+  "Eric Langezaal",
+  "Adrian Weller",
+  "Richard E Turner"
+ ],
+ "icml2025-2446": [
+  "Zexu Sun",
+  "Qiyu Han",
+  "Hao Yang",
+  "Anpeng Wu",
+  "Minqin Zhu",
+  "Dugang Liu",
+  "Chen Ma",
+  "Yunpeng Weng",
+  "Xing Tang",
+  "Xiuqiang He"
+ ],
+ "icml2025-2566": [
+  "Xujie Song",
+  "Liangfa Chen",
+  "Tong Liu",
+  "Wenxuan Wang",
+  "Yinuo Wang",
+  "Shentao Qin",
+  "Yinsong Ma",
+  "Jingliang Duan",
+  "Shengbo Eben Li"
+ ],
+ "icml2025-2778": [
+  "Wei Qu",
+  "Jiawei Guan",
+  "Rui Ma",
+  "Ke Zhai",
+  "Weikun Wu",
+  "Haobo Wang"
+ ],
+ "icml2025-2791": [
+  "Yizhuo Chen",
+  "Chun-Fu Chen",
+  "Hsiang Hsu",
+  "Shaohan Hu",
+  "Tarek F. Abdelzaher"
+ ],
+ "icml2025-2864": [
+  "Lena Stempfle",
+  "Anton Matsson",
+  "Newton Mwai",
+  "Fredrik D. Johansson"
+ ],
+ "icml2025-2990": [
+  "Jade Garcia Bourrée",
+  "Augustin Godinot",
+  "Sayan Biswas",
+  "Anne-Marie Kermarrec",
+  "Erwan Le Merrer",
+  "Gilles Tredan",
+  "Martijn De Vos",
+  "Milos Vujasinovic"
+ ],
+ "icml2025-2991": [
+  "Greyson Brothers"
+ ],
+ "icml2025-3126": [
+  "Yong Liu",
+  "Guo Qin",
+  "Zhiyuan Shi",
+  "Zhi Chen",
+  "Caiyin Yang",
+  "Xiangdong Huang",
+  "Jianmin Wang",
+  "Mingsheng Long"
+ ],
+ "icml2025-3129": [
+  "Jiayue Liu",
+  "Zhongchao Yi",
+  "Zhengyang Zhou",
+  "Qihe Huang",
+  "Kuo Yang",
+  "Xu Wang",
+  "Yang Wang"
+ ],
+ "icml2025-3131": [
+  "Yuchen Zeng",
+  "Tuan Dinh",
+  "Wonjun Kang",
+  "Andreas C Mueller"
+ ],
+ "icml2025-3194": [
+  "Qihe Huang",
+  "Zhengyang Zhou",
+  "Kuo Yang",
+  "Zhongchao Yi",
+  "Xu Wang",
+  "Yang Wang"
+ ],
+ "icml2025-3243": [
+  "Xinyan Liang",
+  "Shijie Wang",
+  "Yuhua Qian",
+  "Qian Guo",
+  "Liang Du",
+  "Bingbing Jiang",
+  "Tingjin Luo",
+  "Feijiang Li"
+ ],
+ "neurips2023-0020": [
+  "Yiyou Sun",
+  "Zhenmei Shi",
+  "Yixuan Li"
+ ],
+ "neurips2023-0072": [
+  "Ilia Sucholutsky",
+  "Tom Griffiths"
+ ],
+ "neurips2023-0074": [
+  "Tao Fang",
+  "Qian Zheng",
+  "Gang Pan"
+ ],
+ "neurips2023-0116": [
+  "Congyue Deng",
+  "Jiahui Lei",
+  "William B Shen",
+  "Kostas Daniilidis",
+  "Leonidas Guibas"
+ ],
+ "neurips2023-0188": [
+  "Tianyang Hu",
+  "Fei Chen",
+  "Haonan Wang",
+  "Jiawei Li",
+  "Wenjia Wang",
+  "Jiacheng Sun",
+  "Zhenguo Li"
+ ],
+ "neurips2023-0246": [
+  "Saber Sheybani",
+  "Himanshu Hansaria",
+  "Justin Wood",
+  "Linda Smith",
+  "Zoran Tiganj"
+ ],
+ "neurips2023-0302": [
+  "Xinyu Tang",
+  "Ashwinee Panda",
+  "Vikash Sehwag",
+  "Prateek Mittal"
+ ],
+ "neurips2023-0306": [
+  "Tsun-Hsuan Johnson Wang",
+  "Juntian Zheng",
+  "Pingchuan Ma",
+  "Yilun Du",
+  "Byungchul Kim",
+  "Andrew Spielberg",
+  "Josh Tenenbaum",
+  "Chuang Gan",
+  "Daniela Rus"
+ ],
+ "neurips2023-0863": [
+  "Karthik Valmeekam",
+  "Matthew Marquez",
+  "Sarath Sreedharan",
+  "Subbarao Kambhampati"
+ ],
+ "neurips2023-0898": [
+  "Eric Zelikman",
+  "Qian Huang",
+  "Gabriel Poesia",
+  "Noah Goodman",
+  "Nick Haber"
+ ],
+ "neurips2023-0974": [
+  "Tim Dettmers",
+  "Artidoro Pagnoni",
+  "Ari Holtzman",
+  "Luke Zettlemoyer"
+ ],
+ "neurips2023-1082": [
+  "Youquan Liu",
+  "Lingdong Kong",
+  "Jun CEN",
+  "Runnan Chen",
+  "Wenwei Zhang",
+  "Liang Pan",
+  "Kai Chen",
+  "Ziwei Liu"
+ ],
+ "neurips2023-1087": [
+  "Alvin Heng",
+  "Harold Soh"
+ ],
+ "neurips2023-1120": [
+  "Ziyi Wu",
+  "Jingyu Hu",
+  "Wuyue Lu",
+  "Igor Gilitschenski",
+  "Animesh Garg"
+ ],
+ "neurips2023-1199": [
+  "Kevin Clark",
+  "Priyank Jaini"
+ ],
+ "neurips2023-1209": [
+  "Laura Ruis",
+  "Akbir Khan",
+  "Stella Biderman",
+  "Sara Hooker",
+  "Tim Rocktäschel",
+  "Edward Grefenstette"
+ ],
+ "neurips2023-1407": [
+  "Jiachen (Tianhao) Wang",
+  "Yuqing Zhu",
+  "Yu-Xiang Wang",
+  "Ruoxi Jia",
+  "Prateek Mittal"
+ ],
+ "neurips2023-1556": [
+  "Xiaolei Ru",
+  "XINYA ZHANG",
+  "Zijia Liu",
+  "Jack Murdoch Moore",
+  "Gang Yan"
+ ],
+ "neurips2023-1720": [
+  "Ahmed M. Alaa",
+  "Zaid Ahmad",
+  "Mark van der Laan"
+ ],
+ "neurips2023-1925": [
+  "Owen Queen",
+  "Tom Hartvigsen",
+  "Teddy Koker",
+  "Huan He",
+  "Theodoros Tsiligkaridis",
+  "Marinka Zitnik"
+ ],
+ "neurips2023-1943": [
+  "Jiayi Shen",
+  "Xiantong Zhen",
+  "Qi Wang",
+  "Marcel Worring"
+ ],
+ "neurips2023-2164": [
+  "Liyuan Wang",
+  "Jingyi Xie",
+  "Xingxing Zhang",
+  "Mingyi Huang",
+  "Hang Su",
+  "Jun Zhu"
+ ],
+ "neurips2023-2242": [
+  "Aditya Chattopadhyay",
+  "Ryan Pilgrim",
+  "Rene Vidal"
+ ],
+ "neurips2023-2444": [
+  "Dan Fu",
+  "Simran Arora",
+  "Jessica Grogan",
+  "Isys Johnson",
+  "Evan Sabri Eyuboglu",
+  "Armin Thomas",
+  "Benjamin Spector",
+  "Michael Poli",
+  "Atri Rudra",
+  "Christopher Ré"
+ ],
+ "neurips2023-2535": [
+  "Amira Abbas",
+  "Robbie King",
+  "Hsin-Yuan Huang",
+  "William J. Huggins",
+  "Ramis Movassagh",
+  "Dar Gilboa",
+  "Jarrod McClean"
+ ],
+ "neurips2023-2615": [
+  "Idan Attias",
+  "Steve Hanneke",
+  "Alkis Kalavasis",
+  "Amin Karbasi",
+  "Grigoris Velegkas"
+ ],
+ "neurips2023-2693": [
+  "Zixuan Jiang",
+  "Jiaqi Gu",
+  "Hanqing Zhu",
+  "David Pan"
+ ],
+ "neurips2023-2899": [
+  "Yifan Yang",
+  "Peiyao Xiao",
+  "Kaiyi Ji"
+ ],
+ "neurips2023-2954": [
+  "Mingxuan Ye",
+  "Yufei Kuang",
+  "Jie Wang",
+  "Yang Rui",
+  "Wengang Zhou",
+  "Houqiang Li",
+  "Feng Wu"
+ ],
+ "neurips2023-3025": [
+  "Ziqian Zhong",
+  "Ziming Liu",
+  "Max Tegmark",
+  "Jacob Andreas"
+ ],
+ "neurips2023-3123": [
+  "Yu Bai",
+  "Fan Chen",
+  "Huan Wang",
+  "Caiming Xiong",
+  "Song Mei"
+ ],
+ "neurips2023-3217": [
+  "Hamed Nilforoshan",
+  "Michael Moor",
+  "Yusuf Roohani",
+  "Yining Chen",
+  "Anja Šurina",
+  "Michihiro Yasunaga",
+  "Sara Oblak",
+  "Jure Leskovec"
+ ],
+ "neurips2024-0111": [
+  "Hojun Chung",
+  "Junseo Lee",
+  "Minsoo Kim",
+  "Dohyeong Kim",
+  "Songhwai Oh"
+ ],
+ "neurips2024-0128": [
+  "Adam Stooke",
+  "Rohit Prabhavalkar",
+  "Khe C. Sim",
+  "Pedro M. Mengibar"
+ ],
+ "neurips2024-0179": [
+  "Mingtian Tan",
+  "Mike A. Merrill",
+  "Vinayak Gupta",
+  "Tim Althoff",
+  "Thomas Hartvigsen"
+ ],
+ "neurips2024-0290": [
+  "Sebastian Dittert",
+  "Vincent Moens",
+  "Gianni De Fabritiis"
+ ],
+ "neurips2024-0636": [
+  "Rohan Choudhury",
+  "Guanglei Zhu",
+  "Sihan Liu",
+  "Koichiro Niinuma",
+  "Kris M. Kitani",
+  "László A. Jeni"
+ ],
+ "neurips2024-0736": [
+  "Yuefei Lyu",
+  "Chaozhuo Li",
+  "Sihong Xie",
+  "Xi Zhang"
+ ],
+ "neurips2024-1166": [
+  "Ye Li",
+  "Lingdong Kong",
+  "Hanjiang Hu",
+  "Xiaohao Xu",
+  "Xiaonan Huang"
+ ],
+ "neurips2024-1216": [
+  "Jaivardhan Kapoor",
+  "Auguste Schulz",
+  "Julius Vetter",
+  "Felix Pei",
+  "Richard Gao",
+  "Jakob H. Macke"
+ ],
+ "neurips2024-1383": [
+  "Yiming Li",
+  "Zehong Wang",
+  "Yue Wang",
+  "Zhiding Yu",
+  "Zan Gojcic",
+  "Marco Pavone",
+  "Chen Feng",
+  "Jose M. Alvarez"
+ ],
+ "neurips2024-1534": [
+  "Zixuan Gong",
+  "Guangyin Bao",
+  "Qi Zhang",
+  "Zhongwei Wan",
+  "Duoqian Miao",
+  "Shoujin Wang",
+  "Lei Zhu",
+  "Changwei Wang",
+  "Rongtao Xu",
+  "Liang Hu",
+  "Ke Liu",
+  "Yu Zhang"
+ ],
+ "neurips2024-1548": [
+  "Benyuan Meng",
+  "Qianqian Xu",
+  "Zitai Wang",
+  "Xiaochun Cao",
+  "Qingming Huang"
+ ],
+ "neurips2024-1643": [
+  "Alexander Lappe",
+  "Anna Bognár",
+  "Ghazaleh G. Nejad",
+  "Albert Mukovskiy",
+  "Lucas Martini",
+  "Martin Giese",
+  "Rufin Vogels"
+ ],
+ "neurips2024-1663": [
+  "Sriyash Poddar",
+  "Yanming Wan",
+  "Hamish Ivison",
+  "Abhishek Gupta",
+  "Natasha Jaques"
+ ],
+ "neurips2024-1679": [
+  "Hadi Vafaii",
+  "Dekel Galor",
+  "Jacob Yates"
+ ],
+ "neurips2024-1867": [
+  "Shaoteng Liu",
+  "Haoqi Yuan",
+  "Minda Hu",
+  "Yanwei Li",
+  "Yukang Chen",
+  "Shu Liu",
+  "Zongqing Lu",
+  "Jiaya Jia"
+ ],
+ "neurips2024-1874": [
+  "Andy Zhou",
+  "Bo Li",
+  "Haohan Wang"
+ ],
+ "neurips2024-1887": [
+  "Xi Yang",
+  "Xu Gu",
+  "Xingyilang Yin",
+  "Xinbo Gao"
+ ],
+ "neurips2024-2141": [
+  "Hao Zhang",
+  "Lei Cao",
+  "Jaiyi Ma"
+ ],
+ "neurips2024-2147": [
+  "Weichao Zeng",
+  "Yan Shu",
+  "Zhenhang Li",
+  "Dongbao Yang",
+  "Yu Zhou"
+ ],
+ "neurips2024-2417": [
+  "Tom Sander",
+  "Pierre Fernandez",
+  "Alain Durmus",
+  "Matthijs Douze",
+  "Teddy Furon"
+ ],
+ "neurips2024-2466": [
+  "Yutao Sun",
+  "Li Dong",
+  "Yi Zhu",
+  "Shaohan Huang",
+  "Wenhui Wang",
+  "Shuming Ma",
+  "Quanlu Zhang",
+  "Jianyong Wang",
+  "Furu Wei"
+ ],
+ "neurips2024-2515": [
+  "Shivvrat Arya",
+  "Tahrima Rahman",
+  "Vibhav Gogate"
+ ],
+ "neurips2024-2587": [
+  "Saiyue Lyu",
+  "Shadab Shaikh",
+  "Frederick Shpilevskiy",
+  "Evan Shelhamer",
+  "Mathias Lécuyer"
+ ],
+ "neurips2024-2641": [
+  "Paul Krzakala",
+  "Junjie Yang",
+  "Rémi Flamary",
+  "Florence d'Alché-Buc",
+  "Charlotte Laclau",
+  "Matthieu Labeau"
+ ],
+ "neurips2024-2889": [
+  "Yongzhe Jia",
+  "Xuyun Zhang",
+  "Hongsheng Hu",
+  "Kim-Kwang Raymond Choo",
+  "Lianyong Qi",
+  "Xiaolong Xu",
+  "Amin Beheshti",
+  "Wanchun Dou"
+ ],
+ "neurips2024-2917": [
+  "Gantavya Bhatt",
+  "Arnav M. Das",
+  "Jeffrey A. Bilmes"
+ ],
+ "neurips2024-3160": [
+  "Haonan Lin",
+  "Wenbin An",
+  "Jiahao Wang",
+  "Yan Chen",
+  "Feng Tian",
+  "Mengmeng Wang",
+  "Guang Dai",
+  "Qianying Wang",
+  "Jingdong Wang"
+ ],
+ "neurips2024-3186": [
+  "Zhenheng Tang",
+  "Yonggang Zhang",
+  "Peijie Dong",
+  "Yiu-ming Cheung",
+  "Amelie C. Zhou",
+  "Bo Han",
+  "Xiaowen Chu"
+ ],
+ "neurips2024-3326": [
+  "Jayden Teoh",
+  "Wenjun Li",
+  "Pradeep Varakantham"
+ ],
+ "neurips2024-3430": [
+  "Mohamed Ghanem",
+  "Frederik Schmitt",
+  "Julian Siber",
+  "Bernd Finkbeiner"
+ ],
+ "neurips2024-3442": [
+  "Gabriel Poesia",
+  "David Broman",
+  "Nick Haber",
+  "Noah Goodman"
+ ],
+ "neurips2024-3606": [
+  "Shukuan Wang",
+  "Ke Xue",
+  "Lei Song",
+  "Xiaobin Huang",
+  "Chao Qian"
+ ],
+ "neurips2024-3700": [
+  "Yue Yu",
+  "Ning Liu",
+  "Fei Lu",
+  "Tian Gao",
+  "Siavash Jafarzadeh",
+  "Stewart Silling"
+ ],
+ "neurips2024-4349": [
+  "Mingrui Zhang",
+  "Chunyang Wang",
+  "Stephan Kramer",
+  "Joseph G. Wallwork",
+  "Siyi Li",
+  "Jiancheng Liu",
+  "Xiang Chen",
+  "Matthew D. Piggott"
+ ],
+ "neurips2024-4397": [
+  "Zhehao Huang",
+  "Xinwen Cheng",
+  "JingHao Zheng",
+  "Haoran Wang",
+  "Zhengbao He",
+  "Tao Li",
+  "Xiaolin Huang"
+ ],
+ "neurips2024-4437": [
+  "Qingyuan Wu",
+  "Simon S. Zhan",
+  "Yixuan Wang",
+  "Yuhui Wang",
+  "Chung-Wei Lin",
+  "Chen Lv",
+  "Qi Zhu",
+  "Chao Huang"
+ ],
+ "neurips2023-2437": [
+  "Jinghan Jia",
+  "Jiancheng Liu",
+  "Parikshit Ram",
+  "Yuguang Yao",
+  "Gaowen Liu",
+  "Yang Liu",
+  "PRANAY SHARMA",
+  "Sijia Liu"
  ]
 }
