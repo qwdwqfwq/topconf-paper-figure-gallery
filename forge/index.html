@@ -506,7 +506,7 @@
   </div>
 
 
-  <div class="card" id="card4" hidden>
+  <div class="card" id="card4">
     <div class="step"><span class="num">4</span><span data-i18n="s4"></span>
       <span class="step-note" data-i18n="s4.note"></span>
     </div>
@@ -527,12 +527,12 @@
         </select>
       </div>
       <div class="export-actions" id="exportActions">
-        <button type="button" data-export="svg"><strong>SVG</strong><small data-i18n="export.svg"></small></button>
-        <button type="button" data-export="pptx"><strong>PPTX</strong><small data-i18n="export.pptx"></small></button>
-        <button type="button" data-export="vsdx"><strong>VSDX</strong><small data-i18n="export.vsdx"></small></button>
-        <button type="button" data-export="drawio"><strong>draw.io</strong><small data-i18n="export.drawio"></small></button>
+        <button type="button" data-export="svg" disabled><strong>SVG</strong><small data-i18n="export.svg"></small></button>
+        <button type="button" data-export="pptx" disabled><strong>PPTX</strong><small data-i18n="export.pptx"></small></button>
+        <button type="button" data-export="vsdx" disabled><strong>VSDX</strong><small data-i18n="export.vsdx"></small></button>
+        <button type="button" data-export="drawio" disabled><strong>draw.io</strong><small data-i18n="export.drawio"></small></button>
       </div>
-      <div class="export-status" id="exportStatus"></div>
+      <div class="export-status" id="exportStatus" data-i18n="export.waiting"></div>
     </section>
   </div>
 
