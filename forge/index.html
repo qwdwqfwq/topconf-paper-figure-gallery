@@ -268,6 +268,10 @@
   .az{background:#f9fafb;border:1px solid var(--line);border-radius:9px;padding:8px 11px}
   .az b{display:block;font-size:10.5px;letter-spacing:.4px;color:#9ca3af;font-weight:700;margin-bottom:3px}
   .az span{font-size:12px;color:#374151}
+  .palette-list{display:flex;flex-wrap:wrap;gap:6px 10px;line-height:1.55}
+  .palette-chip{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .palette-swatch{display:inline-block;width:13px;height:13px;border:1px solid rgba(17,24,39,.18);border-radius:4px;flex:0 0 auto}
+  .palette-chip code{font:inherit;color:#6b7280}
   .rep-strip{display:flex;gap:8px;margin-top:11px;flex-wrap:wrap;align-items:center}
   .rep-strip b{font-size:11.5px;color:var(--muted)}
   .rep-chip{display:flex;align-items:center;gap:6px;background:var(--indigo-soft);border:1px solid #c7d2fe;border-radius:8px;padding:3px 9px 3px 3px;font-size:11.5px;font-weight:700;color:var(--indigo)}
@@ -1579,11 +1583,35 @@ function renderAnalyze(ordered){
     <div class="analyze-grid">
       <div class="az"><b>Layout 布局</b><span>${esc(j.layout||'–')}</span></div>
       <div class="az"><b>Elements 元素</b><span>${esc(j.elements||'–')}</span></div>
-      <div class="az"><b>Palette 配色</b><span>${esc(j.palette||'–')}</span></div>
+      <div class="az"><b>Palette 配色</b>${paletteMarkup(j.palette)}</div>
       <div class="az"><b>Hierarchy 层级</b><span>${esc(j.hierarchy||'–')}</span></div>
     </div>
     <div class="rep-strip"><b>${tt('rep.selected')}</b>${repHtml}</div>
   </div>`;
+}
+
+function paletteMarkup(palette){
+  const entries=[];
+  if(Array.isArray(palette)){
+    palette.forEach((value,index)=>entries.push([`color ${index+1}`,value]));
+  }else if(palette && typeof palette==='object'){
+    ['background','primary','accent','neutral'].forEach(key=>{
+      if(palette[key]) entries.push([key,palette[key]]);
+    });
+    if(Array.isArray(palette.others)){
+      palette.others.forEach((value,index)=>entries.push([`other ${index+1}`,value]));
+    }
+  }else if(palette){
+    return `<span>${esc(String(palette))}</span>`;
+  }
+  if(!entries.length) return '<span>–</span>';
+  return `<span class="palette-list">${entries.map(([name,value])=>{
+    const raw=String(value).trim();
+    const safe=esc(raw);
+    const swatch=/^#[0-9a-f]{3,8}$/i.test(raw)
+      ? `<i class="palette-swatch" style="background:${safe}" aria-hidden="true"></i>` : '';
+    return `<span class="palette-chip">${swatch}<span>${esc(name)} <code>${safe}</code></span></span>`;
+  }).join('')}</span>`;
 }
 
 /* ---------------- build prompts ---------------- */
