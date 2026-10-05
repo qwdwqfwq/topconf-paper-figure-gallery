@@ -49022,25 +49022,6 @@
   "tier": "oral"
  },
  {
-  "id": "icml2026-0161",
-  "venue": "icml",
-  "year": 2026,
-  "title": "A Constrained Optimization Perspective of Unrolled Transformers",
-  "authors": [
-   "Javier Porras-Valenzuela",
-   "Samar Hadou",
-   "Alejandro Ribeiro"
-  ],
-  "pattern": "architecture",
-  "image": "images/icml/final/icml2026-0161.jpg",
-  "paper": "https://openreview.net/forum?id=aYe8j2jOmK",
-  "pdf_source": "https://openreview.net/pdf/fecf049f060f89c594804483ef7474e15ee0dc9c.pdf",
-  "score": 48.22,
-  "w": 1212,
-  "h": 353,
-  "tier": "spotlight"
- },
- {
   "id": "icml2026-0162",
   "venue": "icml",
   "year": 2026,
@@ -52139,30 +52120,6 @@
   "score": 14.93,
   "w": 1236,
   "h": 459,
-  "tier": "spotlight"
- },
- {
-  "id": "icml2026-0417",
-  "venue": "icml",
-  "year": 2026,
-  "title": "Ratio-Variance Regularized Policy Optimization",
-  "authors": [
-   "Yu Luo",
-   "Shuo Han",
-   "Yihan Hu",
-   "Lei Lv",
-   "Huaping Liu",
-   "Fuchun Sun",
-   "Jianye HAO",
-   "Dong Li"
-  ],
-  "pattern": "teaser",
-  "image": "images/icml/final/icml2026-0417.jpg",
-  "paper": "https://openreview.net/forum?id=NT4Cz09S4w",
-  "pdf_source": "https://openreview.net/pdf/cb9f2ecde9098ee40ec092d7224c262421a42e40.pdf",
-  "score": 36.84,
-  "w": 637,
-  "h": 438,
   "tier": "spotlight"
  },
  {
@@ -72445,25 +72402,6 @@
   "score": 66.63,
   "w": 1010,
   "h": 404,
-  "tier": "spotlight"
- },
- {
-  "id": "neurips2025-2930",
-  "venue": "neurips",
-  "year": 2025,
-  "title": "HBLLM: Wavelet-Enhanced High-Fidelity 1-Bit Quantization for LLMs",
-  "authors": [
-   "Ningning CHEN",
-   "Weicai Ye",
-   "Ying Jiang"
-  ],
-  "pattern": "architecture",
-  "image": "images/neurips/final/neurips2025-2930.jpg",
-  "paper": "https://openreview.net/forum?id=3FsM6wWQL4",
-  "pdf_source": "https://openreview.net/pdf?id=3FsM6wWQL4",
-  "score": -0.18,
-  "w": 467,
-  "h": 400,
   "tier": "spotlight"
  },
  {

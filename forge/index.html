@@ -2150,6 +2150,13 @@ function auditSummaryText(res){
    The model returns SVG; this small scene contract is the stable hand-off to
    server-side PPTX/VSDX renderers and keeps the browser preview deterministic. */
 window.__ffExportState = {svg:'', baseSvg:'', scene:null, target:'svg', font:'original'};
+function escapeSvgAttr(value){
+  return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[ch]));
+}
+function rasterToExportSvg(src){
+  const href=escapeSvgAttr(src);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900"><image href="${href}" x="0" y="0" width="1600" height="900" preserveAspectRatio="xMidYMid meet" data-role="raster-image"/></svg>`;
+}
 function exportAttrMap(el){
   const names=['x','y','width','height','x1','y1','x2','y2','cx','cy','r','rx','ry','fill','stroke','stroke-width','stroke-linecap','stroke-linejoin','font-family','font-size','font-weight','text-anchor','transform','d'];
   const out={}; names.forEach(n=>{const v=el.getAttribute(n); if(v!=null) out[n]=v;}); return out;
@@ -2295,10 +2302,12 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const item = d.data?.[0] || d.images?.[0];
   if(!item) throw new Error(tt('img.abnormal',{t:txt.slice(0,200)}));
   const imgSrc = item.url || ('data:image/png;base64,'+item.b64_json);
+  const exportImgSrc = item.b64_json ? `data:image/png;base64,${item.b64_json}` : imgSrc;
   $('#out').style.display='block';
   $('#out').innerHTML = `<img src="${esc(imgSrc)}" alt="draft">
     <div class="dl"><button class="btn-primary" id="dlImg">${tt('img.download')}</button>
     <span class="hint">${usedRefs?tt('img.hintRef',{n:useIds.length}):tt('img.hint')}</span></div>`;
+  showEditableExportStep(rasterToExportSvg(exportImgSrc));
   $('#dlImg').onclick = async ()=>{
     try{
       const rr = await fetch(imgSrc); const blob = await rr.blob();
