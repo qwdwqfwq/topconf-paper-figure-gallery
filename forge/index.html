@@ -2147,42 +2147,321 @@ function auditSummaryText(res){
 }
 
 /* ---------------- Editable export step ----------------
-   The model returns SVG; this small scene contract is the stable hand-off to
-   server-side PPTX/VSDX renderers and keeps the browser preview deterministic. */
+   The SVG produced in step 3 already carries the two things an editable file
+   needs: exact geometry, and labels as real <text> strings. So the export parses
+   that SVG element by element and emits native shapes and text boxes for each
+   target format. Two rules follow from that and both matter:
+
+     1. Text is never re-recognised (no OCR, no bitmap tracing). The string in the
+        SVG is copied verbatim, so the exported labels cannot be misspelled.
+     2. Positions come from the measured SVG, not from a model's guess, so nothing
+        drifts between the preview and the exported file.
+
+   Everything below runs in the browser: no server, no extra API call, works
+   offline. PPTX uses the vendored PptxGenJS; draw.io and VSDX are written here. */
 window.__ffExportState = {svg:'', baseSvg:'', scene:null, target:'svg', font:'original'};
+
+/* ---------- colour / unit helpers ---------- */
+const EXPORT_CANVAS = {w:1600, h:900};
+// 1600 canvas units -> 10in wide figure, centred on a 13.333x7.5in 16:9 slide.
+const PT_PER_UNIT = 0.45;
+
+function svgColorToHex(value){
+  if(!value) return null;
+  let v = String(value).trim().toLowerCase();
+  if(v==='none' || v==='transparent') return null;
+  if(v==='currentcolor') return '000000';
+  if(/^#[0-9a-f]{3}$/.test(v)) return v.slice(1).split('').map(c=>c+c).join('').toUpperCase();
+  if(/^#[0-9a-f]{6}$/.test(v)) return v.slice(1).toUpperCase();
+  if(/^#[0-9a-f]{8}$/.test(v)) return v.slice(1,7).toUpperCase();   // drop alpha
+  const rgb = v.match(/^rgba?\(([^)]+)\)$/);
+  if(rgb){
+    const parts = rgb[1].split(/[,\s/]+/).filter(Boolean).map(Number);
+    if(parts.length>=3 && parts.slice(0,3).every(n=>Number.isFinite(n))){
+      if(parts.length>=4 && parts[3]===0) return null;
+      return parts.slice(0,3).map(n=>Math.max(0,Math.min(255,Math.round(n))).toString(16).padStart(2,'0')).join('').toUpperCase();
+    }
+    return null;
+  }
+  const named = {black:'000000',white:'FFFFFF',red:'FF0000',green:'008000',blue:'0000FF',gray:'808080',grey:'808080',silver:'C0C0C0',orange:'FFA500',yellow:'FFFF00',purple:'800080',navy:'000080',teal:'008080',brown:'A52A2A',lightgray:'D3D3D3',lightgrey:'D3D3D3',darkgray:'A9A9A9'};
+  return named[v] || null;
+}
+
+function parseTransformList(value){
+  const ops = [];
+  const re = /([a-zA-Z]+)\s*\(([^)]*)\)/g;
+  let m;
+  while((m = re.exec(value||''))){
+    const nums = m[2].split(/[\s,]+/).filter(s=>s!=='').map(Number);
+    if(nums.some(n=>!Number.isFinite(n))) continue;
+    ops.push({fn:m[1].toLowerCase(), a:nums});
+  }
+  return ops;
+}
+
+function multiplyMatrix(m1, m2){   // m1 * m2, both [a,b,c,d,e,f]
+  return [
+    m1[0]*m2[0]+m1[2]*m2[1], m1[1]*m2[0]+m1[3]*m2[1],
+    m1[0]*m2[2]+m1[2]*m2[3], m1[1]*m2[2]+m1[3]*m2[3],
+    m1[0]*m2[4]+m1[2]*m2[5]+m1[4], m1[1]*m2[4]+m1[3]*m2[5]+m1[5],
+  ];
+}
+
+function opsToMatrix(ops){
+  let m = [1,0,0,1,0,0];
+  ops.forEach(function(op){
+    const a = op.a;
+    let next = null;
+    if(op.fn==='translate') next = [1,0,0,1, a[0]||0, a[1]||0];
+    else if(op.fn==='scale'){ const sx=a[0]==null?1:a[0], sy=a[1]==null?sx:a[1]; next=[sx,0,0,sy,0,0]; }
+    else if(op.fn==='rotate'){
+      const t = (a[0]||0)*Math.PI/180, cos=Math.cos(t), sin=Math.sin(t);
+      if(a.length>=3){
+        const cx=a[1], cy=a[2];
+        next = multiplyMatrix(multiplyMatrix([1,0,0,1,cx,cy],[cos,sin,-sin,cos,0,0]),[1,0,0,1,-cx,-cy]);
+      } else next = [cos,sin,-sin,cos,0,0];
+    }
+    else if(op.fn==='matrix' && a.length>=6) next = a.slice(0,6);
+    else if(op.fn==='skewx') next = [1,0,Math.tan((a[0]||0)*Math.PI/180),1,0,0];
+    else if(op.fn==='skewy') next = [1,Math.tan((a[0]||0)*Math.PI/180),0,1,0,0];
+    if(next) m = multiplyMatrix(m, next);
+  });
+  return m;
+}
+
+function styleOf(el){
+  let s = {};
+  try{ s = el.style || {}; }catch(_){ s = {}; }
+  const pick = name => {
+    const inline = s && s[name];
+    if(inline) return inline;
+    const attr = el.getAttribute(name);
+    return attr || null;
+  };
+  return {
+    fill: pick('fill'),
+    stroke: pick('stroke'),
+    strokeWidth: pick('stroke-width'),
+    opacity: pick('opacity'),
+    fillOpacity: pick('fill-opacity'),
+    strokeOpacity: pick('stroke-opacity'),
+    fontFamily: pick('font-family'),
+    fontSize: pick('font-size'),
+    fontWeight: pick('font-weight'),
+    fontStyle: pick('font-style'),
+    textAnchor: pick('text-anchor'),
+    dominantBaseline: pick('dominant-baseline'),
+  };
+}
+
+/* ---------- SVG -> scene ----------
+   Returns every visual element with absolute canvas coordinates, measured where
+   measurement is the only way to be correct (text width, and any element wrapped
+   in a transform, which is flattened here so the output formats need no matrices). */
+function parseSvgScene(svg){
+  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+  if(doc.querySelector('parsererror')) throw new Error('scene: SVG could not be parsed');
+  const root = doc.documentElement;
+  const vbRaw = (root.getAttribute('viewBox')||'').trim().split(/[\s,]+/).map(Number);
+  const vb = (vbRaw.length===4 && vbRaw.every(Number.isFinite) && vbRaw[2]>0 && vbRaw[3]>0)
+    ? vbRaw
+    : [0,0, parseFloat(root.getAttribute('width'))||EXPORT_CANVAS.w, parseFloat(root.getAttribute('height'))||EXPORT_CANVAS.h];
+
+  // A hidden host gives getBBox exact text metrics for the real font and size.
+  const host = document.createElement('div');
+  host.setAttribute('aria-hidden','true');
+  host.style.cssText = 'position:fixed;left:-100000px;top:0;width:'+vb[2]+'px;height:'+vb[3]+'px;overflow:hidden;pointer-events:none;';
+  const live = document.importNode(root, true);
+  live.setAttribute('width', vb[2]); live.setAttribute('height', vb[3]);
+  host.appendChild(live);
+  document.body.appendChild(host);
+
+  const nodes = [];
+  const warnings = [];
+
+  function applyMatrix(m, x, y){
+    return { x: m[0]*x + m[2]*y + m[4], y: m[1]*x + m[3]*y + m[5] };
+  }
+  function isIdentity(m){
+    return Math.abs(m[0]-1)<1e-6 && Math.abs(m[1])<1e-6 && Math.abs(m[2])<1e-6 &&
+           Math.abs(m[3]-1)<1e-6 && Math.abs(m[4])<1e-6 && Math.abs(m[5])<1e-6;
+  }
+
+  function walk(el, matrix){
+    const tag = (el.tagName||'').toLowerCase();
+    const own = parseTransformList(el.getAttribute('transform'));
+    const m = own.length ? multiplyMatrix(matrix, opsToMatrix(own)) : matrix;
+    const st = styleOf(el);
+
+    if(tag==='defs' || tag==='style' || tag==='title' || tag==='desc' || tag==='metadata') return;
+
+    if(tag==='g' || tag==='svg'){
+      [...el.children].forEach(child=>walk(child, m));
+      return;
+    }
+
+    const num = (name, fallback) => {
+      const raw = el.getAttribute(name);
+      if(raw==null) return fallback;
+      const v = parseFloat(raw);
+      return Number.isFinite(v) ? v : fallback;
+    };
+
+    if(tag==='rect'){
+      const x=num('x',0), y=num('y',0), w=num('width',0), h=num('height',0);
+      if(w<=0 || h<=0) return;
+      const corners = [applyMatrix(m,x,y), applyMatrix(m,x+w,y), applyMatrix(m,x,y+h)];
+      const x0=Math.min(corners[0].x,corners[1].x,corners[2].x), y0=Math.min(corners[0].y,corners[1].y,corners[2].y);
+      const x1=Math.max(corners[0].x,corners[1].x,corners[2].x), y1=Math.max(corners[0].y,corners[1].y,corners[2].y);
+      const rot = Math.atan2(m[1], m[0]) * 180/Math.PI;
+      const rx = (num('rx',0) || num('ry',0)) || 0;
+      nodes.push({type:'rect', x:x0, y:y0, w:x1-x0, h:y1-y0, radius:rx,
+        fill:svgColorToHex(st.fill), stroke:svgColorToHex(st.stroke),
+        strokeWidth:parseFloat(st.strokeWidth)||0, rotate:Math.abs(rot)>0.01?rot:0});
+      return;
+    }
+
+    if(tag==='circle' || tag==='ellipse'){
+      const cx=num('cx',0), cy=num('cy',0);
+      const rx = tag==='circle' ? num('r',0) : num('rx',0);
+      const ry = tag==='circle' ? num('r',0) : num('ry',0);
+      if(rx<=0 || ry<=0) return;
+      const c = applyMatrix(m, cx, cy);
+      const scaleX = Math.hypot(m[0], m[1]) || 1;
+      const scaleY = Math.hypot(m[2], m[3]) || 1;
+      nodes.push({type:'ellipse', x:c.x-rx*scaleX, y:c.y-ry*scaleY, w:rx*2*scaleX, h:ry*2*scaleY,
+        fill:svgColorToHex(st.fill), stroke:svgColorToHex(st.stroke),
+        strokeWidth:parseFloat(st.strokeWidth)||0});
+      return;
+    }
+
+    if(tag==='line'){
+      const p1 = applyMatrix(m, num('x1',0), num('y1',0));
+      const p2 = applyMatrix(m, num('x2',0), num('y2',0));
+      nodes.push({type:'line', x:p1.x, y:p1.y, x2:p2.x, y2:p2.y,
+        stroke:svgColorToHex(st.stroke)||'000000', strokeWidth:parseFloat(st.strokeWidth)||1,
+        arrow: !!el.getAttribute('marker-end')});
+      return;
+    }
+
+    if(tag==='polygon' || tag==='polyline' || tag==='path'){
+      const d = el.getAttribute('d');
+      const pts = el.getAttribute('points');
+      let bbox = null;
+      try{ bbox = el.getBBox(); }catch(_){ bbox = null; }
+      if(bbox && bbox.width>0 && bbox.height>0){
+        const corners = [applyMatrix(m,bbox.x,bbox.y), applyMatrix(m,bbox.x+bbox.width,bbox.y),
+                         applyMatrix(m,bbox.x,bbox.y+bbox.height), applyMatrix(m,bbox.x+bbox.width,bbox.y+bbox.height)];
+        const xs=corners.map(c=>c.x), ys=corners.map(c=>c.y);
+        nodes.push({type:tag==='polyline'?'polyline':'path',
+          x:Math.min(...xs), y:Math.min(...ys),
+          w:Math.max(...xs)-Math.min(...xs), h:Math.max(...ys)-Math.min(...ys),
+          d:d||null, points:pts||null,
+          fill:svgColorToHex(st.fill), stroke:svgColorToHex(st.stroke)||'000000',
+          strokeWidth:parseFloat(st.strokeWidth)||1,
+          arrow: !!el.getAttribute('marker-end'),
+          matrix: isIdentity(m) ? null : m.slice(),
+          closed: tag!=='polyline'});
+      } else warnings.push(tag+' element without measurable bounds was skipped');
+      return;
+    }
+
+    if(tag==='image'){
+      const href = el.getAttribute('href') || el.getAttribute('xlink:href') || '';
+      const x=num('x',0), y=num('y',0), w=num('width',0), h=num('height',0);
+      if(!href) return;
+      nodes.push({type:'image', x, y, w:w||vb[2], h:h||vb[3], href, matrix:isIdentity(m)?null:m.slice()});
+      return;
+    }
+
+    if(tag==='text'){
+      // tspan children with their own x/y are separate lines; otherwise the whole
+      // string is one label and the parent's position is authoritative.
+      const kids = [...el.children].filter(c=>(c.tagName||'').toLowerCase()==='tspan');
+      const positioned = kids.filter(k=>k.getAttribute('x')!=null || k.getAttribute('y')!=null);
+      if(positioned.length && positioned.length===kids.length && kids.length>1){
+        kids.forEach(k=>emitText(k, m, st, el));
+        return;
+      }
+      emitText(el, m, st, el);
+      return;
+    }
+
+    // Unknown element types: recurse so nothing nested is lost.
+    if(el.children && el.children.length) [...el.children].forEach(child=>walk(child, m));
+  }
+
+  function emitText(el, matrix, inherited, styleSource){
+    const text = (el.textContent||'').replace(/\s+/g,' ').trim();
+    if(!text) return;
+    const st = Object.assign({}, inherited, styleOf(el));
+    const base = styleSource || el;
+    const xRaw = el.getAttribute('x')!=null ? parseFloat(el.getAttribute('x')) : parseFloat(base.getAttribute('x'));
+    const yRaw = el.getAttribute('y')!=null ? parseFloat(el.getAttribute('y')) : parseFloat(base.getAttribute('y'));
+    const x = Number.isFinite(xRaw) ? xRaw : 0;
+    const y = Number.isFinite(yRaw) ? yRaw : 0;
+    let fontSize = parseFloat(st.fontSize);
+    if(!Number.isFinite(fontSize) || fontSize<=0) fontSize = 16;
+
+    let box = null;
+    try{ box = el.getBBox(); }catch(_){ box = null; }
+    const scaleX = Math.hypot(matrix[0], matrix[1]) || 1;
+    const scaleY = Math.hypot(matrix[2], matrix[3]) || 1;
+    const width = box && box.width>0 ? box.width*scaleX : text.length*fontSize*0.58*scaleX;
+    const height = box && box.height>0 ? box.height*scaleY : fontSize*1.25*scaleY;
+    const anchor = (st.textAnchor||'start').toLowerCase();
+    const effective = Object.assign({}, matrix);
+    const pt = applyMatrix(effective, x, y);
+
+    nodes.push({
+      type:'text', text,
+      x:pt.x, y:pt.y, w:width, h:height,
+      fontSize: fontSize*scaleY,
+      anchor,
+      fill: svgColorToHex(st.fill) || '000000',
+      fontFamily: st.fontFamily || null,
+      bold: String(st.fontWeight||'').match(/^(bold|[6-9]00)$/) ? true : false,
+      italic: String(st.fontStyle||'')==='italic',
+      role: el.getAttribute('data-role') || null,
+    });
+  }
+
+  try{
+    walk(live, [1,0,0,1,0,0]);
+  } finally {
+    if(host.parentNode) host.parentNode.removeChild(host);
+  }
+
+  return {
+    schema:'figureforge.scene.v2',
+    canvas:{x:vb[0], y:vb[1], width:vb[2], height:vb[3], viewBox:vb.join(' ')},
+    nodes,
+    counts:{total:nodes.length, text:nodes.filter(n=>n.type==='text').length,
+            shapes:nodes.filter(n=>n.type!=='text'&&n.type!=='image').length,
+            images:nodes.filter(n=>n.type==='image').length},
+    warnings,
+  };
+}
+
 function escapeSvgAttr(value){
   return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[ch]));
+}
+function xmlEscape(value){
+  return String(value==null?'':value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[ch]));
 }
 function rasterToExportSvg(src){
   const href=escapeSvgAttr(src);
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900"><image href="${href}" x="0" y="0" width="1600" height="900" preserveAspectRatio="xMidYMid meet" data-role="raster-image"/></svg>`;
 }
-function exportAttrMap(el){
-  const names=['x','y','width','height','x1','y1','x2','y2','cx','cy','r','rx','ry','fill','stroke','stroke-width','stroke-linecap','stroke-linejoin','font-family','font-size','font-weight','text-anchor','transform','d'];
-  const out={}; names.forEach(n=>{const v=el.getAttribute(n); if(v!=null) out[n]=v;}); return out;
-}
-function parseSvgScene(svg){
-  const doc = new DOMParser().parseFromString(svg,'image/svg+xml');
-  const root = doc.documentElement;
-  const vb = (root.getAttribute('viewBox')||'0 0 1600 900').trim().split(/\s+/).map(Number);
-  const nums = vb.length===4 && vb.every(Number.isFinite) ? vb : [0,0,1600,900];
-  const nodes = [...root.querySelectorAll('rect,circle,ellipse,line,path,polygon,polyline,text,image,g')]
-    .filter(el=>el!==root)
-    .map((el,i)=>(
-      {id:el.getAttribute('id')||`node-${i+1}`, type:el.tagName, role:el.getAttribute('data-role')||'graphic',
-       editable:el.getAttribute('data-editable')!=='false', text:el.tagName.toLowerCase()==='text' ? (el.textContent||'').trim() : undefined, attrs:exportAttrMap(el)}
-    ));
-  return {schema:'figureforge.scene.v1',canvas:{x:nums[0],y:nums[1],width:nums[2],height:nums[3],viewBox:nums.join(' ')},nodes};
-}
 function downloadText(filename,text,type){
   const blob=new Blob([text],{type:type||'text/plain;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
   a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
 }
-function base64Utf8(text){const bytes=new TextEncoder().encode(text); let bin=''; bytes.forEach(b=>bin+=String.fromCharCode(b)); return btoa(bin);}
-function svgToDrawio(svg){
-  const encoded=base64Utf8(svg);
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<mxfile host="app.diagrams.net" modified="${new Date().toISOString()}" agent="FigureForge"><diagram id="figureforge" name="FigureForge"><mxGraphModel dx="1200" dy="800" grid="1" gridSize="10" page="1" pageScale="1" pageWidth="1600" pageHeight="900"><root><mxCell id="0"/><mxCell id="1" parent="0"/><mxCell id="figure" value="FigureForge SVG" style="shape=image;image=data:image/svg+xml;base64,${encoded};html=1;aspect=fixed;" vertex="1" parent="1"><mxGeometry x="0" y="0" width="1600" height="900" as="geometry"/></mxCell></root></mxGraphModel></diagram></mxfile>`;
+function downloadBlob(filename,blob){
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000);
 }
+
 function applyExportFont(font){
   const st=window.__ffExportState; if(!st.baseSvg) return;
   let svg=st.baseSvg;
@@ -2191,11 +2470,467 @@ function applyExportFont(font){
     [...doc.querySelectorAll('text,tspan')].forEach(el=>{el.setAttribute('font-family',font); el.style.fontFamily=font;});
     svg=new XMLSerializer().serializeToString(doc);
   }
-  st.font=font; st.svg=svg; st.scene=parseSvgScene(svg); renderEditableExportCard();
+  st.font=font; st.svg=svg;
+  try{ st.scene=parseSvgScene(svg); }catch(e){ st.scene=null; }
+  renderEditableExportCard();
   if(window.__ffExportPreviewUrl) URL.revokeObjectURL(window.__ffExportPreviewUrl);
   window.__ffExportPreviewUrl=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
   const frame=$('#out iframe'); if(frame) frame.srcdoc=svg;
 }
+
+/* ---------- PPTX ----------
+   Native shapes and real text boxes, positioned from the measured scene, so the
+   result is editable in PowerPoint without any redrawing step and the labels are
+   the exact strings from the SVG. */
+let pptxLibPromise = null;
+function loadPptxGenJS(){
+  if(window.PptxGenJS) return Promise.resolve(window.PptxGenJS);
+  if(!pptxLibPromise){
+    pptxLibPromise = new Promise((resolve, reject)=>{
+      const s = document.createElement('script');
+      // The bundle build is used, not pptxgen.min.js: the minified file expects an
+      // external JSZip, so loading it throws and never sets the global.
+      s.src = 'vendor/pptxgen.bundle.js';
+      s.onload = ()=> window.PptxGenJS ? resolve(window.PptxGenJS) : reject(new Error('PPTX library loaded but global missing'));
+      s.onerror = ()=> reject(new Error('PPTX library could not be loaded (vendor/pptxgen.bundle.js)'));
+      document.head.appendChild(s);
+    });
+  }
+  return pptxLibPromise;
+}
+
+function pptxColor(hex){ return hex || null; }
+
+function buildPptx(scene){
+  const canvas = scene.canvas;
+  const scale = 10 / canvas.width;                    // canvas units -> inches (10in wide)
+  const slideW = 13.333, slideH = 7.5;
+  const offX = (slideW - canvas.width*scale) / 2;
+  const offY = (slideH - canvas.height*scale) / 2;
+  const IN = v => v*scale;
+  const pt = v => Math.max(1, Number(v||0) * PT_PER_UNIT);
+
+  return loadPptxGenJS().then(function(PptxGenJS){
+    const pres = new PptxGenJS();
+    pres.defineLayout({ name:'FF169', width:slideW, height:slideH });
+    pres.layout = 'FF169';
+    const slide = pres.addSlide();
+    slide.background = { color:'FFFFFF' };
+
+    // background: only a full-canvas rect, so the slide is not over-painted
+    scene.nodes.forEach(function(n){
+      if(n.type!=='rect') return;
+      if(n.fill) slide.addShape(pres.ShapeType.rect, { x:offX+IN(n.x), y:offY+IN(n.y), w:IN(n.w), h:IN(n.h), fill:{color:pptxColor(n.fill)} });
+    });
+
+    scene.nodes.forEach(function(n){
+      if(n.type==='rect'){
+        if(n.fill) return;                              // already painted as background
+        const opts = { x:offX+IN(n.x), y:offY+IN(n.y), w:IN(n.w), h:IN(n.h),
+                       fill:{ color:'FFFFFF', transparency:100 },
+                       line:{ color:pptxColor(n.stroke)||'000000', width:pt(n.strokeWidth||1) } };
+        if(n.radius>0){
+          opts.rectRadius = Math.min(0.5, (n.radius/canvas.width)/scale*0.01 || 0.08);
+          slide.addShape(pres.ShapeType.roundRect, opts);
+        } else slide.addShape(pres.ShapeType.rect, opts);
+        return;
+      }
+      if(n.type==='ellipse'){
+        slide.addShape(pres.ShapeType.ellipse, {
+          x:offX+IN(n.x), y:offY+IN(n.y), w:IN(n.w), h:IN(n.h),
+          fill:n.fill?{color:pptxColor(n.fill)}:{color:'FFFFFF',transparency:100},
+          line:{ color:pptxColor(n.stroke)||'000000', width:pt(n.strokeWidth||1) } });
+        return;
+      }
+      if(n.type==='line'){
+        const lineOpts = { x:offX+IN(n.x), y:offY+IN(n.y), w:IN(n.x2-n.x), h:IN(n.y2-n.y),
+                           line:{ color:pptxColor(n.stroke)||'000000', width:pt(n.strokeWidth||1), beginArrowType:'none', endArrowType:n.arrow?'triangle':'none' } };
+        if(Math.abs(n.y2-n.y) < 0.75) lineOpts.line.dashType = 'solid';
+        slide.addShape(pres.ShapeType.line, lineOpts);
+        return;
+      }
+      if(n.type==='path' || n.type==='polyline'){
+        // Keep freeform geometry where it can be expressed; otherwise fall back to
+        // a bounded outline so the element is still present and positionable.
+        if(n.points){
+          try{
+            const raw = n.points.trim().split(/[\s,]+/).map(Number);
+            const pts = [];
+            for(let i=0;i+1<raw.length;i+=2) pts.push({x:offX+IN(raw[i]), y:offY+IN(raw[i+1])});
+            if(pts.length>=2){
+              slide.addShape(pres.ShapeType.custGeom ? pres.ShapeType.custGeom : pres.ShapeType.rect,
+                { x:offX+IN(n.x), y:offY+IN(n.y), w:IN(n.w), h:IN(n.h),
+                  fill:n.fill?{color:pptxColor(n.fill)}:{color:'FFFFFF',transparency:100},
+                  line:{ color:pptxColor(n.stroke)||'000000', width:pt(n.strokeWidth||1) },
+                  points:pts });
+              return;
+            }
+          }catch(_){ /* fall through to outline */ }
+        }
+        slide.addShape(pres.ShapeType.rect, {
+          x:offX+IN(n.x), y:offY+IN(n.y), w:Math.max(IN(n.w),0.02), h:Math.max(IN(n.h),0.02),
+          fill:{ color:'FFFFFF', transparency:100 },
+          line:{ color:'BFBFBF', width:0.75, dashType:'dash' } });
+        return;
+      }
+      if(n.type==='image'){
+        const uri = n.href||'';
+        const m = uri.match(/^data:([^;]+);base64,(.*)$/);
+        if(m){
+          slide.addImage({ data:'data:'+m[1]+';base64,'+m[2], x:offX+IN(n.x), y:offY+IN(n.y), w:IN(n.w), h:IN(n.h) });
+        }
+        return;
+      }
+      if(n.type==='text'){
+        const fontUnits = n.fontSize || 16;
+        const boxW = Math.max(IN(n.w) + 0.06, 0.1);
+        const boxH = Math.max(IN(fontUnits*1.45), 0.12);
+        let left;
+        if(n.anchor==='middle') left = offX + IN(n.x) - boxW/2;
+        else if(n.anchor==='end') left = offX + IN(n.x) - boxW;
+        else left = offX + IN(n.x);
+        const top = offY + IN(n.y) - boxH/2;
+        slide.addText(String(n.text), {
+          x:left, y:top, w:boxW, h:boxH,
+          align:'center', valign:'middle', margin:0,
+          fontFace: n.fontFamily ? String(n.fontFamily).split(',')[0].replace(/["']/g,'') : 'Arial',
+          fontSize: Math.max(4, fontUnits*PT_PER_UNIT),
+          bold: !!n.bold, italic: !!n.italic,
+          color: pptxColor(n.fill) || '000000',
+          wrap:false, shrinkText:false, isTextBox:true,
+        });
+        return;
+      }
+    });
+
+    return pres.write({ outputType:'blob', compression:true });
+  });
+}
+
+/* ---------- draw.io ----------
+   Emits real mxCell geometry, not an embedded picture, so every box and label is
+   individually editable inside draw.io. This file can also be exported to VSDX
+   from draw.io, which is the supported path to Visio. */
+function sceneToDrawio(scene){
+  const c = scene.canvas;
+  const cells = [];
+  let seq = 10;
+  const nextId = ()=> 'ff' + (seq++);
+  const xml = s => xmlEscape(s);
+
+  scene.nodes.forEach(function(n){
+    const id = nextId();
+    if(n.type==='text'){
+      const anchor = n.anchor==='middle' ? 'center' : (n.anchor==='end' ? 'right' : 'left');
+      const style = 'text;html=1;strokeColor=none;fillColor=none;align='+anchor+';verticalAlign=middle;'+
+                    'fontSize='+Math.round((n.fontSize||16)*0.75)+';fontColor=#'+(n.fill||'000000')+
+                    (n.bold?';fontStyle=1':'')+(n.italic?';fontStyle=2':'')+';whiteSpace=wrap;';
+      const w = Math.max(n.w*1.04, 8), h = Math.max((n.fontSize||16)*1.3, 8);
+      const x = n.anchor==='middle' ? n.x - w/2 : (n.anchor==='end' ? n.x - w : n.x);
+      cells.push('<mxCell id="'+id+'" value="'+xml(n.text)+'" style="'+style+'" vertex="1" parent="1">'+
+                 '<mxGeometry x="'+Math.round(x)+'" y="'+Math.round(n.y - h/2)+'" width="'+Math.round(w)+'" height="'+Math.round(h)+'" as="geometry"/></mxCell>');
+      return;
+    }
+    if(n.type==='line'){
+      const style = 'endArrow='+(n.arrow?'classic':'none')+';html=1;strokeColor=#'+(n.stroke||'000000')+';strokeWidth='+(n.strokeWidth||1)+';';
+      cells.push('<mxCell id="'+id+'" style="'+style+'" edge="1" parent="1">'+
+                 '<mxGeometry relative="1" as="geometry"><mxPoint x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" as="sourcePoint"/>'+
+                 '<mxPoint x="'+Math.round(n.x2)+'" y="'+Math.round(n.y2)+'" as="targetPoint"/></mxGeometry></mxCell>');
+      return;
+    }
+    if(n.type==='ellipse'){
+      const style = 'ellipse;whiteSpace=wrap;html=1;fillColor=#'+(n.fill||'none')+';strokeColor=#'+(n.stroke||'000000')+';strokeWidth='+(n.strokeWidth||1)+';';
+      cells.push('<mxCell id="'+id+'" style="'+style+'" vertex="1" parent="1">'+
+                 '<mxGeometry x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" width="'+Math.round(n.w)+'" height="'+Math.round(n.h)+'" as="geometry"/></mxCell>');
+      return;
+    }
+    if(n.type==='rect'){
+      const rounded = n.radius>0 ? 'rounded=1;arcSize='+Math.max(4, Math.min(50, Math.round(n.radius/Math.max(1,Math.min(n.w,n.h))*100)))+';' : '';
+      const style = rounded+'whiteSpace=wrap;html=1;fillColor=#'+(n.fill||'none')+';strokeColor=#'+(n.stroke||'none')+';strokeWidth='+(n.strokeWidth||1)+';';
+      cells.push('<mxCell id="'+id+'" style="'+style+'" vertex="1" parent="1">'+
+                 '<mxGeometry x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" width="'+Math.round(n.w)+'" height="'+Math.round(n.h)+'" as="geometry"/></mxCell>');
+      return;
+    }
+    if(n.type==='path' || n.type==='polyline'){
+      const style = 'shape=stencil;whiteSpace=wrap;html=1;fillColor=#'+(n.fill||'none')+';strokeColor=#'+(n.stroke||'000000')+';strokeWidth='+(n.strokeWidth||1)+';';
+      cells.push('<mxCell id="'+id+'" value="" style="'+style+'" vertex="1" parent="1">'+
+                 '<mxGeometry x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" width="'+Math.round(Math.max(n.w,4))+'" height="'+Math.round(Math.max(n.h,4))+'" as="geometry"/></mxCell>');
+      return;
+    }
+    if(n.type==='image'){
+      const style = 'shape=image;imageAspect=0;aspect=fixed;image='+xmlEscape(n.href||'')+';';
+      cells.push('<mxCell id="'+id+'" style="'+style+'" vertex="1" parent="1">'+
+                 '<mxGeometry x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" width="'+Math.round(n.w)+'" height="'+Math.round(n.h)+'" as="geometry"/></mxCell>');
+      return;
+    }
+  });
+
+  return '<?xml version="1.0" encoding="UTF-8"?>\n'+
+    '<mxfile host="app.diagrams.net" agent="FigureForge" type="device">'+
+    '<diagram id="figureforge" name="FigureForge">'+
+    '<mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="'+c.width+'" pageHeight="'+c.height+'" math="0" shadow="0">'+
+    '<root><mxCell id="0"/><mxCell id="1" parent="0"/>'+cells.join('')+'</root>'+
+    '</mxGraphModel></diagram></mxfile>';
+}
+
+/* ---------- VSDX ----------
+   Minimal but valid Visio package: one page, native Rectangle / Ellipse / Line /
+   Text shapes. Layout uses explicit PinX/PinY in inches, so shapes land exactly
+   where the SVG had them.
+
+   Honest limitation: this was written against the VSDX package structure and is
+   delivered without a Visio installation to open it with, so treat it as a draft
+   that PowerPoint-grade guarantees do not cover. draw.io's own VSDX export (from
+   the .drawio file next to this one) is the validated alternative. */
+function sceneToVsdxFiles(scene, font){
+  const c = scene.canvas;
+  const PX_PER_IN = c.width/10;                    // keep the same 10in width as PPTX
+  const inches = v => (v/PX_PER_IN);
+  const shapes = [];
+
+  scene.nodes.forEach(function(n, idx){
+    const ID = idx+1;
+    const st = { fill:(n.fill||'none'), line:(n.stroke||'none'), weight:(n.strokeWidth||0) };
+    let xml = '';
+    if(n.type==='rect' || n.type==='ellipse'){
+      const master = n.type==='ellipse' ? 'Ellipse' : 'Rectangle';
+      xml = '<Shape ID="'+ID+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'+
+            '<Cell N="PinX" V="'+inches(n.x+n.w/2).toFixed(4)+'"/><Cell N="PinY" V="'+inches(c.height-(n.y+n.h/2)).toFixed(4)+'"/>'+
+            '<Cell N="Width" V="'+inches(Math.max(n.w,1)).toFixed(4)+'"/><Cell N="Height" V="'+inches(Math.max(n.h,1)).toFixed(4)+'"/>'+
+            '<Cell N="LocPinX" V="'+inches(Math.max(n.w,1)/2).toFixed(4)+'"/><Cell N="LocPinY" V="'+inches(Math.max(n.h,1)/2).toFixed(4)+'"/>'+
+            fillCells(st)+
+            '<Cell N="Rounding" V="'+(n.radius? inches(n.radius).toFixed(4) : '0')+'"/>'+
+            '<Cell N="ShapeType" V="'+master+'"/>'+
+            '</Shape>';
+    } else if(n.type==='line'){
+      const x1=n.x, y1=n.y, x2=n.x2, y2=n.y2;
+      const len = Math.hypot(x2-x1, y2-y1);
+      const ang = Math.atan2(-(y2-y1), x2-x1) * 180/Math.PI;
+      xml = '<Shape ID="'+ID+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'+
+            '<Cell N="PinX" V="'+inches((x1+x2)/2).toFixed(4)+'"/><Cell N="PinY" V="'+inches(c.height-(y1+y2)/2).toFixed(4)+'"/>'+
+            '<Cell N="Width" V="'+inches(Math.max(len,0.5)).toFixed(4)+'"/><Cell N="Height" V="0"/>'+
+            '<Cell N="LocPinX" V="'+inches(Math.max(len,0.5)/2).toFixed(4)+'"/><Cell N="LocPinY" V="0"/>'+
+            '<Cell N="Angle" V="'+ang.toFixed(4)+'"/>'+
+            '<Cell N="EndArrow" V="'+(n.arrow?4:0)+'"/>'+
+            '<Cell N="LineColor" V="'+(n.stroke? '#'+n.stroke : '#000000')+'"/>'+
+            '<Cell N="LineWeight" V="'+(inches(Math.max(n.strokeWidth||1,1))*72).toFixed(3)+'"/>'+
+            '<Cell N="ShapeType" V="Line"/>'+
+            '</Shape>';
+    } else if(n.type==='text'){
+      const text = String(n.text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const sizePt = (n.fontSize||16)*PT_PER_UNIT;
+      const boxW = Math.max(n.w*1.04, 20), boxH = (n.fontSize||16)*1.4;
+      const anchorX = n.anchor==='middle' ? n.x : (n.anchor==='end' ? n.x - boxW/2 : n.x + boxW/2);
+      xml = '<Shape ID="'+ID+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'+
+            '<Cell N="PinX" V="'+inches(anchorX).toFixed(4)+'"/><Cell N="PinY" V="'+inches(c.height-n.y).toFixed(4)+'"/>'+
+            '<Cell N="Width" V="'+inches(boxW).toFixed(4)+'"/><Cell N="Height" V="'+inches(boxH).toFixed(4)+'"/>'+
+            '<Cell N="LocPinX" V="'+inches(boxW/2).toFixed(4)+'"/><Cell N="LocPinY" V="'+inches(boxH/2).toFixed(4)+'"/>'+
+            '<Cell N="FillForegnd" V="#FFFFFF"/><Cell N="FillPattern" V="0"/>'+
+            '<Cell N="LinePattern" V="0"/>'+
+            '<Cell N="VerticalAlign" V="1"/><Cell N="HorzAlign" V="'+(n.anchor==='middle'?1:(n.anchor==='end'?2:0))+'"/>'+
+            '<Cell N="ShapeType" V="Text"/>'+
+            '<Section N="Character"><Row IX="0"><Cell N="Size" V="'+sizePt.toFixed(2)+'"/>'+
+              '<Cell N="Color" V="#'+(n.fill||'000000')+'"/><Cell N="Style" V="'+(n.bold?1:0)+'"/>'+
+              '<Cell N="Font" V="'+(font||'Arial')+'"/></Row></Section>'+
+            '<Text>'+text+'</Text>'+
+            '</Shape>';
+    } else {
+      // Unsupported primitive: keep a dashed placeholder so nothing silently vanishes.
+      xml = '<Shape ID="'+ID+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'+
+            '<Cell N="PinX" V="'+inches(n.x+n.w/2).toFixed(4)+'"/><Cell N="PinY" V="'+inches(c.height-(n.y+n.h/2)).toFixed(4)+'"/>'+
+            '<Cell N="Width" V="'+inches(Math.max(n.w,4)).toFixed(4)+'"/><Cell N="Height" V="'+inches(Math.max(n.h,4)).toFixed(4)+'"/>'+
+            '<Cell N="FillPattern" V="0"/><Cell N="LinePattern" V="2"/>'+
+            '<Cell N="LineColor" V="#BFBFBF"/>'+
+            '<Cell N="ShapeType" V="Rectangle"/></Shape>';
+    }
+    shapes.push(xml);
+  });
+
+  function fillCells(st){
+    const parts = [];
+    parts.push('<Cell N="FillForegnd" V="'+(st.fill && st.fill!=='none' ? '#'+st.fill : '#FFFFFF')+'"/>');
+    parts.push('<Cell N="FillPattern" V="'+(st.fill && st.fill!=='none' ? 1 : 0)+'"/>');
+    parts.push('<Cell N="LineColor" V="'+(st.line && st.line!=='none' ? '#'+st.line : '#000000')+'"/>');
+    parts.push('<Cell N="LinePattern" V="'+(st.line && st.line!=='none' ? 1 : 0)+'"/>');
+    parts.push('<Cell N="LineWeight" V="'+(inches(Math.max(st.weight,1))*72).toFixed(3)+'"/>');
+    return parts.join('');
+  }
+
+  const pageXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<VisioDocument xmlns="http://schemas.microsoft.com/office/visio/2012/main" xml:space="preserve">'+
+    '<DocumentSettings TopPage="0" DefaultTextStyle="0" DefaultLineStyle="0" DefaultFillStyle="0"/>'+
+    '<Colors/><FaceNames/><StyleSheets/>'+
+    '<DocumentSheet NameU="TheDoc" IsCustomNameU="1" Name="TheDoc" IsCustomName="1">'+
+      '<PageProps><PageWidth>'+inches(c.width).toFixed(4)+'</PageWidth><PageHeight>'+inches(c.height).toFixed(4)+'</PageHeight>'+
+      '<ShdwOffsetX>0.1181</ShdwOffsetX><ShdwOffsetY>-0.1181</ShdwOffsetY><PageScale>1</PageScale><DrawingScale>1</DrawingScale>'+
+      '<DrawingSizeType>3</DrawingSizeType><DrawingScaleType>0</DrawingScaleType><InhibitSnap>0</InhibitSnap>'+
+      '<PageLockReplace>0</PageLockReplace><PageLockDuplicate>0</PageLockDuplicate><UIVisibility>0</UIVisibility>'+
+      '<ShdwType>0</ShdwType><ShdwObliqueAngle>0</ShdwObliqueAngle><ShdwScaleFactor>1</ShdwScaleFactor></PageProps>'+
+    '</DocumentSheet>'+
+    '<Masters/>'+
+    '<Pages><Page ID="0" NameU="FigureForge" Name="FigureForge" ViewScale="-1" ViewCenterX="'+inches(c.width/2).toFixed(4)+'" ViewCenterY="'+inches(c.height/2).toFixed(4)+'">'+
+      '<PageSheet LineStyle="0" FillStyle="0" TextStyle="0">'+
+        '<Cell N="PageWidth" V="'+inches(c.width).toFixed(4)+'"/><Cell N="PageHeight" V="'+inches(c.height).toFixed(4)+'"/>'+
+        '<Cell N="PageScale" V="1"/><Cell N="DrawingScale" V="1"/>'+
+      '</PageSheet>'+
+      '<Shapes>'+shapes.join('')+'</Shapes>'+
+    '</Page></VisioDocument>';
+
+  // Visio requires the shapes part name to match, and a parts list plus a
+  // content-types map. Names are fixed so only text content varies.
+  const contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
+    '<Default Extension="xml" ContentType="application/xml"/>'+
+    '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>'+
+    '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'+
+    '<Override PartName="/visio/document.xml" ContentType="application/vnd.ms-visio.drawing.main+xml"/>'+
+    '<Override PartName="/visio/pages/pages.xml" ContentType="application/vnd.ms-visio.pages+xml"/>'+
+    '<Override PartName="/visio/pages/page1.xml" ContentType="application/vnd.ms-visio.page+xml"/>'+
+    '<Override PartName="/visio/windows.xml" ContentType="application/vnd.ms-visio.windows+xml"/>'+
+    '</Types>';
+
+  const rootRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+    '<Relationship Id="rId1" Type="http://schemas.microsoft.com/visio/2010/relationships/document" Target="visio/document.xml"/>'+
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>'+
+    '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>'+
+    '</Relationships>';
+
+  const docRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+    '<Relationship Id="rId1" Type="http://schemas.microsoft.com/visio/2010/relationships/pages" Target="pages/pages.xml"/>'+
+    '<Relationship Id="rId2" Type="http://schemas.microsoft.com/visio/2010/relationships/windows" Target="windows.xml"/>'+
+    '</Relationships>';
+
+  const documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<VisioDocument xmlns="http://schemas.microsoft.com/office/visio/2012/main" xml:space="preserve">'+
+    '<DocumentSettings TopPage="0" DefaultTextStyle="0" DefaultLineStyle="0" DefaultFillStyle="0"/>'+
+    '<Colors/><FaceNames/><StyleSheets/>'+
+    '</VisioDocument>';
+
+  const pagesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Pages xmlns="http://schemas.microsoft.com/office/visio/2012/main" xml:space="preserve">'+
+    '<Page ID="0" NameU="FigureForge" Name="FigureForge" ViewScale="-1" ViewCenterX="'+inches(c.width/2).toFixed(4)+'" ViewCenterY="'+inches(c.height/2).toFixed(4)+'">'+
+    '<PageSheet LineStyle="0" FillStyle="0" TextStyle="0">'+
+      '<Cell N="PageWidth" V="'+inches(c.width).toFixed(4)+'"/><Cell N="PageHeight" V="'+inches(c.height).toFixed(4)+'"/>'+
+      '<Cell N="PageScale" V="1"/><Cell N="DrawingScale" V="1"/>'+
+    '</PageSheet>'+
+    '<Rel r:id="rId1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>'+
+    '</Page></Pages>';
+
+  const pagesRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+    '<Relationship Id="rId1" Type="http://schemas.microsoft.com/visio/2010/relationships/page" Target="page1.xml"/>'+
+    '</Relationships>';
+
+  const windowsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Windows xmlns="http://schemas.microsoft.com/office/visio/2012/main" ClientWidth="1600" ClientHeight="900"/>';
+
+  const appXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">'+
+    '<Application>FigureForge</Application><Company></Company></Properties>';
+
+  const coreXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '+
+    'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'+
+    '<dc:title>FigureForge editable figure</dc:title><dc:creator>FigureForge</dc:creator>'+
+    '<cp:lastModifiedBy>FigureForge</cp:lastModifiedBy>'+
+    '<dcterms:created xsi:type="dcterms:W3CDTF">'+new Date().toISOString()+'</dcterms:created>'+
+    '</cp:coreProperties>';
+
+  return [
+    { name:'[Content_Types].xml', data:contentTypes },
+    { name:'_rels/.rels', data:rootRels },
+    { name:'docProps/app.xml', data:appXml },
+    { name:'docProps/core.xml', data:coreXml },
+    { name:'visio/document.xml', data:documentXml },
+    { name:'visio/_rels/document.xml.rels', data:docRels },
+    { name:'visio/pages/pages.xml', data:pagesXml },
+    { name:'visio/pages/_rels/pages.xml.rels', data:pagesRels },
+    { name:'visio/pages/page1.xml', data:pageXml },
+    { name:'visio/windows.xml', data:windowsXml },
+  ];
+}
+
+/* ---------- zip (stored, no compression) ----------
+   VSDX is an OOXML package, so a minimal store-only zip writer is enough and
+   keeps this dependency-free. CRC32 is required by the format. */
+function crc32(bytes){
+  let table = crc32.table;
+  if(!table){
+    table = crc32.table = new Uint32Array(256);
+    for(let n=0;n<256;n++){
+      let c = n;
+      for(let k=0;k<8;k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n] = c >>> 0;
+    }
+  }
+  let crc = 0xFFFFFFFF;
+  for(let i=0;i<bytes.length;i++) crc = (crc >>> 8) ^ table[(crc ^ bytes[i]) & 0xFF];
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function zipStore(files){
+  const enc = new TextEncoder();
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  const now = new Date();
+  const dosTime = ((now.getHours()<<11) | (now.getMinutes()<<5) | Math.floor(now.getSeconds()/2)) & 0xFFFF;
+  const dosDate = (((now.getFullYear()-1980)<<9) | ((now.getMonth()+1)<<5) | now.getDate()) & 0xFFFF;
+
+  files.forEach(function(f){
+    const nameBytes = enc.encode(f.name);
+    const dataBytes = typeof f.data === 'string' ? enc.encode(f.data) : f.data;
+    const crc = crc32(dataBytes);
+    const local = new Uint8Array(30 + nameBytes.length);
+    const lv = new DataView(local.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0, true);
+    lv.setUint16(8, 0, true);            // stored
+    lv.setUint16(10, dosTime, true);
+    lv.setUint16(12, dosDate, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, dataBytes.length, true);
+    lv.setUint32(22, dataBytes.length, true);
+    lv.setUint16(26, nameBytes.length, true);
+    lv.setUint16(28, 0, true);
+    local.set(nameBytes, 30);
+    chunks.push(local, dataBytes);
+
+    const cd = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(cd.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, dosTime, true);
+    cv.setUint16(14, dosDate, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, dataBytes.length, true);
+    cv.setUint32(24, dataBytes.length, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint32(42, offset, true);
+    cd.set(nameBytes, 46);
+    central.push(cd);
+
+    offset += local.length + dataBytes.length;
+  });
+
+  const centralSize = central.reduce((a,c)=>a+c.length, 0);
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, offset, true);
+  return new Blob(chunks.concat(central, [end]), { type:'application/vnd.ms-visio.drawing' });
+}
+
 function renderEditableExportCard(){
   const card=$('#card4'), state=window.__ffExportState; if(!card || !state.svg) return; card.hidden=false;
   const font=$('#exportFont'); if(font) font.value=state.font||'original';
@@ -2225,15 +2960,38 @@ function initEditableExport(){
     st.target=btn.dataset.export; syncExportSelection();
     const status=$('#exportStatus'); if(status) status.textContent=tt('export.selection',{format:st.target.toUpperCase()});
   });
-  $('#exportConfirm')?.addEventListener('click',()=>{
+  $('#exportConfirm')?.addEventListener('click', async ()=>{
     const st=window.__ffExportState; if(!st.svg || !st.target) return;
-    const target=st.target;
-    if(target==='svg') downloadText('figure-forge-editable.svg',st.svg,'image/svg+xml;charset=utf-8');
-    else if(target==='drawio') downloadText('figure-forge-editable.drawio',svgToDrawio(st.svg),'application/xml;charset=utf-8');
-    const status=$('#exportStatus');
-    if(status) status.textContent=(target==='svg'||target==='drawio')
-      ? tt('export.downloaded',{format:target==='drawio'?'draw.io':'SVG'})
-      : tt('export.apiNeeded',{format:target.toUpperCase()});
+    const target=st.target, status=$('#exportStatus'), btn=$('#exportConfirm');
+    const setStatus=(k,vars)=>{ if(status) status.textContent=tt(k,vars); };
+    const scene=st.scene || (st.scene = (function(){ try{ return parseSvgScene(st.svg); }catch(e){ return null; } })());
+    if(!scene){
+      setStatus('export.failed',{format:target.toUpperCase()});
+      return;
+    }
+    const fontChoice = st.font && st.font!=='original' ? st.font : 'Arial';
+    const prevLabel = btn ? btn.textContent : '';
+    if(btn) btn.disabled=true;
+    setStatus('export.working');
+    try{
+      if(target==='svg'){
+        downloadText('figure-forge-editable.svg', st.svg, 'image/svg+xml;charset=utf-8');
+      } else if(target==='drawio'){
+        downloadText('figure-forge-editable.drawio', sceneToDrawio(scene), 'application/xml;charset=utf-8');
+      } else if(target==='pptx'){
+        const blob = await buildPptx(scene);
+        downloadBlob('figure-forge-editable.pptx', blob);
+      } else if(target==='vsdx'){
+        const blob = zipStore(sceneToVsdxFiles(scene, fontChoice));
+        downloadBlob('figure-forge-editable.vsdx', blob);
+      }
+      setStatus('export.downloaded',{format:target==='drawio'?'draw.io':target.toUpperCase()});
+    }catch(err){
+      console.warn('editable export failed', err);
+      setStatus('export.failed',{format:target==='drawio'?'draw.io':target.toUpperCase()});
+    }finally{
+      if(btn){ btn.disabled=false; if(prevLabel) btn.textContent=prevLabel; }
+    }
   });
   $('#exportFont')?.addEventListener('change',e=>applyExportFont(e.target.value));
 }
