@@ -299,6 +299,11 @@
     .export-font-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}
     .export-font-row label{font-size:13px;color:var(--muted);font-weight:700}
     .export-font-row select{min-width:220px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);padding:9px 12px;font:inherit}
+    .export-recon{margin-top:12px;border:1px dashed #c7d2fe;border-radius:11px;padding:11px 12px;background:#f8faff}
+    .recon-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:9px}
+    .recon-check{display:flex;align-items:center;gap:9px;font-size:12.5px;color:#3730a3;line-height:1.5;cursor:pointer}
+    .recon-check input[type=checkbox]{width:16px;height:16px;accent-color:#4f46e5;flex:0 0 auto}
+    .recon-status{color:var(--muted);font-size:12px;line-height:1.5}
     .export-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}
     .export-actions button{min-height:52px;padding:10px 12px;border:1px solid #dfe3f5;border-radius:12px;background:#fff;color:var(--ink);font:inherit;font-weight:700;cursor:pointer;transition:.16s ease}
     .export-actions button:hover{border-color:#667eea;box-shadow:0 0 0 3px rgba(102,126,234,.12);background:#f8f9ff}
@@ -521,6 +526,18 @@
     <div class="flow-note" data-i18n-html="export.intro"></div>
     <section class="box b-slate">
       <h4><span class="bi" aria-hidden="true">✏️</span><span data-i18n="export.title"></span></h4>
+      <div class="export-recon" id="exportRecon" hidden>
+        <div class="recon-row">
+          <label class="recon-check">
+            <input type="checkbox" id="reconToggle" checked>
+            <span data-i18n="recon.toggle"></span>
+          </label>
+        </div>
+        <div class="recon-row">
+          <button type="button" class="btn-primary" id="reconBtn" data-i18n="recon.btn"></button>
+          <span class="recon-status" id="reconStatus"></span>
+        </div>
+      </div>
       <div class="export-font-row">
         <label for="exportFont" data-i18n="export.font"></label>
         <select id="exportFont">
@@ -3067,6 +3084,251 @@ function zipStore(files){
   return new Blob(chunks.concat(central, [end]), { type:'application/vnd.ms-visio.drawing' });
 }
 
+/* ---------- text-free base -> editable scene ----------
+   The image model is asked to draw the figure with empty label areas, because a
+   model that paints letters as pictures is what produces garbled labels. Here the
+   label boxes are found by local pixel analysis (no API), the wording is taken from
+   the paper, and the text is drawn as real SVG <text>. Everything downstream — the
+   preview, the geometry audit and the four exporters — then works on real shapes
+   and real strings. */
+const RECON_SCHEMA = 'figureforge.recon.v2';
+
+function bitmapToDataUrl(src){
+  return /^data:image\//.test(String(src||'')) ? String(src) : null;
+}
+
+function loadImage(dataUrl){
+  return new Promise(function(resolve, reject){
+    const im = new Image();
+    im.onload = function(){ resolve(im); };
+    im.onerror = function(){ reject(new Error('image decode failed')); };
+    im.src = dataUrl;
+  });
+}
+
+/* Flood fill the light pixels and keep regions that are large, bounded and roughly
+   rectangular. Empty label areas come out as single regions with a high fill ratio;
+   areas holding an illustration come out with a lower one. */
+function detectLightRegions(canvas){
+  const w = canvas.width, h = canvas.height;
+  const img = canvas.getContext('2d', { willReadFrequently:true }).getImageData(0,0,w,h).data;
+  const N = w*h;
+  const light = function(i){
+    const o = i*4;
+    return img[o] > 200 && img[o+1] > 200 && img[o+2] > 200;
+  };
+  const seen = new Uint8Array(N);
+  const out = [];
+  const stack = [];
+  for(let start=0; start<N; start++){
+    if(seen[start] || !light(start)) continue;
+    stack.length = 0; stack.push(start); seen[start] = 1;
+    let count = 0, minX = w, maxX = -1, minY = h, maxY = -1;
+    while(stack.length){
+      const p = stack.pop();
+      const x = p % w, y = (p - x) / w;
+      count++;
+      if(x < minX) minX = x;
+      if(x > maxX) maxX = x;
+      if(y < minY) minY = y;
+      if(y > maxY) maxY = y;
+      if(x > 0   && !seen[p-1] && light(p-1)){ seen[p-1] = 1; stack.push(p-1); }
+      if(x < w-1 && !seen[p+1] && light(p+1)){ seen[p+1] = 1; stack.push(p+1); }
+      if(y > 0   && !seen[p-w] && light(p-w)){ seen[p-w] = 1; stack.push(p-w); }
+      if(y < h-1 && !seen[p+w] && light(p+w)){ seen[p+w] = 1; stack.push(p+w); }
+    }
+    out.push({ x:minX, y:minY, w:maxX-minX+1, h:maxY-minY+1, area:count });
+  }
+  const minArea = Math.max(900, Math.round(w*h*0.0015));
+  return out.map(function(r){
+    r.fill = r.area / (r.w * r.h);
+    return r;
+  }).filter(function(r){
+    // keep box-like regions: big enough, not the page background, near-rectangular
+    return r.area >= minArea && r.area <= w*h*0.55
+        && r.w >= 40 && r.h >= 28
+        && r.w <= w*0.92 && r.h <= h*0.92
+        && r.fill >= 0.82
+        && (r.w / r.h) >= 0.6 && (r.w / r.h) <= 14;
+  }).sort(function(a,b){ return b.area - a.area; });
+}
+
+/* Which wording goes in which box is decided by position, because the wording comes
+   from the paper, not from a model reading the pixels. The vision model only names
+   the regions it was shown, in order. */
+function assignLabelsToRegions(regions, labels){
+  const boxes = regions.slice(0, labels.length);
+  const sorted = boxes.slice().sort(function(a,b){
+    if(Math.abs(a.y - b.y) > 60) return a.y - b.y;
+    return a.x - b.x;
+  });
+  return sorted.map(function(r, i){
+    return { region:r, text:(labels[i]==null ? '' : String(labels[i])).trim() };
+  }).filter(function(x){ return x.text; });
+}
+
+function reconPrompt(n){
+  return 'Here are ' + n + ' empty label areas from a scientific figure, listed in reading order '
+    + '(left to right, top to bottom). For EACH one, return the short English label (1-4 words) that '
+    + 'belongs there, judged from the paper content and from the surrounding figure structure. '
+    + 'Use wording that appears in the paper; do not invent unrelated terms. '
+    + 'Return STRICT JSON only: {"labels":["...","..."]} with exactly ' + n + ' strings, same order.';
+}
+
+/* Build a scene whose shapes carry the base bitmap and whose text is real text. */
+function buildReconScene(baseCanvas, placed, paperText){
+  const W = baseCanvas.width, H = baseCanvas.height;
+  const nodes = [];
+  nodes.push({ id:'bg', type:'image', x:0, y:0, w:W, h:H, href: baseCanvas.toDataURL('image/png') });
+  placed.forEach(function(item, i){
+    const r = item.region;
+    // a text box anchored at the top-left of the detected area, with a little padding
+    const pad = 4;
+    const fontSize = Math.max(14, Math.min(34, Math.round(r.h * 0.26)));
+    nodes.push({
+      id: 'label' + (i+1),
+      type: 'text',
+      x: r.x + pad,
+      y: r.y + pad + fontSize,
+      w: Math.max(r.w - pad*2, 20),
+      h: fontSize * 1.35,
+      text: item.text,
+      fontSize: fontSize,
+      fill: '111827',
+      anchor: 'start',
+      bold: false,
+    });
+  });
+  return { schema:'figureforge.scene.v3', canvas:{ w:W, h:H },
+           nodes:nodes, counts:{ shapes:1, text:placed.length } };
+}
+
+function sceneToSvgString(scene){
+  const c = scene.canvas;
+  const parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ' +
+    'viewBox="0 0 ' + c.w + ' ' + c.h + '" width="' + c.w + '" height="' + c.h + '">',
+    '<rect x="0" y="0" width="' + c.w + '" height="' + c.h + '" fill="#ffffff"/>'];
+  scene.nodes.forEach(function(n, i){
+    const id = n.id || ('n' + i);
+    if(n.type === 'image'){
+      parts.push('<image id="' + id + '" data-role="base" data-editable="true" x="' + n.x + '" y="' + n.y +
+        '" width="' + n.w + '" height="' + n.h + '" xlink:href="' + n.href + '"/>');
+    } else if(n.type === 'text'){
+      parts.push('<text id="' + id + '" data-role="label" data-editable="true" x="' + n.x + '" y="' + n.y +
+        '" font-family="Arial, Helvetica, sans-serif" font-size="' + n.fontSize +
+        '" fill="#' + (n.fill || '111827') + '"' + (n.bold ? ' font-weight="bold"' : '') + '>' +
+        xmlEscape(n.text) + '</text>');
+    }
+  });
+  parts.push('</svg>');
+  return parts.join('\n');
+}
+
+/* The whole step: find the label areas, ask for their wording, draw the text, and
+   hand the result to the existing export path. */
+async function runReconstruction(){
+  const st = window.__ffExportState;
+  const status = $('#reconStatus');
+  const say = function(k, vars){ if(status) status.textContent = tt(k, vars); };
+  const src = bitmapToDataUrl(st.bitmap);
+  if(!src){ say('recon.nobitmap'); return false; }
+  try{
+    say('recon.reading');
+    const im = await loadImage(src);
+    const canvas = document.createElement('canvas');
+    canvas.width = im.naturalWidth || im.width;
+    canvas.height = im.naturalHeight || im.height;
+    canvas.getContext('2d').drawImage(im, 0, 0);
+    const regions = detectLightRegions(canvas);
+    if(!regions.length){ say('recon.noboxes'); return false; }
+
+    say('recon.labelling', { n: regions.length });
+    const labels = await requestRegionLabels(regions, canvas);
+    const placed = assignLabelsToRegions(regions, labels);
+    if(!placed.length){ say('recon.notext'); return false; }
+
+    const scene = buildReconScene(canvas, placed, $('#paper') ? $('#paper').value : '');
+    const svg = sceneToSvgString(scene);
+    const audit = auditReconScene(scene);
+    Object.assign(st, { scene:scene, svg:svg, baseSvg:svg, source:'bitmap',
+                       recon:{ regions:regions.length, labels:placed.length, audit:audit } });
+    renderEditableExportCard();
+    applyExportFont(st.font || 'original');
+    say(audit.defects.length ? 'recon.audit' : 'recon.done',
+        { n: placed.length, d: audit.defects.length });
+    return true;
+  }catch(err){
+    console.warn('reconstruction failed', err);
+    const msg = String(err && err.message || err);
+    say(msg && msg.length < 200 ? 'recon.failedDetail' : 'recon.failed', { msg: msg });
+    return false;
+  }
+}
+
+/* Only the wording is requested here; nothing is painted from these strings. */
+async function requestRegionLabels(regions, canvas){
+  const cfgv = cfg(), relay = $('#baseOverride').value.trim();
+  const paper = (($('#paper') && $('#paper').value) || '').slice(0, 2500);
+  const list = regions.slice(0, 24).map(function(r, i){
+    return (i+1) + '. area ' + r.w + 'x' + r.h + ' px at (' + r.x + ',' + r.y + ')';
+  }).join('\n');
+  const prompt = reconPrompt(regions.slice(0,24).length) + '\n\nDetected areas:\n' + list +
+    '\n\nPaper content:\n' + paper;
+  const model = ($('#analyzeModel') && $('#analyzeModel').value) || $('#model').value;
+  if(!model) throw new Error(tt('analyze.needmodel'));
+
+  let txt;
+  if(cfgv.proto === 'anthropic' && !relay){
+    const body = { model:model, max_tokens:1200, system:ANALYZE_SYS,
+                   messages:[{ role:'user', content:[{ type:'text', text:prompt }] }] };
+    const r = await fetch(baseURL() + '/v1/messages',
+      { method:'POST', headers:anthropicHeaders(cleanKey($('#key').value)), body:JSON.stringify(body) });
+    txt = await r.text();
+    if(!r.ok) throw new Error(friendlyHttp(r.status, txt));
+    const d = JSON.parse(txt);
+    txt = (d.content||[]).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text; }).join('');
+  }else{
+    const body = { model:model, temperature:0.2,
+                   messages:[{ role:'system', content:ANALYZE_SYS },
+                             { role:'user', content:prompt }] };
+    if($('#provider').value === 'ark') body.thinking = { type:'disabled' };
+    const r = await postJSON(baseURL(), '/chat/completions', body, cleanKey($('#key').value));
+    txt = await r.text();
+    if(!r.ok) throw new Error(friendlyHttp(r.status, txt));
+    const d = JSON.parse(txt);
+    txt = (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '';
+  }
+  let j;
+  try{ j = extractJSON(txt); }
+  catch(err){ throw new Error(tt('recon.badjson')); }
+  const labels = Array.isArray(j && j.labels) ? j.labels : [];
+  return labels.map(function(s){ return String(s||'').replace(/[\r\n]+/g,' ').slice(0, 48); });
+}
+
+/* Deterministic checks on the reconstructed scene, so a broken result is caught
+   here rather than in Visio or PowerPoint. */
+function auditReconScene(scene){
+  const c = scene.canvas, defects = [];
+  const text = scene.nodes.filter(function(n){ return n.type === 'text'; });
+  text.forEach(function(n){
+    if(n.x < 0 || n.y < 0 || n.x + n.w > c.w || n.y > c.h){
+      defects.push({ id:n.id, kind:'out-of-canvas' });
+    }
+    if(!n.text || !n.text.trim()) defects.push({ id:n.id, kind:'empty-label' });
+  });
+  // overlapping label boxes are a layout bug worth reporting
+  for(let i=0;i<text.length;i++){
+    for(let j=i+1;j<text.length;j++){
+      const a = text[i], b = text[j];
+      const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+      const oy = Math.min(a.y, a.y + a.h) - Math.max(a.y, b.y);
+      if(ox > 2 && oy > 2) defects.push({ id:a.id + '+' + b.id, kind:'overlap' });
+    }
+  }
+  return { ok: defects.length === 0, defects: defects };
+}
+
 function renderEditableExportCard(){
   const card=$('#card4'), state=window.__ffExportState; if(!card || !state.svg) return; card.hidden=false;
   const font=$('#exportFont'); if(font) font.value=state.font||'original';
@@ -3143,6 +3405,9 @@ initEditableExport();
 
 window.__ffRenderSVG = (...args) => renderSVG(...args);
 
+/* Exposed the same way as __ffRenderSVG: the rebuild is otherwise module-scoped. */
+window.__ffReconstruct = () => runReconstruction();
+
 function renderSVG(svg, usedVision, useIds, truncated, auditRes){
   const blob = new Blob([svg],{type:'image/svg+xml'});
   const url = URL.createObjectURL(blob);
@@ -3165,17 +3430,23 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     : '';
   const imgPrompt = `${guide}`
     + `${tg.img}. Publication-quality Figure 1 for a top-tier ML paper. `
-    + `Include a prominent bold TITLE line running across the top of the figure, above all panels. `
     + `Below it, a DENSE information-rich multi-panel composition of 3-5 boxed panels side by side, `
-    + `each panel carrying its own bold header, several labelled module boxes, arrows showing the data `
-    + `flow between components, and small sub-diagrams or result thumbnails inside the panels. `
-    + `Line weight and line style carry meaning here: draw each panel's outer container border clearly `
-    + `THICKER than the module boxes inside it, and vary the strokes — dashed borders for optional, `
-    + `conceptual or repeated blocks, solid borders for concrete modules — so groups stay distinct. `
+    + `each panel with its own outer container border and several module boxes inside it. `
+    + `Line weight and line style carry meaning: draw each container border clearly THICKER than the `
+    + `module boxes inside it, and vary the strokes — dashed for optional, conceptual or repeated `
+    + `blocks, solid for concrete modules — so groups stay distinct. `
+    + `Fill the whole canvas densely: no large empty areas, every box carries content. `
+    + `Every module box must hold a VISUAL: a small illustration, a photo-like patch, a diagram, a `
+    + `chart or plot thumbnail, a coordinate map, a matrix, or a mathematical formula. `
+    + `Where a formula appears it must be a real display formula taken from the paper content below. `
+    + `Arrows connect the boxes to show data flow. `
+    + `CRITICAL — DO NOT DRAW ANY TEXT: no letters, no words, no digits, no title, no captions, no `
+    + `axis numbers, no labels of any kind, in any language. Draw every box completely EMPTY inside, `
+    + `except for its illustration, formula, chart or photo content. Leave clean blank space where a `
+    + `label would sit, so text can be placed there later. `
     + `Faithfully FUSE the panel division, colour palette, box shapes, border weights and arrow style of `
-    + `the reference figures: mirror their density and element count. Fill the canvas with meaningful `
-    + `structure — rich and detailed, never sparse. White background, clean flat vector illustration, `
-    + `crisp aligned shapes, clearly readable short English labels. Paper content: ${content.slice(0,2000)}`;
+    + `the reference figures: mirror their density and element count. White background, clean flat `
+    + `vector illustration, crisp aligned shapes. Paper content: ${content.slice(0,2000)}`;
   const body = {model, prompt:imgPrompt};
   if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
   else if(p==='sf'){ body.image_size='1024x1024'; body.batch_size=1; }
@@ -3215,13 +3486,21 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const d = JSON.parse(txt);
   const item = d.data?.[0] || d.images?.[0];
   if(!item) throw new Error(tt('img.abnormal',{t:txt.slice(0,200)}));
+  const st = window.__ffExportState;
   const imgSrc = item.url || ('data:image/png;base64,'+item.b64_json);
   const exportImgSrc = item.b64_json ? `data:image/png;base64,${item.b64_json}` : imgSrc;
   $('#out').style.display='block';
   $('#out').innerHTML = `<img src="${esc(imgSrc)}" alt="draft">
     <div class="dl"><button class="btn-primary" id="dlImg">${tt('img.download')}</button>
     <span class="hint">${usedRefs?tt('img.hintRef',{n:useIds.length}):tt('img.hint')}</span></div>`;
+  st.source = 'bitmap'; st.bitmap = exportImgSrc; st.recon = null;
   showEditableExportStep({ svg: rasterToExportSvg(exportImgSrc), source:'bitmap', bitmap: exportImgSrc });
+  // When the base image was requested without text, carry on into the rebuild: the
+  // labels then become real text, so step 4 exports genuinely editable content rather
+  // than a picture. The switch is on by default and visible, so the extra model call
+  // is never a surprise.
+  const reconOn = $('#reconToggle');
+  if(!reconOn || reconOn.checked){ runReconstruction(); }
   $('#dlImg').onclick = async ()=>{
     try{
       const rr = await fetch(imgSrc); const blob = await rr.blob();

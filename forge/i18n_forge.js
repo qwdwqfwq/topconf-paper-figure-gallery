@@ -227,7 +227,20 @@ en:{
  "pass.warn1":"Two-stage mode expects 8–10 same-type references.",
  "pass.warn2":"Direct mode works best with 2–3 picks; {n} selected — layouts may conflict.",
  "modelLabel.svg":"Model (chat / vision)", "modelLabel.image":"Model (image)",
-},
+
+ "recon.toggle":"Base image without text (recommended: labels cannot come out garbled, and step 4 becomes editable)",
+ "recon.reading":"Finding the label areas in the base image...",
+ "recon.labelling":"Naming {n} areas from your paper...",
+ "recon.done":"Rebuilt: {n} real text labels placed.",
+ "recon.audit":"Rebuilt {n} labels, but {d} need a look (overlapping or outside the canvas).",
+ "recon.nobitmap":"No bitmap to rebuild yet - generate a figure in bitmap mode first.",
+ "recon.noboxes":"Found no empty label areas in this image. Regenerate the base image so it leaves blank label space.",
+ "recon.notext":"The model returned no usable labels. Check the paper content, or try another analysis model.",
+ "recon.badjson":"The model did not return usable JSON for the labels. Try again or switch the analysis model.",
+ "recon.failed":"Rebuild failed. The bitmap itself is still downloadable.",
+ "recon.failedDetail":"Rebuild failed: {msg}",
+ "recon.btn":"Rebuild into editable content",
+ "export.needRecon":"Exported as a picture for now. Use the rebuild button above to turn it into editable text.",},
 zh:{
  "sub":"上传你的论文内容 → 从 {n} 张顶会主图中检索最贴合的参考 → 生成你的主图初稿",
  "pill":"浏览器本地运行 · PDF 仅在你点击模型解析时发送给步骤一配置的模型",
@@ -454,5 +467,18 @@ zh:{
  "pass.warn1":"两阶段建议勾选 8–10 张同类型参考图。",
  "pass.warn2":"直接生成建议精选 2–3 张；当前选了 {n} 张，版式可能互相干扰。",
  "modelLabel.svg":"模型（对话 / 视觉模型）", "modelLabel.image":"模型（图像模型）",
-}
+
+ "recon.toggle":"底图不写文字（推荐：标签不会乱码，第四步直接可编辑）",
+ "recon.reading":"正在从底图中找出标签框…",
+ "recon.labelling":"正在根据论文内容为 {n} 个区域命名…",
+ "recon.done":"已重建：放置了 {n} 个真实文字标签。",
+ "recon.audit":"已重建 {n} 个标签，其中 {d} 个需要检查（重叠或超出画布）。",
+ "recon.nobitmap":"还没有位图可重建——请先用位图模式生成一张图。",
+ "recon.noboxes":"这张图里没找到空的标签框。请让底图留出空白标签区域后重新生成。",
+ "recon.notext":"模型没有返回可用的标签。请检查论文内容，或换一个分析模型。",
+ "recon.badjson":"模型没有返回可用的 JSON 标签。请重试或换一个分析模型。",
+ "recon.failed":"重建失败。位图本身仍然可以下载。",
+ "recon.failedDetail":"重建失败：{msg}",
+ "recon.btn":"重建为可编辑内容",
+ "export.needRecon":"当前导出为图片。点上方按钮可转为可编辑文字。",}
 });
