@@ -1520,7 +1520,7 @@ document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
   b.classList.add('on'); passMode=b.dataset.pass;
   syncPassUI();
   if(passMode==='two' && refs.size && refs.size<4) showErr(tt('pass.warn1'));
-  if(passMode==='direct' && refs.size>4) showErr(tt('pass.warn2',{n:refs.size}));
+  if(passMode==='direct' && refs.size>6) showErr(tt('pass.warn2',{n:refs.size}));
 });
 $('#model').onchange = e=>localStorage.setItem('ff_model_'+$('#provider').value, e.target.value);
 
