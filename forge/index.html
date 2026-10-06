@@ -1560,9 +1560,14 @@ density: COUNT what you actually see, as integers, using the MEDIAN of the suppl
   solidBorders and dashedBorders  how many borders use each style in that figure,
   connectors  how many separate arrows or connection lines it has,
   boxFillPercent  roughly what share of a module box's area is covered by content (0-100),
-  nesting  describe the levels precisely and list them in order, e.g.
-    "panel > dashed grouping frame > 5 module boxes > each holds a photo thumbnail or mini chart";
-    state how many levels a typical panel has, and whether grouping frames are used inside panels.
+  nesting  describe the levels in order, e.g.
+    "section > grouping frame > 4 module boxes > each holds an icon or mini chart";
+    say how many levels a typical section has and whether grouping frames appear inside sections.
+  variety  one sentence on how neighbouring units differ in these figures (icons vs charts vs
+    formulas vs thumbnails), and whether any element sits outside the sections, such as a legend,
+    a dataset icon, a side inset or a result thumbnail.
+  whitespace  one sentence on where the figures leave space open, so density is not mistaken for
+    "fill every gap".
 representative: use the figure ids EXACTLY as listed below, 4-6 of them, no indices.
 Available figure ids: ${ids}
 refinedPrompt should be 120-180 concrete English words about panels, arrows, palette and hierarchy. It is the only prose a bitmap model receives, so make it specific and visual: name each panel and what it contains, the recurring module blocks and their connections, and the kind of icons or illustrations that appear. Keep the prose compact so the whole JSON answer fits in one response — a truncated answer loses the counted density, which matters more than extra words here.`;
@@ -3756,18 +3761,23 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const imgPrompt = `${guide}`
     + `${tg.img}. Publication-quality Figure 1 for a top-tier ML paper. `
     + `Include a prominent bold TITLE line running across the top of the figure, above all panels. `
-    + `Below it, a DENSE information-rich multi-panel composition of 3-5 boxed panels side by side, `
-    + `each panel carrying its own bold header. `
-    + `NEST THE BOXES — this is the most important structural requirement. Do not draw one flat row of `
-    + `rectangles per panel. Build several levels inside every panel: `
-    + `(1) the panel container; `
-    + `(2) inside it, one or more dashed grouping frames that hold a related cluster of parts; `
-    + `(3) inside each grouping frame, 4-6 module boxes; `
-    + `(4) inside each module box, a small illustration, a photo thumbnail, a mini chart, a matrix, a `
-    + `diagram or a formula. `
-    + `A panel whose interior is largely blank white is a defect: fill it with more module boxes at `
-    + `smaller scale until it is as busy as the reference figures. `
-    + `Do not leave a module box empty: every one holds a visual or a formula, never text alone. `
+    + `Below it, an information-rich composition of labelled sections. Let the CONTENT decide how `
+    + `many sections there are and how wide each one is: three to five is common, but use as many as `
+    + `the method really has, and size them by how much they hold rather than splitting the canvas `
+    + `evenly. Each section carries its own bold header. `
+    + `ORGANISE THE FIGURE IN LEVELS, the way a strong conference figure does. Three levels are typical: `
+    + `the section container; inside it one or more grouping frames that hold a related cluster; and `
+    + `inside those, module boxes. Put an illustration, a mini chart, a table, a formula, a photo `
+    + `thumbnail or an icon inside a module box when the content calls for one. `
+    + `DO NOT repeat the same element to fill space. Neighbouring units must differ: mix icon modules, `
+    + `chart modules, formula modules, diagram modules and text modules rather than cloning one block. `
+    + `A panel crammed with near-identical copies looks worse than one that is partly open. `
+    + `LET DENSITY FOLLOW MEANING. Where the method is intricate, pack the modules tightly. Where a `
+    + `point is simple, leave the space open. Keep deliberate whitespace between units so the eye can `
+    + `separate them; an open area is NOT a defect to be padded out. `
+    + `USE DASHED FRAMES FOR A REASON: an optional or future stage, an iterative loop, a repeated `
+    + `group, or something outside the core method. A dashed frame that means nothing is worse than `
+    + `no frame. `
     + `Keep the geometry square and orderly: axis-aligned rectangles with at most a slight corner `
     + `radius, even gaps between boxes, and crisp straight arrows. `
     + `USE COLOUR TO SEPARATE GROUPS — do not paint everything one tint. `
@@ -3782,22 +3792,28 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     + `plus arrows and dashed grouping frames. Vary the border style — SOLID for concrete modules, `
     + `arrows and data-flow steps, DASHED for optional, repeated, conceptual or grouped blocks — so the `
     + `levels are obvious at a glance. `
-    + `Arrows showing the data flow between components, and small sub-diagrams or result thumbnails `
-    + `inside the panels. `
+    + `Arrows show the data flow between components, and they carry much of the structure: long `
+    + `connectors that span the whole figure, dashed feedback loops that route back to an earlier `
+    + `stage, and short arrows inside a group. Small elements may also sit OUTSIDE the main sections `
+    + `— a legend, a partner or dataset icon, a training-loop inset at the side, a result thumbnail `
+    + `beside its stage — which is how real figures keep their middle from looking stuffed. `
     + `Line weight and line style carry meaning here: draw each panel's outer container border clearly `
     + `THICKER than the module boxes inside it, and vary the strokes — dashed borders for optional, `
     + `conceptual or repeated blocks, solid borders for concrete modules — so groups stay distinct. `
-    + `Faithfully FUSE the panel division, colour palette, box shapes, border weights and arrow style of `
-    + `the reference figures: mirror their density and element count exactly. Fill the canvas with `
-    + `meaningful structure — rich and detailed, never sparse. White background, clean flat vector `
-    + `illustration, crisp aligned shapes, clearly readable short English labels. `
-    + `FINAL CHECK before you finish. Walk each panel and ask: does its interior have white space bigger `
-    + `than one module box? If yes, subdivide it and add module boxes with visuals. Then check that every `
-    + `module box holds an illustration, a chart, a matrix, a diagram or a formula and not only a label, `
-    + `and that at least one dashed grouping frame nests a cluster of boxes inside each panel. Finally `
-    + `check the colour: if two panels share the same background tint, or every box in a panel has the `
-    + `same fill, change them so each group is told apart by colour. Keep adding and adjusting until the `
-    + `figure is as full, as layered and as colour-varied as the reference figures. `
+    + `Faithfully FUSE the section division, colour palette, box shapes, border weights and arrow style `
+    + `of the reference figures: mirror how much they put in each part, and how much they leave open. `
+    + `White background, clean flat vector illustration, crisp aligned shapes, clearly readable short `
+    + `English labels. `
+    + `FINAL CHECK before you finish. Read the figure as a reviewer would. `
+    + `Is any unit a near-duplicate of its neighbour? Replace it with something that carries different `
+    + `information. `
+    + `Does any section look padded, with modules that exist only to fill it? Remove them and let that `
+    + `section breathe. `
+    + `Does every dashed frame stand for something a reader could name? If not, make it solid or drop it. `
+    + `Can a reader follow the flow from the arrows alone? Add a connector if a step is unclear. `
+    + `Is the colour varied enough that sections and groups read apart, without turning garish? `
+    + `The goal is a figure a top-conference reviewer would find clear and well judged, not the `
+    + `densest possible one. `
     + `Paper content: ${content.slice(0,2000)}`;
   const body = {model, prompt:imgPrompt};
   if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
