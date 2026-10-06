@@ -636,15 +636,15 @@ const IMGRE = /(image|seedream|flux|kolors|dall-e|gpt-image|cogview|sd-|stable-d
 const kindOf = id => SKIP.test(id) ? 'skip' : IMGRE.test(id) ? 'image' : 'chat';
 
 const TARGETS = {
- overview:{label:tt('tg.overview'), img:'Design a publication-quality Figure 1 teaser/overview figure',
+ overview:{label:tt('tg.overview'), img:'Design a publication-quality Figure 1 teaser/overview figure with a prominent bold title line across the top',
    instr:'一张论文 Figure 1 总览（teaser）图：左侧或顶部为输入示例，中间为我们方法的核心模块（2-4 个方块+箭头表示数据流），右侧或底部为输出/效果。横向布局，每个面板一个信息点。'},
- architecture:{label:tt('tg.architecture'), img:'Design a publication-quality method architecture figure',
+ architecture:{label:tt('tg.architecture'), img:'Design a publication-quality method architecture figure with a prominent bold title line across the top',
    instr:'一张方法架构图：展示模型内部组件与层次结构（编码器、模块、解码器等），用方块表示组件、箭头表示数据流，标注关键组件名称与维度；体现组件之间的连接关系。'},
- pipeline:{label:tt('tg.pipeline'), img:'Design a publication-quality pipeline/process figure',
+ pipeline:{label:tt('tg.pipeline'), img:'Design a publication-quality pipeline/process figure with a prominent bold title line across the top',
    instr:'一张 pipeline 流程图：按顺序展示从输入到输出的若干阶段（阶段用横向或纵向排列的圆角方块，箭头连接），每个阶段下方用小字标注该阶段。'},
- results:{label:tt('tg.results'), img:'Design a publication-quality results figure',
+ results:{label:tt('tg.results'), img:'Design a publication-quality results figure with a prominent bold title line across the top',
    instr:'一张结果展示图：以多面板网格对比不同方法/设置的结果，每列一种方法、每行一个样本，面板下方标注方法名与关键指标，坐标轴与图例清晰。'},
- custom:{label:tt('tg.custom'), img:'Design a publication-quality scientific figure', instr:''},
+ custom:{label:tt('tg.custom'), img:'Design a publication-quality scientific figure with a prominent bold title line across the top', instr:''},
 };
 
 /* FALLBACK：manifest 拉取失败（离线）时使用，与 forge/data/manifest.json 同口径 */
@@ -1520,14 +1520,14 @@ Analyze their COMMON design grammar and return one JSON object with EXACTLY thes
  "strokes":{"box":0,"arrow":0,"connector":0},
  "elements":"recurring visual elements: box styles, arrow types, icon/illustration conventions",
  "hierarchy":"information hierarchy: what is emphasised and how",
- "representative":["ids of the 2-3 most typical, highest-quality figures among these"],
+ "representative":["ids of the 4-6 figures among these whose layout is the RICHEST: the most panels, the most labelled modules and the most varied elements — the goal is to reproduce that density, not a typical average"],
  "refinedPrompt":"a detailed self-contained English description of what is drawn: each panel and its contents, the module blocks and their connections, arrow directions and flow, the visual levels, and the icon or illustration style"}
 Rules: output JSON only, no markdown or commentary.
 panels: 2-6 entries. x/y/w/h are integers in a 1600x900 coordinate space with the origin at the top-left; they must not overlap and must stay inside 1600x900.
 palette: every value MUST be a real #rrggbb hex string.
 typography: integer pixel sizes for a 1600x900 canvas (title 36-56, panelHeader 26-36, label 20-30, note 16-22).
 strokes: integer pixel widths (box 2-4, arrow 2-4, connector 1-3).
-representative: use the figure ids EXACTLY as listed below, 2-3 of them, no indices.
+representative: use the figure ids EXACTLY as listed below, 4-6 of them, no indices.
 Available figure ids: ${ids}
 refinedPrompt should be 160-260 concrete English words about panels, arrows, palette and hierarchy. It is the only guidance a bitmap model receives, so make it specific and visual: name each panel and what it contains, describe the recurring module blocks and their connections, the arrow directions and what flows along them, the number of visual levels, and the kind of icons or illustrations that appear. Describe what is actually drawn, not how good it looks.`;
 }
@@ -1578,21 +1578,25 @@ async function analyzeReferences(){
     if(isFinite(n) && n>=1 && n<=ordered.length) return ordered[n-1];
     return null;
   }).filter(Boolean);
-  reps=[...new Set(reps)].slice(0,3);
+  reps=[...new Set(reps)].slice(0,6);
   if(reps.length<2) reps=ordered.slice(0,3);
   // Two style guides, because the two output paths consume them differently.
   const contract = designContractText(j);
   const prose = (j.refinedPrompt||'').trim();
+  const styleRows = imageStyleText(j);
   analysis={
     j, repIds:reps,
     // SVG generation is measured and audited shape by shape, so the precise contract
     // (exact hex values, panel coordinates, type scale) feeds straight into it.
     refinedPrompt:[contract, prose].filter(s=>s && s.trim()).join('\n\n'),
-    // A bitmap model paints pixels instead of laying out shapes, so a numeric
-    // contract mostly narrows it down: panels come out flatter and more uniform.
-    // Prose alone leaves room for the model to invent detail, which is what makes
-    // the draft useful as inspiration.
-    refinedPromptImage:prose,
+    // The bitmap path gets the measured values too, but phrased rather than pinned
+    // to coordinates. Leaving them out is what made earlier drafts ignore the chosen
+    // reference figures: the palette, line weights and panel count were measured and
+    // then thrown away before they reached the image model.
+    refinedPromptImage:[
+      styleRows.length ? 'Measured from the chosen reference figures — follow these:\n' + styleRows.join('\n') : '',
+      prose,
+    ].filter(s=>s && s.trim()).join('\n\n'),
   };
   renderAnalyze(ordered);
   return analysis;
@@ -1641,6 +1645,42 @@ function paletteMarkup(palette){
 /* Turn the analysis result into a compact, checkable design contract. Prose like
    "restrained palette, clear hierarchy" leaves every concrete decision to the
    generator, which is where style drift comes from; exact values pin it down. */
+/* The same measurements as designContractText, but phrased for an image model.
+   A bitmap model paints pixels rather than placing shapes, so exact coordinates
+   would only pin it to one layout; the measured palette, type scale, stroke
+   weights, element conventions and panel division are what make the draft match
+   the chosen reference figures, so those are spelled out in words instead. */
+function imageStyleText(j){
+  if(!j) return '';
+  const rows = [];
+  const pal = j.palette;
+  if(pal && !Array.isArray(pal) && typeof pal === 'object'){
+    const used = ['background','primary','accent','neutral'].filter(k=>pal[k]).map(k=>`${k} ${pal[k]}`);
+    const extra = Array.isArray(pal.others) ? pal.others.join(', ') : '';
+    if(used.length || extra) rows.push(`- palette: ${used.concat(extra?[extra]:[]).join(', ')}`);
+  } else if(Array.isArray(pal) && pal.length){
+    rows.push(`- palette: ${pal.join(', ')}`);
+  }
+  const ty = j.typography;
+  if(ty && typeof ty === 'object'){
+    const scale = ['title','panelHeader','label','note'].filter(k=>ty[k]!=null).map(k=>`${k} ${ty[k]}px`);
+    if(scale.length) rows.push(`- type scale: ${scale.join(', ')} (keep this hierarchy: the title clearly largest, panel headers next, then labels, then small notes)`);
+  }
+  const st = j.strokes;
+  if(st && typeof st === 'object'){
+    const w = ['box','arrow','connector'].filter(k=>st[k]!=null).map(k=>`${k} ${st[k]}px`);
+    if(w.length) rows.push(`- stroke weights: ${w.join(', ')}`);
+  }
+  if(j.elements) rows.push(`- recurring elements: ${j.elements}`);
+  if(j.hierarchy) rows.push(`- hierarchy: ${j.hierarchy}`);
+  if(j.layout) rows.push(`- panel division and reading direction: ${j.layout}`);
+  if(Array.isArray(j.panels) && j.panels.length){
+    const names = j.panels.slice(0,8).map(p=>[p.name, p.role].filter(Boolean).join(' — ')).filter(Boolean);
+    if(names.length) rows.push(`- panels: ${names.join(' | ')}`);
+  }
+  return rows;
+}
+
 function designContractText(j){
   if(!j) return '';
   const rows = [];
@@ -1701,7 +1741,7 @@ ${content}
 
 ${refLines}
 
-请输出一张极简、完整、可编辑的 SVG（viewBox 1600x900，横向，白色背景，主色一个、强调色一个，留白充足；方块/箭头/文字标签对齐；不得出现 lorem ipsum 或占位数字）。
+请输出一张完整、可编辑的 SVG（viewBox 1600x900，横向，白色背景；顶部有一行醒目的粗体标题；主色一个、强调色一个；方块/箭头/文字标签对齐；面板外框线明显粗于内部模块框，并用虚线区分可选/概念/重复的块；不得出现 lorem ipsum 或占位数字）。
 若上面的设计契约给出了面板坐标与字号，请直接按其数值排版，不要自行改变比例。
 只画一个清晰的主面板：聚焦“我们的方法”核心 pipeline（标题 + 若干模块方块 + 箭头表示数据流），不要画 baseline 对比、不要多个子面板、不要重复图形；把重复样式放进 <defs> 复用，总代码尽量短，务必在一次输出内以 </svg> 正常结尾。
 布局硬性要求（会自动检查）：所有可见文字必须完全落在 x=0..1600、y=0..900 之内；任何标签的文字宽度不得超过它所处方块的宽度（放不下就缩短文字、减小字号或加宽方块）；不同标签的文字包围盒不得相互重叠。
@@ -3122,7 +3162,19 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const guide = layoutGuide
     ? `Follow this gallery-derived layout style guide precisely (panel division, arrows, palette, hierarchy):\n${layoutGuide}\n\n`
     : '';
-  const imgPrompt = `${guide}${tg.img}. White background, flat modern scientific illustration style, elegant layout, minimal accurate labels. Paper content: ${content.slice(0,2000)}`;
+  const imgPrompt = `${guide}`
+    + `${tg.img}. Publication-quality Figure 1 for a top-tier ML paper. `
+    + `Include a prominent bold TITLE line running across the top of the figure, above all panels. `
+    + `Below it, a DENSE information-rich multi-panel composition of 3-5 boxed panels side by side, `
+    + `each panel carrying its own bold header, several labelled module boxes, arrows showing the data `
+    + `flow between components, and small sub-diagrams or result thumbnails inside the panels. `
+    + `Line weight and line style carry meaning here: draw each panel's outer container border clearly `
+    + `THICKER than the module boxes inside it, and vary the strokes — dashed borders for optional, `
+    + `conceptual or repeated blocks, solid borders for concrete modules — so groups stay distinct. `
+    + `Faithfully FUSE the panel division, colour palette, box shapes, border weights and arrow style of `
+    + `the reference figures: mirror their density and element count. Fill the canvas with meaningful `
+    + `structure — rich and detailed, never sparse. White background, clean flat vector illustration, `
+    + `crisp aligned shapes, clearly readable short English labels. Paper content: ${content.slice(0,2000)}`;
   const body = {model, prompt:imgPrompt};
   if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
   else if(p==='sf'){ body.image_size='1024x1024'; body.batch_size=1; }
