@@ -1584,19 +1584,20 @@ async function analyzeReferences(){
   const contract = designContractText(j);
   const prose = (j.refinedPrompt||'').trim();
   const styleRows = imageStyleText(j);
+  const measured = styleRows.length
+    ? 'Measured from the chosen reference figures — follow these:\n' + styleRows.join('\n')
+    : '';
   analysis={
     j, repIds:reps,
-    // SVG generation is measured and audited shape by shape, so the precise contract
-    // (exact hex values, panel coordinates, type scale) feeds straight into it.
-    refinedPrompt:[contract, prose].filter(s=>s && s.trim()).join('\n\n'),
+    // SVG generation is measured and audited shape by shape, so it takes the prose
+    // style description AND the precise contract: the hex values, panel coordinates
+    // and type scale are what the geometry audit can actually check.
+    refinedPrompt:[measured, contract, prose].filter(s=>s && s.trim()).join('\n\n'),
     // The bitmap path gets the measured values too, but phrased rather than pinned
     // to coordinates. Leaving them out is what made earlier drafts ignore the chosen
     // reference figures: the palette, line weights and panel count were measured and
     // then thrown away before they reached the image model.
-    refinedPromptImage:[
-      styleRows.length ? 'Measured from the chosen reference figures — follow these:\n' + styleRows.join('\n') : '',
-      prose,
-    ].filter(s=>s && s.trim()).join('\n\n'),
+    refinedPromptImage:[measured, prose].filter(s=>s && s.trim()).join('\n\n'),
   };
   renderAnalyze(ordered);
   return analysis;
