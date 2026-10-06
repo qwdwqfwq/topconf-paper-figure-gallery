@@ -299,8 +299,11 @@
     .export-font-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}
     .export-font-row label{font-size:13px;color:var(--muted);font-weight:700}
     .export-font-row select{min-width:220px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);padding:9px 12px;font:inherit}
-    .export-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}
-    .export-actions button{min-height:52px;padding:10px 12px;border:1px solid #dfe3f5;border-radius:12px;background:#fff;color:var(--ink);font:inherit;font-weight:700;cursor:pointer;transition:.16s ease}
+    .export-recon{margin-top:12px;border:1px dashed #c7d2fe;border-radius:11px;padding:11px 12px;background:#f8faff}
+  .recon-note{margin:0 0 9px;color:#4338ca;font-size:12.5px;line-height:1.6}
+  .recon-row{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+  .recon-status{color:var(--muted);font-size:12px;line-height:1.5}
+  .export-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}    .export-actions button{min-height:52px;padding:10px 12px;border:1px solid #dfe3f5;border-radius:12px;background:#fff;color:var(--ink);font:inherit;font-weight:700;cursor:pointer;transition:.16s ease}
     .export-actions button:hover{border-color:#667eea;box-shadow:0 0 0 3px rgba(102,126,234,.12);background:#f8f9ff}
     .export-actions button.selected{border-color:#667eea;box-shadow:0 0 0 3px rgba(102,126,234,.18);background:#f8f9ff}
     .export-actions button:disabled{cursor:not-allowed;opacity:.58}
@@ -521,6 +524,13 @@
     <div class="flow-note" data-i18n-html="export.intro"></div>
     <section class="box b-slate">
       <h4><span class="bi" aria-hidden="true">✏️</span><span data-i18n="export.title"></span></h4>
+      <div class="export-recon" id="exportRecon" hidden>
+        <p class="recon-note" data-i18n-html="recon.note"></p>
+        <div class="recon-row">
+          <button type="button" class="btn-primary" id="reconBtn" data-i18n="recon.btn"></button>
+          <span class="recon-status" id="reconStatus"></span>
+        </div>
+      </div>
       <div class="export-font-row">
         <label for="exportFont" data-i18n="export.font"></label>
         <select id="exportFont">
@@ -2157,15 +2167,285 @@ function auditSummaryText(res){
      2. Positions come from the measured SVG, not from a model's guess, so nothing
         drifts between the preview and the exported file.
 
-   Everything below runs in the browser: no server, no extra API call, works
-   offline. PPTX uses the vendored PptxGenJS; draw.io and VSDX are written here. */
-window.__ffExportState = {svg:'', baseSvg:'', scene:null, target:'svg', font:'original'};
+   Bitmap drafts have neither property, so they take one extra step first: a vision
+   model reads the image and returns a scene, which is then normalised, audited and
+   written by exactly the same renderers. That step is what turns a bitmap into an
+   editable figure, and it is the only place a model is involved at all.
 
-/* ---------- colour / unit helpers ---------- */
+   Everything below runs in the browser and works offline (PPTX uses the vendored
+   PptxGenJS; draw.io and VSDX are written here). The only network call is the
+   optional bitmap reconstruction, which is an explicit button, never automatic. */
+window.__ffExportState = {svg:'', baseSvg:'', scene:null, target:'svg', font:'original', source:'svg', bitmap:'', recon:null};
+
+/* ---------- canvas units ---------- */
 const EXPORT_CANVAS = {w:1600, h:900};
 // 1600 canvas units -> 10in wide figure, centred on a 13.333x7.5in 16:9 slide.
 const PT_PER_UNIT = 0.45;
 
+/* ---------- bitmap -> scene reconstruction (vision model) ---------- */
+const RECON_SCHEMA = 'figureforge.recon.v1';
+
+function dataUriToDataUrl(src){
+  // Trim and whitelist mime types so a malformed data URI cannot smuggle anything.
+  const m = /^data:(image\/(?:png|jpeg|jpg|webp));base64,([A-Za-z0-9+/=\s]+)$/.exec(String(src||'').trim());
+  if(!m) return null;
+  return 'data:' + m[1] + ';base64,' + m[2].replace(/\s+/g,'');
+}
+
+async function bitmapToDataUrl(src){
+  const direct = dataUriToDataUrl(src);
+  if(direct) return direct;
+  const r = await fetch(src);
+  if(!r.ok) throw new Error('image fetch ' + r.status);
+  const blob = await r.blob();
+  const raw = await new Promise((res, rej)=>{
+    const fr = new FileReader();
+    fr.onload = ()=>res(String(fr.result));
+    fr.onerror = ()=>rej(new Error('image read failed'));
+    fr.readAsDataURL(blob);
+  });
+  return dataUriToDataUrl(raw) || raw;
+}
+
+/* Vision models read small text far better at a decent pixel size, so the image is
+   upscaled when it is smaller than the model's comfortable input. */
+function loadImage(src){
+  return new Promise((resolve, reject)=>{
+    const img = new Image();
+    img.onload = ()=>resolve(img);
+    img.onerror = ()=>reject(new Error('image could not be decoded'));
+    img.src = src;
+  });
+}
+
+async function upscaleForReading(dataUrl, minW){
+  try{
+    const img = await loadImage(dataUrl);
+    const limit = minW || 1536;
+    if(img.naturalWidth >= limit) return dataUrl;
+    const scale = Math.min(3, limit / Math.max(1, img.naturalWidth));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(img.naturalWidth * scale);
+    canvas.height = Math.round(img.naturalHeight * scale);
+    const ctx = canvas.getContext('2d');
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    return canvas.toDataURL('image/png');
+  }catch(_){ return dataUrl; }
+}
+
+function reconPrompt(){
+  const contract = (function(){
+    try{ return (typeof analysis!=='undefined' && analysis && analysis.j) ? designContractText(analysis.j) : ''; }
+    catch(_){ return ''; }
+  })();
+  return `You reconstruct a scientific figure from a raster image into EDITABLE vector content.
+Return STRICT JSON only. No markdown, no code fences, no commentary.
+
+METHOD
+1. First transcribe every piece of text in the image, character by character, then lay out the shapes around it. Do not paraphrase, translate, abbreviate, complete, or "improve" any label.
+2. Every box, circle, arrow, line, panel frame and image region becomes its own element.
+3. Use a 1600x900 canvas. Convert both your transcription and your geometry into that coordinate space.
+
+TEXT RULES (most important)
+- Transcribe exactly as printed, including punctuation. Never translate. Never invent a label that is not printed.
+- If any character is genuinely illegible, put "?" at that exact position instead of guessing a plausible word, and set that text element's "quality" to "uncertain".
+- If a text region is not text (a logo, a watermark, a decorative mark), omit it entirely.
+
+OUTPUT SHAPE
+{"canvas":{"w":1600,"h":900},
+ "background":"#rrggbb",
+ "texts":[{"text":"exact transcription","x":0,"y":0,"w":0,"h":0,"fontSize":24,"align":"left|center|right","color":"#rrggbb","bold":false,"quality":"ok|uncertain"}],
+ "shapes":[{"shape":"rect|roundrect|ellipse|line|arrow|image","x":0,"y":0,"w":0,"h":0,"radius":0,"fill":"#rrggbb or none","stroke":"#rrggbb or none","strokeWidth":1,"x2":0,"y2":0}],
+ "notes":"anything you had to approximate"}
+
+RULES
+- x/y/w/h are integers. Keep every element fully inside 0..1600 and 0..900.
+- No two boxes may overlap unless the image clearly shows them overlapping.
+- "line" and "arrow" use x,y as the start and x2,y2 as the end; leave w and h at 0.
+- For a photo, screenshot, plot or illustration region use "image" and give its rectangle.
+- "none" is valid for fill and stroke. Never use a gradient or a pattern.
+${contract ? '\nThe gallery analysis of this figure type already established these measurements. Prefer them where they match what you see:\n' + contract + '\n' : ''}
+Output the JSON object only.`;
+}
+
+async function callReconstructionApi(dataUrl){
+  const p = $('#provider').value, key = cleanKey($('#key').value);
+  if(!key) throw new Error(tt('gen.keyfmt'));
+  const base = p==='custom' ? $('#baseOverride').value.replace(/\/+$/,'') : baseURL();
+  const model = (p==='custom' ? $('#customModel').value : $('#model').value) || '';
+  if(!base || !model) throw new Error(tt('gen.base'));
+  const prompt = reconPrompt();
+  let txt, ok, status;
+  if(p==='claude' && !$('#baseOverride').value.trim()){
+    const parts = dataURIToParts(dataUrl);
+    const body = { model, max_tokens:8000, temperature:0,
+      messages:[{ role:'user', content:[
+        { type:'image', source:{ type:'base64', media_type:parts.media, data:parts.data } },
+        { type:'text', text:prompt } ] }] };
+    const r = await fetch(base.replace(/\/+$/,'')+'/v1/messages',
+      { method:'POST', headers:anthropicHeaders(key), body:JSON.stringify(body) });
+    status = r.status; ok = r.ok; txt = await r.text();
+    if(ok){
+      const d = JSON.parse(txt);
+      txt = (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    }
+  } else {
+    const body = { model, temperature:0,
+      messages:[{ role:'user', content:[
+        { type:'image_url', image_url:{ url:dataUrl } },
+        { type:'text', text:prompt } ] }] };
+    if(p==='ark') body.thinking = { type:'disabled' };
+    const r = await postJSON(base, '/chat/completions', body, key);
+    status = r.status; ok = r.ok; txt = await r.text();
+    if(ok){
+      const d = JSON.parse(txt);
+      txt = d.choices?.[0]?.message?.content || '';
+    }
+  }
+  if(!ok) throw new Error(friendlyHttp(status, txt));
+  let parsed;
+  try{ parsed = extractJsonObject(txt); }
+  catch(_){ throw new Error(tt('recon.badjson')); }
+  if(!parsed) throw new Error(tt('recon.badjson'));
+  return parsed;
+}
+
+/* Model output is untrusted: clamp every number, whitelist every colour, drop
+   anything outside the canvas, and keep the raw transcription verbatim. */
+function reconToScene(raw){
+  const canvas = { x:0, y:0,
+    width: Math.max(200, Math.min(6000, Number(raw && raw.canvas && raw.canvas.w) || EXPORT_CANVAS.w)),
+    height: Math.max(200, Math.min(6000, Number(raw && raw.canvas && raw.canvas.h) || EXPORT_CANVAS.h)) };
+  const clamp = (v, lo, hi, dflt)=>{ const n = Number(v); return Number.isFinite(n) ? Math.max(lo, Math.min(hi, n)) : dflt; };
+  const notes = [];
+  const nodes = [];
+  const uncertain = [];
+  const seen = new Set();
+
+  const bg = svgColorToHex(raw && raw.background);
+  if(bg) nodes.push({ type:'rect', x:0, y:0, w:canvas.width, h:canvas.height, radius:0,
+    fill:bg, stroke:null, strokeWidth:0, rotate:0 });
+
+  (raw && Array.isArray(raw.texts) ? raw.texts : []).forEach(function(t){
+    const text = String(t && t.text != null ? t.text : '').replace(/\s+/g,' ').trim();
+    if(!text) return;
+    if(seen.has(text)) return;
+    seen.add(text);
+    const fontSize = clamp(t.fontSize, 6, 200, 24);
+    const w = clamp(t.w, 4, canvas.width, Math.max(text.length*fontSize*0.58, 10));
+    const h = clamp(t.h, 4, canvas.height, fontSize*1.3);
+    const align = ['left','center','right'].indexOf(t.align) >= 0 ? t.align : 'left';
+    const node = { type:'text', text, w, h, fontSize, anchor: align,
+      x: clamp(t.x, 0, canvas.width, 0), y: clamp(t.y, 0, canvas.height, 0),
+      fill: svgColorToHex(t.color) || '000000',
+      fontFamily: null, bold: !!t.bold, italic: false };
+    if(String(t.quality||'') === 'uncertain' || text.indexOf('?') >= 0) uncertain.push(text);
+    nodes.push(node);
+  });
+
+  (raw && Array.isArray(raw.shapes) ? raw.shapes : []).forEach(function(s){
+    const kind = String(s && s.shape || 'rect').toLowerCase();
+    const fill = svgColorToHex(s && s.fill);
+    const stroke = svgColorToHex(s && s.stroke);
+    const strokeWidth = clamp(s && s.strokeWidth, 0, 40, stroke ? 1 : 0);
+    if(kind === 'line' || kind === 'arrow'){
+      nodes.push({ type:'line',
+        x: clamp(s.x, 0, canvas.width, 0), y: clamp(s.y, 0, canvas.height, 0),
+        x2: clamp(s.x2, 0, canvas.width, 0), y2: clamp(s.y2, 0, canvas.height, 0),
+        stroke: stroke || '000000', strokeWidth: strokeWidth || 1, arrow: kind === 'arrow' });
+      return;
+    }
+    const x = clamp(s.x, 0, canvas.width, 0), y = clamp(s.y, 0, canvas.height, 0);
+    const w = clamp(s.w, 1, canvas.width, 1), h = clamp(s.h, 1, canvas.height, 1);
+    if(x + w > canvas.width || y + h > canvas.height) notes.push('a shape was clipped to the canvas edge');
+    nodes.push({ type: kind === 'ellipse' ? 'ellipse' : 'rect',
+      x, y, w: Math.min(w, canvas.width - x), h: Math.min(h, canvas.height - y),
+      radius: clamp(s.radius, 0, 400, 0),
+      fill, stroke, strokeWidth, rotate: 0 });
+  });
+
+  return { schema:RECON_SCHEMA, canvas, nodes, uncertain,
+    warnings: notes.concat(Array.isArray(raw && raw.notes) ? [String(raw.notes)] : []),
+    counts:{ total:nodes.length,
+      text:nodes.filter(n=>n.type==='text').length,
+      shapes:nodes.filter(n=>n.type!=='text'&&n.type!=='image').length,
+      images:nodes.filter(n=>n.type==='image').length } };
+}
+
+/* Geometry checks that apply to a reconstructed scene: the same classes of defect
+   the SVG audit catches, plus a canvas-bounds check because these numbers come
+   from a model rather than from measurement. */
+function auditReconScene(scene){
+  const c = scene.canvas, defects = [];
+  scene.nodes.forEach(function(n){
+    if(n.type === 'rect' || n.type === 'ellipse'){
+      if(n.x < -1 || n.y < -1 || n.x + n.w > c.width + 1 || n.y + n.h > c.height + 1){
+        defects.push('box at ' + Math.round(n.x) + ',' + Math.round(n.y) + ' extends past the canvas');
+      }
+    }
+    if(n.type === 'text'){
+      if(n.x < -1 || n.y < -1 || n.x > c.width + 1 || n.y > c.height + 1){
+        defects.push('label "' + n.text.slice(0,24) + '" sits outside the canvas');
+      }
+    }
+  });
+  const texts = scene.nodes.filter(n=>n.type==='text');
+  for(let i=0;i<texts.length;i++){
+    for(let j=i+1;j<texts.length;j++){
+      const a = texts[i], b = texts[j];
+      const ox = Math.min(a.x + (a.anchor==='center'?a.w/2:0), b.x + (b.anchor==='center'?b.w/2:0)) -
+                 Math.max(a.x - (a.anchor==='center'?a.w/2:0), b.x - (b.anchor==='center'?b.w/2:0));
+      const oy = Math.min(a.y, b.y) + Math.max(1, Math.min(a.h, b.h)) - Math.max(a.y, b.y);
+      if(ox > 10 && oy > Math.min(a.h, b.h) * 0.4){
+        defects.push('labels "' + a.text.slice(0,18) + '" and "' + b.text.slice(0,18) + '" overlap');
+      }
+    }
+  }
+  return { defects:defects.slice(0,12), ok:defects.length === 0 };
+}
+
+/* The scene is rendered back to SVG so the existing geometry audit, the preview and
+   the SVG download all work on reconstructed content without a second code path. */
+function sceneToSvg(scene){
+  const c = scene.canvas;
+  const parts = ['<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 '+c.width+' '+c.height+'" width="'+c.width+'" height="'+c.height+'">',
+                 '<rect x="0" y="0" width="'+c.width+'" height="'+c.height+'" fill="#ffffff"/>'];
+  const hex = v => v ? '#'+v : 'none';
+  scene.nodes.forEach(function(n){
+    if(n.type === 'rect'){
+      parts.push('<rect x="'+n.x+'" y="'+n.y+'" width="'+n.w+'" height="'+n.h+'"'+
+        (n.radius ? ' rx="'+n.radius+'" ry="'+n.radius+'"' : '')+
+        ' fill="'+hex(n.fill)+'"'+(n.stroke ? ' stroke="'+hex(n.stroke)+'" stroke-width="'+(n.strokeWidth||1)+'"' : '')+'/>');
+      return;
+    }
+    if(n.type === 'ellipse'){
+      parts.push('<ellipse cx="'+(n.x+n.w/2)+'" cy="'+(n.y+n.h/2)+'" rx="'+(n.w/2)+'" ry="'+(n.h/2)+'"'+
+        ' fill="'+hex(n.fill)+'"'+(n.stroke ? ' stroke="'+hex(n.stroke)+'" stroke-width="'+(n.strokeWidth||1)+'"' : '')+'/>');
+      return;
+    }
+    if(n.type === 'line'){
+      parts.push('<line x1="'+n.x+'" y1="'+n.y+'" x2="'+n.x2+'" y2="'+n.y2+'" stroke="'+hex(n.stroke||'000000')+'" stroke-width="'+(n.strokeWidth||1)+'"/>');
+      return;
+    }
+    if(n.type === 'text'){
+      const anchor = n.anchor === 'center' ? 'middle' : (n.anchor === 'right' ? 'end' : 'start');
+      parts.push('<text x="'+n.x+'" y="'+n.y+'" font-size="'+n.fontSize+'" font-family="Arial, Helvetica, sans-serif"'+
+        (n.bold ? ' font-weight="bold"' : '')+' text-anchor="'+anchor+'" fill="'+hex(n.fill||'000000')+'">'+
+        xmlEscape(n.text)+'</text>');
+      return;
+    }
+    if(n.type === 'image'){
+      parts.push('<rect x="'+n.x+'" y="'+n.y+'" width="'+n.w+'" height="'+n.h+'" fill="#f3f4f6" stroke="#9ca3af" stroke-dasharray="6 4"/>');
+      return;
+    }
+  });
+  parts.push('</svg>');
+  return parts.join('');
+}
+
+/* ---------- colour / unit helpers ---------- */
 function svgColorToHex(value){
   if(!value) return null;
   let v = String(value).trim().toLowerCase();
@@ -2934,8 +3214,14 @@ function zipStore(files){
 function renderEditableExportCard(){
   const card=$('#card4'), state=window.__ffExportState; if(!card || !state.svg) return; card.hidden=false;
   const font=$('#exportFont'); if(font) font.value=state.font||'original';
-  const status=$('#exportStatus'); if(status) status.textContent=tt('export.ready');
-  document.querySelectorAll('#exportActions [data-export]').forEach(btn=>btn.disabled=false);
+  const isBitmap = state.source === 'bitmap';
+  const reconBox = $('#exportRecon'); if(reconBox) reconBox.hidden = !isBitmap;
+  const awaitingRecon = isBitmap && !state.recon;
+  const status=$('#exportStatus');
+  if(status) status.textContent = awaitingRecon ? tt('export.needRecon') : tt('export.ready');
+  // A bitmap draft can still be exported as-is, but it would only embed the image;
+  // the labels only become editable text through reconstruction.
+  document.querySelectorAll('#exportActions [data-export]').forEach(btn=>btn.disabled = awaitingRecon);
   syncExportSelection();
 }
 function syncExportSelection(){
@@ -2948,11 +3234,66 @@ function syncExportSelection(){
   const confirm=$('#exportConfirm');
   if(confirm) confirm.disabled=!state.svg || !state.target;
 }
-function showEditableExportStep(svg){
-  try{ window.__ffExportState={svg,baseSvg:svg,scene:parseSvgScene(svg),target:'svg',font:'original'}; renderEditableExportCard(); }
-  catch(e){ console.warn('editable export scene parse failed',e); return; }
+function showEditableExportStep(svgOrSource){
+  const src = (svgOrSource && typeof svgOrSource === 'object') ? svgOrSource : { svg:svgOrSource, source:'svg' };
+  try{
+    window.__ffExportState = Object.assign(window.__ffExportState, {
+      svg: src.svg || '', baseSvg: src.svg || '',
+      source: src.source || 'svg', bitmap: src.bitmap || '', recon: null,
+      scene: src.svg ? parseSvgScene(src.svg) : null,
+      target: 'svg', font:'original',
+    });
+    renderEditableExportCard();
+  }
+  catch(e){ console.warn('editable export scene parse failed', e); return; }
   const card=$('#card4'); if(card) card.scrollIntoView({behavior:'smooth',block:'start'});
 }
+
+/* Bitmap drafts take one extra, explicit step: a vision model reads the image and
+   returns the elements as data, which is then normalised, audited and written by
+   the same renderers. Nothing here runs unless the user asks for it, because it is
+   a paid call that can take a while. */
+async function runReconstruction(){
+  const st = window.__ffExportState;
+  const btn = $('#reconBtn'), status = $('#reconStatus');
+  if(!st.bitmap){ if(status) status.textContent = tt('recon.nobitmap'); return; }
+  if(btn) btn.disabled = true;
+  const setStatus = (k, vars)=>{ if(status) status.textContent = tt(k, vars); };
+  setStatus('recon.reading');
+  try{
+    const dataUrl = await upscaleForReading(await bitmapToDataUrl(st.bitmap), 1536);
+    setStatus('recon.calling');
+    const raw = await callReconstructionApi(dataUrl);
+    const scene = reconToScene(raw);
+    if(!scene.nodes.filter(n=>n.type==='text').length){
+      throw new Error(tt('recon.notext'));
+    }
+    const audit = auditReconScene(scene);
+    let svg;
+    try{ svg = sceneToSvg(scene); }
+    catch(e){ throw new Error(tt('recon.failed')); }
+    // the SVG is rebuilt from the scene so every later step (audit, preview,
+    // download, other formats) works on reconstructed content unchanged
+    Object.assign(st, { scene, svg, baseSvg: svg, recon:{ raw, audit } });
+    applyExportFont(st.font || 'original');
+    renderEditableExportCard();
+    const counts = scene.counts;
+    if(scene.uncertain.length){
+      setStatus('recon.uncertain', {n:counts.text, s:counts.shapes, u:scene.uncertain.length});
+    } else if(!audit.ok){
+      setStatus('recon.audit', {n:counts.text, s:counts.shapes, d:audit.defects.length});
+    } else {
+      setStatus('recon.done', {n:counts.text, s:counts.shapes});
+    }
+  }catch(err){
+    console.warn('reconstruction failed', err);
+    const msg = String(err && err.message || err);
+    if(status) status.textContent = (msg.length > 6 && msg.length < 300) ? msg : tt('recon.failed');
+  }finally{
+    if(btn) btn.disabled = false;
+  }
+}
+
 function initEditableExport(){
   const actions=$('#exportActions'); if(!actions || actions.dataset.bound) return; actions.dataset.bound='1';
   actions.addEventListener('click',e=>{
@@ -2994,6 +3335,7 @@ function initEditableExport(){
     }
   });
   $('#exportFont')?.addEventListener('change',e=>applyExportFont(e.target.value));
+  $('#reconBtn')?.addEventListener('click',()=>runReconstruction());
 }
 initEditableExport();
 
@@ -3065,7 +3407,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   $('#out').innerHTML = `<img src="${esc(imgSrc)}" alt="draft">
     <div class="dl"><button class="btn-primary" id="dlImg">${tt('img.download')}</button>
     <span class="hint">${usedRefs?tt('img.hintRef',{n:useIds.length}):tt('img.hint')}</span></div>`;
-  showEditableExportStep(rasterToExportSvg(exportImgSrc));
+  showEditableExportStep({ svg: rasterToExportSvg(exportImgSrc), source:'bitmap', bitmap: exportImgSrc });
   $('#dlImg').onclick = async ()=>{
     try{
       const rr = await fetch(imgSrc); const blob = await rr.blob();
