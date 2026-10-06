@@ -1,4 +1,4 @@
-const CACHE_NAME = 'figureforge-static-v2';
+const CACHE_NAME = 'figureforge-static-v3';
 const STATIC_FILE = /\.(?:html|css|js|mjs|wasm|onnx|json|bin|png|gif)(?:$|\?)/i;
 
 // Keep the manifest network-first so a newly published model/data version is
