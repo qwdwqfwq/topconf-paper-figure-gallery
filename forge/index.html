@@ -1555,7 +1555,9 @@ density: COUNT what you actually see, as integers, using the MEDIAN of the suppl
   solidBorders and dashedBorders  how many borders use each style in that figure,
   connectors  how many separate arrows or connection lines it has,
   boxFillPercent  roughly what share of a module box's area is covered by content (0-100),
-  nesting  one short sentence for the levels, e.g. "panel > 6 module boxes > each holds an icon or mini chart".
+  nesting  describe the levels precisely and list them in order, e.g.
+    "panel > dashed grouping frame > 5 module boxes > each holds a photo thumbnail or mini chart";
+    state how many levels a typical panel has, and whether grouping frames are used inside panels.
 representative: use the figure ids EXACTLY as listed below, 4-6 of them, no indices.
 Available figure ids: ${ids}
 refinedPrompt should be 120-180 concrete English words about panels, arrows, palette and hierarchy. It is the only prose a bitmap model receives, so make it specific and visual: name each panel and what it contains, the recurring module blocks and their connections, and the kind of icons or illustrations that appear. Keep the prose compact so the whole JSON answer fits in one response — a truncated answer loses the counted density, which matters more than extra words here.`;
@@ -3739,9 +3741,17 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     + `${tg.img}. Publication-quality Figure 1 for a top-tier ML paper. `
     + `Include a prominent bold TITLE line running across the top of the figure, above all panels. `
     + `Below it, a DENSE information-rich multi-panel composition of 3-5 boxed panels side by side, `
-    + `each panel carrying its own bold header and MANY labelled module boxes — divide every panel into `
-    + `a grid of small boxes instead of leaving one large empty area. Do not leave a box empty: put an `
-    + `icon, a small chart, a photo thumbnail, a matrix, a diagram or a formula inside each one. `
+    + `each panel carrying its own bold header. `
+    + `NEST THE BOXES — this is the most important structural requirement. Do not draw one flat row of `
+    + `rectangles per panel. Build several levels inside every panel: `
+    + `(1) the panel container; `
+    + `(2) inside it, one or more dashed grouping frames that hold a related cluster of parts; `
+    + `(3) inside each grouping frame, 4-6 module boxes; `
+    + `(4) inside each module box, a small illustration, a photo thumbnail, a mini chart, a matrix, a `
+    + `diagram or a formula. `
+    + `A panel whose interior is largely blank white is a defect: fill it with more module boxes at `
+    + `smaller scale until it is as busy as the reference figures. `
+    + `Do not leave a module box empty: every one holds a visual or a formula, never text alone. `
     + `Keep the geometry square and orderly: axis-aligned rectangles with at most a slight corner `
     + `radius, even gaps between boxes, and crisp straight arrows. `
     + `Draw MANY borders: not one outline per panel, but a border around every module box inside it, `
@@ -3757,9 +3767,11 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     + `the reference figures: mirror their density and element count exactly. Fill the canvas with `
     + `meaningful structure — rich and detailed, never sparse. White background, clean flat vector `
     + `illustration, crisp aligned shapes, clearly readable short English labels. `
-    + `FINAL CHECK before you finish: count the module boxes you have drawn and their borders. If any box `
-    + `is empty inside, or the canvas still shows a large blank area, add more boxes and more content `
-    + `until the figure is as full and as busy as the reference figures. `
+    + `FINAL CHECK before you finish. Walk each panel and ask: does its interior have white space bigger `
+    + `than one module box? If yes, subdivide it and add module boxes with visuals. Then check that every `
+    + `module box holds an illustration, a chart, a matrix, a diagram or a formula and not only a label, `
+    + `and that at least one dashed grouping frame nests a cluster of boxes inside each panel. Keep adding `
+    + `until the figure is as full and as layered as the reference figures. `
     + `Paper content: ${content.slice(0,2000)}`;
   const body = {model, prompt:imgPrompt};
   if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
