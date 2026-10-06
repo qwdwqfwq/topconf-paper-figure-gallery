@@ -1563,11 +1563,12 @@ density: COUNT what you actually see, as integers, using the MEDIAN of the suppl
   nesting  describe the levels in order, e.g.
     "section > grouping frame > 4 module boxes > each holds an icon or mini chart";
     say how many levels a typical section has and whether grouping frames appear inside sections.
-  variety  one sentence on how neighbouring units differ in these figures (icons vs charts vs
-    formulas vs thumbnails), and whether any element sits outside the sections, such as a legend,
-    a dataset icon, a side inset or a result thumbnail.
-  whitespace  one sentence on where the figures leave space open, so density is not mistaken for
-    "fill every gap".
+  variety  name the KINDS of element these figures use inside boxes (icons, small charts, formulas,
+    matrices, diagram fragments, photo thumbnails, flow strips, tables) and how neighbours differ,
+    plus any element that sits outside the sections such as a legend, a dataset icon, a side inset
+    or a result thumbnail. The generator uses this list as its vocabulary.
+  fill  one sentence on how FULL the boxes are in these figures — how much of a typical box is
+    occupied by its element — so fullness is matched without resorting to copies.
 representative: use the figure ids EXACTLY as listed below, 4-6 of them, no indices.
 Available figure ids: ${ids}
 refinedPrompt should be 120-180 concrete English words about panels, arrows, palette and hierarchy. It is the only prose a bitmap model receives, so make it specific and visual: name each panel and what it contains, the recurring module blocks and their connections, and the kind of icons or illustrations that appear. Keep the prose compact so the whole JSON answer fits in one response — a truncated answer loses the counted density, which matters more than extra words here.`;
@@ -3769,12 +3770,17 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     + `the section container; inside it one or more grouping frames that hold a related cluster; and `
     + `inside those, module boxes. Put an illustration, a mini chart, a table, a formula, a photo `
     + `thumbnail or an icon inside a module box when the content calls for one. `
-    + `DO NOT repeat the same element to fill space. Neighbouring units must differ: mix icon modules, `
-    + `chart modules, formula modules, diagram modules and text modules rather than cloning one block. `
-    + `A panel crammed with near-identical copies looks worse than one that is partly open. `
-    + `LET DENSITY FOLLOW MEANING. Where the method is intricate, pack the modules tightly. Where a `
-    + `point is simple, leave the space open. Keep deliberate whitespace between units so the eye can `
-    + `separate them; an open area is NOT a defect to be padded out. `
+    + `FILL EVERY SECTION, BUT NEVER WITH COPIES. Each section's interior should be occupied by module `
+    + `boxes, not left as a large empty area; what must not happen is filling it with near-identical `
+    + `blocks. Make the contents of neighbouring boxes genuinely different in kind: an icon module, a `
+    + `small chart or plot, a formula, a matrix or grid, a diagram fragment, a photo thumbnail, a `
+    + `flow strip, a table. `
+    + `Every element must earn its place by being relevant to THIS paper: take the modules and parts of `
+    + `the reference figures as your vocabulary, but fill them with the components, variables, stages `
+    + `and results that the paper content below actually describes. An element that could belong to any `
+    + `paper is filler; an element that shows this method's own parts is content. `
+    + `Keep the boxes tightly packed within a section, with even small gaps between them so the eye `
+    + `separates them; the gaps belong between boxes, not as an empty region inside a section. `
     + `USE DASHED FRAMES FOR A REASON: an optional or future stage, an iterative loop, a repeated `
     + `group, or something outside the core method. A dashed frame that means nothing is worse than `
     + `no frame. `
@@ -3805,15 +3811,17 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     + `White background, clean flat vector illustration, crisp aligned shapes, clearly readable short `
     + `English labels. `
     + `FINAL CHECK before you finish. Read the figure as a reviewer would. `
-    + `Is any unit a near-duplicate of its neighbour? Replace it with something that carries different `
-    + `information. `
-    + `Does any section look padded, with modules that exist only to fill it? Remove them and let that `
-    + `section breathe. `
+    + `Is any section still holding a large empty area? Fill it with further module boxes that show `
+    + `this method's own parts. `
+    + `Is any box a near-duplicate of its neighbour, or an element that could sit in any paper? `
+    + `Replace it with a different kind of element that is specific to this method. `
+    + `Can a reader name what every box contains by looking at it? If a box is generic, make it `
+    + `concrete: name the variable, the stage, the metric or the component it stands for. `
     + `Does every dashed frame stand for something a reader could name? If not, make it solid or drop it. `
     + `Can a reader follow the flow from the arrows alone? Add a connector if a step is unclear. `
     + `Is the colour varied enough that sections and groups read apart, without turning garish? `
-    + `The goal is a figure a top-conference reviewer would find clear and well judged, not the `
-    + `densest possible one. `
+    + `The goal is a figure that is full, varied and specific to this paper — what a top-conference `
+    + `reviewer would find clear and well judged. `
     + `Paper content: ${content.slice(0,2000)}`;
   const body = {model, prompt:imgPrompt};
   if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
