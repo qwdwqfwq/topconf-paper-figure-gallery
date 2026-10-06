@@ -520,7 +520,7 @@
   </div>
 
 
-  <div class="card" id="card4">
+  <div class="card" id="card4" hidden>
     <div class="step"><span class="num">4</span><span data-i18n="s4"></span>
       <span class="step-note" data-i18n="s4.note"></span>
     </div>
@@ -3443,10 +3443,20 @@ function syncExportSelection(){
   const confirm=$('#exportConfirm');
   if(confirm) confirm.disabled=!state.svg || !state.target;
 }
-function showEditableExportStep(svg){
+/* Accepts either a bare SVG string (the SVG path) or
+   { svg, source, bitmap } (the bitmap path). Both call sites exist, and a mismatch here
+   silently leaves the export buttons disabled, so the shape is normalised up front. */
+function showEditableExportStep(svgOrSource){
+  const src = (svgOrSource && typeof svgOrSource === 'object')
+    ? svgOrSource
+    : { svg: svgOrSource, source: 'svg' };
+  const svg = src.svg || '';
   try{
     window.__ffExportState = Object.assign(window.__ffExportState, {
-      svg: svg || '', baseSvg: svg || '',
+      svg: svg, baseSvg: svg,
+      source: src.source || 'svg',
+      bitmap: src.bitmap || '',
+      recon: null,
       scene: svg ? parseSvgScene(svg) : null,
       target: 'svg', font:'original',
     });
@@ -3481,12 +3491,21 @@ function setBusy(btn, busy, label){
 function initEditableExport(){
   const actions=$('#exportActions'); if(!actions || actions.dataset.bound) return; actions.dataset.bound='1';
   actions.addEventListener('click',e=>{
-    const btn=e.target.closest('[data-export]'); if(!btn) return; const st=window.__ffExportState; if(!st.svg) return;
+    const btn=e.target.closest('[data-export]'); if(!btn) return; const st=window.__ffExportState;
+    if(!st.svg){
+      const s2=$('#exportStatus'); if(s2) s2.textContent=tt('export.waiting');
+      return;
+    }
     st.target=btn.dataset.export; syncExportSelection();
     const status=$('#exportStatus'); if(status) status.textContent=tt('export.selection',{format:st.target.toUpperCase()});
   });
   $('#exportConfirm')?.addEventListener('click', async ()=>{
-    const st=window.__ffExportState; if(!st.svg || !st.target) return;
+    const st=window.__ffExportState;
+    if(!st.svg || !st.target){
+      const s2=$('#exportStatus');
+      if(s2) s2.textContent = tt('export.waiting');
+      return;
+    }
     const target=st.target, status=$('#exportStatus'), btn=$('#exportConfirm');
     const setStatus=(k,vars)=>{ if(status) status.textContent=tt(k,vars); };
     const scene=st.scene || (st.scene = (function(){ try{ return parseSvgScene(st.svg); }catch(e){ return null; } })());
@@ -3528,6 +3547,8 @@ window.__ffRenderSVG = (...args) => renderSVG(...args);
 
 /* Exposed the same way as __ffRenderSVG: the rebuild is otherwise module-scoped. */
 window.__ffReconstruct = () => runReconstruction();
+/* Kept alongside the other hooks so the card can be re-rendered from outside. */
+window.__ffRefreshExportCard = () => renderEditableExportCard();
 
 function renderSVG(svg, usedVision, useIds, truncated, auditRes){
   const blob = new Blob([svg],{type:'image/svg+xml'});
