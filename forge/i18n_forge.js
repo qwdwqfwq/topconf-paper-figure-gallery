@@ -225,7 +225,6 @@ en:{
  "cors.note":"⚠ This provider's official API does not allow direct browser CORS (verified). Options: ① tick the relay above and enter an OpenAI-compatible relay URL; ② switch to a CORS-enabled provider (Volcengine Ark / SiliconFlow / Zhipu / Kimi / Qwen / DeepSeek).",
  "base.hint":"Endpoint: {b}",
  "pass.warn1":"Two-stage mode needs at least 4 same-type references.",
- "pass.warn2":"Direct mode works best with 2-4 picks; {n} selected — layouts may conflict.",
  "modelLabel.svg":"Model (chat / vision)", "modelLabel.image":"Model (image)",
 
  "recon.reading":"Finding the label areas in the base image...",
@@ -472,7 +471,6 @@ zh:{
  "cors.note":"⚠ 该服务商官方接口未开放浏览器跨域直连（实测）。两种用法：① 勾选上方中转并填入 OpenAI 兼容中转地址；② 也可直接改用支持 CORS 的服务商（火山方舟 / 硅基流动 / 智谱 / Kimi / Qwen / DeepSeek）。",
  "base.hint":"接口地址：{b}",
  "pass.warn1":"两阶段模式至少需要 4 张同类型参考图。",
- "pass.warn2":"直接生成建议精选 2-4 张（当前选了 {n} 张），版式可能互相干扰。",
  "modelLabel.svg":"模型（对话 / 视觉模型）", "modelLabel.image":"模型（图像模型）",
 
  "recon.reading":"正在从底图中找出标签框…",

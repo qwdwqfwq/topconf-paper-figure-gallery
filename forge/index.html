@@ -1528,7 +1528,9 @@ document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
   b.classList.add('on'); passMode=b.dataset.pass;
   syncPassUI();
   if(passMode==='two' && refs.size && refs.size<4) showErr(tt('pass.warn1'));
-  if(passMode==='direct' && refs.size>6) showErr(tt('pass.warn2',{n:refs.size}));
+  // No upper-bound warning for direct mode: it used to complain above 6 references, but
+  // sending the model more original figures is useful — the images carry detail that a
+  // written summary cannot, so a higher count is not a problem to warn about.
 });
 $('#model').onchange = e=>localStorage.setItem('ff_model_'+$('#provider').value, e.target.value);
 
