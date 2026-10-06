@@ -1532,6 +1532,8 @@ Analyze their COMMON design grammar and return one JSON object with EXACTLY thes
  "strokes":{"box":0,"arrow":0,"connector":0},
  "elements":"recurring visual elements: box styles, arrow types, icon/illustration conventions",
  "hierarchy":"information hierarchy: what is emphasised and how",
+ "density":{"containers":0,"modulesPerPanel":0,"solidBorders":0,"dashedBorders":0,"connectors":0,"boxFillPercent":0,
+            "nesting":"the levels, e.g. panel > 6 module boxes > each holds an icon or mini chart"},
  "representative":["ids of the 4-6 figures among these whose layout is the RICHEST: the most panels, the most labelled modules and the most varied elements — the goal is to reproduce that density, not a typical average"],
  "refinedPrompt":"a detailed self-contained English description of what is drawn: each panel and its contents, the module blocks and their connections, arrow directions and flow, the visual levels, and the icon or illustration style"}
 Rules: output JSON only, no markdown or commentary.
@@ -1539,6 +1541,13 @@ panels: 2-6 entries. x/y/w/h are integers in a 1600x900 coordinate space with th
 palette: every value MUST be a real #rrggbb hex string.
 typography: integer pixel sizes for a 1600x900 canvas (title 36-56, panelHeader 26-36, label 20-30, note 16-22).
 strokes: integer pixel widths (box 2-4, arrow 2-4, connector 1-3).
+density: COUNT what you actually see, as integers, using the MEDIAN of the supplied figures — never report 0 for something you can see:
+  containers  how many outer panel/container boxes one typical figure has,
+  modulesPerPanel  how many module boxes are drawn inside ONE panel,
+  solidBorders and dashedBorders  how many borders use each style in that figure,
+  connectors  how many separate arrows or connection lines it has,
+  boxFillPercent  roughly what share of a module box's area is covered by content (0-100),
+  nesting  one short sentence for the levels, e.g. "panel > 6 module boxes > each holds an icon or mini chart".
 representative: use the figure ids EXACTLY as listed below, 4-6 of them, no indices.
 Available figure ids: ${ids}
 refinedPrompt should be 160-260 concrete English words about panels, arrows, palette and hierarchy. It is the only guidance a bitmap model receives, so make it specific and visual: name each panel and what it contains, describe the recurring module blocks and their connections, the arrow directions and what flows along them, the number of visual levels, and the kind of icons or illustrations that appear. Describe what is actually drawn, not how good it looks.`;
@@ -1683,6 +1692,18 @@ function imageStyleText(j){
   if(st && typeof st === 'object'){
     const w = ['box','arrow','connector'].filter(k=>st[k]!=null).map(k=>`${k} ${st[k]}px`);
     if(w.length) rows.push(`- stroke weights: ${w.join(', ')}`);
+  }
+  const dn = j.density;
+  if(dn && typeof dn === 'object'){
+    const bits = [];
+    if(dn.containers != null) bits.push(`${dn.containers} container boxes`);
+    if(dn.modulesPerPanel != null) bits.push(`${dn.modulesPerPanel} module boxes per panel`);
+    if(dn.solidBorders != null || dn.dashedBorders != null)
+      bits.push(`${dn.solidBorders||0} solid and ${dn.dashedBorders||0} dashed borders`);
+    if(dn.connectors != null) bits.push(`${dn.connectors} separate arrows/connectors`);
+    if(dn.boxFillPercent != null) bits.push(`boxes about ${dn.boxFillPercent}% filled with content`);
+    if(bits.length) rows.push(`- counted in a typical reference figure: ${bits.join(', ')} — match these counts`);
+    if(dn.nesting) rows.push(`- nesting: ${dn.nesting}`);
   }
   if(j.elements) rows.push(`- recurring elements: ${j.elements}`);
   if(j.hierarchy) rows.push(`- hierarchy: ${j.hierarchy}`);
@@ -3532,15 +3553,28 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     + `${tg.img}. Publication-quality Figure 1 for a top-tier ML paper. `
     + `Include a prominent bold TITLE line running across the top of the figure, above all panels. `
     + `Below it, a DENSE information-rich multi-panel composition of 3-5 boxed panels side by side, `
-    + `each panel carrying its own bold header, several labelled module boxes, arrows showing the data `
-    + `flow between components, and small sub-diagrams or result thumbnails inside the panels. `
+    + `each panel carrying its own bold header and MANY labelled module boxes — divide every panel into `
+    + `a grid of small boxes instead of leaving one large empty area. Do not leave a box empty: put an `
+    + `icon, a small chart, a photo thumbnail, a matrix, a diagram or a formula inside each one. `
+    + `Keep the geometry square and orderly: axis-aligned rectangles with at most a slight corner `
+    + `radius, even gaps between boxes, and crisp straight arrows. `
+    + `Draw MANY borders: not one outline per panel, but a border around every module box inside it, `
+    + `plus arrows and dashed grouping frames. Vary the border style — SOLID for concrete modules, `
+    + `arrows and data-flow steps, DASHED for optional, repeated, conceptual or grouped blocks — so the `
+    + `levels are obvious at a glance. `
+    + `Arrows showing the data flow between components, and small sub-diagrams or result thumbnails `
+    + `inside the panels. `
     + `Line weight and line style carry meaning here: draw each panel's outer container border clearly `
     + `THICKER than the module boxes inside it, and vary the strokes — dashed borders for optional, `
     + `conceptual or repeated blocks, solid borders for concrete modules — so groups stay distinct. `
     + `Faithfully FUSE the panel division, colour palette, box shapes, border weights and arrow style of `
-    + `the reference figures: mirror their density and element count. Fill the canvas with meaningful `
-    + `structure — rich and detailed, never sparse. White background, clean flat vector illustration, `
-    + `crisp aligned shapes, clearly readable short English labels. Paper content: ${content.slice(0,2000)}`;
+    + `the reference figures: mirror their density and element count exactly. Fill the canvas with `
+    + `meaningful structure — rich and detailed, never sparse. White background, clean flat vector `
+    + `illustration, crisp aligned shapes, clearly readable short English labels. `
+    + `FINAL CHECK before you finish: count the module boxes you have drawn and their borders. If any box `
+    + `is empty inside, or the canvas still shows a large blank area, add more boxes and more content `
+    + `until the figure is as full and as busy as the reference figures. `
+    + `Paper content: ${content.slice(0,2000)}`;
   const body = {model, prompt:imgPrompt};
   if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
   else if(p==='sf'){ body.image_size='1024x1024'; body.batch_size=1; }
