@@ -661,15 +661,15 @@ const IMGRE = /(image|seedream|flux|kolors|dall-e|gpt-image|cogview|sd-|stable-d
 const kindOf = id => SKIP.test(id) ? 'skip' : IMGRE.test(id) ? 'image' : 'chat';
 
 const TARGETS = {
- overview:{label:tt('tg.overview'), img:'Design a publication-quality Figure 1 teaser/overview figure with a prominent bold title line across the top',
-   instr:'一张论文 Figure 1 总览（teaser）图：左侧或顶部为输入示例，中间为我们方法的核心模块（2-4 个方块+箭头表示数据流），右侧或底部为输出/效果。横向布局，每个面板一个信息点。'},
- architecture:{label:tt('tg.architecture'), img:'Design a publication-quality method architecture figure with a prominent bold title line across the top',
-   instr:'一张方法架构图：展示模型内部组件与层次结构（编码器、模块、解码器等），用方块表示组件、箭头表示数据流，标注关键组件名称与维度；体现组件之间的连接关系。'},
- pipeline:{label:tt('tg.pipeline'), img:'Design a publication-quality pipeline/process figure with a prominent bold title line across the top',
-   instr:'一张 pipeline 流程图：按顺序展示从输入到输出的若干阶段（阶段用横向或纵向排列的圆角方块，箭头连接），每个阶段下方用小字标注该阶段。'},
- results:{label:tt('tg.results'), img:'Design a publication-quality results figure with a prominent bold title line across the top',
-   instr:'一张结果展示图：以多面板网格对比不同方法/设置的结果，每列一种方法、每行一个样本，面板下方标注方法名与关键指标，坐标轴与图例清晰。'},
- custom:{label:tt('tg.custom'), img:'Design a publication-quality scientific figure with a prominent bold title line across the top', instr:''},
+ overview:{label:tt('tg.overview'), img:'Design a publication-quality Figure 1 teaser/overview figure that follows the supplied reference composition',
+   instr:'一张论文 Figure 1 总览（teaser）图：表达输入、核心方法与输出/效果的语义关系；模块数量、分区方式、阅读方向与信息密度以参考图设计契约为准。'},
+ architecture:{label:tt('tg.architecture'), img:'Design a publication-quality method architecture figure that follows the supplied reference composition',
+   instr:'一张方法架构图：展示模型内部组件、层次结构、数据流与连接关系；组件数量、嵌套关系、分区和阅读方向以参考图设计契约为准。'},
+ pipeline:{label:tt('tg.pipeline'), img:'Design a publication-quality pipeline/process figure that follows the supplied reference composition',
+   instr:'一张 pipeline 流程图：表达从输入到输出的阶段关系、分支、循环或反馈；阶段布局、方向、容器和箭头组织以参考图设计契约为准。'},
+ results:{label:tt('tg.results'), img:'Design a publication-quality results figure that follows the supplied reference composition',
+   instr:'一张结果展示图：呈现样本、方法、指标和对比关系；面板组织、图表类型、分组方式、图例与阅读方向以参考图设计契约为准。'},
+ custom:{label:tt('tg.custom'), img:'Design a publication-quality scientific figure that follows the supplied reference composition', instr:''},
 };
 
 /* FALLBACK：manifest 拉取失败（离线）时使用，与 forge/data/manifest.json 同口径 */
@@ -1535,7 +1535,7 @@ document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
 $('#model').onchange = e=>localStorage.setItem('ff_model_'+$('#provider').value, e.target.value);
 
 /* ---------------- pass 1: analyze references ---------------- */
-const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference overview figures of the SAME target visual type. Extract their shared layout grammar as a CONCRETE design contract: exact hex colours, panel rectangles as numbers on a 1600x900 canvas, a numeric type scale and stroke widths. Return STRICT JSON only.';
+const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference figures of the SAME target visual type. Recover the visual grammar without averaging away the canonical composition: identify one primary layout anchor, supporting style evidence, exact palette, relative panel geometry, density, spacing, typography and stroke conventions. Return STRICT JSON only.';
 function buildAnalyzePrompt(n, idList){
   const ids = (idList||[]).join(', ');
   return `Here are ${n} top-conference paper figures, all of the target visual type for the figure I want to design.
@@ -1547,16 +1547,19 @@ Analyze their COMMON design grammar and return one JSON object with EXACTLY thes
  "palette":{"background":"#hex","primary":"#hex","accent":"#hex","neutral":"#hex","others":["#hex"]},
  "layout":"how the canvas is divided (number/arrangement of panels) and reading direction",
  "panels":[{"name":"panel name","role":"what this panel shows","x":0,"y":0,"w":0,"h":0}],
+ "topology":{"anchor":"the canonical composition to preserve","zones":"relative columns/rows and nesting","flow":"reading direction and connector routes","spacing":"gaps, margins and whitespace rhythm"},
+ "styleFingerprint":{"background":"surface treatment","panelShape":"corner radius and container treatment","moduleShape":"module box treatment","iconStyle":"icon/illustration language","arrowStyle":"arrow and connector language","textTreatment":"title, header and label treatment"},
  "elements":"recurring visual elements: box styles, arrow types, icon/illustration conventions",
  "hierarchy":"information hierarchy: what is emphasised and how",
- "representative":["ids of the 4-6 figures among these whose layout is the RICHEST: the most panels, the most labelled modules and the most varied elements — the goal is to reproduce that density, not a typical average"],
+ "representative":["ids of the 2-4 figures that best preserve the canonical composition and richest detail; choose a primary anchor first, then supporting examples"],
+ "imageRefIds":["ids of 1-3 figures that are the strongest visual anchors for a bitmap model"],
  "refinedPrompt":"a detailed self-contained English description of what is drawn: each panel and its contents, the module blocks and their connections, arrow directions and flow, the visual levels, and the icon or illustration style"}
 Rules: output JSON only, no markdown or commentary.
-panels: 2-6 entries. x/y/w/h are integers in a 1600x900 coordinate space with the origin at the top-left; they must not overlap and must stay inside 1600x900.
+panels: 2-6 entries. x/y/w/h are integers in a 1600x900 coordinate space with the origin at the top-left; they must not overlap and must stay inside 1600x900. Preserve the actual relative arrangement: do not turn stacked zones into side-by-side panels and do not invent a symmetric grid.
 palette: every value MUST be a real #rrggbb hex string.
 typography: integer pixel sizes for a 1600x900 canvas (title 36-56, panelHeader 26-36, label 20-30, note 16-22).
 strokes: integer pixel widths (box 2-4, arrow 2-4, connector 1-3).
-density: COUNT what you actually see, as integers, using the MEDIAN of the supplied figures — never report 0 for something you can see:
+density: COUNT what you actually see, as integers. Use the median only for genuinely shared quantities; keep the anchor's topology and density when the figures differ materially — never report 0 for something you can see:
   containers  how many outer panel/container boxes one typical figure has,
   modulesPerPanel  how many module boxes are drawn inside ONE panel,
   solidBorders and dashedBorders  how many borders use each style in that figure,
@@ -1571,9 +1574,10 @@ density: COUNT what you actually see, as integers, using the MEDIAN of the suppl
     or a result thumbnail. The generator uses this list as its vocabulary.
   fill  one sentence on how FULL the boxes are in these figures — how much of a typical box is
     occupied by its element — so fullness is matched without resorting to copies.
-representative: use the figure ids EXACTLY as listed below, 4-6 of them, no indices.
+representative: use the figure ids EXACTLY as listed below, 2-4 of them, no indices. The first id is the primary layout anchor; the remaining ids are supporting style references, not images to blend equally.
+imageRefIds: use 1-3 of the listed ids, no indices. Prefer the primary anchor plus at most two supporting references; do not select a visually incompatible outlier.
 Available figure ids: ${ids}
-refinedPrompt should be 120-180 concrete English words about panels, arrows, palette and hierarchy. It is the only prose a bitmap model receives, so make it specific and visual: name each panel and what it contains, the recurring module blocks and their connections, and the kind of icons or illustrations that appear. Keep the prose compact so the whole JSON answer fits in one response — a truncated answer loses the counted density, which matters more than extra words here.`;
+topology, styleFingerprint and refinedPrompt must describe visible layout and styling, not the paper's scientific claims. refinedPrompt should be 120-180 concrete English words about panels, arrows, palette, spacing, hierarchy and illustration language. It is used as a visual guide, not as a request to copy reference labels. Keep the prose compact so the whole JSON answer fits in one response.`;
 }
 function extractJSON(txt){
   const m = txt.match(/\{[\s\S]*\}/);
@@ -1624,6 +1628,15 @@ async function analyzeReferences(){
   }).filter(Boolean);
   reps=[...new Set(reps)].slice(0,6);
   if(reps.length<2) reps=ordered.slice(0,3);
+  let imageRefIds = (j.imageRefIds||[]).map(x=>{
+    const s = String(x).trim();
+    if(validIds.includes(s)) return s;
+    const n = +s;
+    if(isFinite(n) && n>=1 && n<=ordered.length) return ordered[n-1];
+    return null;
+  }).filter(Boolean);
+  imageRefIds=[...new Set(imageRefIds)].slice(0,3);
+  if(!imageRefIds.length) imageRefIds=reps.slice(0,3);
   // Two style guides, because the two output paths consume them differently.
   const contract = designContractText(j);
   const prose = (j.refinedPrompt||'').trim();
@@ -1632,7 +1645,7 @@ async function analyzeReferences(){
     ? 'Measured from the chosen reference figures — follow these:\n' + styleRows.join('\n')
     : '';
   analysis={
-    j, repIds:reps,
+    j, repIds:reps, imageRefIds,
     // SVG generation is measured and audited shape by shape, so it takes the prose
     // style description AND the precise contract: the hex values, panel coordinates
     // and type scale are what the geometry audit can actually check.
@@ -1641,7 +1654,7 @@ async function analyzeReferences(){
     // to coordinates. Leaving them out is what made earlier drafts ignore the chosen
     // reference figures: the palette, line weights and panel count were measured and
     // then thrown away before they reached the image model.
-    refinedPromptImage:[measured, prose].filter(s=>s && s.trim()).join('\n\n'),
+    refinedPromptImage:[measured, contract, prose].filter(s=>s && s.trim()).join('\n\n'),
   };
   renderAnalyze(ordered);
   return analysis;
@@ -1731,10 +1744,27 @@ function imageStyleText(j){
   if(j.elements) rows.push(`- recurring elements: ${j.elements}`);
   if(j.hierarchy) rows.push(`- hierarchy: ${j.hierarchy}`);
   if(j.layout) rows.push(`- panel division and reading direction: ${j.layout}`);
+  if(j.topology && typeof j.topology==='object'){
+    const top = [];
+    if(j.topology.anchor) top.push('anchor: '+j.topology.anchor);
+    if(Array.isArray(j.topology.zones)) top.push('zones: '+j.topology.zones.join(' | '));
+    if(j.topology.flow) top.push('flow: '+j.topology.flow);
+    if(j.topology.spacing) top.push('spacing: '+j.topology.spacing);
+    if(top.length) rows.push('- canonical topology (preserve this arrangement; do not invent a generic grid): '+top.join('; '));
+  }
+  if(j.styleFingerprint && typeof j.styleFingerprint==='object'){
+    const sf = ['background','panelShape','moduleShape','iconStyle','arrowStyle','textTreatment'].filter(k=>j.styleFingerprint[k]).map(k=>k+': '+j.styleFingerprint[k]);
+    if(sf.length) rows.push('- style fingerprint: '+sf.join('; '));
+  }
   if(Array.isArray(j.panels) && j.panels.length){
-    const names = j.panels.slice(0,8).map(p=>[p.name, p.role].filter(Boolean).join(' — ')).filter(Boolean);
+    const names = j.panels.slice(0,8).map(p=>{
+      const name=[p.name,p.role].filter(Boolean).join(' — ');
+      const geo=(p.x!=null&&p.y!=null&&p.w!=null&&p.h!=null) ? ' @ '+Math.round(p.x/1600*100)+'%,'+Math.round(p.y/900*100)+'% size '+Math.round(p.w/1600*100)+'%x'+Math.round(p.h/900*100)+'%' : '';
+      return name+geo;
+    }).filter(Boolean);
     if(names.length) rows.push(`- panels: ${names.join(' | ')}`);
   }
+  rows.push('- density target: fill the defined module regions with meaningful diagrams, mini charts, icons, thumbnails or short labels; preserve intentional gutters but avoid conspicuous empty white areas.');
   return rows;
 }
 
@@ -1742,6 +1772,18 @@ function designContractText(j){
   if(!j) return '';
   const rows = [];
   if(j.layout) rows.push(`- canvas & panel division: ${j.layout}`);
+  if(j.topology && typeof j.topology==='object'){
+    const top=[];
+    if(j.topology.anchor) top.push('anchor: '+j.topology.anchor);
+    if(Array.isArray(j.topology.zones)) top.push('zones: '+j.topology.zones.join(' | '));
+    if(j.topology.flow) top.push('flow: '+j.topology.flow);
+    if(j.topology.spacing) top.push('spacing: '+j.topology.spacing);
+    if(top.length) rows.push('- canonical topology (highest priority): '+top.join('; '));
+  }
+  if(j.styleFingerprint && typeof j.styleFingerprint==='object'){
+    const sf=['background','panelShape','moduleShape','iconStyle','arrowStyle','textTreatment'].filter(k=>j.styleFingerprint[k]).map(k=>k+'='+j.styleFingerprint[k]);
+    if(sf.length) rows.push('- style fingerprint: '+sf.join('; '));
+  }
   if(Array.isArray(j.panels) && j.panels.length){
     const panels = j.panels.slice(0,8).map(p=>{
       const bits = [p.name, p.role].filter(Boolean).join(' / ');
@@ -1772,6 +1814,7 @@ function designContractText(j){
   }
   if(j.elements) rows.push(`- recurring elements: ${j.elements}`);
   if(j.hierarchy) rows.push(`- information hierarchy: ${j.hierarchy}`);
+  rows.push('- composition priority: preserve the anchor topology and fill its module regions densely; no conspicuous empty panels or unused white areas.');
   return rows.join('\n');
 }
 
@@ -1798,9 +1841,9 @@ ${content}
 
 ${refLines}
 
-请输出一张完整、可编辑的 SVG（viewBox 1600x900，横向，白色背景；顶部有一行醒目的粗体标题；建立 2-4 个层次分明的配色（主色 + 强调色 + 中性色，可用于区分不同面板）；方块/箭头/文字标签对齐；面板外框线明显粗于内部模块框，并用虚线区分可选/概念/重复的块；不得出现 lorem ipsum 或占位数字）。
+请输出一张完整、可编辑的 SVG（viewBox 1600x900，横向，白色背景）。设计契约和参考图中识别出的主锚点拓扑、相对比例、模块密度、配色、线型、间距和阅读方向是最高优先级；不要强行套用固定的面板数量、横向并排网格或统一的顶部标题栏。方块/箭头/文字标签对齐；面板外框线明显粗于内部模块框，并用虚线区分可选/概念/重复的块；不得出现 lorem ipsum 或占位数字。
 若上面的设计契约给出了面板坐标与字号，请直接按其数值排版，不要自行改变比例。
-以主面板为中心呈现“我们的方法”核心 pipeline（标题 + 多个模块方块 + 箭头表示数据流），并允许 2-3 个子面板或局部放大框（例如输入样例、关键模块放大、结果对比小图），让整张图的信息密度接近一张真正的论文 Figure 1。把重复样式放进 <defs> 复用；为控制长度，元素总量保持合理，务必在一次输出内以 </svg> 正常结尾。
+保持参考图的整体阅读路径和层级，在定义好的每个模块区域中填入有意义的结构：小型流程、网络/模型图、数据表、迷你图表、缩略图、图例、短标签或局部放大，不要留下明显的大块空白；保留有意的边距和分组间隙。内容丰富度和排版覆盖率优先于长文字的逐字准确，文字用可编辑的英文短标签或短语即可，后续会在步骤四校正。把重复样式放进 <defs> 复用；为控制长度，元素总量保持合理，务必在一次输出内以 </svg> 正常结尾。
 布局硬性要求（会自动检查）：所有可见文字必须完全落在 x=0..1600、y=0..900 之内；任何标签的文字宽度不得超过它所处方块的宽度（放不下就缩短文字、减小字号或加宽方块）；不同标签的文字包围盒不得相互重叠。
 硬性要求：SVG 中所有可见文字（面板标题、模块名、坐标轴、图例、注释）必须全部使用英文短语，严禁出现任何中文字符；数字与标签需与论文内容一致。
 
@@ -1813,7 +1856,7 @@ ${refLines}
 - 输出前检查所有文字与图形都在画布内，并以 </svg> 正常结尾。
 Output a complete SVG. ALL visible text (panel headers, module names, axes, legends, annotations) MUST be in English — no Chinese characters anywhere. Output only the <svg> code, no explanation.`;
 }
-const SVG_SYS = 'You are a world-class scientific figure designer. Based on the user paper content and the attached reference figures, output exactly ONE complete, self-contained SVG. White background, clean modern vector design: a prominent bold title line across the top, a DENSE multi-panel composition of 3-5 boxed panels side by side, each with its own bold header and several labelled module boxes. Draw each panel outer container border clearly thicker than the module boxes inside it, and vary the strokes — dashed for optional or repeated blocks, solid for concrete modules — so groups stay distinct. Labels are short, accurate phrases taken from the paper. Preserve editable export semantics: give every visible element a stable id plus data-role and data-editable="true"; keep labels as SVG <text>, use basic shapes and paths, avoid masks/filters/outlined text, use viewBox="0 0 1600 900", and never flatten the whole figure into one bitmap. Output SVG markup only, no explanations or code fences.';
+const SVG_SYS = 'You are a world-class scientific figure designer. Based on the user paper content and the attached reference figures, output exactly ONE complete, self-contained SVG. Treat the supplied reference-derived design contract as the highest-priority visual constraint: preserve its canonical panel topology, relative proportions, nesting, spacing rhythm, density, palette, stroke language and reading direction. Do not force a fixed number of side-by-side panels or a generic grid. Produce a richly populated, publication-quality composition: fill most reference-defined module regions with meaningful diagrams, mini charts, thumbnails, icons, legends or short labels, while preserving intentional gutters and avoiding conspicuous empty areas. Exact wording is secondary to layout richness because labels will be edited later; use short readable English labels and clean editable text slots rather than paragraphs. Preserve editable export semantics: give every visible element a stable id plus data-role and data-editable="true"; keep labels as SVG <text>, use basic shapes and paths, avoid masks/filters/outlined text, use viewBox="0 0 1600 900", and never flatten the whole figure into one bitmap. Output SVG markup only, no explanations or code fences.';
 
 /* ---------------- HTTP helpers ---------------- */
 function showErr(msg){
@@ -1934,8 +1977,9 @@ $('#genBtn').onclick = async ()=>{
       $('#stepper').hidden=false; $('#analyzeBox').innerHTML='';
       setStep(1,'active'); btn.textContent=tt('gen.analyzing',{n:refs.size});
       const a = await analyzeReferences();
-      refIds=a.repIds;
-      // The SVG path takes the numeric contract, the bitmap path takes the prose only.
+      refIds = mode==='image' ? (a.imageRefIds||a.repIds).slice(0,3) : a.repIds;
+      // SVG receives the measured contract; bitmap generation receives a dense prose guide
+      // plus only the strongest visual anchors, so incompatible references are not averaged.
       layoutGuide = (mode==='svg') ? a.refinedPrompt : (a.refinedPromptImage || a.refinedPrompt);
       setStep(1,'done'); setStep(2,'active'); btn.textContent=tt('gen.generating');
     }else{
@@ -3516,6 +3560,26 @@ function offerDownload(container, filename, blobOrText, mime){
   row.className = 'export-dl';
   const a = document.createElement('a');
   a.href = url; a.download = filename; a.textContent = tt('export.getFile', { format: filename });
+  /* Some embedded browsers do not honor download="..." for a blob: URL.  Keep a
+     self-contained data URL ready for the visible fallback link, and recreate a
+     fresh object URL if the user clicks before FileReader finishes. */
+  if(typeof FileReader !== 'undefined'){
+    const reader = new FileReader();
+    reader.onload = function(){
+      if(document.body.contains(a) && typeof reader.result === 'string'){
+        a.dataset.dataUrl = reader.result;
+        a.href = reader.result;
+      }
+    };
+    reader.readAsDataURL(blob);
+  }
+  a.addEventListener('click', function(){
+    if(!a.dataset.dataUrl && a.href.indexOf('blob:') === 0){
+      const fresh = URL.createObjectURL(blob);
+      a.href = fresh;
+      setTimeout(function(){ try{ URL.revokeObjectURL(fresh); }catch(e){} }, 30000);
+    }
+  });
   const s = document.createElement('span');
   s.textContent = tt('export.fileReady', { size: size });
   row.appendChild(a); row.appendChild(s);
@@ -3629,7 +3693,7 @@ function runStagedProgress(container, label, steps, task){
   const done = function(){ clearInterval(timer); };
   return Promise.resolve()
     .then(task)
-    .then(function(v){ done(); setExportProgress(container, 0.97); return v; },
+    .then(function(v){ done(); setExportProgress(container, 97); return v; },
           function(e){ done(); setExportProgress(container, 1); throw e; });
 }
 
@@ -3716,7 +3780,7 @@ function initEditableExport(){
         dlData = zipStore(sceneToVsdxFiles(scene, fontChoice)); dlMime = 'application/vnd.ms-visio.drawing';
         downloadBlob(dlName, dlData);
       }
-      setExportProgress(status, 1);
+      setExportProgress(status, 100);
       // also offered as a link, so the result is visible even if the automatic
       // download was blocked or dropped
       offerDownload(status, dlName, dlData, dlMime);
@@ -3756,14 +3820,16 @@ function renderSVG(svg, usedVision, useIds, truncated, auditRes){
 }
 
 async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
-  const useIds = refIds||[...refs];
+  const useIds = (refIds||[...refs]).slice(0,3);
   const tg = TARGETS[$('#target').value] || TARGETS.overview;
   const guide = layoutGuide
-    ? `Follow this gallery-derived layout style guide precisely (panel division, arrows, palette, hierarchy):\n${layoutGuide}\n\n`
+    ? `REFERENCE-DERIVED DESIGN CONTRACT (highest priority; preserve the anchor topology, relative geometry, density, palette, spacing, arrows and hierarchy):\n${layoutGuide}\n\n`
     : '';
   const imgPrompt = `${guide}`
-    + `${tg.img}. Publication-quality Figure 1 for a top-tier ML paper. `
-    + `Include a prominent bold TITLE line running across the top of the figure, above all panels. `
+    + `${tg.img}. Use the first supplied reference image as the primary composition anchor; treat any other supplied references as supporting evidence for style only, not as equal layouts to blend. `
+    + `Preserve the anchor's panel topology, relative proportions, nesting, reading direction, spacing rhythm, palette, stroke language and visual density. Do not impose a generic 3-5 side-by-side grid or a new symmetric layout. `
+    + `Publication-quality Figure 1 for a top-tier ML paper. `
+    + `Use a prominent bold TITLE line across the top only when the primary reference uses one; otherwise preserve the reference's top region. `
     + `Below it, an information-rich composition of labelled sections. Let the CONTENT decide how `
     + `many sections there are and how wide each one is: three to five is common, but use as many as `
     + `the method really has, and size them by how much they hold rather than splitting the canvas `
@@ -3808,8 +3874,12 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     + `Line weight and line style carry meaning here: draw each panel's outer container border clearly `
     + `THICKER than the module boxes inside it, and vary the strokes — dashed borders for optional, `
     + `conceptual or repeated blocks, solid borders for concrete modules — so groups stay distinct. `
-    + `Faithfully FUSE the section division, colour palette, box shapes, border weights and arrow style `
-    + `of the reference figures: mirror how much they put in each part, and how much they leave open. `
+    + `Faithfully follow the primary anchor's section division, colour palette, box shapes, border weights `
+    + `and arrow style: mirror its topology, density and spacing rhythm while using the paper content below `
+    + `to populate the corresponding semantic roles. `
+    + `Exact wording is secondary to layout richness because Step 4 will edit labels later. Use short readable `
+    + `English labels or clean editable-looking label slots; never spend composition budget on paragraphs or `
+    + `let uncertain text reduce the number of visual modules. `
     + `White background, clean flat vector illustration, crisp aligned shapes, clearly readable short `
     + `English labels. `
     + `FINAL CHECK before you finish. Read the figure as a reviewer would. `
