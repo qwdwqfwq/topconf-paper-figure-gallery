@@ -315,6 +315,10 @@
     .export-confirm:disabled{cursor:progress}
     .export-busy{background:#eef2ff;color:#3730a3}
     .export-status{margin-top:11px;border-radius:9px;padding:9px 11px;background:#f5f7fb;color:var(--muted);font-size:12px;line-height:1.5}
+    .export-dl{margin-top:9px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid #c7d2fe;background:#eef2ff;border-radius:9px;padding:9px 11px}
+    .export-dl a{font-weight:700;color:#3730a3;text-decoration:underline;font-size:13px}
+    .export-dl span{color:#4338ca;font-size:12px}
+    .export-msg{line-height:1.5}
     @media(max-width:760px){.export-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
@@ -1534,13 +1538,6 @@ Analyze their COMMON design grammar and return one JSON object with EXACTLY thes
  "hierarchy":"information hierarchy: what is emphasised and how",
  "density":{"containers":0,"modulesPerPanel":0,"solidBorders":0,"dashedBorders":0,"connectors":0,"boxFillPercent":0,
             "nesting":"the levels, e.g. panel > 6 module boxes > each holds an icon or mini chart"},
- "borderStyle":{"outerContainer":"dashed|solid|mixed","innerModule":"dashed|solid|mixed",
-                "groupFrames":"dashed|solid|none","connectors":"dashed|solid|mixed",
-                "convention":"one sentence: what a dashed border means here and what a solid one means"},
- "boxContent":{"kinds":["icon","mini chart","photo thumbnail","matrix","formula","diagram","text only"],
-               "fillPercent":0,"emptyBoxes":"none|few|many"},
- "cornerRadius":"square|slight|rounded","arrowStyle":"straight|elbow|curved|mixed",
- "colorUse":{"border":"#hex","fill":"#hex","accentBorder":"#hex","background":"#hex"},
  "representative":["ids of the 4-6 figures among these whose layout is the RICHEST: the most panels, the most labelled modules and the most varied elements — the goal is to reproduce that density, not a typical average"],
  "refinedPrompt":"a detailed self-contained English description of what is drawn: each panel and its contents, the module blocks and their connections, arrow directions and flow, the visual levels, and the icon or illustration style"}
 Rules: output JSON only, no markdown or commentary.
@@ -1555,15 +1552,6 @@ density: COUNT what you actually see, as integers, using the MEDIAN of the suppl
   connectors  how many separate arrows or connection lines it has,
   boxFillPercent  roughly what share of a module box's area is covered by content (0-100),
   nesting  one short sentence for the levels, e.g. "panel > 6 module boxes > each holds an icon or mini chart".
-borderStyle: report what the supplied figures actually do, not what is conventional —
-  outerContainer / innerModule / groupFrames / connectors  which line style each level uses,
-  convention  one sentence on what dashed versus solid MEANS in these figures
-  (e.g. "dashed marks a conceptual or optional grouping, solid marks concrete modules").
-boxContent: kinds  which of icon, mini chart, photo thumbnail, matrix, formula, diagram, text only appear inside boxes,
-  fillPercent  the median share of a box covered by content,
-  emptyBoxes  whether boxes are left empty: none, few or many.
-cornerRadius: square, slight or rounded. arrowStyle: straight, elbow, curved or mixed.
-colorUse: which measured hex is used for borders, for fills, for the accent border and for the background.
 representative: use the figure ids EXACTLY as listed below, 4-6 of them, no indices.
 Available figure ids: ${ids}
 refinedPrompt should be 160-260 concrete English words about panels, arrows, palette and hierarchy. It is the only guidance a bitmap model receives, so make it specific and visual: name each panel and what it contains, describe the recurring module blocks and their connections, the arrow directions and what flows along them, the number of visual levels, and the kind of icons or illustrations that appear. Describe what is actually drawn, not how good it looks.`;
@@ -1720,31 +1708,6 @@ function imageStyleText(j){
     if(dn.boxFillPercent != null) bits.push(`boxes about ${dn.boxFillPercent}% filled with content`);
     if(bits.length) rows.push(`- counted in a typical reference figure: ${bits.join(', ')} — match these counts`);
     if(dn.nesting) rows.push(`- nesting: ${dn.nesting}`);
-  }
-  const bs = j.borderStyle;
-  if(bs && typeof bs === 'object'){
-    const lv = [];
-    if(bs.outerContainer) lv.push(`outer frames ${bs.outerContainer}`);
-    if(bs.innerModule) lv.push(`inner module boxes ${bs.innerModule}`);
-    if(bs.groupFrames && bs.groupFrames !== 'none') lv.push(`grouping frames ${bs.groupFrames}`);
-    if(bs.connectors) lv.push(`connectors ${bs.connectors}`);
-    if(lv.length) rows.push(`- line style by level: ${lv.join(', ')}`);
-    if(bs.convention) rows.push(`- what the line styles mean here: ${bs.convention}`);
-  }
-  const bc = j.boxContent;
-  if(bc && typeof bc === 'object'){
-    const cb = [];
-    if(Array.isArray(bc.kinds) && bc.kinds.length) cb.push(`contents are ${bc.kinds.join('/')}`);
-    if(bc.fillPercent != null) cb.push(`filled to about ${bc.fillPercent}%`);
-    if(bc.emptyBoxes) cb.push(`empty boxes: ${bc.emptyBoxes}`);
-    if(cb.length) rows.push(`- box contents: ${cb.join(', ')}`);
-  }
-  if(j.cornerRadius) rows.push(`- corner treatment: ${j.cornerRadius}`);
-  if(j.arrowStyle) rows.push(`- arrow style: ${j.arrowStyle}`);
-  const cu = j.colorUse;
-  if(cu && typeof cu === 'object'){
-    const u = ['border','fill','accentBorder','background'].filter(k=>cu[k]).map(k=>`${k} ${cu[k]}`);
-    if(u.length) rows.push(`- which colour is used where: ${u.join(', ')}`);
   }
   if(j.elements) rows.push(`- recurring elements: ${j.elements}`);
   if(j.hierarchy) rows.push(`- hierarchy: ${j.hierarchy}`);
@@ -3474,7 +3437,7 @@ function renderEditableExportCard(){
   // would otherwise carry a picture instead of editable text.
   const box=$('#exportRecon'); if(box) box.hidden = state.source !== 'bitmap';
   const status=$('#exportStatus');
-  if(status) status.textContent = (state.source === 'bitmap' && !state.recon) ? tt('export.needRecon') : tt('export.ready');
+  setExportStatus(status, (state.source === 'bitmap' && !state.recon) ? tt('export.needRecon') : tt('export.ready'));
   document.querySelectorAll('#exportActions [data-export]').forEach(btn=>btn.disabled=false);
   syncExportSelection();
 }
@@ -3511,6 +3474,44 @@ function showEditableExportStep(svgOrSource){
   const card=$('#card4'); if(card) card.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
+/* A finished file is offered as a link as well as auto-downloaded: the browser can drop
+   an automatic download without telling anyone, and then a successful export looks like
+   nothing happened. */
+function offerDownload(container, filename, blobOrText, mime){
+  if(!container) return;
+  const blob = (blobOrText instanceof Blob) ? blobOrText : new Blob([blobOrText], {type:mime||'application/octet-stream'});
+  const url = URL.createObjectURL(blob);
+  const size = blob.size < 1024 ? (blob.size + ' B') : (Math.round(blob.size/1024) + ' KB');
+  const row = document.createElement('div');
+  row.className = 'export-dl';
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.textContent = tt('export.getFile', { format: filename });
+  const s = document.createElement('span');
+  s.textContent = tt('export.fileReady', { size: size });
+  row.appendChild(a); row.appendChild(s);
+  const old = container.querySelector('.export-dl');
+  if(old) old.remove();
+  container.appendChild(row);
+}
+
+/* Write the message into a child element rather than into the container's textContent:
+   assigning textContent clears every child, which would wipe the download link that the
+   export puts in the same box. The container's original static text is cleared once, so
+   the seed message from the markup cannot linger beside the live one. */
+function setExportStatus(container, text){
+  if(!container) return;
+  let msg = container.querySelector('.export-msg');
+  if(!msg){
+    msg = document.createElement('div');
+    msg.className = 'export-msg';
+    container.insertBefore(msg, container.firstChild);
+    Array.prototype.slice.call(container.childNodes).forEach(function(node){
+      if(node !== msg && node.nodeType === 3) container.removeChild(node);
+    });
+  }
+  msg.textContent = text;
+}
+
 /* Keep the label visible while work runs, so a slow build never looks like a no-op. */
 function setBusy(btn, busy, label){
   if(!btn) return;
@@ -3538,11 +3539,11 @@ function initEditableExport(){
   actions.addEventListener('click',e=>{
     const btn=e.target.closest('[data-export]'); if(!btn) return; const st=window.__ffExportState;
     if(!st.svg){
-      const s2=$('#exportStatus'); if(s2) s2.textContent=tt('export.waiting');
+      setExportStatus($('#exportStatus'), tt('export.waiting'));
       return;
     }
     st.target=btn.dataset.export; syncExportSelection();
-    const status=$('#exportStatus'); if(status) status.textContent=tt('export.selection',{format:st.target.toUpperCase()});
+    setExportStatus($('#exportStatus'), tt('export.selection',{format:st.target.toUpperCase()}));
   });
   $('#exportConfirm')?.addEventListener('click', async ()=>{
     const st=window.__ffExportState;
@@ -3552,7 +3553,7 @@ function initEditableExport(){
       return;
     }
     const target=st.target, status=$('#exportStatus'), btn=$('#exportConfirm');
-    const setStatus=(k,vars)=>{ if(status) status.textContent=tt(k,vars); };
+    const setStatus=(k,vars)=>{ setExportStatus(status, tt(k,vars)); };
     const scene=st.scene || (st.scene = (function(){ try{ return parseSvgScene(st.svg); }catch(e){ return null; } })());
     if(!scene){
       setStatus('export.failed',{format:target.toUpperCase()});
@@ -3564,17 +3565,24 @@ function initEditableExport(){
     if(status) status.classList.add('export-busy');
     setStatus('export.building', { format: fmtName });
     try{
+      let dlName = 'figure-forge-editable.' + (target==='drawio' ? 'drawio' : target);
+      let dlData = null, dlMime = '';
       if(target==='svg'){
-        downloadText('figure-forge-editable.svg', st.svg, 'image/svg+xml;charset=utf-8');
+        dlData = st.svg; dlMime = 'image/svg+xml;charset=utf-8';
+        downloadText(dlName, st.svg, dlMime);
       } else if(target==='drawio'){
-        downloadText('figure-forge-editable.drawio', sceneToDrawio(scene), 'application/xml;charset=utf-8');
+        dlData = sceneToDrawio(scene); dlMime = 'application/xml;charset=utf-8';
+        downloadText(dlName, dlData, dlMime);
       } else if(target==='pptx'){
-        const blob = await buildPptx(scene);
-        downloadBlob('figure-forge-editable.pptx', blob);
+        dlData = await buildPptx(scene); dlMime = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+        downloadBlob(dlName, dlData);
       } else if(target==='vsdx'){
-        const blob = zipStore(sceneToVsdxFiles(scene, fontChoice));
-        downloadBlob('figure-forge-editable.vsdx', blob);
+        dlData = zipStore(sceneToVsdxFiles(scene, fontChoice)); dlMime = 'application/vnd.ms-visio.drawing';
+        downloadBlob(dlName, dlData);
       }
+      // also offered as a link, so the result is visible even if the automatic
+      // download was blocked or dropped
+      offerDownload(status, dlName, dlData, dlMime);
       setStatus('export.downloaded',{format:target==='drawio'?'draw.io':target.toUpperCase()});
     }catch(err){
       console.warn('editable export failed', err);
@@ -3627,8 +3635,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     + `Draw MANY borders: not one outline per panel, but a border around every module box inside it, `
     + `plus arrows and dashed grouping frames. Vary the border style — SOLID for concrete modules, `
     + `arrows and data-flow steps, DASHED for optional, repeated, conceptual or grouped blocks — so the `
-    + `levels are obvious at a glance. If the style guide above states which line style each level uses, `
-    + `follow it exactly: an outer grouping frame may be dashed while the module boxes inside it are solid. `
+    + `levels are obvious at a glance. `
     + `Arrows showing the data flow between components, and small sub-diagrams or result thumbnails `
     + `inside the panels. `
     + `Line weight and line style carry meaning here: draw each panel's outer container border clearly `

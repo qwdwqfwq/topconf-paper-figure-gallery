@@ -241,7 +241,9 @@ en:{
  "recon.btn":"Rebuild into editable content",
  "export.needRecon":"Exported as a picture for now. Use the rebuild button above to turn it into editable text.",
  "export.building":"Building {format}...",
- "export.failed":"{format} export failed in this browser. SVG and draw.io need no library; PPTX needs vendor/pptxgen.bundle.js to be reachable.",},
+ "export.failed":"{format} export failed in this browser. SVG and draw.io need no library; PPTX needs vendor/pptxgen.bundle.js to be reachable.",
+ "export.getFile":"Download {format}",
+ "export.fileReady":"{size} ready — click if it did not start",},
 zh:{
  "sub":"上传你的论文内容 → 从 {n} 张顶会主图中检索最贴合的参考 → 生成你的主图初稿",
  "pill":"浏览器本地运行 · PDF 仅在你点击模型解析时发送给步骤一配置的模型",
@@ -482,5 +484,7 @@ zh:{
  "recon.btn":"重建为可编辑内容",
  "export.needRecon":"当前导出为图片。点上方按钮可转为可编辑文字。",
  "export.building":"正在生成 {format}…",
- "export.failed":"{format} 导出失败（浏览器内）。SVG 与 draw.io 不需要任何库；PPTX 需要 vendor/pptxgen.bundle.js 可访问。",}
+ "export.failed":"{format} 导出失败（浏览器内）。SVG 与 draw.io 不需要任何库；PPTX 需要 vendor/pptxgen.bundle.js 可访问。",
+ "export.getFile":"下载 {format}",
+ "export.fileReady":"{size} 已生成——若未自动下载请点这里",}
 });
