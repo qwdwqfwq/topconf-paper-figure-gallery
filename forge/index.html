@@ -1742,9 +1742,9 @@ ${content}
 
 ${refLines}
 
-请输出一张完整、可编辑的 SVG（viewBox 1600x900，横向，白色背景；顶部有一行醒目的粗体标题；主色一个、强调色一个；方块/箭头/文字标签对齐；面板外框线明显粗于内部模块框，并用虚线区分可选/概念/重复的块；不得出现 lorem ipsum 或占位数字）。
+请输出一张完整、可编辑的 SVG（viewBox 1600x900，横向，白色背景；顶部有一行醒目的粗体标题；建立 2-4 个层次分明的配色（主色 + 强调色 + 中性色，可用于区分不同面板）；方块/箭头/文字标签对齐；面板外框线明显粗于内部模块框，并用虚线区分可选/概念/重复的块；不得出现 lorem ipsum 或占位数字）。
 若上面的设计契约给出了面板坐标与字号，请直接按其数值排版，不要自行改变比例。
-只画一个清晰的主面板：聚焦“我们的方法”核心 pipeline（标题 + 若干模块方块 + 箭头表示数据流），不要画 baseline 对比、不要多个子面板、不要重复图形；把重复样式放进 <defs> 复用，总代码尽量短，务必在一次输出内以 </svg> 正常结尾。
+以主面板为中心呈现“我们的方法”核心 pipeline（标题 + 多个模块方块 + 箭头表示数据流），并允许 2-3 个子面板或局部放大框（例如输入样例、关键模块放大、结果对比小图），让整张图的信息密度接近一张真正的论文 Figure 1。把重复样式放进 <defs> 复用；为控制长度，元素总量保持合理，务必在一次输出内以 </svg> 正常结尾。
 布局硬性要求（会自动检查）：所有可见文字必须完全落在 x=0..1600、y=0..900 之内；任何标签的文字宽度不得超过它所处方块的宽度（放不下就缩短文字、减小字号或加宽方块）；不同标签的文字包围盒不得相互重叠。
 硬性要求：SVG 中所有可见文字（面板标题、模块名、坐标轴、图例、注释）必须全部使用英文短语，严禁出现任何中文字符；数字与标签需与论文内容一致。
 
@@ -1757,7 +1757,7 @@ ${refLines}
 - 输出前检查所有文字与图形都在画布内，并以 </svg> 正常结尾。
 Output a complete SVG. ALL visible text (panel headers, module names, axes, legends, annotations) MUST be in English — no Chinese characters anywhere. Output only the <svg> code, no explanation.`;
 }
-const SVG_SYS = 'You are a world-class scientific figure designer. Based on the user paper content and the attached reference figures, output exactly ONE complete, self-contained SVG. White background, flat modern design, clear panels, arrows, short accurate labels taken from the paper. Preserve editable export semantics: give every visible element a stable id plus data-role and data-editable="true"; keep labels as SVG <text>, use basic shapes and paths, avoid masks/filters/outlined text, use viewBox="0 0 1600 900", and never flatten the whole figure into one bitmap. Output SVG markup only, no explanations or code fences.';
+const SVG_SYS = 'You are a world-class scientific figure designer. Based on the user paper content and the attached reference figures, output exactly ONE complete, self-contained SVG. White background, clean modern vector design: a prominent bold title line across the top, a DENSE multi-panel composition of 3-5 boxed panels side by side, each with its own bold header and several labelled module boxes. Draw each panel outer container border clearly thicker than the module boxes inside it, and vary the strokes — dashed for optional or repeated blocks, solid for concrete modules — so groups stay distinct. Labels are short, accurate phrases taken from the paper. Preserve editable export semantics: give every visible element a stable id plus data-role and data-editable="true"; keep labels as SVG <text>, use basic shapes and paths, avoid masks/filters/outlined text, use viewBox="0 0 1600 900", and never flatten the whole figure into one bitmap. Output SVG markup only, no explanations or code fences.';
 
 /* ---------------- HTTP helpers ---------------- */
 function showErr(msg){
