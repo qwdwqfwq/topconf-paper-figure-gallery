@@ -790,6 +790,11 @@ async function search(){
   const scored = [];
   for(let i=0;i<data.N;i++){
     const f = data.figs[i];
+    // Defensive: ids.json, bm25.docs and the embedding matrices must all stay the
+    // same length as figures.json. If they ever drift, one missing record used to
+    // throw on the next line and abort the whole retrieval, leaving an empty grid.
+    // Skipping the row keeps the rest of the search usable instead.
+    if(!f) continue;
     if(pv!=='all' && f.venue!==pv) continue;
     if(yr!=='all' && f.year!=+yr) continue;
     if(tt!=='all' && !matchTier(f,tt)) continue;
