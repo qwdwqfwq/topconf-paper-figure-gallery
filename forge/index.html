@@ -2711,12 +2711,84 @@ function sceneToVsdxFiles(scene, font){
   const PX_PER_IN = c.width/10;                    // keep the same 10in width as PPTX
   const inches = v => (v/PX_PER_IN);
   const shapes = [];
+  const media = [];                                // {name, bytes, contentType, ext}
+  const mediaRels = [];                            // relationship entries for page1
+  let mediaSeq = 0;
+
+  function dataUriParts(uri){
+    const m = /^data:(image\/(png|jpeg|jpg|gif|webp));base64,([A-Za-z0-9+/=\s]+)$/.exec(String(uri||'').trim());
+    if(!m) return null;
+    const mime = m[1].toLowerCase();
+    const ext = mime === 'image/jpeg' || mime === 'image/jpg' ? 'jpeg' : mime.split('/')[1];
+    let bin;
+    try{ bin = atob(m[3].replace(/\s+/g,'')); }
+    catch(_){ return null; }
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    return { bytes, contentType:mime, ext };
+  }
+
+  /* Visio stores a bitmap shape as Type="Foreign" with a rectangle geometry, the
+     Img* cells, and a <ForeignData> that points at a media part through a page
+     relationship. This mirrors the structure Visio itself writes. */
+  function imageShape(n, ID, parts, relId){
+    const w = Math.max(n.w, 1), h = Math.max(n.h, 1);
+    const iw = inches(w), ih = inches(h);
+    return '<Shape ID="'+ID+'" Type="Foreign" LineStyle="0" FillStyle="0" TextStyle="0">'+
+      '<Cell N="PinX" V="'+inches(n.x + w/2).toFixed(4)+'"/>'+
+      '<Cell N="PinY" V="'+inches(c.height - (n.y + h/2)).toFixed(4)+'"/>'+
+      '<Cell N="Width" V="'+iw.toFixed(4)+'" U="IN"/><Cell N="Height" V="'+ih.toFixed(4)+'" U="IN"/>'+
+      '<Cell N="LocPinX" V="'+(iw/2).toFixed(4)+'" U="IN" F="Width*0.5"/>'+
+      '<Cell N="LocPinY" V="'+(ih/2).toFixed(4)+'" U="IN" F="Height*0.5"/>'+
+      '<Cell N="Angle" V="0"/><Cell N="FlipX" V="0"/><Cell N="FlipY" V="0"/><Cell N="ResizeMode" V="0"/>'+
+      '<Cell N="ImgOffsetX" V="0" U="IN" F="ImgWidth*0"/><Cell N="ImgOffsetY" V="0" U="IN" F="ImgHeight*0"/>'+
+      '<Cell N="ImgWidth" V="'+iw.toFixed(4)+'" U="IN" F="Width*1"/>'+
+      '<Cell N="ImgHeight" V="'+ih.toFixed(4)+'" U="IN" F="Height*1"/>'+
+      '<Cell N="ClippingPath" V="" F="&quot;&quot;" E="#N/A"/>'+
+      '<Cell N="TxtPinX" V="'+(iw/2).toFixed(4)+'" U="IN" F="Width*0.5"/>'+
+      '<Cell N="TxtPinY" V="0" U="IN" F="Height*0"/>'+
+      '<Cell N="TxtWidth" V="'+iw.toFixed(4)+'" U="IN" F="Width*1"/>'+
+      '<Cell N="TxtHeight" V="0" U="IN" F="Height*0"/>'+
+      '<Cell N="TxtLocPinX" V="'+(iw/2).toFixed(4)+'" U="IN" F="TxtWidth*0.5"/>'+
+      '<Cell N="TxtLocPinY" V="0" U="IN" F="TxtHeight*0.5"/>'+
+      '<Cell N="TxtAngle" V="0"/><Cell N="VerticalAlign" V="0"/><Cell N="ShdwPattern" V="0"/>'+
+      '<Section N="Geometry" IX="0">'+
+        '<Cell N="NoFill" V="0"/><Cell N="NoLine" V="0"/><Cell N="NoShow" V="0"/>'+
+        '<Cell N="NoSnap" V="0"/><Cell N="NoQuickDrag" V="0"/>'+
+        '<Row T="RelMoveTo" IX="1"><Cell N="X" V="0"/><Cell N="Y" V="0"/></Row>'+
+        '<Row T="RelLineTo" IX="2"><Cell N="X" V="1"/><Cell N="Y" V="0"/></Row>'+
+        '<Row T="RelLineTo" IX="3"><Cell N="X" V="1"/><Cell N="Y" V="1"/></Row>'+
+        '<Row T="RelLineTo" IX="4"><Cell N="X" V="0"/><Cell N="Y" V="1"/></Row>'+
+        '<Row T="RelLineTo" IX="5"><Cell N="X" V="0"/><Cell N="Y" V="0"/></Row>'+
+      '</Section>'+
+      '<ForeignData ForeignType="Bitmap" CompressionType="'+parts.ext.toUpperCase()+'"><Rel r:id="'+relId+'"/></ForeignData>'+
+      '</Shape>';
+  }
 
   scene.nodes.forEach(function(n, idx){
     const ID = idx+1;
     const st = { fill:(n.fill||'none'), line:(n.stroke||'none'), weight:(n.strokeWidth||0) };
     let xml = '';
-    if(n.type==='rect' || n.type==='ellipse'){
+    if(n.type==='image'){
+      const parts = dataUriParts(n.href);
+      if(parts){
+        mediaSeq++;
+        const name = 'image' + mediaSeq + '.' + parts.ext;
+        const relId = 'rIdImg' + mediaSeq;
+        media.push({ name:'visio/media/'+name, bytes:parts.bytes });
+        mediaRels.push({ id:relId, target:'../media/'+name });
+        xml = imageShape(n, ID, parts, relId);
+      } else {
+        // A reference we cannot inline (a remote URL or a path the page cannot read):
+        // keep the rectangle correct instead of pretending an image is there.
+        xml = '<Shape ID="'+ID+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'+
+              '<Cell N="PinX" V="'+inches(n.x+n.w/2).toFixed(4)+'"/><Cell N="PinY" V="'+inches(c.height-(n.y+n.h/2)).toFixed(4)+'"/>'+
+              '<Cell N="Width" V="'+inches(Math.max(n.w,4)).toFixed(4)+'"/><Cell N="Height" V="'+inches(Math.max(n.h,4)).toFixed(4)+'"/>'+
+              '<Cell N="FillForegnd" V="#F3F4F6"/><Cell N="FillPattern" V="1"/>'+
+              '<Cell N="LineColor" V="#9CA3AF"/><Cell N="LinePattern" V="2"/><Cell N="LineWeight" V="0.5"/>'+
+              '<Cell N="ShapeType" V="Rectangle"/></Shape>';
+      }
+    } else if(n.type==='rect' || n.type==='ellipse'){
       const master = n.type==='ellipse' ? 'Ellipse' : 'Rectangle';
       xml = '<Shape ID="'+ID+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'+
             '<Cell N="PinX" V="'+inches(n.x+n.w/2).toFixed(4)+'"/><Cell N="PinY" V="'+inches(c.height-(n.y+n.h/2)).toFixed(4)+'"/>'+
@@ -2780,32 +2852,29 @@ function sceneToVsdxFiles(scene, font){
     return parts.join('');
   }
 
-  const pageXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
-    '<VisioDocument xmlns="http://schemas.microsoft.com/office/visio/2012/main" xml:space="preserve">'+
-    '<DocumentSettings TopPage="0" DefaultTextStyle="0" DefaultLineStyle="0" DefaultFillStyle="0"/>'+
-    '<Colors/><FaceNames/><StyleSheets/>'+
-    '<DocumentSheet NameU="TheDoc" IsCustomNameU="1" Name="TheDoc" IsCustomName="1">'+
-      '<PageProps><PageWidth>'+inches(c.width).toFixed(4)+'</PageWidth><PageHeight>'+inches(c.height).toFixed(4)+'</PageHeight>'+
-      '<ShdwOffsetX>0.1181</ShdwOffsetX><ShdwOffsetY>-0.1181</ShdwOffsetY><PageScale>1</PageScale><DrawingScale>1</DrawingScale>'+
-      '<DrawingSizeType>3</DrawingSizeType><DrawingScaleType>0</DrawingScaleType><InhibitSnap>0</InhibitSnap>'+
-      '<PageLockReplace>0</PageLockReplace><PageLockDuplicate>0</PageLockDuplicate><UIVisibility>0</UIVisibility>'+
-      '<ShdwType>0</ShdwType><ShdwObliqueAngle>0</ShdwObliqueAngle><ShdwScaleFactor>1</ShdwScaleFactor></PageProps>'+
-    '</DocumentSheet>'+
-    '<Masters/>'+
-    '<Pages><Page ID="0" NameU="FigureForge" Name="FigureForge" ViewScale="-1" ViewCenterX="'+inches(c.width/2).toFixed(4)+'" ViewCenterY="'+inches(c.height/2).toFixed(4)+'">'+
-      '<PageSheet LineStyle="0" FillStyle="0" TextStyle="0">'+
-        '<Cell N="PageWidth" V="'+inches(c.width).toFixed(4)+'"/><Cell N="PageHeight" V="'+inches(c.height).toFixed(4)+'"/>'+
-        '<Cell N="PageScale" V="1"/><Cell N="DrawingScale" V="1"/>'+
-      '</PageSheet>'+
-      '<Shapes>'+shapes.join('')+'</Shapes>'+
-    '</Page></VisioDocument>';
+  const pageWidth = inches(c.width).toFixed(4), pageHeight = inches(c.height).toFixed(4);
 
-  // Visio requires the shapes part name to match, and a parts list plus a
-  // content-types map. Names are fixed so only text content varies.
+  // The page part is a PageContents document holding the shapes. The drawing-level
+  // VisioDocument, its page list and the page properties live in the other parts.
+  const pageXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<PageContents xmlns="http://schemas.microsoft.com/office/visio/2012/main" '+
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xml:space="preserve">'+
+    '<Shapes>'+shapes.join('')+'</Shapes>'+
+    '</PageContents>';
+
+  const pageRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+    mediaRels.map(r=>'<Relationship Id="'+r.id+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="'+r.target+'"/>').join('')+
+    '</Relationships>';
+
   const contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
     '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
     '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
     '<Default Extension="xml" ContentType="application/xml"/>'+
+    (media.some(m=>/\.png$/i.test(m.name)) ? '<Default Extension="png" ContentType="image/png"/>' : '')+
+    (media.some(m=>/\.jpe?g$/i.test(m.name)) ? '<Default Extension="jpeg" ContentType="image/jpeg"/>' : '')+
+    (media.some(m=>/\.gif$/i.test(m.name)) ? '<Default Extension="gif" ContentType="image/gif"/>' : '')+
+    (media.some(m=>/\.webp$/i.test(m.name)) ? '<Default Extension="webp" ContentType="image/webp"/>' : '')+
     '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>'+
     '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'+
     '<Override PartName="/visio/document.xml" ContentType="application/vnd.ms-visio.drawing.main+xml"/>'+
@@ -2834,13 +2903,14 @@ function sceneToVsdxFiles(scene, font){
     '</VisioDocument>';
 
   const pagesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
-    '<Pages xmlns="http://schemas.microsoft.com/office/visio/2012/main" xml:space="preserve">'+
-    '<Page ID="0" NameU="FigureForge" Name="FigureForge" ViewScale="-1" ViewCenterX="'+inches(c.width/2).toFixed(4)+'" ViewCenterY="'+inches(c.height/2).toFixed(4)+'">'+
+    '<Pages xmlns="http://schemas.microsoft.com/office/visio/2012/main" '+
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xml:space="preserve">'+
+    '<Page ID="0" NameU="FigureForge" Name="FigureForge" ViewScale="-1" ViewCenterX="'+(c.width/2/PX_PER_IN).toFixed(4)+'" ViewCenterY="'+(c.height/2/PX_PER_IN).toFixed(4)+'">'+
     '<PageSheet LineStyle="0" FillStyle="0" TextStyle="0">'+
-      '<Cell N="PageWidth" V="'+inches(c.width).toFixed(4)+'"/><Cell N="PageHeight" V="'+inches(c.height).toFixed(4)+'"/>'+
+      '<Cell N="PageWidth" V="'+pageWidth+'" U="IN"/><Cell N="PageHeight" V="'+pageHeight+'" U="IN"/>'+
       '<Cell N="PageScale" V="1"/><Cell N="DrawingScale" V="1"/>'+
     '</PageSheet>'+
-    '<Rel r:id="rId1" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"/>'+
+    '<Rel r:id="rId1"/>'+
     '</Page></Pages>';
 
   const pagesRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
@@ -2873,8 +2943,9 @@ function sceneToVsdxFiles(scene, font){
     { name:'visio/pages/pages.xml', data:pagesXml },
     { name:'visio/pages/_rels/pages.xml.rels', data:pagesRels },
     { name:'visio/pages/page1.xml', data:pageXml },
+    { name:'visio/pages/_rels/page1.xml.rels', data:pageRels },
     { name:'visio/windows.xml', data:windowsXml },
-  ];
+  ].concat(media.map(m=>({ name:m.name, data:m.bytes })));
 }
 
 /* ---------- zip (stored, no compression) ----------
