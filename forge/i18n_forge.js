@@ -228,7 +228,6 @@ en:{
  "pass.warn2":"Direct mode works best with 2-4 picks; {n} selected — layouts may conflict.",
  "modelLabel.svg":"Model (chat / vision)", "modelLabel.image":"Model (image)",
 
- "recon.toggle":"Base image without text (recommended: labels cannot come out garbled, and step 4 becomes editable)",
  "recon.reading":"Finding the label areas in the base image...",
  "recon.labelling":"Naming {n} areas from your paper...",
  "recon.done":"Rebuilt: {n} real text labels placed.",
@@ -468,7 +467,6 @@ zh:{
  "pass.warn2":"直接生成建议精选 2-4 张（当前选了 {n} 张），版式可能互相干扰。",
  "modelLabel.svg":"模型（对话 / 视觉模型）", "modelLabel.image":"模型（图像模型）",
 
- "recon.toggle":"底图不写文字（推荐：标签不会乱码，第四步直接可编辑）",
  "recon.reading":"正在从底图中找出标签框…",
  "recon.labelling":"正在根据论文内容为 {n} 个区域命名…",
  "recon.done":"已重建：放置了 {n} 个真实文字标签。",

@@ -301,8 +301,6 @@
     .export-font-row select{min-width:220px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);padding:9px 12px;font:inherit}
     .export-recon{margin-top:12px;border:1px dashed #c7d2fe;border-radius:11px;padding:11px 12px;background:#f8faff}
     .recon-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:9px}
-    .recon-check{display:flex;align-items:center;gap:9px;font-size:12.5px;color:#3730a3;line-height:1.5;cursor:pointer}
-    .recon-check input[type=checkbox]{width:16px;height:16px;accent-color:#4f46e5;flex:0 0 auto}
     .recon-status{color:var(--muted);font-size:12px;line-height:1.5}
     .export-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}
     .export-actions button{min-height:52px;padding:10px 12px;border:1px solid #dfe3f5;border-radius:12px;background:#fff;color:var(--ink);font:inherit;font-weight:700;cursor:pointer;transition:.16s ease}
@@ -527,12 +525,6 @@
     <section class="box b-slate">
       <h4><span class="bi" aria-hidden="true">✏️</span><span data-i18n="export.title"></span></h4>
       <div class="export-recon" id="exportRecon" hidden>
-        <div class="recon-row">
-          <label class="recon-check">
-            <input type="checkbox" id="reconToggle" checked>
-            <span data-i18n="recon.toggle"></span>
-          </label>
-        </div>
         <div class="recon-row">
           <button type="button" class="btn-primary" id="reconBtn" data-i18n="recon.btn"></button>
           <span class="recon-status" id="reconStatus"></span>
@@ -3511,26 +3503,17 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     : '';
   const imgPrompt = `${guide}`
     + `${tg.img}. Publication-quality Figure 1 for a top-tier ML paper. `
+    + `Include a prominent bold TITLE line running across the top of the figure, above all panels. `
     + `Below it, a DENSE information-rich multi-panel composition of 3-5 boxed panels side by side, `
-    + `each panel with its own outer container border and several module boxes inside it. `
-    + `Line weight and line style carry meaning: draw each container border clearly THICKER than the `
-    + `module boxes inside it, and vary the strokes — dashed for optional, conceptual or repeated `
-    + `blocks, solid for concrete modules — so groups stay distinct. `
-    + `LAY OUT THE FIGURE IN LAYERS. Each panel keeps a completely blank horizontal band across its `
-    + `top, roughly 12% of the panel height, reserved for the panel title. Inside each panel, draw `
-    + `module boxes packed generously with content: every box must hold a VISUAL — a small `
-    + `illustration, a photo-like patch, a diagram, a chart or plot thumbnail, a coordinate map, a `
-    + `matrix, or a mathematical formula. Where a formula appears it must be a real display formula `
-    + `taken from the paper content below. Directly below or beside each module box, leave a narrow `
-    + `blank strip, about 30-40 px tall, reserved for that box's label. Arrows connect the boxes to `
-    + `show data flow. Fill the content areas densely; the only empty space is the reserved title `
-    + `bands and label strips. `
-    + `CRITICAL — DO NOT DRAW ANY TEXT: no letters, no words, no digits, no panel titles, no captions, `
-    + `no axis numbers, no labels of any kind, in any language. The reserved bands and strips must `
-    + `stay completely blank so text can be placed there later. `
+    + `each panel carrying its own bold header, several labelled module boxes, arrows showing the data `
+    + `flow between components, and small sub-diagrams or result thumbnails inside the panels. `
+    + `Line weight and line style carry meaning here: draw each panel's outer container border clearly `
+    + `THICKER than the module boxes inside it, and vary the strokes — dashed borders for optional, `
+    + `conceptual or repeated blocks, solid borders for concrete modules — so groups stay distinct. `
     + `Faithfully FUSE the panel division, colour palette, box shapes, border weights and arrow style of `
-    + `the reference figures: mirror their density and element count. White background, clean flat `
-    + `vector illustration, crisp aligned shapes. Paper content: ${content.slice(0,2000)}`;
+    + `the reference figures: mirror their density and element count. Fill the canvas with meaningful `
+    + `structure — rich and detailed, never sparse. White background, clean flat vector illustration, `
+    + `crisp aligned shapes, clearly readable short English labels. Paper content: ${content.slice(0,2000)}`;
   const body = {model, prompt:imgPrompt};
   if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
   else if(p==='sf'){ body.image_size='1024x1024'; body.batch_size=1; }
@@ -3579,12 +3562,6 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     <span class="hint">${usedRefs?tt('img.hintRef',{n:useIds.length}):tt('img.hint')}</span></div>`;
   st.source = 'bitmap'; st.bitmap = exportImgSrc; st.recon = null;
   showEditableExportStep({ svg: rasterToExportSvg(exportImgSrc), source:'bitmap', bitmap: exportImgSrc });
-  // When the base image was requested without text, carry on into the rebuild: the
-  // labels then become real text, so step 4 exports genuinely editable content rather
-  // than a picture. The switch is on by default and visible, so the extra model call
-  // is never a surprise.
-  const reconOn = $('#reconToggle');
-  if(!reconOn || reconOn.checked){ runReconstruction(); }
   $('#dlImg').onclick = async ()=>{
     try{
       const rr = await fetch(imgSrc); const blob = await rr.blob();
