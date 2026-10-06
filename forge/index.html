@@ -3770,6 +3770,14 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     + `Do not leave a module box empty: every one holds a visual or a formula, never text alone. `
     + `Keep the geometry square and orderly: axis-aligned rectangles with at most a slight corner `
     + `radius, even gaps between boxes, and crisp straight arrows. `
+    + `USE COLOUR TO SEPARATE GROUPS — do not paint everything one tint. `
+    + `Give each panel a DIFFERENT pale background tint, so the panels read apart at a glance. `
+    + `Within a panel, give the module boxes fills that differ from each other and from the panel `
+    + `behind them, drawn from the palette above; do not repeat a single fill for every box. `
+    + `Let a saturated accent colour mark the one or two most important blocks, and keep grouping `
+    + `frames lighter or neutral so the nested levels stay readable. Aim for the same colour variety `
+    + `as the reference figures, where a reader can tell the panels and the individual modules apart `
+    + `by fill alone. `
     + `Draw MANY borders: not one outline per panel, but a border around every module box inside it, `
     + `plus arrows and dashed grouping frames. Vary the border style — SOLID for concrete modules, `
     + `arrows and data-flow steps, DASHED for optional, repeated, conceptual or grouped blocks — so the `
@@ -3786,8 +3794,10 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     + `FINAL CHECK before you finish. Walk each panel and ask: does its interior have white space bigger `
     + `than one module box? If yes, subdivide it and add module boxes with visuals. Then check that every `
     + `module box holds an illustration, a chart, a matrix, a diagram or a formula and not only a label, `
-    + `and that at least one dashed grouping frame nests a cluster of boxes inside each panel. Keep adding `
-    + `until the figure is as full and as layered as the reference figures. `
+    + `and that at least one dashed grouping frame nests a cluster of boxes inside each panel. Finally `
+    + `check the colour: if two panels share the same background tint, or every box in a panel has the `
+    + `same fill, change them so each group is told apart by colour. Keep adding and adjusting until the `
+    + `figure is as full, as layered and as colour-varied as the reference figures. `
     + `Paper content: ${content.slice(0,2000)}`;
   const body = {model, prompt:imgPrompt};
   if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
