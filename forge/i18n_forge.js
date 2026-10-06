@@ -207,7 +207,7 @@ en:{
  "export.downloaded":"{format} download started.",
  "export.apiNeeded":"{format} export service is not connected yet.",
  "export.working":"Building the editable file\u2026",
- "export.failed":"{format} export failed in this browser. SVG and draw.io need no library; PPTX needs vendor/pptxgen.min.js to be reachable.",
+ "export.failed":"{format} 导出失败（浏览器内）。SVG 与 draw.io 不需要任何库；PPTX 需要 vendor/pptxgen.bundle.js 可访问。",
  "ref.note":"Reference figure {i}: {t} ({v} {y}, {p}) — learn only its layout structure, panel division and colour style; replace all content with my paper.",
  "svg.trunc":"⚠ The output was too long and truncated; closure was auto-completed — check the end or simplify the request and retry.",
  "audit.clean":" ✓ Layout check: no overflowing or overlapping labels found.",
@@ -239,7 +239,9 @@ en:{
  "recon.failed":"Rebuild failed. The bitmap itself is still downloadable.",
  "recon.failedDetail":"Rebuild failed: {msg}",
  "recon.btn":"Rebuild into editable content",
- "export.needRecon":"Exported as a picture for now. Use the rebuild button above to turn it into editable text.",},
+ "export.needRecon":"Exported as a picture for now. Use the rebuild button above to turn it into editable text.",
+ "export.building":"Building {format}...",
+ "export.failed":"{format} export failed in this browser. SVG and draw.io need no library; PPTX needs vendor/pptxgen.bundle.js to be reachable.",},
 zh:{
  "sub":"上传你的论文内容 → 从 {n} 张顶会主图中检索最贴合的参考 → 生成你的主图初稿",
  "pill":"浏览器本地运行 · PDF 仅在你点击模型解析时发送给步骤一配置的模型",
@@ -446,7 +448,7 @@ zh:{
  "export.downloaded":"{format} 文件已开始下载。",
  "export.apiNeeded":"{format} 导出服务尚未接入。",
  "export.working":"正在生成可编辑文件…",
- "export.failed":"{format} 导出失败（浏览器内）。SVG 与 draw.io 不需任何库；PPTX 需要 vendor/pptxgen.min.js 可访问。",
+ "export.failed":"{format} 导出失败（浏览器内）。SVG 与 draw.io 不需要任何库；PPTX 需要 vendor/pptxgen.bundle.js 可访问。",
  "ref.note":"参考图 {i}：{t}（{v} {y}，{p}）——只学习它的版面结构、面板划分与配色风格，内容全部替换为我的论文。",
  "svg.trunc":"⚠ 本次输出过长被截断、已自动补全闭合，请检查末尾或精简需求后重试。",
  "audit.clean":" ✓ 版式检查：未发现文字越界或重叠。",
@@ -478,5 +480,7 @@ zh:{
  "recon.failed":"重建失败。位图本身仍然可以下载。",
  "recon.failedDetail":"重建失败：{msg}",
  "recon.btn":"重建为可编辑内容",
- "export.needRecon":"当前导出为图片。点上方按钮可转为可编辑文字。",}
+ "export.needRecon":"当前导出为图片。点上方按钮可转为可编辑文字。",
+ "export.building":"正在生成 {format}…",
+ "export.failed":"{format} 导出失败（浏览器内）。SVG 与 draw.io 不需要任何库；PPTX 需要 vendor/pptxgen.bundle.js 可访问。",}
 });

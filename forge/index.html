@@ -310,7 +310,10 @@
     .export-actions button strong{display:block;font-size:14px}
     .export-actions button small{display:block;margin-top:3px;color:var(--muted);font-size:11px;font-weight:500}
     .export-confirm-row{display:flex;justify-content:flex-end;margin-top:12px}
-    .export-confirm{min-width:150px}
+    .export-confirm{min-width:150px;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+    .btn-spin{width:14px;height:14px;flex:0 0 auto;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;animation:rot .7s linear infinite}
+    .export-confirm:disabled{cursor:progress}
+    .export-busy{background:#eef2ff;color:#3730a3}
     .export-status{margin-top:11px;border-radius:9px;padding:9px 11px;background:#f5f7fb;color:var(--muted);font-size:12px;line-height:1.5}
     @media(max-width:760px){.export-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
@@ -3432,6 +3435,28 @@ function showEditableExportStep(svg){
   const card=$('#card4'); if(card) card.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
+/* Keep the label visible while work runs, so a slow build never looks like a no-op. */
+function setBusy(btn, busy, label){
+  if(!btn) return;
+  btn.disabled = !!busy;
+  btn.setAttribute('aria-busy', busy ? 'true' : 'false');
+  btn.classList.toggle('is-busy', !!busy);
+  if(busy){
+    if(btn.dataset.idle === undefined) btn.dataset.idle = btn.textContent;
+    btn.textContent = '';
+    const sp = document.createElement('span');
+    sp.className = 'btn-spin';
+    sp.setAttribute('aria-hidden', 'true');
+    btn.appendChild(sp);
+    const tx = document.createElement('span');
+    tx.textContent = label || tt('export.working');
+    btn.appendChild(tx);
+  }else{
+    btn.classList.remove('is-busy');
+    if(btn.dataset.idle !== undefined){ btn.textContent = btn.dataset.idle; delete btn.dataset.idle; }
+  }
+}
+
 function initEditableExport(){
   const actions=$('#exportActions'); if(!actions || actions.dataset.bound) return; actions.dataset.bound='1';
   actions.addEventListener('click',e=>{
@@ -3449,9 +3474,10 @@ function initEditableExport(){
       return;
     }
     const fontChoice = st.font && st.font!=='original' ? st.font : 'Arial';
-    const prevLabel = btn ? btn.textContent : '';
-    if(btn) btn.disabled=true;
-    setStatus('export.working');
+    const fmtName = (target==='drawio') ? 'draw.io' : target.toUpperCase();
+    setBusy(btn, true, tt('export.building', { format: fmtName }));
+    if(status) status.classList.add('export-busy');
+    setStatus('export.building', { format: fmtName });
     try{
       if(target==='svg'){
         downloadText('figure-forge-editable.svg', st.svg, 'image/svg+xml;charset=utf-8');
@@ -3469,7 +3495,8 @@ function initEditableExport(){
       console.warn('editable export failed', err);
       setStatus('export.failed',{format:target==='drawio'?'draw.io':target.toUpperCase()});
     }finally{
-      if(btn){ btn.disabled=false; if(prevLabel) btn.textContent=prevLabel; }
+      setBusy(btn, false);
+      if(status) status.classList.remove('export-busy');
     }
   });
   $('#exportFont')?.addEventListener('change',e=>applyExportFont(e.target.value));
