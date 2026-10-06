@@ -243,7 +243,11 @@ en:{
  "export.building":"Building {format}...",
  "export.failed":"{format} export failed in this browser. SVG and draw.io need no library; PPTX needs vendor/pptxgen.bundle.js to be reachable.",
  "export.getFile":"Download {format}",
- "export.fileReady":"{size} ready — click if it did not start",},
+ "export.fileReady":"{size} ready — click if it did not start",
+ "export.stage.scene":"reading the figure",
+ "export.stage.build":"building the format",
+ "export.stage.pack":"packing the file",
+ "export.finished":"{format} is ready - download it below.",},
 zh:{
  "sub":"上传你的论文内容 → 从 {n} 张顶会主图中检索最贴合的参考 → 生成你的主图初稿",
  "pill":"浏览器本地运行 · PDF 仅在你点击模型解析时发送给步骤一配置的模型",
@@ -486,5 +490,9 @@ zh:{
  "export.building":"正在生成 {format}…",
  "export.failed":"{format} 导出失败（浏览器内）。SVG 与 draw.io 不需要任何库；PPTX 需要 vendor/pptxgen.bundle.js 可访问。",
  "export.getFile":"下载 {format}",
- "export.fileReady":"{size} 已生成——若未自动下载请点这里",}
+ "export.fileReady":"{size} 已生成——若未自动下载请点这里",
+ "export.stage.scene":"正在解析图形",
+ "export.stage.build":"正在生成格式",
+ "export.stage.pack":"正在打包文件",
+ "export.finished":"{format} 已生成——请在下方下载。",}
 });

@@ -319,6 +319,10 @@
     .export-dl a{font-weight:700;color:#3730a3;text-decoration:underline;font-size:13px}
     .export-dl span{color:#4338ca;font-size:12px}
     .export-msg{line-height:1.5}
+    .export-progress{margin-top:10px}
+    .export-progress-label{font-size:12px;color:#3730a3;margin-bottom:5px}
+    .export-progress-track{height:8px;border-radius:999px;background:#e0e7ff;overflow:hidden}
+    .export-progress-fill{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#6366f1,#4f46e5);transition:width .16s ease}
     @media(max-width:760px){.export-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
@@ -3494,6 +3498,29 @@ function offerDownload(container, filename, blobOrText, mime){
   container.appendChild(row);
 }
 
+/* Some strings must never degrade into a raw key. If the dictionary is a cached older
+   copy it can be missing a key entirely, and tt() then returns the key itself, so the
+   user reads "export.getFile". These fallbacks keep the export usable in that case. */
+const EXPORT_TEXT = {
+  en: { 'export.getFile':'Download {format}', 'export.fileReady':'{size} ready - click if it did not start',
+        'export.building':'Building {format}...', 'export.ready':'Choose a format, then click "Confirm and export".',
+        'export.needRecon':'Exported as a picture for now. Use the rebuild button above to turn it into editable text.' },
+  zh: { 'export.getFile':'下载 {format}', 'export.fileReady':'{size} 已生成——若未自动下载请点这里',
+        'export.building':'正在生成 {format}…', 'export.ready':'请选择格式，然后点击“确认设置并导出”。',
+        'export.needRecon':'当前导出为图片。点上方按钮可转为可编辑文字。' }
+};
+function exportText(key, vars){
+  let s = tt(key, vars);
+  // tt() returns the key itself when the dictionary has no entry for it
+  if(s === key){
+    const lang = (window.GAL_I18N && window.GAL_I18N.lang) || 'en';
+    const table = EXPORT_TEXT[lang] || EXPORT_TEXT.en;
+    s = table[key] || EXPORT_TEXT.en[key] || key;
+  }
+  if(vars) s = String(s).replace(/\{(\w+)\}/g, function(m, k){ return vars[k] != null ? vars[k] : m; });
+  return s;
+}
+
 /* Write the message into a child element rather than into the container's textContent:
    assigning textContent clears every child, which would wipe the download link that the
    export puts in the same box. The container's original static text is cleared once, so
@@ -3510,6 +3537,60 @@ function setExportStatus(container, text){
     });
   }
   msg.textContent = text;
+}
+
+/* A determinate bar for the export. The work runs in stages whose counts are known, so
+   the bar reports real progress instead of an indefinite spinner. */
+function showExportProgress(container, label){
+  if(!container) return null;
+  let box = container.querySelector('.export-progress');
+  if(!box){
+    box = document.createElement('div');
+    box.className = 'export-progress';
+    box.innerHTML = '<div class="export-progress-label"></div>' +
+                    '<div class="export-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">' +
+                    '<div class="export-progress-fill"></div></div>';
+    const msg = container.querySelector('.export-msg');
+    if(msg && msg.nextSibling) container.insertBefore(box, msg.nextSibling);
+    else container.appendChild(box);
+  }
+  const lab = box.querySelector('.export-progress-label');
+  if(lab) lab.textContent = label || '';
+  return box;
+}
+function setExportProgress(container, percent){
+  const box = container && container.querySelector('.export-progress');
+  if(!box) return;
+  const clamped = Math.max(0, Math.min(100, Math.round(percent)));
+  const fill = box.querySelector('.export-progress-fill');
+  const track = box.querySelector('.export-progress-track');
+  if(fill) fill.style.width = clamped + '%';
+  if(track) track.setAttribute('aria-valuenow', String(clamped));
+}
+function clearExportProgress(container){
+  const box = container && container.querySelector('.export-progress');
+  if(box) box.remove();
+}
+
+/* Advance the bar across the stages the export actually performs. The label carries the
+   stage name only; the status message above it already says what is being built, so
+   repeating it here would read as duplicated text. */
+function runStagedProgress(container, label, steps, task){
+  const box = showExportProgress(container, steps[0].label || '');
+  setExportProgress(container, steps[0].at * 100);
+  let i = 1;
+  const timer = setInterval(function(){
+    if(i >= steps.length){ clearInterval(timer); return; }
+    setExportProgress(container, steps[i].at * 100);
+    const lab = box && box.querySelector('.export-progress-label');
+    if(lab) lab.textContent = steps[i].label || '';
+    i++;
+  }, 140);
+  const done = function(){ clearInterval(timer); };
+  return Promise.resolve()
+    .then(task)
+    .then(function(v){ done(); setExportProgress(container, 0.97); return v; },
+          function(e){ done(); setExportProgress(container, 1); throw e; });
 }
 
 /* Keep the label visible while work runs, so a slow build never looks like a no-op. */
@@ -3543,7 +3624,9 @@ function initEditableExport(){
       return;
     }
     st.target=btn.dataset.export; syncExportSelection();
-    setExportStatus($('#exportStatus'), tt('export.selection',{format:st.target.toUpperCase()}));
+    // Not written into the status box: that would clear the progress bar or the download
+    // link an in-flight export had put there.
+    st.selectionNote = tt('export.selection',{format:st.target.toUpperCase()});
   });
   $('#exportConfirm')?.addEventListener('click', async ()=>{
     const st=window.__ffExportState;
@@ -3554,16 +3637,29 @@ function initEditableExport(){
     }
     const target=st.target, status=$('#exportStatus'), btn=$('#exportConfirm');
     const setStatus=(k,vars)=>{ setExportStatus(status, tt(k,vars)); };
+    // Declared before anything uses it: the progress helpers below need the format name,
+    // and a const in the temporal dead zone would throw and skip the bar entirely.
+    const fmtName = (target==='drawio') ? 'drawio' : target.toUpperCase();
+    showExportProgress(status, '');
+    setExportProgress(status, 0.08);
     const scene=st.scene || (st.scene = (function(){ try{ return parseSvgScene(st.svg); }catch(e){ return null; } })());
+    setExportProgress(status, 0.34);
     if(!scene){
       setStatus('export.failed',{format:target.toUpperCase()});
       return;
     }
     const fontChoice = st.font && st.font!=='original' ? st.font : 'Arial';
-    const fmtName = (target==='drawio') ? 'draw.io' : target.toUpperCase();
-    setBusy(btn, true, tt('export.building', { format: fmtName }));
+    setBusy(btn, true, exportText('export.building', { format: fmtName }));
     if(status) status.classList.add('export-busy');
-    setStatus('export.building', { format: fmtName });
+    setExportStatus(status, exportText('export.building', { format: fmtName }));
+    // The stages below match what the code actually does, so the bar reflects real work:
+    // read the scene, build the format, pack it, hand over the file.
+    const STEPS = [
+      { at:0.08, label:'' },
+      { at:0.34, label:'· ' + tt('export.stage.scene') },
+      { at:0.68, label:'· ' + tt('export.stage.build') },
+      { at:0.88, label:'· ' + tt('export.stage.pack') },
+    ];
     try{
       let dlName = 'figure-forge-editable.' + (target==='drawio' ? 'drawio' : target);
       let dlData = null, dlMime = '';
@@ -3580,13 +3676,15 @@ function initEditableExport(){
         dlData = zipStore(sceneToVsdxFiles(scene, fontChoice)); dlMime = 'application/vnd.ms-visio.drawing';
         downloadBlob(dlName, dlData);
       }
+      setExportProgress(status, 1);
       // also offered as a link, so the result is visible even if the automatic
       // download was blocked or dropped
       offerDownload(status, dlName, dlData, dlMime);
-      setStatus('export.downloaded',{format:target==='drawio'?'draw.io':target.toUpperCase()});
+      setExportStatus(status, exportText('export.finished',{format:target==='drawio'?'draw.io':target.toUpperCase()}));
     }catch(err){
       console.warn('editable export failed', err);
-      setStatus('export.failed',{format:target==='drawio'?'draw.io':target.toUpperCase()});
+      clearExportProgress(status);
+      setExportStatus(status, exportText('export.failed',{format:target==='drawio'?'draw.io':target.toUpperCase()}));
     }finally{
       setBusy(btn, false);
       if(status) status.classList.remove('export-busy');
