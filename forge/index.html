@@ -3494,7 +3494,15 @@ function offerDownload(container, filename, blobOrText, mime){
   s.textContent = tt('export.fileReady', { size: size });
   row.appendChild(a); row.appendChild(s);
   const old = container.querySelector('.export-dl');
-  if(old) old.remove();
+  if(old){
+    // Release the previous export's object URL only now, when it is being replaced.
+    // The automatic download frees its own URL after a few seconds, but this link has to
+    // stay usable for as long as it is on screen: revoking it on a timer is what made a
+    // later click do nothing.
+    if(old.dataset.objectUrl) { try{ URL.revokeObjectURL(old.dataset.objectUrl); }catch(e){} }
+    old.remove();
+  }
+  row.dataset.objectUrl = url;
   container.appendChild(row);
 }
 
@@ -3556,6 +3564,12 @@ function showExportProgress(container, label){
   }
   const lab = box.querySelector('.export-progress-label');
   if(lab) lab.textContent = label || '';
+  // Reset to empty here, not only when the element is created: a second export reuses the
+  // same bar, and a bar left showing the previous run reads as "no progress at all".
+  const fill = box.querySelector('.export-progress-fill');
+  if(fill) fill.style.width = '0%';
+  const track = box.querySelector('.export-progress-track');
+  if(track) track.setAttribute('aria-valuenow', '0');
   return box;
 }
 function setExportProgress(container, percent){
