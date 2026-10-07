@@ -3612,18 +3612,23 @@ async function requestEditableScene(imageDataUri, W, H){
 
 /* The whole step: find the label areas, ask for their wording, draw the text, and
    hand the result to the existing export path. */
+function rememberStep3Bitmap(src){
+  if(typeof src!=='string' || !src.trim()) return;
+  window.__ffStep3Bitmap=src;
+  try{ sessionStorage.setItem('__ffStep3Bitmap',src); }catch(_){ }
+}
 function currentStep3Bitmap(){
   const st=window.__ffExportState||{};
   const candidates=[window.__ffStep3Bitmap,st.reconBitmap,st.bitmap,st.generatedBitmap,st.generatedImage,st.image,st.outputImage];
-  const out=$('#out'), img=out && out.querySelector('img');
-  if(img) candidates.push(img.currentSrc||img.src);
-  return candidates.find(function(v){ return typeof v==='string' && v.trim(); }) || '';
+  document.querySelectorAll('#out img,#card3 img').forEach(function(img){ candidates.push(img.currentSrc||img.src); });
+  try{ candidates.push(sessionStorage.getItem('__ffStep3Bitmap')||''); }catch(_){ }
+  return candidates.find(function(v){ return /^(data:image\/|https?:|blob:)/i.test(String(v||'').trim()); }) || '';
 }
 function syncStep3Bitmap(){
   const st=window.__ffExportState||{};
   const src=currentStep3Bitmap();
   if(src){
-    window.__ffStep3Bitmap=src;
+    rememberStep3Bitmap(src);
     st.bitmap=src;
     st.reconBitmap=src;
   }
@@ -3696,6 +3701,13 @@ async function runReconstruction(options){
     const scene = buildReconScene(canvas, placed, $('#paper') ? $('#paper').value : '');
     const svg = sceneToSvgString(scene);
     const audit = auditReconScene(scene);
+    if(audit.dominantBitmap || audit.primitiveCount < 6){
+      st.reconFailed = true;
+      st.reconError = '重建结果缺少足够的独立可编辑元素';
+      renderEditableExportCard();
+      say('recon.failedDetail',{msg:st.reconError});
+      return false;
+    }
     Object.assign(st, { scene:scene, svg:svg, baseSvg:svg, source:'bitmap',
                        recon:{ anchors:anchors.length, labels:placed.length, audit:audit },
                        reconFailed:false, reconError:'' });
@@ -3847,8 +3859,8 @@ function showEditableExportStep(svgOrSource){
     : { svg: svgOrSource, source: 'svg' };
   const svg = src.svg || '';
   const current = window.__ffExportState || {};
-  const bitmap = src.bitmap || src.reconBitmap || current.bitmap || current.reconBitmap || window.__ffStep3Bitmap || '';
-  if(bitmap) window.__ffStep3Bitmap = bitmap;
+  const bitmap = src.bitmap || src.reconBitmap || current.bitmap || current.reconBitmap || currentStep3Bitmap() || '';
+  if(bitmap) rememberStep3Bitmap(bitmap);
   try{
     window.__ffExportState = Object.assign(window.__ffExportState, {
       svg: svg, baseSvg: svg,
@@ -4293,7 +4305,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const st = window.__ffExportState;
   const imgSrc = item.url || ('data:image/png;base64,'+item.b64_json);
   const exportImgSrc = item.b64_json ? `data:image/png;base64,${item.b64_json}` : imgSrc;
-  window.__ffStep3Bitmap = exportImgSrc;
+      rememberStep3Bitmap(exportImgSrc);
   $('#out').style.display='block';
   $('#out').innerHTML = `<img src="${esc(imgSrc)}" alt="draft">
     <div class="dl"><button class="btn-primary" id="dlImg">${tt('img.download')}</button>
