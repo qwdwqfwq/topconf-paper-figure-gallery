@@ -3566,11 +3566,40 @@ function editableReconstructionModel(){
 }
 
 function editableResponseText(d){
-  const c=d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
-  if(typeof c==='string') return c;
-  if(Array.isArray(c)) return c.map(function(p){ return typeof p==='string' ? p : (p && (p.text || p.content) || ''); }).join('');
-  if(c && typeof c==='object') return String(c.text || c.content || '');
-  return parseResponseText(d) || '';
+  /* Providers do not agree on the shape of multimodal output.  Ark and some
+     OpenAI-compatible relays may return content as nested arrays/objects,
+     Responses-style output_text, or a message object.  The old parser only
+     handled one Chat Completions shape and silently produced an empty string,
+     which was then reported as a reconstruction failure even though Step 3
+     had a valid bitmap. */
+  const seen=[];
+  function walk(v, depth){
+    if(v==null || depth>12) return '';
+    if(typeof v==='string') return v;
+    if(typeof v!=='object') return '';
+    if(seen.indexOf(v)>=0) return '';
+    seen.push(v);
+    if(Array.isArray(v)) return v.map(function(x){ return walk(x,depth+1); }).join('');
+    const preferred=['text','output_text','content','message','choices','output'];
+    for(let i=0;i<preferred.length;i++){
+      const key=preferred[i];
+      if(v[key]!==undefined && v[key]!==null){
+        const s=walk(v[key],depth+1);
+        if(s) return s;
+      }
+    }
+    /* Keep provider reasoning fields as a last resort; they sometimes contain
+       the JSON when the visible content field is wrapped by a relay. */
+    const fallback=['reasoning_content','reasoning'];
+    for(let i=0;i<fallback.length;i++){
+      if(v[fallback[i]]!==undefined){
+        const s=walk(v[fallback[i]],depth+1);
+        if(s) return s;
+      }
+    }
+    return '';
+  }
+  return walk(d,0) || parseResponseText(d) || '';
 }
 
 async function requestEditableScene(imageDataUri, W, H){
