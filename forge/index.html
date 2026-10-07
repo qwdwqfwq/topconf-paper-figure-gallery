@@ -3620,7 +3620,7 @@ function rememberStep3Bitmap(src){
 function currentStep3Bitmap(){
   const st=window.__ffExportState||{};
   const candidates=[window.__ffStep3Bitmap,st.reconBitmap,st.bitmap,st.generatedBitmap,st.generatedImage,st.image,st.outputImage];
-  document.querySelectorAll('#out img,#card3 img').forEach(function(img){ candidates.push(img.currentSrc||img.src); });
+  document.querySelectorAll('#out img,#card3 img').forEach(function(img){ candidates.push(img.currentSrc||img.src||img.getAttribute('src')||''); });
   try{ candidates.push(sessionStorage.getItem('__ffStep3Bitmap')||''); }catch(_){ }
   return candidates.find(function(v){ return /^(data:image\/|https?:|blob:)/i.test(String(v||'').trim()); }) || '';
 }
@@ -3647,6 +3647,7 @@ async function runReconstruction(options){
   }catch(err){
     st.reconFailed = true;
     st.reconError = String(err && err.message || err || 'Bitmap preparation failed');
+    renderEditableExportCard();
     say('recon.failed');
     return false;
   }
@@ -3829,8 +3830,8 @@ function renderEditableExportCard(){
   const status=$('#exportStatus');
   if(state.reconPending){
     setExportStatus(status, tt('recon.reading'));
-  } else if(!state.svg && state.reconFailed && bitmapSource){
-    setExportStatus(status, tt('export.reconFailed'));
+  } else if(!state.svg && state.reconFailed){
+    setExportStatus(status, tt(bitmapSource ? 'export.reconFailed' : 'export.reconNoBitmap'));
   } else if(locked){
     setExportStatus(status, tt('export.waiting'));
   } else {
@@ -4058,8 +4059,8 @@ function initEditableExport(){
     const btn=e.target.closest('[data-export]'); if(!btn) return; const st=window.__ffExportState;
     const bitmapSource=syncStep3Bitmap();
     if(!st.svg || st.reconPending){
-      const status = st.reconFailed && bitmapSource
-        ? tt('export.reconFailed')
+      const status = st.reconFailed
+        ? tt(bitmapSource ? 'export.reconFailed' : 'export.reconNoBitmap')
         : st.reconPending ? tt('recon.reading') : tt('export.waiting');
       setExportStatus($('#exportStatus'), status);
       return;
@@ -4074,8 +4075,8 @@ function initEditableExport(){
     const bitmapSource=syncStep3Bitmap();
     if(!st.svg || st.reconPending || !st.target){
       const s2=$('#exportStatus');
-      if(s2) s2.textContent = st.reconFailed && bitmapSource
-        ? tt('export.reconFailed')
+      if(s2) s2.textContent = st.reconFailed
+        ? tt(bitmapSource ? 'export.reconFailed' : 'export.reconNoBitmap')
         : st.reconPending ? tt('recon.reading') : tt('export.waiting');
       return;
     }
