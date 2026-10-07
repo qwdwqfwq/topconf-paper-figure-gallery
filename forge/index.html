@@ -3436,7 +3436,8 @@ function visionReconPrompt(){
     + '{"type":"text","x":0,"y":0,"w":0,"h":0,"text":"Exact wording","fontSize":16,"bold":false,"fill":"#111827"}\n'
     + '{"type":"rect","x":0,"y":0,"w":0,"h":0,"fill":"#ffffff","stroke":"#334155","strokeWidth":1.5}\n'
     + '{"type":"line","x":0,"y":0,"x2":0,"y2":0,"stroke":"#334155","strokeWidth":1.5,"arrow":true}\n'
-    + 'Rules: coordinates are pixels on a 1600x900 canvas. Transcribe EVERY visible text string as a text node, exactly as written (English, short labels). '
+    + 'Rules: coordinates are pixels on a 1600x900 canvas. Transcribe EVERY visible text string VERBATIM, character by character, exactly as it appears in the image (English labels, short panel titles, axis labels, numbers, equations). '
+    + 'Do not paraphrase, translate, or invent words; if a label is unreadable, omit it rather than guessing. '
     + 'Every panel / box / card is a rect. Every connector with an arrowhead is a line node with "arrow":true. '
     + 'Use the observed palette as #RRGGBB. Output only the JSON, no prose.';
 }
@@ -3450,7 +3451,7 @@ async function visionReconstruct(){
   say('recon.vision');
   const model = parserModelId();
   if(!model) throw new Error(tt('analyze.needmodel'));
-  const jpeg = await downscaleJPEG(src);
+  const jpeg = await downscaleJPEG(src, 1600, 0.9);
   const cfgv = cfg(), relay = $('#baseOverride').value.trim();
   let txt;
   if(cfgv.proto==='anthropic' && !relay){
@@ -3986,7 +3987,10 @@ function renderSVG(svg, usedVision, useIds, truncated, auditRes){
 async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const useIds = (refIds||[...refs]).slice(0,3);
   const tg = TARGETS[$('#target').value] || TARGETS.overview;
-  const imgPrompt = `${tg.img}. White background, flat modern scientific illustration style, elegant layout, minimal accurate labels. Paper content: ${content.slice(0,2000)}`;
+  const imgPrompt = `${tg.img}. White background, flat modern scientific illustration style, elegant layout, minimal accurate labels. `
+    + 'The attached reference figures are STYLE inspiration only (palette, strokes, icon language, panel rhythm). '
+    + 'Design an ORIGINAL composition for THIS paper\'s content; do NOT copy the reference panels, icons, text, numbers or overall layout. '
+    + `Paper content: ${content.slice(0,2000)}`;
   const body = {model, prompt:imgPrompt};
   if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
   else if(p==='sf'){ body.image_size='1024x1024'; body.batch_size=1; }
@@ -4035,6 +4039,11 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     <span class="hint">${usedRefs?tt('img.hintRef',{n:useIds.length}):tt('img.hint')}</span></div>`;
   st.source = 'bitmap'; st.bitmap = exportImgSrc; st.recon = null;
   showEditableExportStep({ svg: rasterToExportSvg(exportImgSrc), source:'bitmap', bitmap: exportImgSrc });
+  // Auto-run step-4 vision decomposition so the exports are editable without a
+  // manual click. Vision first, pixel-band fallback inside runReconstruction.
+  setTimeout(async function(){
+    const btn = $('#reconBtn'); if(btn) btn.click();
+  }, 400);
   $('#dlImg').onclick = async ()=>{
     try{
       const rr = await fetch(imgSrc); const blob = await rr.blob();
