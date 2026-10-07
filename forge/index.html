@@ -1544,11 +1544,11 @@ document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
 $('#model').onchange = e=>localStorage.setItem('ff_model_'+$('#provider').value, e.target.value);
 
 /* ---------------- pass 1: analyze references ---------------- */
-const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference figures of the SAME target visual type. First identify the figure with the RICHEST, most complete visual content (most modules, deepest nesting, fullest occupancy) and treat it as the primary density anchor; the other figures are supporting grammar evidence. Recover the anchor\'s concrete composition, zones, nesting, topology and density, and use the other figures to corroborate palette, strokes, typography and illustration language. Return STRICT JSON only.';
+const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference figures of the SAME target visual type. Extract their shared layout grammar as a CONCRETE design contract: exact hex colours, panel rectangles as numbers on a 1600x900 canvas, a numeric type scale and stroke widths. Return STRICT JSON only.';
 function buildAnalyzePrompt(n, idList){
   const ids = (idList||[]).join(', ');
   return `Here are ${n} top-conference paper figures, all of the target visual type for the figure I want to design.
-Analyze the PRIMARY ANCHOR: among the supplied images, CHOOSE the single figure with the RICHEST, most complete visual content (highest module count, deepest nesting, fullest occupancy). It is the density and grammar benchmark for the new figure, NOT a pixel template to copy. Return one JSON object with EXACTLY these keys:
+Analyze their COMMON design grammar and return one JSON object with EXACTLY these keys:
 {"density":{"containers":0,"modulesPerPanel":0,"solidBorders":0,"dashedBorders":0,"connectors":0,"boxFillPercent":0,
             "nesting":"the levels, e.g. panel > 6 module boxes > each holds an icon or mini chart",
             "variety":"the kinds of visual modules present and how neighbouring modules differ",
@@ -1563,11 +1563,11 @@ Analyze the PRIMARY ANCHOR: among the supplied images, CHOOSE the single figure 
  "styleFingerprint":{"background":"surface treatment","panelShape":"corner radius and container treatment","moduleShape":"module box treatment","iconStyle":"icon/illustration language","arrowStyle":"arrow and connector language","textTreatment":"title, header and label treatment"},
  "elements":"recurring visual elements: box styles, arrow types, icon/illustration conventions",
  "hierarchy":"information hierarchy: what is emphasised and how",
- "representative":["ids of the 2-4 figures with the richest detail; the RICHEST figure MUST be listed first, then supporting examples"],
- "imageRefIds":["ids of 1-3 strongest anchors for a bitmap model, the richest first"],
+ "representative":["ids of the 4-6 figures among these whose layout is the RICHEST: the most panels, the most labelled modules and the most varied elements - the goal is to reproduce that density, not a typical average"],
+ "imageRefIds":["ids of the 1-3 figures with the richest, most complete layout among these"],
  "refinedPrompt":"a detailed self-contained English description of what is drawn: each panel and its contents, the module blocks and their connections, arrow directions and flow, the visual levels, and the icon or illustration style"}
 Rules: output JSON only, no markdown or commentary.
-The RICHEST supplied figure is the density and grammar benchmark: it sets the target fullness, hierarchy and module kinds. Do NOT copy its concrete icons, text, numbers or figures, and do not average the layouts or invent a composition unrelated to the paper. Use the other figures only as supporting evidence for palette, strokes, icon language and chart treatment.
+Extract the COMMON grammar across the supplied figures - shared panel division, palette, strokes, typography and hierarchy - rather than copying any single figure. The goal is to reproduce the density and module variety of the richest examples while every element reflects the new paper's content.
 panels: 2-6 entries. x/y/w/h are integers in a 1600x900 coordinate space with the origin at the top-left; they must not overlap and must stay inside 1600x900. Preserve the actual relative arrangement: do not turn stacked zones into side-by-side panels and do not invent a symmetric grid.
 layoutBlueprint: derive 4-12 concrete zones, grouping frames or module slots from the FIRST figure. Coordinates are integers in the same 1600x900 space. Preserve their order, relative area, nesting and connector routes. Zones may nest or overlap intentionally. Do not add zones that are absent from the anchor. moduleCount is the number of distinct visual modules in that zone; occupancy is the approximate percent of its area occupied by meaningful content; moduleKinds names the visible kinds (icon, chart, matrix, photo, formula, flow strip, table, diagram fragment, etc.).
 palette: every value MUST be a real #rrggbb hex string.
@@ -1594,6 +1594,17 @@ imageRefIds: the FIRST id MUST be the first supplied id. Add at most two support
 Available figure ids: ${ids}
 topology, styleFingerprint and refinedPrompt must describe visible layout and styling, not the paper's scientific claims. refinedPrompt should be 120-180 concrete English words about panels, arrows, palette, spacing, hierarchy and illustration language. It is used as a visual guide, not as a request to copy reference labels. Keep the prose compact so the whole JSON answer fits in one response.`;
 }
+function firstCloseBrace(s){
+  let depth=0,inStr=false,esc=false;
+  for(let i=0;i<s.length;i++){
+    const c=s[i];
+    if(inStr){ if(esc){esc=false;} else if(c==='\\'){esc=true;} else if(c==='"'){inStr=false;} continue; }
+    if(c==='"'){inStr=true;}
+    else if(c==='{'){depth++;}
+    else if(c==='}'){depth--; if(depth===0) return i;}
+  }
+  return -1;
+}
 function extractJSON(txt){
   let s = String(txt||'').trim().replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
   const m = s.match(/\{[\s\S]*\}/);
@@ -1602,6 +1613,14 @@ function extractJSON(txt){
   const noTrailing = raw.replace(/,(\s*[}\]])/g,'$1');
   for(const cand of [raw, noTrailing]){
     try{ return JSON.parse(cand); }catch(e){}
+  }
+  // The model closed the root object early and stranded more root-level keys
+  // after it: merge the tail back into the root object.
+  const fc = firstCloseBrace(noTrailing);
+  if(fc>=0 && fc<noTrailing.length-1){
+    const tail = noTrailing.slice(fc+1).replace(/^[\s,]*/,'');
+    const merged = noTrailing.slice(0,fc) + ',' + tail;
+    try{ return JSON.parse(merged); }catch(e){}
   }
   // Truncated output: repeatedly drop the last partial key and close the object.
   let cut = noTrailing;
@@ -3467,15 +3486,17 @@ function downscaleJPEG(dataUrl, maxW=1280, q=0.85){
 const VISION_RECON_SYS = 'You are a scientific-figure reconstruction engine. You convert one rendered paper figure into editable scene nodes. Output STRICT JSON only, no commentary.';
 
 function visionReconPrompt(){
-  return 'Decompose the attached figure into editable nodes on a 1600x900 canvas. Return exactly one JSON object: {"nodes":[ ... ]}.\n'
-    + 'Each node is one of:\n'
-    + '{"type":"text","x":0,"y":0,"w":0,"h":0,"text":"Exact wording","fontSize":16,"bold":false,"fill":"#111827"}\n'
-    + '{"type":"rect","x":0,"y":0,"w":0,"h":0,"fill":"#ffffff","stroke":"#334155","strokeWidth":1.5}\n'
-    + '{"type":"line","x":0,"y":0,"x2":0,"y2":0,"stroke":"#334155","strokeWidth":1.5,"arrow":true}\n'
-    + 'Rules: coordinates are pixels on a 1600x900 canvas. Transcribe EVERY visible text string VERBATIM, character by character, exactly as it appears in the image (English labels, short panel titles, axis labels, numbers, equations). '
-    + 'Do not paraphrase, translate, or invent words; if a label is unreadable, omit it rather than guessing. '
-    + 'Every panel / box / card is a rect. Every connector with an arrowhead is a line node with "arrow":true. '
-    + 'Use the observed palette as #RRGGBB. Output only the JSON, no prose.';
+  return 'TASK: reconstruct the attached figure as a complete list of editable objects on a 1600x900 canvas. A typical figure contains 20-80 boxes and 15-60 text labels. You MUST enumerate EVERY visible object; an answer that lists only a few labels is a failure.\n'
+    + 'Return exactly one JSON object, no prose:\n'
+    + '{"boxes":[{"x":0,"y":0,"w":0,"h":0,"fill":"#hex or null","stroke":"#hex","strokeWidth":1.5,"rounded":false}],\n'
+    + ' "arrows":[{"x":0,"y":0,"x2":0,"y2":0,"stroke":"#hex","strokeWidth":1.5}],\n'
+    + ' "labels":[{"x":0,"y":0,"w":0,"h":0,"text":"exact wording","fontSize":16,"bold":false,"fill":"#hex"}]}\n'
+    + 'Rules:\n'
+    + '1. Coordinates are pixels measured on the image as displayed, origin top-left. Use the SAME scale for every object.\n'
+    + '2. boxes: every panel, container, module card, database cylinder frame, chart frame and coloured region is one box. Panels first (outer containers), then every inner module box. Do not skip small boxes.\n'
+    + '3. arrows: every connector line or arrowhead, including bidirectional and loop-back arrows.\n'
+    + '4. labels: transcribe EVERY visible text string VERBATIM, character by character: the title, every panel header, module name, axis label, number and equation. Do not paraphrase, translate or invent text; omit unreadable labels.\n'
+    + '5. Colours as #RRGGBB sampled from the image. Output the JSON only.';
 }
 
 async function visionReconstruct(){
@@ -3500,7 +3521,7 @@ async function visionReconstruct(){
     const d = JSON.parse(txt);
     txt = (d.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('');
   } else {
-    const body = { model:model, temperature:0.1,
+    const body = { model:model, temperature:0.1, max_tokens:8000,
       messages:[{role:'system',content:VISION_RECON_SYS},
                 {role:'user',content:[
                   {type:'image_url',image_url:{url:jpeg}},
@@ -3513,31 +3534,60 @@ async function visionReconstruct(){
   }
   const m = txt.match(/\{[\s\S]*\}/);
   if(!m) throw new Error(tt('recon.badjson'));
-  let j; try{ j = JSON.parse(m[0]); }catch(e){ throw new Error(tt('recon.badjson')); }
+  let j; try{ j = extractJSON(m[0]); }catch(e){ throw new Error(tt('recon.badjson')); }
+  // Accept either {"nodes":[...]} or the explicit {"boxes":[],"arrows":[],"labels":[]} schema.
   const raw = Array.isArray(j.nodes) ? j.nodes : [];
+  const boxArr = Array.isArray(j.boxes) ? j.boxes : [];
+  const arrowArr = Array.isArray(j.arrows) ? j.arrows : [];
+  const labelArr = Array.isArray(j.labels) ? j.labels : [];
   const hex = v => /^#[0-9a-fA-F]{6}$/.test(v||'') ? v : null;
   const num = (v,fb)=>{ v=Number(v); return Number.isFinite(v)?v:fb; };
+  // Models sometimes answer in the image's natural pixel scale instead of
+  // 1600x900: measure the observed extent and rescale every coordinate onto the
+  // export canvas.
+  const allItems = raw.concat(boxArr, arrowArr, labelArr);
+  let maxX=0, maxY=0;
+  allItems.forEach(function(n){
+    if(!n||typeof n!=='object') return;
+    maxX=Math.max(maxX, num(n.x,0), num(n.x2,0), num(n.x,0)+num(n.w,0));
+    maxY=Math.max(maxY, num(n.y,0), num(n.y2,0), num(n.y,0)+num(n.h,0));
+  });
+  const sx = maxX>1600 ? 1600/maxX : 1;
+  const sy = maxY>900 ? 900/maxY : 1;
+  const X = v => num(v,0)*sx, Y = v => num(v,0)*sy;
   // No background picture node: every element the model decomposed must be a
   // native editable shape, so PPTX / VSDX / draw.io exports contain selectable
   // boxes, arrows and text — not one embedded bitmap. The original bitmap stays
   // downloadable from step 3.
   const nodes = [];
+  const addLabel = function(n){
+    const text = String(n.text||'').replace(/[\r\n]+/g,' ').trim();
+    if(!text) return;
+    nodes.push({type:'text', text:text,
+      x:X(n.x), y:Y(n.y), w:Math.max(20,num(n.w, text.length*10)*sx), h:Math.max(12,num(n.h,20)*sy),
+      fontSize:Math.min(64,Math.max(9,num(n.fontSize,16)*Math.min(sx,sy))),
+      fill:hex(n.fill)||'#111827', bold:!!n.bold, anchor:'start'});
+  };
+  const addBox = function(n){
+    nodes.push({type:'rect', x:X(n.x),y:Y(n.y),w:Math.max(8,num(n.w,50)*sx),h:Math.max(8,num(n.h,30)*sy),
+      fill:hex(n.fill)||'#ffffff', stroke:hex(n.stroke)||'#334155',
+      strokeWidth:Math.max(0.5,num(n.strokeWidth,1.5)), radius:n.rounded?8:0});
+  };
+  const addArrow = function(n){
+    nodes.push({type:'line', x:X(n.x),y:Y(n.y),x2:X(n.x2),y2:Y(n.y2),
+      stroke:hex(n.stroke)||'#334155', strokeWidth:Math.max(0.5,num(n.strokeWidth,1.5)), arrow:true});
+  };
+  labelArr.forEach(addLabel);
+  boxArr.forEach(addBox);
+  arrowArr.forEach(addArrow);
   raw.forEach(function(n){
     if(!n || typeof n!=='object') return;
     const t = n.type;
-    if(t==='text'){
-      const text = String(n.text||'').replace(/[\r\n]+/g,' ').trim();
-      if(!text) return;
-      nodes.push({type:'text', text:text,
-        x:num(n.x,0), y:num(n.y,0), w:num(n.w, text.length*10), h:num(n.h,20),
-        fontSize:Math.min(64,Math.max(10,num(n.fontSize,16))),
-        fill:hex(n.fill)||'#111827', bold:!!n.bold, anchor:'start'});
-    } else if(t==='rect'){
-      nodes.push({type:'rect', x:num(n.x,0),y:num(n.y,0),w:Math.max(10,num(n.w,50)),h:Math.max(10,num(n.h,30)),
-        fill:hex(n.fill)||'#ffffff', stroke:hex(n.stroke)||'#334155',
-        strokeWidth:Math.max(0.5,num(n.strokeWidth,1.5)), radius:0});
-    } else if(t==='line'||t==='arrow'){
-      nodes.push({type:'line', x:num(n.x,0),y:num(n.y,0),x2:num(n.x2,0),y2:num(n.y2,0),
+    if(t==='text') addLabel(n);
+    else if(t==='rect') addBox(n);
+    else if(t==='line'||t==='arrow'){
+      if(t==='arrow') n.arrow = true;
+      nodes.push({type:'line', x:X(n.x),y:Y(n.y),x2:X(n.x2),y2:Y(n.y2),
         stroke:hex(n.stroke)||'#334155', strokeWidth:Math.max(0.5,num(n.strokeWidth,1.5)), arrow:!!n.arrow});
     }
   });
@@ -4024,7 +4074,7 @@ function renderSVG(svg, usedVision, useIds, truncated, auditRes){
 }
 
 async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
-  const useIds = (refIds||[...refs]).slice(0,3);
+  const useIds = refIds||[...refs];
   const tg = TARGETS[$('#target').value] || TARGETS.overview;
   const guide = layoutGuide
     ? `Follow this gallery-derived layout style guide precisely (panel division, arrows, palette, hierarchy):\n${layoutGuide}\n\n`
@@ -4039,11 +4089,9 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     + `THICKER than the module boxes inside it, and vary the strokes — dashed borders for optional, `
     + `conceptual or repeated blocks, solid borders for concrete modules — so groups stay distinct. `
     + `Faithfully FUSE the panel division, colour palette, box shapes, border weights and arrow style of `
-    + `the reference figures: mirror their density and element count. The FIRST reference is the density `
-    + `benchmark — match its fullness, hierarchy and module kinds, but do NOT copy its concrete icons, `
-    + `text, numbers or figures; every element must reflect THIS paper's content. Fill the canvas with `
-    + `meaningful structure — rich and detailed, never sparse. White background, clean flat vector `
-    + `illustration, crisp aligned shapes, clearly readable short English labels. `
+    + `the reference figures: mirror their density and element count. Fill the canvas with meaningful `
+    + `structure — rich and detailed, never sparse. White background, clean flat vector illustration, `
+    + `crisp aligned shapes, clearly readable short English labels. `
     + `Paper content: ${content.slice(0,2000)}`;
   const body = {model, prompt:imgPrompt};
   if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
