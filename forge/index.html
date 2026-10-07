@@ -1535,11 +1535,11 @@ document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
 $('#model').onchange = e=>localStorage.setItem('ff_model_'+$('#provider').value, e.target.value);
 
 /* ---------------- pass 1: analyze references ---------------- */
-const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference figures of the SAME target visual type. Treat the first supplied figure as the single primary layout anchor; later figures are supporting style evidence only. Recover the anchor\'s concrete composition, zones, nesting, topology and density without averaging layouts, then use the other figures only to corroborate palette, strokes, typography and illustration language. Return STRICT JSON only.';
+const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference figures of the SAME target visual type. First identify the figure with the RICHEST, most complete visual content (most modules, deepest nesting, fullest occupancy) and treat it as the primary density anchor; the other figures are supporting grammar evidence. Recover the anchor\'s concrete composition, zones, nesting, topology and density, and use the other figures to corroborate palette, strokes, typography and illustration language. Return STRICT JSON only.';
 function buildAnalyzePrompt(n, idList){
   const ids = (idList||[]).join(', ');
   return `Here are ${n} top-conference paper figures, all of the target visual type for the figure I want to design.
-Analyze the PRIMARY ANCHOR (the first supplied image) and return one JSON object with EXACTLY these keys:
+Analyze the PRIMARY ANCHOR: among the supplied images, CHOOSE the single figure with the RICHEST, most complete visual content (highest module count, deepest nesting, fullest occupancy). It is the density and grammar benchmark for the new figure, NOT a pixel template to copy. Return one JSON object with EXACTLY these keys:
 {"density":{"containers":0,"modulesPerPanel":0,"solidBorders":0,"dashedBorders":0,"connectors":0,"boxFillPercent":0,
             "nesting":"the levels, e.g. panel > 6 module boxes > each holds an icon or mini chart",
             "variety":"the kinds of visual modules present and how neighbouring modules differ",
@@ -1554,11 +1554,11 @@ Analyze the PRIMARY ANCHOR (the first supplied image) and return one JSON object
  "styleFingerprint":{"background":"surface treatment","panelShape":"corner radius and container treatment","moduleShape":"module box treatment","iconStyle":"icon/illustration language","arrowStyle":"arrow and connector language","textTreatment":"title, header and label treatment"},
  "elements":"recurring visual elements: box styles, arrow types, icon/illustration conventions",
  "hierarchy":"information hierarchy: what is emphasised and how",
- "representative":["ids of the 2-4 figures that best preserve the canonical composition and richest detail; choose a primary anchor first, then supporting examples"],
- "imageRefIds":["ids of 1-3 figures that are the strongest visual anchors for a bitmap model"],
+ "representative":["ids of the 2-4 figures with the richest detail; the RICHEST figure MUST be listed first, then supporting examples"],
+ "imageRefIds":["ids of 1-3 strongest anchors for a bitmap model, the richest first"],
  "refinedPrompt":"a detailed self-contained English description of what is drawn: each panel and its contents, the module blocks and their connections, arrow directions and flow, the visual levels, and the icon or illustration style"}
 Rules: output JSON only, no markdown or commentary.
-The FIRST supplied figure is the ONLY layout master. Do not average the layouts or invent a new composition. Use later figures only as supporting evidence for palette, strokes, icon language and chart treatment.
+The RICHEST supplied figure is the density and grammar benchmark: it sets the target fullness, hierarchy and module kinds. Do NOT copy its concrete icons, text, numbers or figures, and do not average the layouts or invent a composition unrelated to the paper. Use the other figures only as supporting evidence for palette, strokes, icon language and chart treatment.
 panels: 2-6 entries. x/y/w/h are integers in a 1600x900 coordinate space with the origin at the top-left; they must not overlap and must stay inside 1600x900. Preserve the actual relative arrangement: do not turn stacked zones into side-by-side panels and do not invent a symmetric grid.
 layoutBlueprint: derive 4-12 concrete zones, grouping frames or module slots from the FIRST figure. Coordinates are integers in the same 1600x900 space. Preserve their order, relative area, nesting and connector routes. Zones may nest or overlap intentionally. Do not add zones that are absent from the anchor. moduleCount is the number of distinct visual modules in that zone; occupancy is the approximate percent of its area occupied by meaningful content; moduleKinds names the visible kinds (icon, chart, matrix, photo, formula, flow strip, table, diagram fragment, etc.).
 palette: every value MUST be a real #rrggbb hex string.
@@ -3987,9 +3987,24 @@ function renderSVG(svg, usedVision, useIds, truncated, auditRes){
 async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const useIds = (refIds||[...refs]).slice(0,3);
   const tg = TARGETS[$('#target').value] || TARGETS.overview;
-  const imgPrompt = `${tg.img}. White background, flat modern scientific illustration style, elegant layout, minimal accurate labels. `
-    + 'The attached reference figures are STYLE inspiration only (palette, strokes, icon language, panel rhythm). '
-    + 'Design an ORIGINAL composition for THIS paper\'s content; do NOT copy the reference panels, icons, text, numbers or overall layout. '
+  const guide = layoutGuide
+    ? `Follow this gallery-derived layout style guide precisely (panel division, arrows, palette, hierarchy):\n${layoutGuide}\n\n`
+    : '';
+  const imgPrompt = `${guide}`
+    + `${tg.img}. Publication-quality Figure 1 for a top-tier ML paper. `
+    + `Include a prominent bold TITLE line running across the top of the figure, above all panels. `
+    + `Below it, a DENSE information-rich multi-panel composition of 3-5 boxed panels side by side, `
+    + `each panel carrying its own bold header, several labelled module boxes, arrows showing the data `
+    + `flow between components, and small sub-diagrams or result thumbnails inside the panels. `
+    + `Line weight and line style carry meaning here: draw each panel's outer container border clearly `
+    + `THICKER than the module boxes inside it, and vary the strokes — dashed borders for optional, `
+    + `conceptual or repeated blocks, solid borders for concrete modules — so groups stay distinct. `
+    + `Faithfully FUSE the panel division, colour palette, box shapes, border weights and arrow style of `
+    + `the reference figures: mirror their density and element count. The FIRST reference is the density `
+    + `benchmark — match its fullness, hierarchy and module kinds, but do NOT copy its concrete icons, `
+    + `text, numbers or figures; every element must reflect THIS paper's content. Fill the canvas with `
+    + `meaningful structure — rich and detailed, never sparse. White background, clean flat vector `
+    + `illustration, crisp aligned shapes, clearly readable short English labels. `
     + `Paper content: ${content.slice(0,2000)}`;
   const body = {model, prompt:imgPrompt};
   if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
