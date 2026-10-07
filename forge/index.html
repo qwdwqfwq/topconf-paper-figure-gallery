@@ -3550,8 +3550,28 @@ function materializeEditableScene(raw, W, H){
   return {schema:'figureforge.scene.v4',canvas:{width:W,height:H,w:W,h:H},nodes:out,counts:{total:out.length,text:out.filter(n=>n.type==='text').length,shapes:out.filter(n=>n.type!=='text'&&n.type!=='image').length,images:out.filter(n=>n.type==='image').length}};
 }
 
+function editableReconstructionModel(){
+  const cfgv=cfg();
+  const vision=Array.isArray(cfgv.vision) ? cfgv.vision : [];
+  const selectedAnalyze=$('#analyzeModel') && $('#analyzeModel').value;
+  const selectedMain=$('#model') && $('#model').value;
+  const isVision=function(m){ return !!m && (/vision|vl|visual|multimodal|seed[-_ ]?[12]|gpt[-_ ]?5|kimi[-_ ]?k|sonnet|opus/i.test(String(m)) || vision.indexOf(m)>=0); };
+  if(isVision(selectedAnalyze)) return selectedAnalyze;
+  if(isVision(selectedMain)) return selectedMain;
+  if(vision.length) return vision[0];
+  return selectedAnalyze || selectedMain || '';
+}
+
+function editableResponseText(d){
+  const c=d && d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content;
+  if(typeof c==='string') return c;
+  if(Array.isArray(c)) return c.map(function(p){ return typeof p==='string' ? p : (p && (p.text || p.content) || ''); }).join('');
+  if(c && typeof c==='object') return String(c.text || c.content || '');
+  return parseResponseText(d) || '';
+}
+
 async function requestEditableScene(imageDataUri, W, H){
-  const cfgv=cfg(), relay=$('#baseOverride').value.trim(), model=($('#analyzeModel')&&$('#analyzeModel').value)||$('#model').value;
+  const cfgv=cfg(), relay=$('#baseOverride').value.trim(), model=editableReconstructionModel();
   if(!model) throw new Error(tt('analyze.needmodel'));
   const audit=(window.__ffApiAudit||(window.__ffApiAudit={})).reconstruction={state:'pending',startedAt:Date.now(),model,provider:cfgv.proto,endpoint:baseURL()};
   const prompt=editableScenePrompt(W,H,$('#paper')?$('#paper').value:'');
@@ -3564,11 +3584,11 @@ async function requestEditableScene(imageDataUri, W, H){
       if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
       const d=JSON.parse(txt); txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
     }else{
-      const body={model,temperature:0.1,max_tokens:12000,messages:[{role:'system',content:RECON_SYS},{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:imageDataUri,detail:'high'}}]}]};
+      const body={model,temperature:0.1,max_tokens:12000,messages:[{role:'system',content:RECON_SYS},{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:imageDataUri}}]}]};
       if($('#provider').value==='ark') body.thinking={type:'disabled'};
       const r=await postJSON(baseURL(),'/chat/completions',body,cleanKey($('#key').value),undefined,600000); txt=await r.text();
       if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
-      const d=JSON.parse(txt); txt=(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||'';
+      const d=JSON.parse(txt); txt=editableResponseText(d);
     }
     let parsed; try{ parsed=extractJSON(txt); }catch(_){ throw new Error(tt('recon.badjson')); }
     const scene=materializeEditableScene(parsed,W,H);
@@ -3626,7 +3646,7 @@ async function runReconstruction(options){
       return true;
     }catch(vectorErr){
       console.warn('vector reconstruction failed',vectorErr);
-      if(automatic){ st.reconFailed = true; st.reconError = String(vectorErr && vectorErr.message || vectorErr || 'Vector reconstruction failed'); say('recon.failed'); return false; }
+      if(automatic){ st.reconFailed = true; st.reconError = String(vectorErr && vectorErr.message || vectorErr || 'Vector reconstruction failed'); say('recon.failedDetail',{msg:st.reconError}); return false; }
     }
     const blocks = detectContentBlocks(canvas);
     const anchors = labelAnchorsFromBlocks(blocks, canvas.width, canvas.height);
@@ -3684,7 +3704,7 @@ async function requestRegionLabels(regions, canvas){
   }).join('\n');
   const prompt = reconPrompt(regions.slice(0,24).length) + '\n\nDetected areas:\n' + list +
     '\n\nPaper content:\n' + paper;
-  const model = ($('#analyzeModel') && $('#analyzeModel').value) || $('#model').value;
+  const model = editableReconstructionModel();
   if(!model) throw new Error(tt('analyze.needmodel'));
 
   let txt;
@@ -3762,12 +3782,16 @@ function renderEditableExportCard(){
   // first. Hiding the whole card made step 4 look missing.
   const card=$('#card4'), state=window.__ffExportState;
   if(!card) return;
+  const hasBitmap=!!(state.reconBitmap || state.bitmap);
   const locked = !state.svg || state.reconPending;
-  card.classList.toggle('export-locked', locked);
+  // A failed rebuild still has a valid Step 3 bitmap. Keep the rebuild control
+  // usable and avoid presenting the whole card as if Step 3 never ran.
+  const retryableFailure=!state.svg && state.reconFailed && hasBitmap;
+  card.classList.toggle('export-locked', locked && !retryableFailure);
   const font=$('#exportFont'); if(font) font.value=state.font||'original';
   // Only a bitmap draft needs the rebuild panel: that is the case where the export
   // would otherwise carry a picture instead of editable text.
-  const box=$('#exportRecon'); if(box) box.hidden = state.source !== 'bitmap';
+  const box=$('#exportRecon'); if(box) box.hidden = !hasBitmap;
   const status=$('#exportStatus');
   if(state.reconPending){
     setExportStatus(status, tt('recon.reading'));
@@ -3779,6 +3803,7 @@ function renderEditableExportCard(){
     setExportStatus(status, (state.source === 'bitmap' && !state.recon) ? tt('export.needRecon') : tt('export.ready'));
   }
   document.querySelectorAll('#exportActions [data-export]').forEach(btn=>btn.disabled = locked);
+  const reconBtn=$('#reconBtn'); if(reconBtn) reconBtn.disabled = !hasBitmap || state.reconPending;
   const confirm=$('#exportConfirm'); if(confirm) confirm.disabled = locked || !state.target;
   if(!locked) syncExportSelection();
 }
@@ -4260,11 +4285,13 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   st.reconPending = false;
   if(!reconOk){
     const reconStatus=$('#reconStatus');
-    if(reconStatus) reconStatus.textContent=tt('recon.failed');
+    const reconError=String(st.reconError||'Editable reconstruction failed');
+    const reconMessage=reconError.length<200 ? tt('recon.failedDetail',{msg:reconError}) : tt('recon.failed');
+    if(reconStatus) reconStatus.textContent=reconMessage;
     /* Do not leave a raster-wrapped SVG selectable as if it were editable. */
     st.svg=''; st.baseSvg=''; st.scene=null; st.recon=null;
     st.reconFailed = true;
-    st.reconError = st.reconError || 'Editable reconstruction failed';
+    st.reconError = reconError;
     renderEditableExportCard();
   } else {
     renderEditableExportCard();
