@@ -3650,7 +3650,7 @@ async function runReconstruction(options){
     say('recon.failed');
     return false;
   }
-  if(!src){ st.reconFailed = true; st.reconError = 'No bitmap source'; say('recon.nobitmap'); return false; }
+  if(!src){ st.reconFailed = true; st.reconError = 'No bitmap source'; renderEditableExportCard(); say('recon.nobitmap'); return false; }
   try{
     say('recon.reading');
     const im = await loadImage(src);
@@ -3671,11 +3671,11 @@ async function runReconstruction(options){
       return true;
     }catch(vectorErr){
       console.warn('vector reconstruction failed',vectorErr);
-      if(automatic){ st.reconFailed = true; st.reconError = String(vectorErr && vectorErr.message || vectorErr || 'Vector reconstruction failed'); say('recon.failedDetail',{msg:st.reconError}); return false; }
+      if(automatic){ st.reconFailed = true; st.reconError = String(vectorErr && vectorErr.message || vectorErr || 'Vector reconstruction failed'); renderEditableExportCard(); say('recon.failedDetail',{msg:st.reconError}); return false; }
     }
     const blocks = detectContentBlocks(canvas);
     const anchors = labelAnchorsFromBlocks(blocks, canvas.width, canvas.height);
-    if(!anchors.length){ st.reconFailed = true; st.reconError = 'No editable regions detected'; say('recon.noboxes'); return false; }
+    if(!anchors.length){ st.reconFailed = true; st.reconError = 'No editable regions detected'; renderEditableExportCard(); say('recon.noboxes'); return false; }
 
     say('recon.labelling', { n: anchors.length });
     const labels = await requestRegionLabels(anchors, canvas);
@@ -3696,7 +3696,7 @@ async function runReconstruction(options){
       taken.push(finalBox);
       placed.push({ region:finalBox, text:lb.text });
     });
-    if(!placed.length){ st.reconFailed = true; st.reconError = 'No editable text detected'; say('recon.notext'); return false; }
+    if(!placed.length){ st.reconFailed = true; st.reconError = 'No editable text detected'; renderEditableExportCard(); say('recon.notext'); return false; }
 
     const scene = buildReconScene(canvas, placed, $('#paper') ? $('#paper').value : '');
     const svg = sceneToSvgString(scene);
@@ -3721,6 +3721,7 @@ async function runReconstruction(options){
     const msg = String(err && err.message || err);
     say(msg && msg.length < 200 ? 'recon.failedDetail' : 'recon.failed', { msg: msg });
     st.reconFailed = true;
+    renderEditableExportCard();
     st.reconError = msg || 'Reconstruction failed';
     return false;
   }
