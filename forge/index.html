@@ -3609,6 +3609,22 @@ async function requestEditableScene(imageDataUri, W, H){
 
 /* The whole step: find the label areas, ask for their wording, draw the text, and
    hand the result to the existing export path. */
+function currentStep3Bitmap(){
+  const st=window.__ffExportState||{};
+  const candidates=[st.reconBitmap,st.bitmap,st.generatedBitmap,st.generatedImage,st.image,st.outputImage];
+  const out=$('#out'), img=out && out.querySelector('img');
+  if(img) candidates.push(img.currentSrc||img.src);
+  return candidates.find(function(v){ return typeof v==='string' && v.trim(); }) || '';
+}
+function syncStep3Bitmap(){
+  const st=window.__ffExportState||{};
+  const src=currentStep3Bitmap();
+  if(src){
+    st.bitmap=st.bitmap||src;
+    st.reconBitmap=st.reconBitmap||src;
+  }
+  return src;
+}
 async function runReconstruction(options){
   const automatic=!!(options&&options.automatic);
   const st = window.__ffExportState;
@@ -3618,7 +3634,7 @@ async function runReconstruction(options){
   st.reconError = '';
   let src = '';
   try{
-    src = await ensureBitmapDataUrl(st.reconBitmap || st.bitmap);
+    src = await ensureBitmapDataUrl(syncStep3Bitmap());
   }catch(err){
     st.reconFailed = true;
     st.reconError = String(err && err.message || err || 'Bitmap preparation failed');
@@ -3782,7 +3798,8 @@ function renderEditableExportCard(){
   // first. Hiding the whole card made step 4 look missing.
   const card=$('#card4'), state=window.__ffExportState;
   if(!card) return;
-  const hasBitmap=!!(state.reconBitmap || state.bitmap);
+  const bitmapSource=syncStep3Bitmap();
+  const hasBitmap=!!bitmapSource;
   const locked = !state.svg || state.reconPending;
   // A failed rebuild still has a valid Step 3 bitmap. Keep the rebuild control
   // usable and avoid presenting the whole card as if Step 3 never ran.
@@ -3795,7 +3812,7 @@ function renderEditableExportCard(){
   const status=$('#exportStatus');
   if(state.reconPending){
     setExportStatus(status, tt('recon.reading'));
-  } else if(!state.svg && state.reconFailed && (state.reconBitmap || state.bitmap)){
+  } else if(!state.svg && state.reconFailed && bitmapSource){
     setExportStatus(status, tt('export.reconFailed'));
   } else if(locked){
     setExportStatus(status, tt('export.waiting'));
@@ -4020,8 +4037,9 @@ function initEditableExport(){
   const actions=$('#exportActions'); if(!actions || actions.dataset.bound) return; actions.dataset.bound='1';
   actions.addEventListener('click',e=>{
     const btn=e.target.closest('[data-export]'); if(!btn) return; const st=window.__ffExportState;
+    const bitmapSource=syncStep3Bitmap();
     if(!st.svg || st.reconPending){
-      const status = st.reconFailed && (st.reconBitmap || st.bitmap)
+      const status = st.reconFailed && bitmapSource
         ? tt('export.reconFailed')
         : st.reconPending ? tt('recon.reading') : tt('export.waiting');
       setExportStatus($('#exportStatus'), status);
@@ -4034,9 +4052,10 @@ function initEditableExport(){
   });
   $('#exportConfirm')?.addEventListener('click', async ()=>{
     const st=window.__ffExportState;
+    const bitmapSource=syncStep3Bitmap();
     if(!st.svg || st.reconPending || !st.target){
       const s2=$('#exportStatus');
-      if(s2) s2.textContent = st.reconFailed && (st.reconBitmap || st.bitmap)
+      if(s2) s2.textContent = st.reconFailed && bitmapSource
         ? tt('export.reconFailed')
         : st.reconPending ? tt('recon.reading') : tt('export.waiting');
       return;
