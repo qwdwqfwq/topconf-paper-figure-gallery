@@ -3380,12 +3380,23 @@ function sceneToSvgString(scene){
   const parts = ['<?xml version="1.0" encoding="UTF-8"?>',
     '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ' +
     'viewBox="0 0 ' + c.w + ' ' + c.h + '" width="' + c.w + '" height="' + c.h + '">',
+    '<defs><marker id="arrowhead" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">' +
+    '<path d="M0,0 L10,4 L0,8 z" fill="#334155"/></marker></defs>',
     '<rect x="0" y="0" width="' + c.w + '" height="' + c.h + '" fill="#ffffff"/>'];
   scene.nodes.forEach(function(n, i){
     const id = n.id || ('n' + i);
     if(n.type === 'image'){
       parts.push('<image id="' + id + '" data-role="base" data-editable="true" x="' + n.x + '" y="' + n.y +
         '" width="' + n.w + '" height="' + n.h + '" xlink:href="' + n.href + '"/>');
+    } else if(n.type === 'rect'){
+      parts.push('<rect id="' + id + '" data-role="panel" data-editable="true" x="' + n.x + '" y="' + n.y +
+        '" width="' + n.w + '" height="' + n.h + '" rx="' + (n.radius||0) +
+        '" fill="' + (n.fill||'#ffffff') + '" stroke="' + (n.stroke||'none') +
+        '" stroke-width="' + (n.strokeWidth||1) + '"/>');
+    } else if(n.type === 'line' || n.type === 'arrow'){
+      parts.push('<line id="' + id + '" data-role="connector" data-editable="true" x1="' + n.x + '" y1="' + n.y +
+        '" x2="' + n.x2 + '" y2="' + n.y2 + '" stroke="' + (n.stroke||'#000000') +
+        '" stroke-width="' + (n.strokeWidth||1.5) + '" marker-end="' + (n.arrow ? 'url(#arrowhead)' : '') + '"/>');
     } else if(n.type === 'text'){
       parts.push('<text id="' + id + '" data-role="label" data-editable="true" x="' + n.x + '" y="' + n.y +
         '" font-family="Arial, Helvetica, sans-serif" font-size="' + n.fontSize +
@@ -3481,8 +3492,11 @@ async function visionReconstruct(){
   const raw = Array.isArray(j.nodes) ? j.nodes : [];
   const hex = v => /^#[0-9a-fA-F]{6}$/.test(v||'') ? v : null;
   const num = (v,fb)=>{ v=Number(v); return Number.isFinite(v)?v:fb; };
-  // the bitmap itself stays as a base image node; model nodes sit on top of it
-  const nodes = [{type:'image',x:0,y:0,w:1600,h:900,href:src}];
+  // No background picture node: every element the model decomposed must be a
+  // native editable shape, so PPTX / VSDX / draw.io exports contain selectable
+  // boxes, arrows and text — not one embedded bitmap. The original bitmap stays
+  // downloadable from step 3.
+  const nodes = [];
   raw.forEach(function(n){
     if(!n || typeof n!=='object') return;
     const t = n.type;
@@ -3502,14 +3516,14 @@ async function visionReconstruct(){
         stroke:hex(n.stroke)||'#334155', strokeWidth:Math.max(0.5,num(n.strokeWidth,1.5)), arrow:!!n.arrow});
     }
   });
-  if(nodes.length<2) throw new Error(tt('recon.notext'));
+  if(!nodes.length) throw new Error(tt('recon.notext'));
   const scene = { schema:'figureforge.scene.v2', canvas:{w:1600,h:900}, nodes:nodes };
   const svg = sceneToSvgString(scene);
   Object.assign(st, { scene:scene, svg:svg, baseSvg:svg, source:'bitmap',
-                     recon:{ vision:true, nodes:nodes.length-1 } });
+                     recon:{ vision:true, nodes:nodes.length } });
   renderEditableExportCard();
   applyExportFont(st.font||'original');
-  say('recon.visionDone', {n:nodes.length-1});
+  say('recon.visionDone', {n:nodes.length});
   return true;
 }
 
