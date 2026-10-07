@@ -3856,78 +3856,7 @@ function renderSVG(svg, usedVision, useIds, truncated, auditRes){
 async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const useIds = (refIds||[...refs]).slice(0,3);
   const tg = TARGETS[$('#target').value] || TARGETS.overview;
-  const guide = layoutGuide
-    ? `REFERENCE-DERIVED DESIGN CONTRACT (highest priority; preserve the anchor topology, relative geometry, density, palette, spacing, arrows and hierarchy):\n${layoutGuide}\n\n`
-    : '';
-  const imgPrompt = `${guide}`
-    + `${tg.img}. Use the first supplied reference image as the primary composition anchor; treat any other supplied references as supporting evidence for style only, not as equal layouts to blend. `
-    + `Preserve the anchor's panel topology, relative proportions, nesting, reading direction, spacing rhythm, palette, stroke language and visual density. Do not impose a generic 3-5 side-by-side grid or a new symmetric layout. `
-    + `Publication-quality Figure 1 for a top-tier ML paper. `
-    + `Use a prominent bold TITLE line across the top only when the primary reference uses one; otherwise preserve the reference's top region. `
-    + `Below it, reproduce the primary anchor's exact zone count, order, relative widths/heights and module slots from the design contract. `
-    + `Do not add, remove, average or evenly redistribute zones. Treat the blueprint as a construction plan; every defined slot must receive `
-    + `one concrete content module from this paper, with the same nesting and approximate occupied area as the anchor. Each zone carries its `
-    + `own header only when the anchor shows one. `
-    + `Use nested grouping exactly where the anchor blueprint shows it: section containers, grouping frames and module boxes are not interchangeable. `
-    + `Inside each prescribed slot, use the module kind named by the blueprint — illustration, mini chart, table, formula, photo thumbnail, icon, `
-    + `matrix, timeline or flow strip — and keep its footprint and alignment. Do not collapse several slots into one large generic card. `
-    + `FILL EVERY SECTION, BUT NEVER WITH COPIES. Each section's interior should be occupied by module `
-    + `boxes, not left as a large empty area; what must not happen is filling it with near-identical `
-    + `blocks. Make the contents of neighbouring boxes genuinely different in kind: an icon module, a `
-    + `small chart or plot, a formula, a matrix or grid, a diagram fragment, a photo thumbnail, a `
-    + `flow strip, a table. `
-    + `Every element must earn its place by being relevant to THIS paper: take the modules and parts of `
-    + `the reference figures as your vocabulary, but fill them with the components, variables, stages `
-    + `and results that the paper content below actually describes. An element that could belong to any `
-    + `paper is filler; an element that shows this method's own parts is content. `
-    + `Keep the boxes tightly packed within a section, with even small gaps between them so the eye `
-    + `separates them; the gaps belong between boxes, not as an empty region inside a section. `
-    + `USE DASHED FRAMES FOR A REASON: an optional or future stage, an iterative loop, a repeated `
-    + `group, or something outside the core method. A dashed frame that means nothing is worse than `
-    + `no frame. `
-    + `Keep the geometry square and orderly: axis-aligned rectangles with at most a slight corner `
-    + `radius, even gaps between boxes, and crisp straight arrows. `
-    + `USE COLOUR TO SEPARATE GROUPS — do not paint everything one tint. `
-    + `Give each panel a DIFFERENT pale background tint, so the panels read apart at a glance. `
-    + `Within a panel, give the module boxes fills that differ from each other and from the panel `
-    + `behind them, drawn from the palette above; do not repeat a single fill for every box. `
-    + `Let a saturated accent colour mark the one or two most important blocks, and keep grouping `
-    + `frames lighter or neutral so the nested levels stay readable. Aim for the same colour variety `
-    + `as the reference figures, where a reader can tell the panels and the individual modules apart `
-    + `by fill alone. `
-    + `Draw MANY borders: not one outline per panel, but a border around every module box inside it, `
-    + `plus arrows and dashed grouping frames. Vary the border style — SOLID for concrete modules, `
-    + `arrows and data-flow steps, DASHED for optional, repeated, conceptual or grouped blocks — so the `
-    + `levels are obvious at a glance. `
-    + `Arrows show the data flow between components, and they carry much of the structure: long `
-    + `connectors that span the whole figure, dashed feedback loops that route back to an earlier `
-    + `stage, and short arrows inside a group. Small elements may also sit OUTSIDE the main sections `
-    + `— a legend, a partner or dataset icon, a training-loop inset at the side, a result thumbnail `
-    + `beside its stage — which is how real figures keep their middle from looking stuffed. `
-    + `Line weight and line style carry meaning here: draw each panel's outer container border clearly `
-    + `THICKER than the module boxes inside it, and vary the strokes — dashed borders for optional, `
-    + `conceptual or repeated blocks, solid borders for concrete modules — so groups stay distinct. `
-    + `Faithfully follow the primary anchor's section division, colour palette, box shapes, border weights `
-    + `and arrow style: mirror its topology, density and spacing rhythm while using the paper content below `
-    + `to populate the corresponding semantic roles. `
-    + `Exact wording is secondary to layout richness because Step 4 will edit labels later. Use short readable `
-    + `English labels or clean editable-looking label slots; never spend composition budget on paragraphs or `
-    + `let uncertain text reduce the number of visual modules. `
-    + `White background, clean flat vector illustration, crisp aligned shapes, clearly readable short `
-    + `English labels. `
-    + `FINAL CHECK before you finish. Read the figure as a reviewer would. `
-    + `Is any section still holding a large empty area? Fill it with further module boxes that show `
-    + `this method's own parts. `
-    + `Is any box a near-duplicate of its neighbour, or an element that could sit in any paper? `
-    + `Replace it with a different kind of element that is specific to this method. `
-    + `Can a reader name what every box contains by looking at it? If a box is generic, make it `
-    + `concrete: name the variable, the stage, the metric or the component it stands for. `
-    + `Does every dashed frame stand for something a reader could name? If not, make it solid or drop it. `
-    + `Can a reader follow the flow from the arrows alone? Add a connector if a step is unclear. `
-    + `Is the colour varied enough that sections and groups read apart, without turning garish? `
-    + `The goal is a figure that is full, varied and specific to this paper — what a top-conference `
-    + `reviewer would find clear and well judged. `
-    + `Paper content: ${content.slice(0,2000)}`;
+  const imgPrompt = `${tg.img}. White background, flat modern scientific illustration style, elegant layout, minimal accurate labels. Paper content: ${content.slice(0,2000)}`;
   const body = {model, prompt:imgPrompt};
   if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
   else if(p==='sf'){ body.image_size='1024x1024'; body.batch_size=1; }
