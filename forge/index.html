@@ -2421,6 +2421,10 @@ window.__ffExportState = {svg:'', baseSvg:'', scene:null, target:'svg', font:'or
 // Keep the Step 3 raster in a durable page-level slot.  The async reconstruction
 // can fail or refresh the export card without meaning that Step 3 lost its image.
 window.__ffStep3Bitmap = '';
+// Keep a second reference outside the export state.  The export card can be
+// re-rendered while the vision request is pending; that must not discard the
+// image that Step 3 already produced.
+window.__ffLastGeneratedImage = '';
 
 /* ---------- canvas units ---------- */
 const EXPORT_CANVAS = {w:1600, h:900};
@@ -3644,14 +3648,20 @@ async function requestEditableScene(imageDataUri, W, H){
 function rememberStep3Bitmap(src){
   if(typeof src!=='string' || !src.trim()) return;
   window.__ffStep3Bitmap=src;
+  window.__ffLastGeneratedImage=src;
   try{ sessionStorage.setItem('__ffStep3Bitmap',src); }catch(_){ }
 }
 function currentStep3Bitmap(){
   const st=window.__ffExportState||{};
-  const candidates=[window.__ffStep3Bitmap,st.reconBitmap,st.bitmap,st.generatedBitmap,st.generatedImage,st.image,st.outputImage];
-  document.querySelectorAll('#out img,#card3 img').forEach(function(img){ candidates.push(img.currentSrc||img.src||img.getAttribute('src')||''); });
+  const candidates=[window.__ffLastGeneratedImage,window.__ffStep3Bitmap,st.reconBitmap,st.bitmap,st.generatedBitmap,st.generatedImage,st.image,st.outputImage];
+  // Older layouts placed the generated draft outside #out.  Scan every image
+  // as a final fallback so a valid Step 3 result cannot be mistaken for no input.
+  document.querySelectorAll('#out img,#card3 img,img').forEach(function(img){ candidates.push(img.currentSrc||img.src||img.getAttribute('src')||''); });
   try{ candidates.push(sessionStorage.getItem('__ffStep3Bitmap')||''); }catch(_){ }
-  return candidates.find(function(v){ return /^(data:image\/|https?:|blob:)/i.test(String(v||'').trim()); }) || '';
+  return candidates.find(function(v){
+    const s=String(v||'').trim();
+    return /^(data:image\/|https?:|blob:)/i.test(s);
+  }) || '';
 }
 function syncStep3Bitmap(){
   const st=window.__ffExportState||{};
