@@ -2417,7 +2417,7 @@ function auditSummaryText(res){
    Everything below runs in the browser and works offline (PPTX uses the vendored
    PptxGenJS; draw.io and VSDX are written here). The only network call is the
    optional bitmap reconstruction, which is an explicit button, never automatic. */
-window.__ffExportState = {svg:'', baseSvg:'', scene:null, target:'svg', font:'original', source:'svg', bitmap:'', recon:null, reconPending:false};
+window.__ffExportState = {svg:'', baseSvg:'', scene:null, target:'svg', font:'original', source:'svg', bitmap:'', reconBitmap:'', recon:null, reconPending:false, reconFailed:false, reconError:''};
 
 /* ---------- canvas units ---------- */
 const EXPORT_CANVAS = {w:1600, h:900};
@@ -3594,8 +3594,18 @@ async function runReconstruction(options){
   const st = window.__ffExportState;
   const status = $('#reconStatus');
   const say = function(k, vars){ if(status) status.textContent = tt(k, vars); };
-  const src = await ensureBitmapDataUrl(st.reconBitmap || st.bitmap);
-  if(!src){ say('recon.nobitmap'); return false; }
+  st.reconFailed = false;
+  st.reconError = '';
+  let src = '';
+  try{
+    src = await ensureBitmapDataUrl(st.reconBitmap || st.bitmap);
+  }catch(err){
+    st.reconFailed = true;
+    st.reconError = String(err && err.message || err || 'Bitmap preparation failed');
+    say('recon.failed');
+    return false;
+  }
+  if(!src){ st.reconFailed = true; st.reconError = 'No bitmap source'; say('recon.nobitmap'); return false; }
   try{
     say('recon.reading');
     const im = await loadImage(src);
@@ -3610,17 +3620,17 @@ async function runReconstruction(options){
       if(automatic && (audit.dominantBitmap || audit.primitiveCount < 6)){
         throw new Error('Vision model returned a dominant bitmap or too few editable primitives');
       }
-      Object.assign(st,{scene,svg,baseSvg:svg,source:'bitmap',recon:{mode:'vector',nodes:scene.nodes.length,audit}});
+      Object.assign(st,{scene,svg,baseSvg:svg,source:'bitmap',recon:{mode:'vector',nodes:scene.nodes.length,audit},reconFailed:false,reconError:''});
       renderEditableExportCard(); applyExportFont(st.font || 'original');
       say(audit.defects.length ? 'recon.audit' : 'recon.done',{n:scene.nodes.length,d:audit.defects.length});
       return true;
     }catch(vectorErr){
       console.warn('vector reconstruction failed',vectorErr);
-      if(automatic){ say('recon.failed'); return false; }
+      if(automatic){ st.reconFailed = true; st.reconError = String(vectorErr && vectorErr.message || vectorErr || 'Vector reconstruction failed'); say('recon.failed'); return false; }
     }
     const blocks = detectContentBlocks(canvas);
     const anchors = labelAnchorsFromBlocks(blocks, canvas.width, canvas.height);
-    if(!anchors.length){ say('recon.noboxes'); return false; }
+    if(!anchors.length){ st.reconFailed = true; st.reconError = 'No editable regions detected'; say('recon.noboxes'); return false; }
 
     say('recon.labelling', { n: anchors.length });
     const labels = await requestRegionLabels(anchors, canvas);
@@ -3641,13 +3651,14 @@ async function runReconstruction(options){
       taken.push(finalBox);
       placed.push({ region:finalBox, text:lb.text });
     });
-    if(!placed.length){ say('recon.notext'); return false; }
+    if(!placed.length){ st.reconFailed = true; st.reconError = 'No editable text detected'; say('recon.notext'); return false; }
 
     const scene = buildReconScene(canvas, placed, $('#paper') ? $('#paper').value : '');
     const svg = sceneToSvgString(scene);
     const audit = auditReconScene(scene);
     Object.assign(st, { scene:scene, svg:svg, baseSvg:svg, source:'bitmap',
-                       recon:{ anchors:anchors.length, labels:placed.length, audit:audit } });
+                       recon:{ anchors:anchors.length, labels:placed.length, audit:audit },
+                       reconFailed:false, reconError:'' });
     renderEditableExportCard();
     applyExportFont(st.font || 'original');
     say(audit.defects.length ? 'recon.audit' : 'recon.done',
@@ -3657,6 +3668,8 @@ async function runReconstruction(options){
     console.warn('reconstruction failed', err);
     const msg = String(err && err.message || err);
     say(msg && msg.length < 200 ? 'recon.failedDetail' : 'recon.failed', { msg: msg });
+    st.reconFailed = true;
+    st.reconError = msg || 'Reconstruction failed';
     return false;
   }
 }
@@ -3758,6 +3771,8 @@ function renderEditableExportCard(){
   const status=$('#exportStatus');
   if(state.reconPending){
     setExportStatus(status, tt('recon.reading'));
+  } else if(!state.svg && state.reconFailed && (state.reconBitmap || state.bitmap)){
+    setExportStatus(status, tt('export.reconFailed'));
   } else if(locked){
     setExportStatus(status, tt('export.waiting'));
   } else {
@@ -3785,13 +3800,17 @@ function showEditableExportStep(svgOrSource){
     ? svgOrSource
     : { svg: svgOrSource, source: 'svg' };
   const svg = src.svg || '';
+  const current = window.__ffExportState || {};
   try{
     window.__ffExportState = Object.assign(window.__ffExportState, {
       svg: svg, baseSvg: svg,
       source: src.source || 'svg',
-      bitmap: src.bitmap || '',
+      bitmap: src.bitmap || current.bitmap || '',
+      reconBitmap: src.reconBitmap || current.reconBitmap || '',
       recon: null,
       reconPending: !!src.reconPending,
+      reconFailed: src.reconFailed === undefined ? (svg ? false : !!current.reconFailed) : !!src.reconFailed,
+      reconError: src.reconError || (svg ? '' : current.reconError || ''),
       scene: svg ? parseSvgScene(svg) : null,
       target: 'svg', font:'original',
     });
@@ -4063,10 +4082,20 @@ window.__ffRefreshExportCard = () => renderEditableExportCard();
    deterministic fallback when explicitly running a manual retry. */
 $('#reconBtn')?.addEventListener('click', async function(){
   const btn = $('#reconBtn');
+  const st = window.__ffExportState;
+  st.reconPending = true;
+  st.reconFailed = false;
+  st.reconError = '';
+  renderEditableExportCard();
+  let ok = false;
   if(btn) btn.disabled = true;
   try{
-    await runReconstruction();
+    ok = await runReconstruction();
+    return ok;
   }finally{
+    st.reconPending = false;
+    if(!ok) st.reconFailed = true;
+    renderEditableExportCard();
     if(btn) btn.disabled = false;
   }
 });
@@ -4229,6 +4258,8 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     if(reconStatus) reconStatus.textContent=tt('recon.failed');
     /* Do not leave a raster-wrapped SVG selectable as if it were editable. */
     st.svg=''; st.baseSvg=''; st.scene=null; st.recon=null;
+    st.reconFailed = true;
+    st.reconError = st.reconError || 'Editable reconstruction failed';
     renderEditableExportCard();
   } else {
     renderEditableExportCard();
