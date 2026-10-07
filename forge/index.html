@@ -299,6 +299,9 @@
     .export-font-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-top:10px}
     .export-font-row label{font-size:13px;color:var(--muted);font-weight:700}
     .export-font-row select{min-width:220px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);padding:9px 12px;font:inherit}
+    .export-recon{margin-top:12px;border:1px dashed #c7d2fe;border-radius:11px;padding:11px 12px;background:#f8faff}
+    .recon-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:9px}
+    .recon-status{color:var(--muted);font-size:12px;line-height:1.5}
     .export-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}
     .export-actions button{min-height:52px;padding:10px 12px;border:1px solid #dfe3f5;border-radius:12px;background:#fff;color:var(--ink);font:inherit;font-weight:700;cursor:pointer;transition:.16s ease}
     .export-actions button:hover{border-color:#667eea;box-shadow:0 0 0 3px rgba(102,126,234,.12);background:#f8f9ff}
@@ -307,8 +310,24 @@
     .export-actions button strong{display:block;font-size:14px}
     .export-actions button small{display:block;margin-top:3px;color:var(--muted);font-size:11px;font-weight:500}
     .export-confirm-row{display:flex;justify-content:flex-end;margin-top:12px}
-    .export-confirm{min-width:150px}
+    .export-confirm{min-width:150px;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+    .btn-spin{width:14px;height:14px;flex:0 0 auto;border:2px solid rgba(255,255,255,.45);border-top-color:#fff;border-radius:50%;animation:rot .7s linear infinite}
+    .export-confirm:disabled{cursor:progress}
+    .export-busy{background:#eef2ff;color:#3730a3}
     .export-status{margin-top:11px;border-radius:9px;padding:9px 11px;background:#f5f7fb;color:var(--muted);font-size:12px;line-height:1.5}
+    .export-dl{margin-top:9px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;border:1px solid #c7d2fe;background:#eef2ff;border-radius:9px;padding:9px 11px}
+    .export-dl a{font-weight:700;color:#3730a3;text-decoration:underline;font-size:13px}
+    .export-dl span{color:#4338ca;font-size:12px}
+    .export-msg{line-height:1.5}
+    /* Step 4 stays on screen from the start so the flow is legible, but shows as locked
+       until a draft exists. */
+    #card4.export-locked .box{opacity:.62}
+    #card4.export-locked .export-actions button{cursor:not-allowed}
+    #card4.export-locked .export-status{background:#f1f5f9;color:#64748b}
+    .export-progress{margin-top:10px}
+    .export-progress-label{font-size:12px;color:#3730a3;margin-bottom:5px}
+    .export-progress-track{height:8px;border-radius:999px;background:#e0e7ff;overflow:hidden}
+    .export-progress-fill{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#6366f1,#4f46e5);transition:width .16s ease}
     @media(max-width:760px){.export-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
 </style>
 </head>
@@ -521,6 +540,12 @@
     <div class="flow-note" data-i18n-html="export.intro"></div>
     <section class="box b-slate">
       <h4><span class="bi" aria-hidden="true">✏️</span><span data-i18n="export.title"></span></h4>
+      <div class="export-recon" id="exportRecon" hidden>
+        <div class="recon-row">
+          <button type="button" class="btn-primary" id="reconBtn" data-i18n="recon.btn"></button>
+          <span class="recon-status" id="reconStatus"></span>
+        </div>
+      </div>
       <div class="export-font-row">
         <label for="exportFont" data-i18n="export.font"></label>
         <select id="exportFont">
@@ -582,7 +607,7 @@
 </div>
 
 <script src="./i18n.js"></script>
-<script src="./i18n_forge.js?v=20261006"></script>
+<script src="./i18n_forge.js?v=20261008"></script>
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 
@@ -636,15 +661,15 @@ const IMGRE = /(image|seedream|flux|kolors|dall-e|gpt-image|cogview|sd-|stable-d
 const kindOf = id => SKIP.test(id) ? 'skip' : IMGRE.test(id) ? 'image' : 'chat';
 
 const TARGETS = {
- overview:{label:tt('tg.overview'), img:'Design a publication-quality Figure 1 teaser/overview figure',
-   instr:'一张论文 Figure 1 总览（teaser）图：左侧或顶部为输入示例，中间为我们方法的核心模块（2-4 个方块+箭头表示数据流），右侧或底部为输出/效果。横向布局，每个面板一个信息点。'},
- architecture:{label:tt('tg.architecture'), img:'Design a publication-quality method architecture figure',
-   instr:'一张方法架构图：展示模型内部组件与层次结构（编码器、模块、解码器等），用方块表示组件、箭头表示数据流，标注关键组件名称与维度；体现组件之间的连接关系。'},
- pipeline:{label:tt('tg.pipeline'), img:'Design a publication-quality pipeline/process figure',
-   instr:'一张 pipeline 流程图：按顺序展示从输入到输出的若干阶段（阶段用横向或纵向排列的圆角方块，箭头连接），每个阶段下方用小字标注该阶段。'},
- results:{label:tt('tg.results'), img:'Design a publication-quality results figure',
-   instr:'一张结果展示图：以多面板网格对比不同方法/设置的结果，每列一种方法、每行一个样本，面板下方标注方法名与关键指标，坐标轴与图例清晰。'},
- custom:{label:tt('tg.custom'), img:'Design a publication-quality scientific figure', instr:''},
+ overview:{label:tt('tg.overview'), img:'Design a publication-quality Figure 1 teaser/overview figure that follows the supplied reference composition',
+   instr:'一张论文 Figure 1 总览（teaser）图：表达输入、核心方法与输出/效果的语义关系；模块数量、分区方式、阅读方向与信息密度以参考图设计契约为准。'},
+ architecture:{label:tt('tg.architecture'), img:'Design a publication-quality method architecture figure that follows the supplied reference composition',
+   instr:'一张方法架构图：展示模型内部组件、层次结构、数据流与连接关系；组件数量、嵌套关系、分区和阅读方向以参考图设计契约为准。'},
+ pipeline:{label:tt('tg.pipeline'), img:'Design a publication-quality pipeline/process figure that follows the supplied reference composition',
+   instr:'一张 pipeline 流程图：表达从输入到输出的阶段关系、分支、循环或反馈；阶段布局、方向、容器和箭头组织以参考图设计契约为准。'},
+ results:{label:tt('tg.results'), img:'Design a publication-quality results figure that follows the supplied reference composition',
+   instr:'一张结果展示图：呈现样本、方法、指标和对比关系；面板组织、图表类型、分组方式、图例与阅读方向以参考图设计契约为准。'},
+ custom:{label:tt('tg.custom'), img:'Design a publication-quality scientific figure that follows the supplied reference composition', instr:''},
 };
 
 /* FALLBACK：manifest 拉取失败（离线）时使用，与 forge/data/manifest.json 同口径 */
@@ -786,6 +811,10 @@ async function search(){
   const scored = [];
   for(let i=0;i<data.N;i++){
     const f = data.figs?.[i];
+    // Defensive: ids.json, bm25.docs and the embedding matrices must all stay the
+    // same length as figures.json. If they ever drift, one missing record used to
+    // throw on the next line and abort the whole retrieval, leaving an empty grid.
+    // Skipping the row keeps the rest of the search usable instead.
     if(!f) continue;
     if(pv!=='all' && f.venue!==pv) continue;
     if(yr!=='all' && f.year!=+yr) continue;
@@ -804,7 +833,7 @@ async function search(){
   });
   const hasQ = !!clipScores;
   results = scored.map(x=>{
-    const f = data.figs?.[x.i];
+    const f=data.figs?.[x.i];
     if(!f) return null;
     return {...f, matchScore: hasQ ? Math.max(0,Math.min(100,Math.round(x.s*100))) : null};
   }).filter(Boolean);
@@ -1508,33 +1537,62 @@ document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
   b.classList.add('on'); passMode=b.dataset.pass;
   syncPassUI();
   if(passMode==='two' && refs.size && refs.size<4) showErr(tt('pass.warn1'));
-  if(passMode==='direct' && refs.size>4) showErr(tt('pass.warn2',{n:refs.size}));
+  // No upper-bound warning for direct mode: it used to complain above 6 references, but
+  // sending the model more original figures is useful — the images carry detail that a
+  // written summary cannot, so a higher count is not a problem to warn about.
 });
 $('#model').onchange = e=>localStorage.setItem('ff_model_'+$('#provider').value, e.target.value);
 
 /* ---------------- pass 1: analyze references ---------------- */
-const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference overview figures of the SAME target visual type. Extract their shared layout grammar as a CONCRETE design contract: exact hex colours, panel rectangles as numbers on a 1600x900 canvas, a numeric type scale and stroke widths. Return STRICT JSON only.';
+const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference figures of the SAME target visual type. Treat the first supplied figure as the single primary layout anchor; later figures are supporting style evidence only. Recover the anchor\'s concrete composition, zones, nesting, topology and density without averaging layouts, then use the other figures only to corroborate palette, strokes, typography and illustration language. Return STRICT JSON only.';
 function buildAnalyzePrompt(n, idList){
   const ids = (idList||[]).join(', ');
   return `Here are ${n} top-conference paper figures, all of the target visual type for the figure I want to design.
-Analyze their COMMON design grammar and return one JSON object with EXACTLY these keys:
-{"layout":"how the canvas is divided (number/arrangement of panels) and reading direction",
- "panels":[{"name":"panel name","role":"what this panel shows","x":0,"y":0,"w":0,"h":0}],
- "palette":{"background":"#hex","primary":"#hex","accent":"#hex","neutral":"#hex","others":["#hex"]},
- "typography":{"title":0,"panelHeader":0,"label":0,"note":0},
+Analyze the PRIMARY ANCHOR (the first supplied image) and return one JSON object with EXACTLY these keys:
+{"density":{"containers":0,"modulesPerPanel":0,"solidBorders":0,"dashedBorders":0,"connectors":0,"boxFillPercent":0,
+            "nesting":"the levels, e.g. panel > 6 module boxes > each holds an icon or mini chart",
+            "variety":"the kinds of visual modules present and how neighbouring modules differ",
+            "fill":"one sentence describing how fully the anchor's boxes are occupied"},
  "strokes":{"box":0,"arrow":0,"connector":0},
+ "typography":{"title":0,"panelHeader":0,"label":0,"note":0},
+ "palette":{"background":"#hex","primary":"#hex","accent":"#hex","neutral":"#hex","others":["#hex"]},
+ "layout":"how the canvas is divided (number/arrangement of panels) and reading direction",
+ "panels":[{"name":"panel name","role":"what this panel shows","x":0,"y":0,"w":0,"h":0}],
+ "layoutBlueprint":[{"id":"zone-1","role":"what this concrete zone or slot contains","x":0,"y":0,"w":0,"h":0,"moduleCount":0,"occupancy":0,"moduleKinds":["icon","chart"],"nesting":"local nesting","flow":"local reading direction"}],
+ "topology":{"anchor":"the canonical composition to preserve","zones":"relative columns/rows and nesting","flow":"reading direction and connector routes","spacing":"gaps, margins and whitespace rhythm"},
+ "styleFingerprint":{"background":"surface treatment","panelShape":"corner radius and container treatment","moduleShape":"module box treatment","iconStyle":"icon/illustration language","arrowStyle":"arrow and connector language","textTreatment":"title, header and label treatment"},
  "elements":"recurring visual elements: box styles, arrow types, icon/illustration conventions",
  "hierarchy":"information hierarchy: what is emphasised and how",
- "representative":["ids of the 2-3 most typical, highest-quality figures among these"],
- "refinedPrompt":"a detailed self-contained English layout description fusing the common grammar, ready to drive generation"}
+ "representative":["ids of the 2-4 figures that best preserve the canonical composition and richest detail; choose a primary anchor first, then supporting examples"],
+ "imageRefIds":["ids of 1-3 figures that are the strongest visual anchors for a bitmap model"],
+ "refinedPrompt":"a detailed self-contained English description of what is drawn: each panel and its contents, the module blocks and their connections, arrow directions and flow, the visual levels, and the icon or illustration style"}
 Rules: output JSON only, no markdown or commentary.
-panels: 2-6 entries. x/y/w/h are integers in a 1600x900 coordinate space with the origin at the top-left; they must not overlap and must stay inside 1600x900.
+The FIRST supplied figure is the ONLY layout master. Do not average the layouts or invent a new composition. Use later figures only as supporting evidence for palette, strokes, icon language and chart treatment.
+panels: 2-6 entries. x/y/w/h are integers in a 1600x900 coordinate space with the origin at the top-left; they must not overlap and must stay inside 1600x900. Preserve the actual relative arrangement: do not turn stacked zones into side-by-side panels and do not invent a symmetric grid.
+layoutBlueprint: derive 4-12 concrete zones, grouping frames or module slots from the FIRST figure. Coordinates are integers in the same 1600x900 space. Preserve their order, relative area, nesting and connector routes. Zones may nest or overlap intentionally. Do not add zones that are absent from the anchor. moduleCount is the number of distinct visual modules in that zone; occupancy is the approximate percent of its area occupied by meaningful content; moduleKinds names the visible kinds (icon, chart, matrix, photo, formula, flow strip, table, diagram fragment, etc.).
 palette: every value MUST be a real #rrggbb hex string.
 typography: integer pixel sizes for a 1600x900 canvas (title 36-56, panelHeader 26-36, label 20-30, note 16-22).
 strokes: integer pixel widths (box 2-4, arrow 2-4, connector 1-3).
-representative: use the figure ids EXACTLY as listed below, 2-3 of them, no indices.
+density: COUNT what you actually see, as integers. Use the median only for genuinely shared quantities; keep the anchor's topology and density when the figures differ materially — never report 0 for something you can see:
+  containers  how many outer panel/container boxes one typical figure has,
+  modulesPerPanel  how many module boxes are drawn inside ONE panel,
+  solidBorders and dashedBorders  how many borders use each style in that figure,
+  connectors  how many separate arrows or connection lines it has,
+  boxFillPercent  roughly what share of a module box's area is covered by content (0-100),
+  nesting  describe the levels in order, e.g.
+    "section > grouping frame > 4 module boxes > each holds an icon or mini chart";
+    say how many levels a typical section has and whether grouping frames appear inside sections.
+  variety  name the KINDS of element these figures use inside boxes (icons, small charts, formulas,
+    matrices, diagram fragments, photo thumbnails, flow strips, tables) and how neighbours differ,
+    plus any element that sits outside the sections such as a legend, a dataset icon, a side inset
+    or a result thumbnail. The generator uses this list as its vocabulary.
+  fill  one sentence on how FULL the boxes are in these figures — how much of a typical box is
+    occupied by its element — so fullness is matched without resorting to copies.
+representative: use the figure ids EXACTLY as listed below, 2-4 of them, no indices. The first id is the primary layout anchor; the remaining ids are supporting style references, not images to blend equally.
+representative: the FIRST id MUST be the first supplied id. Add 1-3 supporting ids only after it; they are style references, not equal layout references.
+imageRefIds: the FIRST id MUST be the first supplied id. Add at most two supporting ids; do not select a visually incompatible outlier.
 Available figure ids: ${ids}
-refinedPrompt should be 120-200 concrete English words about panels, arrows, palette and hierarchy.`;
+topology, styleFingerprint and refinedPrompt must describe visible layout and styling, not the paper's scientific claims. refinedPrompt should be 120-180 concrete English words about panels, arrows, palette, spacing, hierarchy and illustration language. It is used as a visual guide, not as a request to copy reference labels. Keep the prose compact so the whole JSON answer fits in one response.`;
 }
 function extractJSON(txt){
   const m = txt.match(/\{[\s\S]*\}/);
@@ -1550,7 +1608,7 @@ async function analyzeReferences(){
   if(useAnthropic){
     const blocks=uris.map(u=>{const p=dataURIToParts(u);return {type:'image',source:{type:'base64',media_type:p.media,data:p.data}};});
     blocks.push({type:'text',text:buildAnalyzePrompt(ordered.length, ordered)});
-    const body={model:$('#analyzeModel').value||$('#model').value,max_tokens:3000,system:ANALYZE_SYS,messages:[{role:'user',content:blocks}]};
+    const body={model:$('#analyzeModel').value||$('#model').value,max_tokens:8000,system:ANALYZE_SYS,messages:[{role:'user',content:blocks}]};
     const r=await fetch(baseURL()+'/v1/messages',{method:'POST',headers:anthropicHeaders(cleanKey($('#key').value)),body:JSON.stringify(body)});
     txt=await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
     const d=JSON.parse(txt); txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
@@ -1559,7 +1617,7 @@ async function analyzeReferences(){
     if(!am) throw new Error(tt('analyze.needmodel'));
     const parts=uris.map(u=>({type:'image_url',image_url:{url:u}}));
     parts.push({type:'text',text:buildAnalyzePrompt(ordered.length, ordered)});
-    const body={model:am,temperature:0.2,messages:[{role:'system',content:ANALYZE_SYS},{role:'user',content:parts}]};
+    const body={model:am,temperature:0.2,max_tokens:8000,messages:[{role:'system',content:ANALYZE_SYS},{role:'user',content:parts}]};
     if($('#provider').value==='ark') body.thinking={type:'disabled'};
     let r;
     try{ r=await postJSON(baseURL(),'/chat/completions',body,cleanKey($('#key').value)); }
@@ -1575,20 +1633,40 @@ async function analyzeReferences(){
   // Representative figures may come back as ids (preferred, unambiguous) or as
   // 1-based indices (older models). Accept either, but only ids that really exist
   // in the analysed set, so a miscount can no longer silently pick the wrong figure.
-  const validIds = ordered.filter(id=>data.figs.some(f=>f.id===id));
-  let reps = (j.representative||[]).map(x=>{
-    const s = String(x).trim();
+  const validIds = [...new Set(ordered)].filter(id=>data.figs.some(f=>f.id===id));
+  const primaryId = validIds[0] || null;
+  const resolveRefId = x=>{
+    const s=String(x).trim();
     if(validIds.includes(s)) return s;
-    const n = +s;
-    if(isFinite(n) && n>=1 && n<=ordered.length) return ordered[n-1];
-    return null;
-  }).filter(Boolean);
-  reps=[...new Set(reps)].slice(0,3);
-  if(reps.length<2) reps=ordered.slice(0,3);
-  // The generation prompt gets the numbers from the contract plus the prose.
+    const n=+s;
+    return Number.isInteger(n)&&n>=1&&n<=validIds.length ? validIds[n-1] : null;
+  };
+  let reps=[primaryId,...(Array.isArray(j.representative)?j.representative:[]).map(resolveRefId)].filter(Boolean);
+  reps=[...new Set(reps)].slice(0,4);
+  if(reps.length<2) reps=[...new Set([primaryId,...validIds])].filter(Boolean).slice(0,4);
+  let imageRefIds=[primaryId,...(Array.isArray(j.imageRefIds)?j.imageRefIds:[]).map(resolveRefId)].filter(Boolean);
+  imageRefIds=[...new Set(imageRefIds)].slice(0,3);
+  if(!imageRefIds.length) imageRefIds=reps.slice(0,3);
+  j.primaryId=primaryId;
+  // Two style guides, because the two output paths consume them differently.
   const contract = designContractText(j);
-  const guideParts = [contract, j.refinedPrompt||''].filter(s=>s && s.trim());
-  analysis={j,repIds:reps,refinedPrompt:guideParts.join('\n\n')};
+  const prose = (j.refinedPrompt||'').trim();
+  const styleRows = imageStyleText(j);
+  const measured = styleRows.length
+    ? 'Measured from the chosen reference figures — follow these:\n' + styleRows.join('\n')
+    : '';
+  analysis={
+    j, repIds:reps, imageRefIds,
+    // SVG generation is measured and audited shape by shape, so it takes the prose
+    // style description AND the precise contract: the hex values, panel coordinates
+    // and type scale are what the geometry audit can actually check.
+    refinedPrompt:[measured, contract, prose].filter(s=>s && s.trim()).join('\n\n'),
+    // The bitmap path gets the measured values too, but phrased rather than pinned
+    // to coordinates. Leaving them out is what made earlier drafts ignore the chosen
+    // reference figures: the palette, line weights and panel count were measured and
+    // then thrown away before they reached the image model.
+    refinedPromptImage:[measured, contract, prose].filter(s=>s && s.trim()).join('\n\n'),
+  };
   renderAnalyze(ordered);
   return analysis;
 }
@@ -1636,10 +1714,102 @@ function paletteMarkup(palette){
 /* Turn the analysis result into a compact, checkable design contract. Prose like
    "restrained palette, clear hierarchy" leaves every concrete decision to the
    generator, which is where style drift comes from; exact values pin it down. */
+/* The same measurements as designContractText, but phrased for an image model.
+   A bitmap model paints pixels rather than placing shapes, so exact coordinates
+   would only pin it to one layout; the measured palette, type scale, stroke
+   weights, element conventions and panel division are what make the draft match
+   the chosen reference figures, so those are spelled out in words instead. */
+function imageStyleText(j){
+  if(!j) return '';
+  const rows = [];
+  rows.push('- reference role: the first supplied figure is the single layout master; later figures are style evidence only. Preserve the master\'s zone order, relative geometry, nesting and whitespace rhythm rather than averaging layouts.');
+  const pal = j.palette;
+  if(pal && !Array.isArray(pal) && typeof pal === 'object'){
+    const used = ['background','primary','accent','neutral'].filter(k=>pal[k]).map(k=>`${k} ${pal[k]}`);
+    const extra = Array.isArray(pal.others) ? pal.others.join(', ') : '';
+    if(used.length || extra) rows.push(`- palette: ${used.concat(extra?[extra]:[]).join(', ')}`);
+  } else if(Array.isArray(pal) && pal.length){
+    rows.push(`- palette: ${pal.join(', ')}`);
+  }
+  const ty = j.typography;
+  if(ty && typeof ty === 'object'){
+    const scale = ['title','panelHeader','label','note'].filter(k=>ty[k]!=null).map(k=>`${k} ${ty[k]}px`);
+    if(scale.length) rows.push(`- type scale: ${scale.join(', ')} (keep this hierarchy: the title clearly largest, panel headers next, then labels, then small notes)`);
+  }
+  const st = j.strokes;
+  if(st && typeof st === 'object'){
+    const w = ['box','arrow','connector'].filter(k=>st[k]!=null).map(k=>`${k} ${st[k]}px`);
+    if(w.length) rows.push(`- stroke weights: ${w.join(', ')}`);
+  }
+  const dn = j.density;
+  if(dn && typeof dn === 'object'){
+    const bits = [];
+    if(dn.containers != null) bits.push(`${dn.containers} container boxes`);
+    if(dn.modulesPerPanel != null) bits.push(`${dn.modulesPerPanel} module boxes per panel`);
+    if(dn.solidBorders != null || dn.dashedBorders != null)
+      bits.push(`${dn.solidBorders||0} solid and ${dn.dashedBorders||0} dashed borders`);
+    if(dn.connectors != null) bits.push(`${dn.connectors} separate arrows/connectors`);
+    if(dn.boxFillPercent != null) bits.push(`boxes about ${dn.boxFillPercent}% filled with content`);
+    if(dn.variety != null) bits.push(`visual variety target: ${dn.variety}`);
+    if(dn.fill != null) bits.push(`overall canvas fill target: ${dn.fill}`);
+    if(bits.length) rows.push(`- counted in a typical reference figure: ${bits.join(', ')} — match these counts`);
+    if(dn.nesting) rows.push(`- nesting: ${dn.nesting}`);
+  }
+  if(j.elements) rows.push(`- recurring elements: ${j.elements}`);
+  if(j.hierarchy) rows.push(`- hierarchy: ${j.hierarchy}`);
+  if(j.layout) rows.push(`- panel division and reading direction: ${j.layout}`);
+  if(j.topology && typeof j.topology==='object'){
+    const top = [];
+    if(j.topology.anchor) top.push('anchor: '+j.topology.anchor);
+    if(Array.isArray(j.topology.zones)) top.push('zones: '+j.topology.zones.join(' | '));
+    if(j.topology.flow) top.push('flow: '+j.topology.flow);
+    if(j.topology.spacing) top.push('spacing: '+j.topology.spacing);
+    if(top.length) rows.push('- canonical topology (preserve this arrangement; do not invent a generic grid): '+top.join('; '));
+  }
+  if(j.styleFingerprint && typeof j.styleFingerprint==='object'){
+    const sf = ['background','panelShape','moduleShape','iconStyle','arrowStyle','textTreatment'].filter(k=>j.styleFingerprint[k]).map(k=>k+': '+j.styleFingerprint[k]);
+    if(sf.length) rows.push('- style fingerprint: '+sf.join('; '));
+  }
+  if(Array.isArray(j.panels) && j.panels.length){
+    const names = j.panels.slice(0,8).map(p=>{
+      const name=[p.name,p.role].filter(Boolean).join(' — ');
+      const geo=(p.x!=null&&p.y!=null&&p.w!=null&&p.h!=null) ? ' @ '+Math.round(p.x/1600*100)+'%,'+Math.round(p.y/900*100)+'% size '+Math.round(p.w/1600*100)+'%x'+Math.round(p.h/900*100)+'%' : '';
+      return name+geo;
+    }).filter(Boolean);
+    if(names.length) rows.push(`- panels: ${names.join(' | ')}`);
+  }
+  if(Array.isArray(j.layoutBlueprint) && j.layoutBlueprint.length){
+    const blueprint = j.layoutBlueprint.slice(0,14).map((z,i)=>{
+      if(!z || typeof z!=='object') return '';
+      const vals=[z.x,z.y,z.w,z.h];
+      const geo=vals.every(v=>Number.isFinite(Number(v)))
+        ? ` @ x=${Math.round(Number(z.x))} y=${Math.round(Number(z.y))} w=${Math.round(Number(z.w))} h=${Math.round(Number(z.h))}` : '';
+      const kinds=Array.isArray(z.moduleKinds) ? z.moduleKinds.join(', ') : (z.moduleKinds||'');
+      return `${i+1}. ${z.id||z.name||('zone-'+(i+1))} role=${z.role||'unspecified'}${geo} modules=${z.moduleCount??'?'} occupancy=${z.occupancy??'?'}%${kinds?' kinds='+kinds:''}${z.nesting?' nesting='+z.nesting:''}${z.flow?' flow='+z.flow:''}`;
+    }).filter(Boolean);
+    if(blueprint.length) rows.push('- anchor layout blueprint (copy these zones and slots exactly; do not add or remove zones):\n  '+blueprint.join('\n  '));
+  }
+  rows.push('- density target: fill the defined module regions with meaningful diagrams, mini charts, icons, thumbnails or short labels; preserve intentional gutters but avoid conspicuous empty white areas.');
+  return rows;
+}
+
 function designContractText(j){
   if(!j) return '';
   const rows = [];
+  rows.push('- layout authority: the first selected reference is the only composition anchor; all other references contribute style cues only.');
   if(j.layout) rows.push(`- canvas & panel division: ${j.layout}`);
+  if(j.topology && typeof j.topology==='object'){
+    const top=[];
+    if(j.topology.anchor) top.push('anchor: '+j.topology.anchor);
+    if(Array.isArray(j.topology.zones)) top.push('zones: '+j.topology.zones.join(' | '));
+    if(j.topology.flow) top.push('flow: '+j.topology.flow);
+    if(j.topology.spacing) top.push('spacing: '+j.topology.spacing);
+    if(top.length) rows.push('- canonical topology (highest priority): '+top.join('; '));
+  }
+  if(j.styleFingerprint && typeof j.styleFingerprint==='object'){
+    const sf=['background','panelShape','moduleShape','iconStyle','arrowStyle','textTreatment'].filter(k=>j.styleFingerprint[k]).map(k=>k+'='+j.styleFingerprint[k]);
+    if(sf.length) rows.push('- style fingerprint: '+sf.join('; '));
+  }
   if(Array.isArray(j.panels) && j.panels.length){
     const panels = j.panels.slice(0,8).map(p=>{
       const bits = [p.name, p.role].filter(Boolean).join(' / ');
@@ -1648,6 +1818,17 @@ function designContractText(j){
       return `${bits}${geo}`;
     });
     rows.push(`- panel geometry (canvas 1600x900, origin top-left): ${panels.join(' | ')}`);
+  }
+  if(Array.isArray(j.layoutBlueprint) && j.layoutBlueprint.length){
+    const blueprint=j.layoutBlueprint.slice(0,14).map((z,i)=>{
+      if(!z || typeof z!=='object') return '';
+      const vals=[z.x,z.y,z.w,z.h];
+      const geo=vals.every(v=>Number.isFinite(Number(v)))
+        ? ` @ x=${Math.round(Number(z.x))} y=${Math.round(Number(z.y))} w=${Math.round(Number(z.w))} h=${Math.round(Number(z.h))}` : '';
+      const kinds=Array.isArray(z.moduleKinds) ? z.moduleKinds.join(', ') : (z.moduleKinds||'');
+      return `${i+1}. ${z.id||z.name||('zone-'+(i+1))} role=${z.role||'unspecified'}${geo} modules=${z.moduleCount??'?'} occupancy=${z.occupancy??'?'}%${kinds?' kinds='+kinds:''}${z.nesting?' nesting='+z.nesting:''}${z.flow?' flow='+z.flow:''}`;
+    }).filter(Boolean);
+    if(blueprint.length) rows.push('- anchor layout blueprint (preserve exact zone order and relative slots):\n  '+blueprint.join('\n  '));
   }
   const pal = j.palette;
   if(pal){
@@ -1670,6 +1851,13 @@ function designContractText(j){
   }
   if(j.elements) rows.push(`- recurring elements: ${j.elements}`);
   if(j.hierarchy) rows.push(`- information hierarchy: ${j.hierarchy}`);
+  if(j.density && typeof j.density==='object'){
+    const d=[];
+    if(j.density.variety!=null) d.push('variety='+j.density.variety);
+    if(j.density.fill!=null) d.push('fill='+j.density.fill);
+    if(d.length) rows.push('- density targets: '+d.join(', '));
+  }
+  rows.push('- composition priority: preserve the anchor topology and fill its module regions densely; no conspicuous empty panels or unused white areas.');
   return rows.join('\n');
 }
 
@@ -1686,7 +1874,7 @@ function buildPrompt(content, layoutGuide, refIds){
     return tt('ref.note',{i:idx+1, t:f.title, v:f.venue.toUpperCase(), y:f.year, p:f.pattern, id:f.id});
   }).join('\n');
   const guide = layoutGuide
-    ? `## Design contract (merged from ${refs.size} same-type gallery figures — follow the panel division, arrows, palette and hierarchy strictly)\n${layoutGuide}\n\n`
+    ? `## Design contract (primary anchor + style evidence — follow the anchor topology, module slots, arrows, palette and hierarchy strictly)\n首张参考图是唯一的版式母版；后续参考图只补充配色、笔触、图标和图表语言，不要把多张图平均融合。必须优先复刻母版的区域顺序、相对面积、嵌套分组、模块槽位、连接线拓扑和视觉密度。\n${layoutGuide}\n\n`
     : '';
   return `你是顶尖 ML 论文的配图设计师。我要：${TARGETS[t].label}。
 ${guide}${targetInfo}
@@ -1696,9 +1884,9 @@ ${content}
 
 ${refLines}
 
-请输出一张极简、完整、可编辑的 SVG（viewBox 1600x900，横向，白色背景，主色一个、强调色一个，留白充足；方块/箭头/文字标签对齐；不得出现 lorem ipsum 或占位数字）。
+请输出一张完整、可编辑的 SVG（viewBox 1600x900，横向，白色背景）。设计契约和参考图中识别出的主锚点拓扑、相对比例、模块密度、配色、线型、间距和阅读方向是最高优先级；不要强行套用固定的面板数量、横向并排网格或统一的顶部标题栏。方块/箭头/文字标签对齐；面板外框线明显粗于内部模块框，并用虚线区分可选/概念/重复的块；不得出现 lorem ipsum 或占位数字。
 若上面的设计契约给出了面板坐标与字号，请直接按其数值排版，不要自行改变比例。
-只画一个清晰的主面板：聚焦“我们的方法”核心 pipeline（标题 + 若干模块方块 + 箭头表示数据流），不要画 baseline 对比、不要多个子面板、不要重复图形；把重复样式放进 <defs> 复用，总代码尽量短，务必在一次输出内以 </svg> 正常结尾。
+保持参考图的整体阅读路径和层级，在定义好的每个模块区域中填入有意义的结构：小型流程、网络/模型图、数据表、迷你图表、缩略图、图例、短标签或局部放大，不要留下明显的大块空白；保留有意的边距和分组间隙。内容丰富度和排版覆盖率优先于长文字的逐字准确，文字用可编辑的英文短标签或短语即可，后续会在步骤四校正。把重复样式放进 <defs> 复用；为控制长度，元素总量保持合理，务必在一次输出内以 </svg> 正常结尾。
 布局硬性要求（会自动检查）：所有可见文字必须完全落在 x=0..1600、y=0..900 之内；任何标签的文字宽度不得超过它所处方块的宽度（放不下就缩短文字、减小字号或加宽方块）；不同标签的文字包围盒不得相互重叠。
 硬性要求：SVG 中所有可见文字（面板标题、模块名、坐标轴、图例、注释）必须全部使用英文短语，严禁出现任何中文字符；数字与标签需与论文内容一致。
 
@@ -1711,7 +1899,7 @@ ${refLines}
 - 输出前检查所有文字与图形都在画布内，并以 </svg> 正常结尾。
 Output a complete SVG. ALL visible text (panel headers, module names, axes, legends, annotations) MUST be in English — no Chinese characters anywhere. Output only the <svg> code, no explanation.`;
 }
-const SVG_SYS = 'You are a world-class scientific figure designer. Based on the user paper content and the attached reference figures, output exactly ONE complete, self-contained SVG. White background, flat modern design, clear panels, arrows, short accurate labels taken from the paper. Preserve editable export semantics: give every visible element a stable id plus data-role and data-editable="true"; keep labels as SVG <text>, use basic shapes and paths, avoid masks/filters/outlined text, use viewBox="0 0 1600 900", and never flatten the whole figure into one bitmap. Output SVG markup only, no explanations or code fences.';
+const SVG_SYS = 'You are a world-class scientific figure designer. Based on the user paper content and the attached reference figures, output exactly ONE complete, self-contained SVG. Treat the supplied reference-derived design contract as the highest-priority visual constraint: preserve its canonical panel topology, relative proportions, nesting, spacing rhythm, density, palette, stroke language and reading direction. Do not force a fixed number of side-by-side panels or a generic grid. Produce a richly populated, publication-quality composition: fill most reference-defined module regions with meaningful diagrams, mini charts, thumbnails, icons, legends or short labels, while preserving intentional gutters and avoiding conspicuous empty areas. Exact wording is secondary to layout richness because labels will be edited later; use short readable English labels and clean editable text slots rather than paragraphs. Preserve editable export semantics: give every visible element a stable id plus data-role and data-editable="true"; keep labels as SVG <text>, use basic shapes and paths, avoid masks/filters/outlined text, use viewBox="0 0 1600 900", and never flatten the whole figure into one bitmap. Output SVG markup only, no explanations or code fences.';
 
 /* ---------------- HTTP helpers ---------------- */
 function showErr(msg){
@@ -1832,7 +2020,10 @@ $('#genBtn').onclick = async ()=>{
       $('#stepper').hidden=false; $('#analyzeBox').innerHTML='';
       setStep(1,'active'); btn.textContent=tt('gen.analyzing',{n:refs.size});
       const a = await analyzeReferences();
-      refIds=a.repIds; layoutGuide=a.refinedPrompt;
+      refIds = mode==='image' ? (a.imageRefIds||a.repIds).slice(0,3) : a.repIds;
+      // SVG receives the measured contract; bitmap generation receives a dense prose guide
+      // plus only the strongest visual anchors, so incompatible references are not averaged.
+      layoutGuide = (mode==='svg') ? a.refinedPrompt : (a.refinedPromptImage || a.refinedPrompt);
       setStep(1,'done'); setStep(2,'active'); btn.textContent=tt('gen.generating');
     }else{
       $('#stepper').hidden=true; btn.textContent=tt('gen.working');
@@ -2157,33 +2348,1635 @@ function auditSummaryText(res){
 }
 
 /* ---------------- Editable export step ----------------
-   Raster figures are first converted into a normalized editable scene. SVG and
-   draw.io are generated locally; PPTX/VSDX are handed to a configured renderer.
-*/
-window.__ffExportState={svg:'',baseSvg:'',scene:null,target:'svg',font:'original',sourceImage:'',sourceKind:'',analyzing:false,exporting:false,error:''};
-function escapeSvgAttr(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[ch]));}
-function escapeXml(value){return String(value??'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[ch]));}
-function exportAttrMap(el){const names=['x','y','width','height','x1','y1','x2','y2','cx','cy','r','rx','ry','fill','stroke','stroke-width','stroke-linecap','stroke-linejoin','font-family','font-size','font-weight','text-anchor','transform','d','opacity'];const out={};names.forEach(n=>{const v=el.getAttribute(n);if(v!=null)out[n]=v;});return out;}
-function parseSvgScene(svg){const doc=new DOMParser().parseFromString(svg,'image/svg+xml');const root=doc.documentElement;const vb=(root.getAttribute('viewBox')||'0 0 1600 900').trim().split(/\s+/).map(Number);const nums=vb.length===4&&vb.every(Number.isFinite)?vb:[0,0,1600,900];const nodes=[...root.querySelectorAll('rect,circle,ellipse,line,path,polygon,polyline,text,image,g')].filter(el=>el!==root).map((el,i)=>({id:el.getAttribute('id')||`node-${i+1}`,type:el.tagName,role:el.getAttribute('data-role')||'graphic',editable:el.getAttribute('data-editable')!=='false',text:el.tagName.toLowerCase()==='text'?(el.textContent||'').trim():undefined,attrs:exportAttrMap(el)}));return {schema:'figureforge.scene.v1',canvas:{x:nums[0],y:nums[1],width:nums[2],height:nums[3],viewBox:nums.join(' ')},nodes};}
-function downloadText(filename,text,type){const blob=new Blob([text],{type:type||'text/plain;charset=utf-8'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=filename;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);}
-function base64Utf8(text){const bytes=new TextEncoder().encode(text);let bin='';bytes.forEach(b=>bin+=String.fromCharCode(b));return btoa(bin);}
-function imageDataParts(src){const m=String(src||'').match(/^data:([^;,]+)(?:;base64)?,(.*)$/s);return m?{media:m[1],data:m[2]}:null;}
-function exportPrompt(){return `你是科研论文图形的矢量化解析引擎。请分析用户提供的论文位图，并只输出一个合法 JSON 对象，不要 Markdown。目标是生成可编辑图，而不是简单把位图包成一张图片。请尽可能识别并拆分：标题、分区面板、圆角容器、流程模块、箭头/连线、文字标签、图标/缩略图、表格或指标块。每个可见文字都尽量单独作为 text 节点，保留相对位置、层级、颜色和尺寸；不能识别的复杂图片保留为 image 节点。坐标使用 1600x900 画布。输出格式：{"schema":"figureforge.scene.v1","canvas":{"width":1600,"height":900},"nodes":[{"id":"n1","type":"rect|roundRect|ellipse|line|arrow|text|image|group","role":"panel|module|arrow|label|thumbnail|graphic","x":0,"y":0,"width":100,"height":100,"text":"","fill":"#ffffff","stroke":"#223344","strokeWidth":2,"fontFamily":"Arial","fontSize":20,"fontWeight":"normal","opacity":1,"children":[]}]}。只返回 JSON。`}
-function normalizeExportScene(raw,sourceImage){let r=raw?.scene||raw?.figure||raw;let canvas=r?.canvas||{};let width=Number(canvas.width)||1600,height=Number(canvas.height)||900;let input=Array.isArray(r?.nodes)?r.nodes:Array.isArray(r?.elements)?r.elements:Array.isArray(r?.items)?r.items:[];const typeMap={rectangle:'rect',rounded_rectangle:'roundRect',roundedRect:'roundRect',box:'rect',oval:'ellipse',circle:'ellipse',connector:'line',arrow:'arrow',label:'text',bitmap:'image'};const clamp=(n,min,max)=>Math.max(min,Math.min(max,n));const norm=(n,i)=>{const type=typeMap[n?.type]||n?.type||'group';const x=Number(n?.x??n?.left??0)||0,y=Number(n?.y??n?.top??0)||0,w=Number(n?.width??n?.w??100)||100,h=Number(n?.height??n?.h??40)||40;const out={id:String(n?.id||`node-${i+1}`),type,role:String(n?.role||'graphic'),x:clamp(x,0,width),y:clamp(y,0,height),width:clamp(w,1,width),height:clamp(h,1,height),text:n?.text==null?'':String(n.text),fill:n?.fill||'#ffffff',stroke:n?.stroke||'#334155',strokeWidth:Number(n?.strokeWidth??n?.['stroke-width']??2)||2,fontFamily:n?.fontFamily||'Arial',fontSize:Number(n?.fontSize)||20,fontWeight:n?.fontWeight||'normal',opacity:Number(n?.opacity??1),children:Array.isArray(n?.children)?n.children.map(norm):[]};if(n?.x1!=null){out.x1=Number(n.x1);out.y1=Number(n.y1);out.x2=Number(n.x2);out.y2=Number(n.y2);}if(n?.src||n?.href||n?.image){out.src=n.src||n.href||n.image;}return out;};let nodes=input.map(norm).filter(n=>n.width>0&&n.height>0);if(!nodes.length&&sourceImage)nodes=[{id:'raster-source',type:'image',role:'raster-reference',x:0,y:0,width,height,src:sourceImage,opacity:1,children:[]}];return {schema:'figureforge.scene.v1',canvas:{x:0,y:0,width,height,viewBox:`0 0 ${width} ${height}`},nodes};}
-function sceneToSvg(scene,sourceImage){const c=scene.canvas||{width:1600,height:900};const marker=`<defs><marker id="ff-arrow" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#334155"/></marker></defs>`;const render=(n)=>{const a=n.attrs||{},x=((n.x??Number(a.x))||0),y=((n.y??Number(a.y))||0),w=((n.width??Number(a.width))||100),h=((n.height??Number(a.height))||40);const common=`data-node-id="${escapeSvgAttr(n.id)}" data-role="${escapeSvgAttr(n.role||'graphic')}" data-editable="true" opacity="${Number.isFinite(n.opacity)?n.opacity:1}"`;let body='';if(n.type==='text'){body=`<text x="${x}" y="${y+h*.72}" font-family="${escapeSvgAttr(n.fontFamily||'Arial')}" font-size="${n.fontSize||20}" font-weight="${escapeSvgAttr(n.fontWeight||'normal')}" fill="${escapeSvgAttr(n.fill||'#111827')}" ${common}>${escapeSvgAttr(n.text||'')}</text>`;}else if(n.type==='line'||n.type==='arrow'){body=`<line x1="${n.x1??x}" y1="${n.y1??y}" x2="${n.x2??x+w}" y2="${n.y2??y+h}" stroke="${escapeSvgAttr(n.stroke||'#334155')}" stroke-width="${n.strokeWidth||2}" ${n.type==='arrow'?'marker-end="url(#ff-arrow)"':''} ${common}/>`;}else if(n.type==='ellipse'){body=`<ellipse cx="${x+w/2}" cy="${y+h/2}" rx="${w/2}" ry="${h/2}" fill="${escapeSvgAttr(n.fill||'none')}" stroke="${escapeSvgAttr(n.stroke||'#334155')}" stroke-width="${n.strokeWidth||2}" ${common}/>`;}else if(n.type==='image'){const src=n.src||sourceImage||'';body=src?`<image href="${escapeSvgAttr(src)}" x="${x}" y="${y}" width="${w}" height="${h}" preserveAspectRatio="xMidYMid meet" ${common}/>`:'';}else{body=`<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${n.type==='roundRect'?12:0}" fill="${escapeSvgAttr(n.fill||'none')}" stroke="${escapeSvgAttr(n.stroke||'#334155')}" stroke-width="${n.strokeWidth||2}" ${common}/>`;}const children=(n.children||[]).map(render).join('');return `<g>${body}${children}</g>`;};const nodes=scene.nodes?.length?scene.nodes:(sourceImage?[{id:'raster-source',type:'image',role:'raster-reference',x:0,y:0,width:c.width,height:c.height,src:sourceImage}]:[]);return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${c.viewBox||`0 0 ${c.width} ${c.height}`}" width="${c.width}" height="${c.height}">${marker}${nodes.map(render).join('')}</svg>`;}
-function svgToDrawio(svg,scene){const c=scene.canvas||{width:1600,height:900};let cells='<mxCell id="0"/><mxCell id="1" parent="0"/>';(scene.nodes||[]).forEach((n,i)=>{const id=escapeXml(n.id||`node-${i+1}`),value=escapeXml(n.text||'');const x=Number(n.x)||0,y=Number(n.y)||0,w=Number(n.width)||100,h=Number(n.height)||40;let style=n.type==='text'?'text;html=1;strokeColor=none;fillColor=none;':n.type==='image'?'shape=image;aspect=fixed;':'rounded=1;whiteSpace=wrap;html=1;';cells+=`<mxCell id="${id}" value="${value}" style="${style}" vertex="1" parent="1"><mxGeometry x="${x}" y="${y}" width="${w}" height="${h}" as="geometry"/></mxCell>`;});const encoded=base64Utf8(svg);cells+=`<mxCell id="raster-reference" value="" style="shape=image;image=data:image/svg+xml;base64,${encoded};aspect=fixed;opacity=0;" vertex="1" parent="1"><mxGeometry x="0" y="0" width="${c.width}" height="${c.height}" as="geometry"/></mxCell>`;return `<?xml version="1.0" encoding="UTF-8"?><mxfile host="app.diagrams.net" modified="${new Date().toISOString()}" agent="FigureForge"><diagram id="figureforge" name="FigureForge"><mxGraphModel page="1" pageWidth="${c.width}" pageHeight="${c.height}"><root>${cells}</root></mxGraphModel></diagram></mxfile>`;}
-async function analyzeRasterForExport(source){const st=window.__ffExportState;st.analyzing=true;st.error='';renderEditableExportCard();try{const key=cleanKey();if(!key)throw new Error('请先配置解析模型 API Key');const parsed=imageDataParts(source);if(!parsed)throw new Error('位图格式无法读取');const cfgv=cfg(),base=baseURL(),model=parserModel(),prompt=exportPrompt();let response;if($('#provider').value==='anthropic'){response=await postJSON(base,'/v1/messages',{model,max_tokens:12000,messages:[{role:'user',content:[{type:'image',source:{type:'base64',media_type:parsed.media,data:parsed.data}},{type:'text',text:prompt}]}]},key,anthropicHeaders(key));}else if(/openai\.com/i.test(base)){response=await postJSON(base,'/responses',{model,input:[{role:'user',content:[{type:'input_text',text:prompt},{type:'input_image',image_url:source,detail:'high'}]}],max_output_tokens:12000},key,{});}else{response=await postJSON(base,'/chat/completions',{model,messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:source}}]}],max_tokens:12000},key,{});}const scene=normalizeExportScene(extractJsonObject(parseResponseText(response)),source);st.scene=scene;st.baseSvg=sceneToSvg(scene,source);st.svg=st.baseSvg;st.analyzing=false;renderEditableExportCard();}catch(err){console.warn('raster export analysis failed',err);st.analyzing=false;st.error=err?.message||String(err);st.scene=normalizeExportScene({},source);st.baseSvg=sceneToSvg(st.scene,source);st.svg=st.baseSvg;renderEditableExportCard();}}
-function applyExportFont(font){const st=window.__ffExportState;if(!st.baseSvg)return;let svg=st.baseSvg;if(font!=='original'){const doc=new DOMParser().parseFromString(svg,'image/svg+xml');[...doc.querySelectorAll('text,tspan')].forEach(el=>{el.setAttribute('font-family',font);el.style.fontFamily=font;});svg=new XMLSerializer().serializeToString(doc);}st.font=font;st.svg=svg;try{st.scene=parseSvgScene(svg);}catch{}renderEditableExportCard();}
-function exportApiBase(){return window.FIGUREFORGE_EXPORT_API_URL||localStorage.getItem('ff_export_api')||'';}
-function exportApiKey(){return window.FIGUREFORGE_EXPORT_API_KEY||localStorage.getItem('ff_export_api_key')||'';}
-async function exportViaApi(target){const st=window.__ffExportState,endpoint=exportApiBase();if(!endpoint)throw new Error('未配置 PPTX/VSDX 转换 API');const headers={'Content-Type':'application/json'};const token=exportApiKey();if(token)headers.Authorization='Bearer '+token;const res=await fetchWithTimeout(endpoint,{method:'POST',headers,body:JSON.stringify({format:target,font:st.font,scene:st.scene,svg:st.svg,sourceImage:st.sourceImage})},300000);if(!res.ok)throw new Error(`转换 API 返回 ${res.status}`);const ct=res.headers.get('content-type')||'';if(ct.includes('application/octet-stream')||ct.includes('application/vnd')){downloadText(`figure-forge-editable.${target}`,await res.blob(),ct);return;}const data=await res.json();if(data.downloadUrl||data.url){const file=await fetch(data.downloadUrl||data.url);downloadText(`figure-forge-editable.${target}`,await file.blob(),file.headers.get('content-type')||'application/octet-stream');return;}const b64=data.base64||data.file||data.data;if(b64){const bin=atob(String(b64).replace(/^data:[^,]+/,''));const bytes=Uint8Array.from(bin,c=>c.charCodeAt(0));const blob=new Blob([bytes],{type:'application/octet-stream'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=`figure-forge-editable.${target}`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);return;}throw new Error('转换 API 未返回文件');}
-function renderEditableExportCard(){const card=$('#card4'),st=window.__ffExportState;if(!card)return;card.hidden=false;const status=$('#exportStatus');if(status){if(st.analyzing)status.textContent='正在解析位图并生成可编辑场景…';else if(st.error)status.textContent=`位图解析失败，已保留可编辑图片底图：${st.error}`;else if(st.exporting)status.textContent='正在生成文件…';else if(st.svg)status.textContent=tt('export.ready');}const ready=!!st.svg&&!st.analyzing&&!st.exporting;document.querySelectorAll('#exportActions [data-export]').forEach(btn=>{btn.disabled=!ready;});const confirm=$('#exportConfirm');if(confirm)confirm.disabled=!ready||!st.target;syncExportSelection();}
-function syncExportSelection(){const st=window.__ffExportState;document.querySelectorAll('#exportActions [data-export]').forEach(btn=>{const selected=!!st.svg&&btn.dataset.export===st.target;btn.classList.toggle('selected',selected);btn.setAttribute('aria-pressed',String(selected));});const confirm=$('#exportConfirm');if(confirm)confirm.disabled=!st.svg||st.analyzing||st.exporting||!st.target;}
-function showEditableExportStep(svg,opts={}){const source=opts.sourceImage||'';const st={svg:svg||'',baseSvg:svg||'',scene:null,target:'svg',font:'original',sourceImage:source,sourceKind:opts.raster?'raster':'svg',analyzing:false,exporting:false,error:''};if(svg){try{st.scene=parseSvgScene(svg);}catch(e){st.error=e.message;}}window.__ffExportState=st;renderEditableExportCard();const card=$('#card4');if(card)card.scrollIntoView({behavior:'smooth',block:'start'});if(opts.raster&&source){st.analyzing=true;renderEditableExportCard();void analyzeRasterForExport(source);}}
-function initEditableExport(){const actions=$('#exportActions');if(!actions||actions.dataset.bound)return;actions.dataset.bound='1';actions.addEventListener('click',e=>{const btn=e.target.closest('[data-export]');if(!btn)return;const st=window.__ffExportState;if(!st.svg||st.analyzing)return;st.target=btn.dataset.export;syncExportSelection();const status=$('#exportStatus');if(status)status.textContent=tt('export.selection',{format:st.target.toUpperCase()});});$('#exportConfirm')?.addEventListener('click',async()=>{const st=window.__ffExportState;if(!st.svg||!st.target||st.analyzing)return;const target=st.target;st.exporting=true;renderEditableExportCard();try{if(target==='svg')downloadText('figure-forge-editable.svg',st.svg,'image/svg+xml;charset=utf-8');else if(target==='drawio')downloadText('figure-forge-editable.drawio',svgToDrawio(st.svg,st.scene),'application/xml;charset=utf-8');else await exportViaApi(target);const status=$('#exportStatus');if(status)status.textContent=tt('export.downloaded',{format:target==='drawio'?'draw.io':target.toUpperCase()});}catch(err){const status=$('#exportStatus');if(status)status.textContent=err?.message||String(err);}finally{st.exporting=false;renderEditableExportCard();}});$('#exportFont')?.addEventListener('change',e=>applyExportFont(e.target.value));}
+   The SVG produced in step 3 already carries the two things an editable file
+   needs: exact geometry, and labels as real <text> strings. So the export parses
+   that SVG element by element and emits native shapes and text boxes for each
+   target format. Two rules follow from that and both matter:
+
+     1. Text is never re-recognised (no OCR, no bitmap tracing). The string in the
+        SVG is copied verbatim, so the exported labels cannot be misspelled.
+     2. Positions come from the measured SVG, not from a model's guess, so nothing
+        drifts between the preview and the exported file.
+
+   Bitmap drafts have neither property, so they take one extra step first: a vision
+   model reads the image and returns a scene, which is then normalised, audited and
+   written by exactly the same renderers. That step is what turns a bitmap into an
+   editable figure, and it is the only place a model is involved at all.
+
+   Everything below runs in the browser and works offline (PPTX uses the vendored
+   PptxGenJS; draw.io and VSDX are written here). The only network call is the
+   optional bitmap reconstruction, which is an explicit button, never automatic. */
+window.__ffExportState = {svg:'', baseSvg:'', scene:null, target:'svg', font:'original', source:'svg', bitmap:'', recon:null};
+
+/* ---------- canvas units ---------- */
+const EXPORT_CANVAS = {w:1600, h:900};
+// 1600 canvas units -> 10in wide figure, centred on a 13.333x7.5in 16:9 slide.
+const PT_PER_UNIT = 0.45;
+
+/* ---------- colour / unit helpers ---------- */
+function svgColorToHex(value){
+  if(!value) return null;
+  let v = String(value).trim().toLowerCase();
+  if(v==='none' || v==='transparent') return null;
+  if(v==='currentcolor') return '000000';
+  if(/^#[0-9a-f]{3}$/.test(v)) return v.slice(1).split('').map(c=>c+c).join('').toUpperCase();
+  if(/^#[0-9a-f]{6}$/.test(v)) return v.slice(1).toUpperCase();
+  if(/^#[0-9a-f]{8}$/.test(v)) return v.slice(1,7).toUpperCase();   // drop alpha
+  const rgb = v.match(/^rgba?\(([^)]+)\)$/);
+  if(rgb){
+    const parts = rgb[1].split(/[,\s/]+/).filter(Boolean).map(Number);
+    if(parts.length>=3 && parts.slice(0,3).every(n=>Number.isFinite(n))){
+      if(parts.length>=4 && parts[3]===0) return null;
+      return parts.slice(0,3).map(n=>Math.max(0,Math.min(255,Math.round(n))).toString(16).padStart(2,'0')).join('').toUpperCase();
+    }
+    return null;
+  }
+  const named = {black:'000000',white:'FFFFFF',red:'FF0000',green:'008000',blue:'0000FF',gray:'808080',grey:'808080',silver:'C0C0C0',orange:'FFA500',yellow:'FFFF00',purple:'800080',navy:'000080',teal:'008080',brown:'A52A2A',lightgray:'D3D3D3',lightgrey:'D3D3D3',darkgray:'A9A9A9'};
+  return named[v] || null;
+}
+
+function parseTransformList(value){
+  const ops = [];
+  const re = /([a-zA-Z]+)\s*\(([^)]*)\)/g;
+  let m;
+  while((m = re.exec(value||''))){
+    const nums = m[2].split(/[\s,]+/).filter(s=>s!=='').map(Number);
+    if(nums.some(n=>!Number.isFinite(n))) continue;
+    ops.push({fn:m[1].toLowerCase(), a:nums});
+  }
+  return ops;
+}
+
+function multiplyMatrix(m1, m2){   // m1 * m2, both [a,b,c,d,e,f]
+  return [
+    m1[0]*m2[0]+m1[2]*m2[1], m1[1]*m2[0]+m1[3]*m2[1],
+    m1[0]*m2[2]+m1[2]*m2[3], m1[1]*m2[2]+m1[3]*m2[3],
+    m1[0]*m2[4]+m1[2]*m2[5]+m1[4], m1[1]*m2[4]+m1[3]*m2[5]+m1[5],
+  ];
+}
+
+function opsToMatrix(ops){
+  let m = [1,0,0,1,0,0];
+  ops.forEach(function(op){
+    const a = op.a;
+    let next = null;
+    if(op.fn==='translate') next = [1,0,0,1, a[0]||0, a[1]||0];
+    else if(op.fn==='scale'){ const sx=a[0]==null?1:a[0], sy=a[1]==null?sx:a[1]; next=[sx,0,0,sy,0,0]; }
+    else if(op.fn==='rotate'){
+      const t = (a[0]||0)*Math.PI/180, cos=Math.cos(t), sin=Math.sin(t);
+      if(a.length>=3){
+        const cx=a[1], cy=a[2];
+        next = multiplyMatrix(multiplyMatrix([1,0,0,1,cx,cy],[cos,sin,-sin,cos,0,0]),[1,0,0,1,-cx,-cy]);
+      } else next = [cos,sin,-sin,cos,0,0];
+    }
+    else if(op.fn==='matrix' && a.length>=6) next = a.slice(0,6);
+    else if(op.fn==='skewx') next = [1,0,Math.tan((a[0]||0)*Math.PI/180),1,0,0];
+    else if(op.fn==='skewy') next = [1,Math.tan((a[0]||0)*Math.PI/180),0,1,0,0];
+    if(next) m = multiplyMatrix(m, next);
+  });
+  return m;
+}
+
+function styleOf(el){
+  let s = {};
+  try{ s = el.style || {}; }catch(_){ s = {}; }
+  const pick = name => {
+    const inline = s && s[name];
+    if(inline) return inline;
+    const attr = el.getAttribute(name);
+    return attr || null;
+  };
+  return {
+    fill: pick('fill'),
+    stroke: pick('stroke'),
+    strokeWidth: pick('stroke-width'),
+    opacity: pick('opacity'),
+    fillOpacity: pick('fill-opacity'),
+    strokeOpacity: pick('stroke-opacity'),
+    fontFamily: pick('font-family'),
+    fontSize: pick('font-size'),
+    fontWeight: pick('font-weight'),
+    fontStyle: pick('font-style'),
+    textAnchor: pick('text-anchor'),
+    dominantBaseline: pick('dominant-baseline'),
+  };
+}
+
+/* ---------- SVG -> scene ----------
+   Returns every visual element with absolute canvas coordinates, measured where
+   measurement is the only way to be correct (text width, and any element wrapped
+   in a transform, which is flattened here so the output formats need no matrices). */
+function parseSvgScene(svg){
+  const doc = new DOMParser().parseFromString(svg, 'image/svg+xml');
+  if(doc.querySelector('parsererror')) throw new Error('scene: SVG could not be parsed');
+  const root = doc.documentElement;
+  const vbRaw = (root.getAttribute('viewBox')||'').trim().split(/[\s,]+/).map(Number);
+  const vb = (vbRaw.length===4 && vbRaw.every(Number.isFinite) && vbRaw[2]>0 && vbRaw[3]>0)
+    ? vbRaw
+    : [0,0, parseFloat(root.getAttribute('width'))||EXPORT_CANVAS.w, parseFloat(root.getAttribute('height'))||EXPORT_CANVAS.h];
+
+  // A hidden host gives getBBox exact text metrics for the real font and size.
+  const host = document.createElement('div');
+  host.setAttribute('aria-hidden','true');
+  host.style.cssText = 'position:fixed;left:-100000px;top:0;width:'+vb[2]+'px;height:'+vb[3]+'px;overflow:hidden;pointer-events:none;';
+  const live = document.importNode(root, true);
+  live.setAttribute('width', vb[2]); live.setAttribute('height', vb[3]);
+  host.appendChild(live);
+  document.body.appendChild(host);
+
+  const nodes = [];
+  const warnings = [];
+
+  function applyMatrix(m, x, y){
+    return { x: m[0]*x + m[2]*y + m[4], y: m[1]*x + m[3]*y + m[5] };
+  }
+  function isIdentity(m){
+    return Math.abs(m[0]-1)<1e-6 && Math.abs(m[1])<1e-6 && Math.abs(m[2])<1e-6 &&
+           Math.abs(m[3]-1)<1e-6 && Math.abs(m[4])<1e-6 && Math.abs(m[5])<1e-6;
+  }
+
+  function walk(el, matrix){
+    const tag = (el.tagName||'').toLowerCase();
+    const own = parseTransformList(el.getAttribute('transform'));
+    const m = own.length ? multiplyMatrix(matrix, opsToMatrix(own)) : matrix;
+    const st = styleOf(el);
+
+    if(tag==='defs' || tag==='style' || tag==='title' || tag==='desc' || tag==='metadata') return;
+
+    if(tag==='g' || tag==='svg'){
+      [...el.children].forEach(child=>walk(child, m));
+      return;
+    }
+
+    const num = (name, fallback) => {
+      const raw = el.getAttribute(name);
+      if(raw==null) return fallback;
+      const v = parseFloat(raw);
+      return Number.isFinite(v) ? v : fallback;
+    };
+
+    if(tag==='rect'){
+      const x=num('x',0), y=num('y',0), w=num('width',0), h=num('height',0);
+      if(w<=0 || h<=0) return;
+      const corners = [applyMatrix(m,x,y), applyMatrix(m,x+w,y), applyMatrix(m,x,y+h)];
+      const x0=Math.min(corners[0].x,corners[1].x,corners[2].x), y0=Math.min(corners[0].y,corners[1].y,corners[2].y);
+      const x1=Math.max(corners[0].x,corners[1].x,corners[2].x), y1=Math.max(corners[0].y,corners[1].y,corners[2].y);
+      const rot = Math.atan2(m[1], m[0]) * 180/Math.PI;
+      const rx = (num('rx',0) || num('ry',0)) || 0;
+      nodes.push({type:'rect', x:x0, y:y0, w:x1-x0, h:y1-y0, radius:rx,
+        fill:svgColorToHex(st.fill), stroke:svgColorToHex(st.stroke),
+        strokeWidth:parseFloat(st.strokeWidth)||0, rotate:Math.abs(rot)>0.01?rot:0});
+      return;
+    }
+
+    if(tag==='circle' || tag==='ellipse'){
+      const cx=num('cx',0), cy=num('cy',0);
+      const rx = tag==='circle' ? num('r',0) : num('rx',0);
+      const ry = tag==='circle' ? num('r',0) : num('ry',0);
+      if(rx<=0 || ry<=0) return;
+      const c = applyMatrix(m, cx, cy);
+      const scaleX = Math.hypot(m[0], m[1]) || 1;
+      const scaleY = Math.hypot(m[2], m[3]) || 1;
+      nodes.push({type:'ellipse', x:c.x-rx*scaleX, y:c.y-ry*scaleY, w:rx*2*scaleX, h:ry*2*scaleY,
+        fill:svgColorToHex(st.fill), stroke:svgColorToHex(st.stroke),
+        strokeWidth:parseFloat(st.strokeWidth)||0});
+      return;
+    }
+
+    if(tag==='line'){
+      const p1 = applyMatrix(m, num('x1',0), num('y1',0));
+      const p2 = applyMatrix(m, num('x2',0), num('y2',0));
+      nodes.push({type:'line', x:p1.x, y:p1.y, x2:p2.x, y2:p2.y,
+        stroke:svgColorToHex(st.stroke)||'000000', strokeWidth:parseFloat(st.strokeWidth)||1,
+        arrow: !!el.getAttribute('marker-end')});
+      return;
+    }
+
+    if(tag==='polygon' || tag==='polyline' || tag==='path'){
+      const d = el.getAttribute('d');
+      const pts = el.getAttribute('points');
+      let bbox = null;
+      try{ bbox = el.getBBox(); }catch(_){ bbox = null; }
+      if(bbox && bbox.width>0 && bbox.height>0){
+        const corners = [applyMatrix(m,bbox.x,bbox.y), applyMatrix(m,bbox.x+bbox.width,bbox.y),
+                         applyMatrix(m,bbox.x,bbox.y+bbox.height), applyMatrix(m,bbox.x+bbox.width,bbox.y+bbox.height)];
+        const xs=corners.map(c=>c.x), ys=corners.map(c=>c.y);
+        nodes.push({type:tag==='polyline'?'polyline':'path',
+          x:Math.min(...xs), y:Math.min(...ys),
+          w:Math.max(...xs)-Math.min(...xs), h:Math.max(...ys)-Math.min(...ys),
+          d:d||null, points:pts||null,
+          fill:svgColorToHex(st.fill), stroke:svgColorToHex(st.stroke)||'000000',
+          strokeWidth:parseFloat(st.strokeWidth)||1,
+          arrow: !!el.getAttribute('marker-end'),
+          matrix: isIdentity(m) ? null : m.slice(),
+          closed: tag!=='polyline'});
+      } else warnings.push(tag+' element without measurable bounds was skipped');
+      return;
+    }
+
+    if(tag==='image'){
+      const href = el.getAttribute('href') || el.getAttribute('xlink:href') || '';
+      const x=num('x',0), y=num('y',0), w=num('width',0), h=num('height',0);
+      if(!href) return;
+      nodes.push({type:'image', x, y, w:w||vb[2], h:h||vb[3], href, matrix:isIdentity(m)?null:m.slice()});
+      return;
+    }
+
+    if(tag==='text'){
+      // tspan children with their own x/y are separate lines; otherwise the whole
+      // string is one label and the parent's position is authoritative.
+      const kids = [...el.children].filter(c=>(c.tagName||'').toLowerCase()==='tspan');
+      const positioned = kids.filter(k=>k.getAttribute('x')!=null || k.getAttribute('y')!=null);
+      if(positioned.length && positioned.length===kids.length && kids.length>1){
+        kids.forEach(k=>emitText(k, m, st, el));
+        return;
+      }
+      emitText(el, m, st, el);
+      return;
+    }
+
+    // Unknown element types: recurse so nothing nested is lost.
+    if(el.children && el.children.length) [...el.children].forEach(child=>walk(child, m));
+  }
+
+  function emitText(el, matrix, inherited, styleSource){
+    const text = (el.textContent||'').replace(/\s+/g,' ').trim();
+    if(!text) return;
+    const st = Object.assign({}, inherited, styleOf(el));
+    const base = styleSource || el;
+    const xRaw = el.getAttribute('x')!=null ? parseFloat(el.getAttribute('x')) : parseFloat(base.getAttribute('x'));
+    const yRaw = el.getAttribute('y')!=null ? parseFloat(el.getAttribute('y')) : parseFloat(base.getAttribute('y'));
+    const x = Number.isFinite(xRaw) ? xRaw : 0;
+    const y = Number.isFinite(yRaw) ? yRaw : 0;
+    let fontSize = parseFloat(st.fontSize);
+    if(!Number.isFinite(fontSize) || fontSize<=0) fontSize = 16;
+
+    let box = null;
+    try{ box = el.getBBox(); }catch(_){ box = null; }
+    const scaleX = Math.hypot(matrix[0], matrix[1]) || 1;
+    const scaleY = Math.hypot(matrix[2], matrix[3]) || 1;
+    const width = box && box.width>0 ? box.width*scaleX : text.length*fontSize*0.58*scaleX;
+    const height = box && box.height>0 ? box.height*scaleY : fontSize*1.25*scaleY;
+    const anchor = (st.textAnchor||'start').toLowerCase();
+    const effective = Object.assign({}, matrix);
+    const pt = applyMatrix(effective, x, y);
+
+    nodes.push({
+      type:'text', text,
+      x:pt.x, y:pt.y, w:width, h:height,
+      fontSize: fontSize*scaleY,
+      anchor,
+      fill: svgColorToHex(st.fill) || '000000',
+      fontFamily: st.fontFamily || null,
+      bold: String(st.fontWeight||'').match(/^(bold|[6-9]00)$/) ? true : false,
+      italic: String(st.fontStyle||'')==='italic',
+      role: el.getAttribute('data-role') || null,
+    });
+  }
+
+  try{
+    walk(live, [1,0,0,1,0,0]);
+  } finally {
+    if(host.parentNode) host.parentNode.removeChild(host);
+  }
+
+  return {
+    schema:'figureforge.scene.v2',
+    canvas:{x:vb[0], y:vb[1], width:vb[2], height:vb[3], viewBox:vb.join(' ')},
+    nodes,
+    counts:{total:nodes.length, text:nodes.filter(n=>n.type==='text').length,
+            shapes:nodes.filter(n=>n.type!=='text'&&n.type!=='image').length,
+            images:nodes.filter(n=>n.type==='image').length},
+    warnings,
+  };
+}
+
+function escapeSvgAttr(value){
+  return String(value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[ch]));
+}
+function xmlEscape(value){
+  return String(value==null?'':value).replace(/[&<>"']/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&apos;'}[ch]));
+}
+function rasterToExportSvg(src){
+  const href=escapeSvgAttr(src);
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900"><image href="${href}" x="0" y="0" width="1600" height="900" preserveAspectRatio="xMidYMid meet" data-role="raster-image"/></svg>`;
+}
+function downloadText(filename,text,type){
+  const blob=new Blob([text],{type:type||'text/plain;charset=utf-8'}); const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function downloadBlob(filename,blob){
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download=filename; document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(url),4000);
+}
+
+function applyExportFont(font){
+  const st=window.__ffExportState; if(!st.baseSvg) return;
+  let svg=st.baseSvg;
+  if(font!=='original'){
+    const doc=new DOMParser().parseFromString(svg,'image/svg+xml');
+    [...doc.querySelectorAll('text,tspan')].forEach(el=>{el.setAttribute('font-family',font); el.style.fontFamily=font;});
+    svg=new XMLSerializer().serializeToString(doc);
+  }
+  st.font=font; st.svg=svg;
+  try{ st.scene=parseSvgScene(svg); }catch(e){ st.scene=null; }
+  renderEditableExportCard();
+  if(window.__ffExportPreviewUrl) URL.revokeObjectURL(window.__ffExportPreviewUrl);
+  window.__ffExportPreviewUrl=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
+  const frame=$('#out iframe'); if(frame) frame.srcdoc=svg;
+}
+
+/* ---------- PPTX ----------
+   Native shapes and real text boxes, positioned from the measured scene, so the
+   result is editable in PowerPoint without any redrawing step and the labels are
+   the exact strings from the SVG. */
+let pptxLibPromise = null;
+function loadPptxGenJS(){
+  if(window.PptxGenJS) return Promise.resolve(window.PptxGenJS);
+  if(!pptxLibPromise){
+    pptxLibPromise = new Promise((resolve, reject)=>{
+      const s = document.createElement('script');
+      // The bundle build is used, not pptxgen.min.js: the minified file expects an
+      // external JSZip, so loading it throws and never sets the global.
+      s.src = 'vendor/pptxgen.bundle.js';
+      s.onload = ()=> window.PptxGenJS ? resolve(window.PptxGenJS) : reject(new Error('PPTX library loaded but global missing'));
+      s.onerror = ()=> reject(new Error('PPTX library could not be loaded (vendor/pptxgen.bundle.js)'));
+      document.head.appendChild(s);
+    });
+  }
+  return pptxLibPromise;
+}
+
+function pptxColor(hex){ return hex || null; }
+
+function buildPptx(scene){
+  const canvas = scene.canvas;
+  const scale = 10 / canvas.width;                    // canvas units -> inches (10in wide)
+  const slideW = 13.333, slideH = 7.5;
+  const offX = (slideW - canvas.width*scale) / 2;
+  const offY = (slideH - canvas.height*scale) / 2;
+  const IN = v => v*scale;
+  const pt = v => Math.max(1, Number(v||0) * PT_PER_UNIT);
+
+  return loadPptxGenJS().then(function(PptxGenJS){
+    const pres = new PptxGenJS();
+    pres.defineLayout({ name:'FF169', width:slideW, height:slideH });
+    pres.layout = 'FF169';
+    const slide = pres.addSlide();
+    slide.background = { color:'FFFFFF' };
+
+    // background: only a full-canvas rect, so the slide is not over-painted
+    scene.nodes.forEach(function(n){
+      if(n.type!=='rect') return;
+      if(n.fill) slide.addShape(pres.ShapeType.rect, { x:offX+IN(n.x), y:offY+IN(n.y), w:IN(n.w), h:IN(n.h), fill:{color:pptxColor(n.fill)} });
+    });
+
+    scene.nodes.forEach(function(n){
+      if(n.type==='rect'){
+        if(n.fill) return;                              // already painted as background
+        const opts = { x:offX+IN(n.x), y:offY+IN(n.y), w:IN(n.w), h:IN(n.h),
+                       fill:{ color:'FFFFFF', transparency:100 },
+                       line:{ color:pptxColor(n.stroke)||'000000', width:pt(n.strokeWidth||1) } };
+        if(n.radius>0){
+          opts.rectRadius = Math.min(0.5, (n.radius/canvas.width)/scale*0.01 || 0.08);
+          slide.addShape(pres.ShapeType.roundRect, opts);
+        } else slide.addShape(pres.ShapeType.rect, opts);
+        return;
+      }
+      if(n.type==='ellipse'){
+        slide.addShape(pres.ShapeType.ellipse, {
+          x:offX+IN(n.x), y:offY+IN(n.y), w:IN(n.w), h:IN(n.h),
+          fill:n.fill?{color:pptxColor(n.fill)}:{color:'FFFFFF',transparency:100},
+          line:{ color:pptxColor(n.stroke)||'000000', width:pt(n.strokeWidth||1) } });
+        return;
+      }
+      if(n.type==='line'){
+        const lineOpts = { x:offX+IN(n.x), y:offY+IN(n.y), w:IN(n.x2-n.x), h:IN(n.y2-n.y),
+                           line:{ color:pptxColor(n.stroke)||'000000', width:pt(n.strokeWidth||1), beginArrowType:'none', endArrowType:n.arrow?'triangle':'none' } };
+        if(Math.abs(n.y2-n.y) < 0.75) lineOpts.line.dashType = 'solid';
+        slide.addShape(pres.ShapeType.line, lineOpts);
+        return;
+      }
+      if(n.type==='path' || n.type==='polyline'){
+        // Keep freeform geometry where it can be expressed; otherwise fall back to
+        // a bounded outline so the element is still present and positionable.
+        if(n.points){
+          try{
+            const raw = n.points.trim().split(/[\s,]+/).map(Number);
+            const pts = [];
+            for(let i=0;i+1<raw.length;i+=2) pts.push({x:offX+IN(raw[i]), y:offY+IN(raw[i+1])});
+            if(pts.length>=2){
+              slide.addShape(pres.ShapeType.custGeom ? pres.ShapeType.custGeom : pres.ShapeType.rect,
+                { x:offX+IN(n.x), y:offY+IN(n.y), w:IN(n.w), h:IN(n.h),
+                  fill:n.fill?{color:pptxColor(n.fill)}:{color:'FFFFFF',transparency:100},
+                  line:{ color:pptxColor(n.stroke)||'000000', width:pt(n.strokeWidth||1) },
+                  points:pts });
+              return;
+            }
+          }catch(_){ /* fall through to outline */ }
+        }
+        slide.addShape(pres.ShapeType.rect, {
+          x:offX+IN(n.x), y:offY+IN(n.y), w:Math.max(IN(n.w),0.02), h:Math.max(IN(n.h),0.02),
+          fill:{ color:'FFFFFF', transparency:100 },
+          line:{ color:'BFBFBF', width:0.75, dashType:'dash' } });
+        return;
+      }
+      if(n.type==='image'){
+        const uri = n.href||'';
+        const m = uri.match(/^data:([^;]+);base64,(.*)$/);
+        if(m){
+          slide.addImage({ data:'data:'+m[1]+';base64,'+m[2], x:offX+IN(n.x), y:offY+IN(n.y), w:IN(n.w), h:IN(n.h) });
+        }
+        return;
+      }
+      if(n.type==='text'){
+        const fontUnits = n.fontSize || 16;
+        const boxW = Math.max(IN(n.w) + 0.06, 0.1);
+        const boxH = Math.max(IN(fontUnits*1.45), 0.12);
+        let left;
+        if(n.anchor==='middle') left = offX + IN(n.x) - boxW/2;
+        else if(n.anchor==='end') left = offX + IN(n.x) - boxW;
+        else left = offX + IN(n.x);
+        const top = offY + IN(n.y) - boxH/2;
+        slide.addText(String(n.text), {
+          x:left, y:top, w:boxW, h:boxH,
+          align:'center', valign:'middle', margin:0,
+          fontFace: n.fontFamily ? String(n.fontFamily).split(',')[0].replace(/["']/g,'') : 'Arial',
+          fontSize: Math.max(4, fontUnits*PT_PER_UNIT),
+          bold: !!n.bold, italic: !!n.italic,
+          color: pptxColor(n.fill) || '000000',
+          wrap:false, shrinkText:false, isTextBox:true,
+        });
+        return;
+      }
+    });
+
+    return pres.write({ outputType:'blob', compression:true });
+  });
+}
+
+/* ---------- draw.io ----------
+   Emits real mxCell geometry, not an embedded picture, so every box and label is
+   individually editable inside draw.io. This file can also be exported to VSDX
+   from draw.io, which is the supported path to Visio. */
+function sceneToDrawio(scene){
+  const c = scene.canvas;
+  const cells = [];
+  let seq = 10;
+  const nextId = ()=> 'ff' + (seq++);
+  const xml = s => xmlEscape(s);
+
+  scene.nodes.forEach(function(n){
+    const id = nextId();
+    if(n.type==='text'){
+      const anchor = n.anchor==='middle' ? 'center' : (n.anchor==='end' ? 'right' : 'left');
+      const style = 'text;html=1;strokeColor=none;fillColor=none;align='+anchor+';verticalAlign=middle;'+
+                    'fontSize='+Math.round((n.fontSize||16)*0.75)+';fontColor=#'+(n.fill||'000000')+
+                    (n.bold?';fontStyle=1':'')+(n.italic?';fontStyle=2':'')+';whiteSpace=wrap;';
+      const w = Math.max(n.w*1.04, 8), h = Math.max((n.fontSize||16)*1.3, 8);
+      const x = n.anchor==='middle' ? n.x - w/2 : (n.anchor==='end' ? n.x - w : n.x);
+      cells.push('<mxCell id="'+id+'" value="'+xml(n.text)+'" style="'+style+'" vertex="1" parent="1">'+
+                 '<mxGeometry x="'+Math.round(x)+'" y="'+Math.round(n.y - h/2)+'" width="'+Math.round(w)+'" height="'+Math.round(h)+'" as="geometry"/></mxCell>');
+      return;
+    }
+    if(n.type==='line'){
+      const style = 'endArrow='+(n.arrow?'classic':'none')+';html=1;strokeColor=#'+(n.stroke||'000000')+';strokeWidth='+(n.strokeWidth||1)+';';
+      cells.push('<mxCell id="'+id+'" style="'+style+'" edge="1" parent="1">'+
+                 '<mxGeometry relative="1" as="geometry"><mxPoint x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" as="sourcePoint"/>'+
+                 '<mxPoint x="'+Math.round(n.x2)+'" y="'+Math.round(n.y2)+'" as="targetPoint"/></mxGeometry></mxCell>');
+      return;
+    }
+    if(n.type==='ellipse'){
+      const style = 'ellipse;whiteSpace=wrap;html=1;fillColor=#'+(n.fill||'none')+';strokeColor=#'+(n.stroke||'000000')+';strokeWidth='+(n.strokeWidth||1)+';';
+      cells.push('<mxCell id="'+id+'" style="'+style+'" vertex="1" parent="1">'+
+                 '<mxGeometry x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" width="'+Math.round(n.w)+'" height="'+Math.round(n.h)+'" as="geometry"/></mxCell>');
+      return;
+    }
+    if(n.type==='rect'){
+      const rounded = n.radius>0 ? 'rounded=1;arcSize='+Math.max(4, Math.min(50, Math.round(n.radius/Math.max(1,Math.min(n.w,n.h))*100)))+';' : '';
+      const style = rounded+'whiteSpace=wrap;html=1;fillColor=#'+(n.fill||'none')+';strokeColor=#'+(n.stroke||'none')+';strokeWidth='+(n.strokeWidth||1)+';';
+      cells.push('<mxCell id="'+id+'" style="'+style+'" vertex="1" parent="1">'+
+                 '<mxGeometry x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" width="'+Math.round(n.w)+'" height="'+Math.round(n.h)+'" as="geometry"/></mxCell>');
+      return;
+    }
+    if(n.type==='path' || n.type==='polyline'){
+      const style = 'shape=stencil;whiteSpace=wrap;html=1;fillColor=#'+(n.fill||'none')+';strokeColor=#'+(n.stroke||'000000')+';strokeWidth='+(n.strokeWidth||1)+';';
+      cells.push('<mxCell id="'+id+'" value="" style="'+style+'" vertex="1" parent="1">'+
+                 '<mxGeometry x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" width="'+Math.round(Math.max(n.w,4))+'" height="'+Math.round(Math.max(n.h,4))+'" as="geometry"/></mxCell>');
+      return;
+    }
+    if(n.type==='image'){
+      const style = 'shape=image;imageAspect=0;aspect=fixed;image='+xmlEscape(n.href||'')+';';
+      cells.push('<mxCell id="'+id+'" style="'+style+'" vertex="1" parent="1">'+
+                 '<mxGeometry x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" width="'+Math.round(n.w)+'" height="'+Math.round(n.h)+'" as="geometry"/></mxCell>');
+      return;
+    }
+  });
+
+  return '<?xml version="1.0" encoding="UTF-8"?>\n'+
+    '<mxfile host="app.diagrams.net" agent="FigureForge" type="device">'+
+    '<diagram id="figureforge" name="FigureForge">'+
+    '<mxGraphModel dx="1600" dy="900" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="'+c.width+'" pageHeight="'+c.height+'" math="0" shadow="0">'+
+    '<root><mxCell id="0"/><mxCell id="1" parent="0"/>'+cells.join('')+'</root>'+
+    '</mxGraphModel></diagram></mxfile>';
+}
+
+/* ---------- VSDX ----------
+   Minimal but valid Visio package: one page, native Rectangle / Ellipse / Line /
+   Text shapes. Layout uses explicit PinX/PinY in inches, so shapes land exactly
+   where the SVG had them.
+
+   Honest limitation: this was written against the VSDX package structure and is
+   delivered without a Visio installation to open it with, so treat it as a draft
+   that PowerPoint-grade guarantees do not cover. draw.io's own VSDX export (from
+   the .drawio file next to this one) is the validated alternative. */
+function sceneToVsdxFiles(scene, font){
+  const c = scene.canvas;
+  const PX_PER_IN = c.width/10;                    // keep the same 10in width as PPTX
+  const inches = v => (v/PX_PER_IN);
+  const shapes = [];
+  const media = [];                                // {name, bytes, contentType, ext}
+  const mediaRels = [];                            // relationship entries for page1
+  let mediaSeq = 0;
+
+  function dataUriParts(uri){
+    const m = /^data:(image\/(png|jpeg|jpg|gif|webp));base64,([A-Za-z0-9+/=\s]+)$/.exec(String(uri||'').trim());
+    if(!m) return null;
+    const mime = m[1].toLowerCase();
+    const ext = mime === 'image/jpeg' || mime === 'image/jpg' ? 'jpeg' : mime.split('/')[1];
+    let bin;
+    try{ bin = atob(m[3].replace(/\s+/g,'')); }
+    catch(_){ return null; }
+    const bytes = new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i] = bin.charCodeAt(i);
+    return { bytes, contentType:mime, ext };
+  }
+
+  /* Visio stores a bitmap shape as Type="Foreign" with a rectangle geometry, the
+     Img* cells, and a <ForeignData> that points at a media part through a page
+     relationship. This mirrors the structure Visio itself writes. */
+  function imageShape(n, ID, parts, relId){
+    const w = Math.max(n.w, 1), h = Math.max(n.h, 1);
+    const iw = inches(w), ih = inches(h);
+    return '<Shape ID="'+ID+'" Type="Foreign" LineStyle="0" FillStyle="0" TextStyle="0">'+
+      '<Cell N="PinX" V="'+inches(n.x + w/2).toFixed(4)+'"/>'+
+      '<Cell N="PinY" V="'+inches(c.height - (n.y + h/2)).toFixed(4)+'"/>'+
+      '<Cell N="Width" V="'+iw.toFixed(4)+'" U="IN"/><Cell N="Height" V="'+ih.toFixed(4)+'" U="IN"/>'+
+      '<Cell N="LocPinX" V="'+(iw/2).toFixed(4)+'" U="IN" F="Width*0.5"/>'+
+      '<Cell N="LocPinY" V="'+(ih/2).toFixed(4)+'" U="IN" F="Height*0.5"/>'+
+      '<Cell N="Angle" V="0"/><Cell N="FlipX" V="0"/><Cell N="FlipY" V="0"/><Cell N="ResizeMode" V="0"/>'+
+      '<Cell N="ImgOffsetX" V="0" U="IN" F="ImgWidth*0"/><Cell N="ImgOffsetY" V="0" U="IN" F="ImgHeight*0"/>'+
+      '<Cell N="ImgWidth" V="'+iw.toFixed(4)+'" U="IN" F="Width*1"/>'+
+      '<Cell N="ImgHeight" V="'+ih.toFixed(4)+'" U="IN" F="Height*1"/>'+
+      '<Cell N="ClippingPath" V="" F="&quot;&quot;" E="#N/A"/>'+
+      '<Cell N="TxtPinX" V="'+(iw/2).toFixed(4)+'" U="IN" F="Width*0.5"/>'+
+      '<Cell N="TxtPinY" V="0" U="IN" F="Height*0"/>'+
+      '<Cell N="TxtWidth" V="'+iw.toFixed(4)+'" U="IN" F="Width*1"/>'+
+      '<Cell N="TxtHeight" V="0" U="IN" F="Height*0"/>'+
+      '<Cell N="TxtLocPinX" V="'+(iw/2).toFixed(4)+'" U="IN" F="TxtWidth*0.5"/>'+
+      '<Cell N="TxtLocPinY" V="0" U="IN" F="TxtHeight*0.5"/>'+
+      '<Cell N="TxtAngle" V="0"/><Cell N="VerticalAlign" V="0"/><Cell N="ShdwPattern" V="0"/>'+
+      '<Section N="Geometry" IX="0">'+
+        '<Cell N="NoFill" V="0"/><Cell N="NoLine" V="0"/><Cell N="NoShow" V="0"/>'+
+        '<Cell N="NoSnap" V="0"/><Cell N="NoQuickDrag" V="0"/>'+
+        '<Row T="RelMoveTo" IX="1"><Cell N="X" V="0"/><Cell N="Y" V="0"/></Row>'+
+        '<Row T="RelLineTo" IX="2"><Cell N="X" V="1"/><Cell N="Y" V="0"/></Row>'+
+        '<Row T="RelLineTo" IX="3"><Cell N="X" V="1"/><Cell N="Y" V="1"/></Row>'+
+        '<Row T="RelLineTo" IX="4"><Cell N="X" V="0"/><Cell N="Y" V="1"/></Row>'+
+        '<Row T="RelLineTo" IX="5"><Cell N="X" V="0"/><Cell N="Y" V="0"/></Row>'+
+      '</Section>'+
+      '<ForeignData ForeignType="Bitmap" CompressionType="'+parts.ext.toUpperCase()+'"><Rel r:id="'+relId+'"/></ForeignData>'+
+      '</Shape>';
+  }
+
+  scene.nodes.forEach(function(n, idx){
+    const ID = idx+1;
+    const st = { fill:(n.fill||'none'), line:(n.stroke||'none'), weight:(n.strokeWidth||0) };
+    let xml = '';
+    if(n.type==='image'){
+      const parts = dataUriParts(n.href);
+      if(parts){
+        mediaSeq++;
+        const name = 'image' + mediaSeq + '.' + parts.ext;
+        const relId = 'rIdImg' + mediaSeq;
+        media.push({ name:'visio/media/'+name, bytes:parts.bytes });
+        mediaRels.push({ id:relId, target:'../media/'+name });
+        xml = imageShape(n, ID, parts, relId);
+      } else {
+        // A reference we cannot inline (a remote URL or a path the page cannot read):
+        // keep the rectangle correct instead of pretending an image is there.
+        xml = '<Shape ID="'+ID+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'+
+              '<Cell N="PinX" V="'+inches(n.x+n.w/2).toFixed(4)+'"/><Cell N="PinY" V="'+inches(c.height-(n.y+n.h/2)).toFixed(4)+'"/>'+
+              '<Cell N="Width" V="'+inches(Math.max(n.w,4)).toFixed(4)+'"/><Cell N="Height" V="'+inches(Math.max(n.h,4)).toFixed(4)+'"/>'+
+              '<Cell N="FillForegnd" V="#F3F4F6"/><Cell N="FillPattern" V="1"/>'+
+              '<Cell N="LineColor" V="#9CA3AF"/><Cell N="LinePattern" V="2"/><Cell N="LineWeight" V="0.5"/>'+
+              '<Cell N="ShapeType" V="Rectangle"/></Shape>';
+      }
+    } else if(n.type==='rect' || n.type==='ellipse'){
+      const master = n.type==='ellipse' ? 'Ellipse' : 'Rectangle';
+      xml = '<Shape ID="'+ID+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'+
+            '<Cell N="PinX" V="'+inches(n.x+n.w/2).toFixed(4)+'"/><Cell N="PinY" V="'+inches(c.height-(n.y+n.h/2)).toFixed(4)+'"/>'+
+            '<Cell N="Width" V="'+inches(Math.max(n.w,1)).toFixed(4)+'"/><Cell N="Height" V="'+inches(Math.max(n.h,1)).toFixed(4)+'"/>'+
+            '<Cell N="LocPinX" V="'+inches(Math.max(n.w,1)/2).toFixed(4)+'"/><Cell N="LocPinY" V="'+inches(Math.max(n.h,1)/2).toFixed(4)+'"/>'+
+            fillCells(st)+
+            '<Cell N="Rounding" V="'+(n.radius? inches(n.radius).toFixed(4) : '0')+'"/>'+
+            '<Cell N="ShapeType" V="'+master+'"/>'+
+            '</Shape>';
+    } else if(n.type==='line'){
+      const x1=n.x, y1=n.y, x2=n.x2, y2=n.y2;
+      const len = Math.hypot(x2-x1, y2-y1);
+      const ang = Math.atan2(-(y2-y1), x2-x1) * 180/Math.PI;
+      xml = '<Shape ID="'+ID+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'+
+            '<Cell N="PinX" V="'+inches((x1+x2)/2).toFixed(4)+'"/><Cell N="PinY" V="'+inches(c.height-(y1+y2)/2).toFixed(4)+'"/>'+
+            '<Cell N="Width" V="'+inches(Math.max(len,0.5)).toFixed(4)+'"/><Cell N="Height" V="0"/>'+
+            '<Cell N="LocPinX" V="'+inches(Math.max(len,0.5)/2).toFixed(4)+'"/><Cell N="LocPinY" V="0"/>'+
+            '<Cell N="Angle" V="'+ang.toFixed(4)+'"/>'+
+            '<Cell N="EndArrow" V="'+(n.arrow?4:0)+'"/>'+
+            '<Cell N="LineColor" V="'+(n.stroke? '#'+n.stroke : '#000000')+'"/>'+
+            '<Cell N="LineWeight" V="'+(inches(Math.max(n.strokeWidth||1,1))*72).toFixed(3)+'"/>'+
+            '<Cell N="ShapeType" V="Line"/>'+
+            '</Shape>';
+    } else if(n.type==='text'){
+      const text = String(n.text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      const sizePt = (n.fontSize||16)*PT_PER_UNIT;
+      const boxW = Math.max(n.w*1.04, 20), boxH = (n.fontSize||16)*1.4;
+      const anchorX = n.anchor==='middle' ? n.x : (n.anchor==='end' ? n.x - boxW/2 : n.x + boxW/2);
+      xml = '<Shape ID="'+ID+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'+
+            '<Cell N="PinX" V="'+inches(anchorX).toFixed(4)+'"/><Cell N="PinY" V="'+inches(c.height-n.y).toFixed(4)+'"/>'+
+            '<Cell N="Width" V="'+inches(boxW).toFixed(4)+'"/><Cell N="Height" V="'+inches(boxH).toFixed(4)+'"/>'+
+            '<Cell N="LocPinX" V="'+inches(boxW/2).toFixed(4)+'"/><Cell N="LocPinY" V="'+inches(boxH/2).toFixed(4)+'"/>'+
+            '<Cell N="FillForegnd" V="#FFFFFF"/><Cell N="FillPattern" V="0"/>'+
+            '<Cell N="LinePattern" V="0"/>'+
+            '<Cell N="VerticalAlign" V="1"/><Cell N="HorzAlign" V="'+(n.anchor==='middle'?1:(n.anchor==='end'?2:0))+'"/>'+
+            '<Cell N="ShapeType" V="Text"/>'+
+            '<Section N="Character"><Row IX="0"><Cell N="Size" V="'+sizePt.toFixed(2)+'"/>'+
+              '<Cell N="Color" V="#'+(n.fill||'000000')+'"/><Cell N="Style" V="'+(n.bold?1:0)+'"/>'+
+              '<Cell N="Font" V="'+(font||'Arial')+'"/></Row></Section>'+
+            '<Text>'+text+'</Text>'+
+            '</Shape>';
+    } else {
+      // Unsupported primitive: keep a dashed placeholder so nothing silently vanishes.
+      xml = '<Shape ID="'+ID+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'+
+            '<Cell N="PinX" V="'+inches(n.x+n.w/2).toFixed(4)+'"/><Cell N="PinY" V="'+inches(c.height-(n.y+n.h/2)).toFixed(4)+'"/>'+
+            '<Cell N="Width" V="'+inches(Math.max(n.w,4)).toFixed(4)+'"/><Cell N="Height" V="'+inches(Math.max(n.h,4)).toFixed(4)+'"/>'+
+            '<Cell N="FillPattern" V="0"/><Cell N="LinePattern" V="2"/>'+
+            '<Cell N="LineColor" V="#BFBFBF"/>'+
+            '<Cell N="ShapeType" V="Rectangle"/></Shape>';
+    }
+    shapes.push(xml);
+  });
+
+  function fillCells(st){
+    const parts = [];
+    parts.push('<Cell N="FillForegnd" V="'+(st.fill && st.fill!=='none' ? '#'+st.fill : '#FFFFFF')+'"/>');
+    parts.push('<Cell N="FillPattern" V="'+(st.fill && st.fill!=='none' ? 1 : 0)+'"/>');
+    parts.push('<Cell N="LineColor" V="'+(st.line && st.line!=='none' ? '#'+st.line : '#000000')+'"/>');
+    parts.push('<Cell N="LinePattern" V="'+(st.line && st.line!=='none' ? 1 : 0)+'"/>');
+    parts.push('<Cell N="LineWeight" V="'+(inches(Math.max(st.weight,1))*72).toFixed(3)+'"/>');
+    return parts.join('');
+  }
+
+  const pageWidth = inches(c.width).toFixed(4), pageHeight = inches(c.height).toFixed(4);
+
+  // The page part is a PageContents document holding the shapes. The drawing-level
+  // VisioDocument, its page list and the page properties live in the other parts.
+  const pageXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<PageContents xmlns="http://schemas.microsoft.com/office/visio/2012/main" '+
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xml:space="preserve">'+
+    '<Shapes>'+shapes.join('')+'</Shapes>'+
+    '</PageContents>';
+
+  const pageRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+    mediaRels.map(r=>'<Relationship Id="'+r.id+'" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="'+r.target+'"/>').join('')+
+    '</Relationships>';
+
+  const contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'+
+    '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'+
+    '<Default Extension="xml" ContentType="application/xml"/>'+
+    (media.some(m=>/\.png$/i.test(m.name)) ? '<Default Extension="png" ContentType="image/png"/>' : '')+
+    (media.some(m=>/\.jpe?g$/i.test(m.name)) ? '<Default Extension="jpeg" ContentType="image/jpeg"/>' : '')+
+    (media.some(m=>/\.gif$/i.test(m.name)) ? '<Default Extension="gif" ContentType="image/gif"/>' : '')+
+    (media.some(m=>/\.webp$/i.test(m.name)) ? '<Default Extension="webp" ContentType="image/webp"/>' : '')+
+    '<Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>'+
+    '<Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>'+
+    '<Override PartName="/visio/document.xml" ContentType="application/vnd.ms-visio.drawing.main+xml"/>'+
+    '<Override PartName="/visio/pages/pages.xml" ContentType="application/vnd.ms-visio.pages+xml"/>'+
+    '<Override PartName="/visio/pages/page1.xml" ContentType="application/vnd.ms-visio.page+xml"/>'+
+    '<Override PartName="/visio/windows.xml" ContentType="application/vnd.ms-visio.windows+xml"/>'+
+    '</Types>';
+
+  const rootRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+    '<Relationship Id="rId1" Type="http://schemas.microsoft.com/visio/2010/relationships/document" Target="visio/document.xml"/>'+
+    '<Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>'+
+    '<Relationship Id="rId3" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>'+
+    '</Relationships>';
+
+  const docRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+    '<Relationship Id="rId1" Type="http://schemas.microsoft.com/visio/2010/relationships/pages" Target="pages/pages.xml"/>'+
+    '<Relationship Id="rId2" Type="http://schemas.microsoft.com/visio/2010/relationships/windows" Target="windows.xml"/>'+
+    '</Relationships>';
+
+  const documentXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<VisioDocument xmlns="http://schemas.microsoft.com/office/visio/2012/main" xml:space="preserve">'+
+    '<DocumentSettings TopPage="0" DefaultTextStyle="0" DefaultLineStyle="0" DefaultFillStyle="0"/>'+
+    '<Colors/><FaceNames/><StyleSheets/>'+
+    '</VisioDocument>';
+
+  const pagesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Pages xmlns="http://schemas.microsoft.com/office/visio/2012/main" '+
+    'xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xml:space="preserve">'+
+    '<Page ID="0" NameU="FigureForge" Name="FigureForge" ViewScale="-1" ViewCenterX="'+(c.width/2/PX_PER_IN).toFixed(4)+'" ViewCenterY="'+(c.height/2/PX_PER_IN).toFixed(4)+'">'+
+    '<PageSheet LineStyle="0" FillStyle="0" TextStyle="0">'+
+      '<Cell N="PageWidth" V="'+pageWidth+'" U="IN"/><Cell N="PageHeight" V="'+pageHeight+'" U="IN"/>'+
+      '<Cell N="PageScale" V="1"/><Cell N="DrawingScale" V="1"/>'+
+    '</PageSheet>'+
+    '<Rel r:id="rId1"/>'+
+    '</Page></Pages>';
+
+  const pagesRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+    '<Relationship Id="rId1" Type="http://schemas.microsoft.com/visio/2010/relationships/page" Target="page1.xml"/>'+
+    '</Relationships>';
+
+  const windowsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Windows xmlns="http://schemas.microsoft.com/office/visio/2012/main" ClientWidth="1600" ClientHeight="900"/>';
+
+  const appXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties">'+
+    '<Application>FigureForge</Application><Company></Company></Properties>';
+
+  const coreXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n'+
+    '<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" '+
+    'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">'+
+    '<dc:title>FigureForge editable figure</dc:title><dc:creator>FigureForge</dc:creator>'+
+    '<cp:lastModifiedBy>FigureForge</cp:lastModifiedBy>'+
+    '<dcterms:created xsi:type="dcterms:W3CDTF">'+new Date().toISOString()+'</dcterms:created>'+
+    '</cp:coreProperties>';
+
+  return [
+    { name:'[Content_Types].xml', data:contentTypes },
+    { name:'_rels/.rels', data:rootRels },
+    { name:'docProps/app.xml', data:appXml },
+    { name:'docProps/core.xml', data:coreXml },
+    { name:'visio/document.xml', data:documentXml },
+    { name:'visio/_rels/document.xml.rels', data:docRels },
+    { name:'visio/pages/pages.xml', data:pagesXml },
+    { name:'visio/pages/_rels/pages.xml.rels', data:pagesRels },
+    { name:'visio/pages/page1.xml', data:pageXml },
+    { name:'visio/pages/_rels/page1.xml.rels', data:pageRels },
+    { name:'visio/windows.xml', data:windowsXml },
+  ].concat(media.map(m=>({ name:m.name, data:m.bytes })));
+}
+
+/* ---------- zip (stored, no compression) ----------
+   VSDX is an OOXML package, so a minimal store-only zip writer is enough and
+   keeps this dependency-free. CRC32 is required by the format. */
+function crc32(bytes){
+  let table = crc32.table;
+  if(!table){
+    table = crc32.table = new Uint32Array(256);
+    for(let n=0;n<256;n++){
+      let c = n;
+      for(let k=0;k<8;k++) c = (c & 1) ? (0xEDB88320 ^ (c >>> 1)) : (c >>> 1);
+      table[n] = c >>> 0;
+    }
+  }
+  let crc = 0xFFFFFFFF;
+  for(let i=0;i<bytes.length;i++) crc = (crc >>> 8) ^ table[(crc ^ bytes[i]) & 0xFF];
+  return (crc ^ 0xFFFFFFFF) >>> 0;
+}
+
+function zipStore(files){
+  const enc = new TextEncoder();
+  const chunks = [];
+  const central = [];
+  let offset = 0;
+  const now = new Date();
+  const dosTime = ((now.getHours()<<11) | (now.getMinutes()<<5) | Math.floor(now.getSeconds()/2)) & 0xFFFF;
+  const dosDate = (((now.getFullYear()-1980)<<9) | ((now.getMonth()+1)<<5) | now.getDate()) & 0xFFFF;
+
+  files.forEach(function(f){
+    const nameBytes = enc.encode(f.name);
+    const dataBytes = typeof f.data === 'string' ? enc.encode(f.data) : f.data;
+    const crc = crc32(dataBytes);
+    const local = new Uint8Array(30 + nameBytes.length);
+    const lv = new DataView(local.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0, true);
+    lv.setUint16(8, 0, true);            // stored
+    lv.setUint16(10, dosTime, true);
+    lv.setUint16(12, dosDate, true);
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, dataBytes.length, true);
+    lv.setUint32(22, dataBytes.length, true);
+    lv.setUint16(26, nameBytes.length, true);
+    lv.setUint16(28, 0, true);
+    local.set(nameBytes, 30);
+    chunks.push(local, dataBytes);
+
+    const cd = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(cd.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint16(12, dosTime, true);
+    cv.setUint16(14, dosDate, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, dataBytes.length, true);
+    cv.setUint32(24, dataBytes.length, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint32(42, offset, true);
+    cd.set(nameBytes, 46);
+    central.push(cd);
+
+    offset += local.length + dataBytes.length;
+  });
+
+  const centralSize = central.reduce((a,c)=>a+c.length, 0);
+  const end = new Uint8Array(22);
+  const ev = new DataView(end.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, centralSize, true);
+  ev.setUint32(16, offset, true);
+  return new Blob(chunks.concat(central, [end]), { type:'application/vnd.ms-visio.drawing' });
+}
+
+/* ---------- text-free base -> editable scene ----------
+   The image model is asked to draw the figure with empty label areas, because a
+   model that paints letters as pictures is what produces garbled labels. Here the
+   label boxes are found by local pixel analysis (no API), the wording is taken from
+   the paper, and the text is drawn as real SVG <text>. Everything downstream — the
+   preview, the geometry audit and the four exporters — then works on real shapes
+   and real strings. */
+const RECON_SCHEMA = 'figureforge.recon.v2';
+
+function bitmapToDataUrl(src){
+  return /^data:image\//.test(String(src||'')) ? String(src) : null;
+}
+
+function loadImage(dataUrl){
+  return new Promise(function(resolve, reject){
+    const im = new Image();
+    im.onload = function(){ resolve(im); };
+    im.onerror = function(){ reject(new Error('image decode failed')); };
+    im.src = dataUrl;
+  });
+}
+
+/* Flood fill the light pixels and keep regions that are large, bounded and roughly
+   rectangular. Empty label areas come out as single regions with a high fill ratio;
+   areas holding an illustration come out with a lower one. */
+/* Find label anchors by looking at content rather than at blank boxes.
+   A blank box is only detectable when a dark border encloses it, which is exactly
+   what the layered layout avoids: boxes are packed and the reserved bands are open to
+   the background. So instead: find the content blocks, then anchor a label in the
+   blank band above and below each block. */
+function detectContentBlocks(canvas){
+  const w = canvas.width, h = canvas.height;
+  const img = canvas.getContext('2d', { willReadFrequently:true }).getImageData(0,0,w,h).data;
+  const N = w*h;
+  const isContent = function(i){
+    const o = i*4, r = img[o], g = img[o+1], b = img[o+2];
+    // anything that is not near-white counts as content
+    return !(r > 228 && g > 228 && b > 228);
+  };
+  const seen = new Uint8Array(N);
+  const blocks = [];
+  const stack = [];
+  const minPixels = Math.max(400, Math.round(N * 0.0004));
+  for(let start = 0; start < N; start++){
+    if(seen[start] || !isContent(start)) continue;
+    stack.length = 0; stack.push(start); seen[start] = 1;
+    let count = 0, minX = w, maxX = -1, minY = h, maxY = -1;
+    while(stack.length){
+      const p = stack.pop();
+      const x = p % w, y = (p - x) / w;
+      count++;
+      if(x < minX) minX = x;
+      if(x > maxX) maxX = x;
+      if(y < minY) minY = y;
+      if(y > maxY) maxY = y;
+      if(x > 0   && !seen[p-1] && isContent(p-1)){ seen[p-1] = 1; stack.push(p-1); }
+      if(x < w-1 && !seen[p+1] && isContent(p+1)){ seen[p+1] = 1; stack.push(p+1); }
+      if(y > 0   && !seen[p-w] && isContent(p-w)){ seen[p-w] = 1; stack.push(p-w); }
+      if(y < h-1 && !seen[p+w] && isContent(p+w)){ seen[p+w] = 1; stack.push(p+w); }
+    }
+    if(count < minPixels) continue;
+    const bw = maxX - minX + 1, bh = maxY - minY + 1;
+    if(bw < 30 || bh < 20) continue;
+    if(bw > w * 0.95 && bh > h * 0.95) continue;   // the page frame itself
+    blocks.push({ x:minX, y:minY, w:bw, h:bh, area:count });
+  }
+  return blocks;
+}
+
+/* Turn content blocks into candidate label anchors: the blank band directly under a
+   block (a box label) and the blank band directly above it (often a panel title). */
+function labelAnchorsFromBlocks(blocks, w, h){
+  const anchors = [];
+  blocks.forEach(function(b){
+    const below = { x:b.x, y:b.y + b.h + 4, w:b.w, h:Math.max(22, Math.min(38, Math.round(b.h * 0.16))) };
+    if(below.y + below.h < h - 2) anchors.push(below);
+    const above = { x:b.x, y:b.y - Math.max(22, Math.min(38, Math.round(b.h * 0.16))) - 4,
+                    w:b.w, h:Math.max(22, Math.min(38, Math.round(b.h * 0.16))) };
+    if(above.y > 2) anchors.push(above);
+  });
+  return anchors;
+}
+
+/* Slide a label box to the nearest position whose pixels are actually blank, so text
+   never sits on top of an illustration. Returns the adjusted box, or the input when no
+   blank spot is within reach. */
+function snapToBlankPixels(canvas, box){
+  const w = canvas.width, h = canvas.height;
+  const ctx = canvas.getContext('2d', { willReadFrequently:true });
+  const bw = Math.max(20, Math.round(box.w)), bh = Math.max(16, Math.round(box.h));
+  const maxShift = 46;
+  const blankRatio = function(x0, y0){
+    const x = Math.max(0, Math.min(w - 1, Math.round(x0)));
+    const y = Math.max(0, Math.min(h - 1, Math.round(y0)));
+    const cw = Math.min(bw, w - x), ch = Math.min(bh, h - y);
+    if(cw < 6 || ch < 6) return -1;
+    const d = ctx.getImageData(x, y, cw, ch).data;
+    let light = 0, total = cw * ch;
+    for(let i = 0; i < total; i++){
+      const o = i*4;
+      if(d[o] > 228 && d[o+1] > 228 && d[o+2] > 228) light++;
+    }
+    return light / total;
+  };
+  let best = null, bestScore = -1;
+  for(let dy = -maxShift; dy <= maxShift; dy += 6){
+    for(let dx = -maxShift; dx <= maxShift; dx += 6){
+      const ratio = blankRatio(box.x + dx, box.y + dy);
+      if(ratio < 0) continue;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      const score = ratio - dist / (maxShift * 12);
+      if(score > bestScore){ bestScore = score; best = { x:box.x + dx, y:box.y + dy }; }
+    }
+  }
+  if(!best) return box;
+  return { x:best.x, y:best.y, w:bw, h:bh };
+}
+
+/* Which wording goes in which box is decided by position, because the wording comes
+   from the paper, not from a model reading the pixels. The vision model only names
+   the regions it was shown, in order. */
+function assignLabelsToRegions(regions, labels){
+  const boxes = regions.slice(0, labels.length);
+  const sorted = boxes.slice().sort(function(a,b){
+    if(Math.abs(a.y - b.y) > 60) return a.y - b.y;
+    return a.x - b.x;
+  });
+  return sorted.map(function(r, i){
+    return { region:r, text:(labels[i]==null ? '' : String(labels[i])).trim() };
+  }).filter(function(x){ return x.text; });
+}
+
+function reconPrompt(n){
+  return 'You are given ' + n + ' blank label areas detected in a scientific figure, in reading order '
+    + '(left to right, top to bottom). Each entry gives its position, in pixels, on a 1600x900 canvas. '
+    + 'For EACH area, decide the short English label (1-4 words) that belongs there, judged from the '
+    + 'paper content and from that area position relative to the figure. '
+    + 'Use wording that appears in the paper; never invent unrelated terms. '
+    + 'A blank area at the very top of a panel is usually a panel title (2-4 words, capitalised). '
+    + 'A narrow blank area just under a box is that box label. '
+    + 'Return STRICT JSON only, no commentary: '
+    + '{"labels":[{"text":"Input Encoder","x":0,"y":0,"w":0,"h":0}]} '
+    + 'with exactly ' + n + ' entries, in the same order as given. '
+    + 'x/y/w/h are your best estimate in pixels on the 1600x900 canvas; a rough estimate is enough.';
+}
+
+/* Build a scene whose shapes carry the base bitmap and whose text is real text. */
+function buildReconScene(baseCanvas, placed, paperText){
+  const W = baseCanvas.width, H = baseCanvas.height;
+  const nodes = [];
+  nodes.push({ id:'bg', type:'image', x:0, y:0, w:W, h:H, href: baseCanvas.toDataURL('image/png') });
+  placed.forEach(function(item, i){
+    const r = item.region;
+    // a text box anchored at the top-left of the detected area, with a little padding
+    const pad = 4;
+    const fontSize = Math.max(14, Math.min(34, Math.round(r.h * 0.26)));
+    nodes.push({
+      id: 'label' + (i+1),
+      type: 'text',
+      x: r.x + pad,
+      y: r.y + pad + fontSize,
+      w: Math.max(r.w - pad*2, 20),
+      h: fontSize * 1.35,
+      text: item.text,
+      fontSize: fontSize,
+      fill: '111827',
+      anchor: 'start',
+      bold: false,
+    });
+  });
+  return { schema:'figureforge.scene.v3', canvas:{ w:W, h:H },
+           nodes:nodes, counts:{ shapes:1, text:placed.length } };
+}
+
+function sceneToSvgString(scene){
+  const c = scene.canvas;
+  const parts = ['<?xml version="1.0" encoding="UTF-8"?>',
+    '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ' +
+    'viewBox="0 0 ' + c.w + ' ' + c.h + '" width="' + c.w + '" height="' + c.h + '">',
+    '<rect x="0" y="0" width="' + c.w + '" height="' + c.h + '" fill="#ffffff"/>'];
+  scene.nodes.forEach(function(n, i){
+    const id = n.id || ('n' + i);
+    if(n.type === 'image'){
+      parts.push('<image id="' + id + '" data-role="base" data-editable="true" x="' + n.x + '" y="' + n.y +
+        '" width="' + n.w + '" height="' + n.h + '" xlink:href="' + n.href + '"/>');
+    } else if(n.type === 'text'){
+      parts.push('<text id="' + id + '" data-role="label" data-editable="true" x="' + n.x + '" y="' + n.y +
+        '" font-family="Arial, Helvetica, sans-serif" font-size="' + n.fontSize +
+        '" fill="#' + (n.fill || '111827') + '"' + (n.bold ? ' font-weight="bold"' : '') + '>' +
+        xmlEscape(n.text) + '</text>');
+    }
+  });
+  parts.push('</svg>');
+  return parts.join('\n');
+}
+
+/* Step 4 core: send the rendered bitmap to the Step-1 chat/vision model and ask
+   it to decompose every visible element into editable scene nodes (text, panels,
+   arrows). The same provider/key/base from Step 1 is reused. On failure the old
+   pixel-band reconstruction runs as a fallback. */
+function parserModelId(){
+  const am = $('#analyzeModel');
+  if(am && am.value && !IMGRE.test(am.value)) return am.value;
+  const sel = $('#model');
+  if(sel && sel.value && !IMGRE.test(sel.value)) return sel.value;
+  for(const o of (sel ? sel.options : [])){
+    if(o.value && !IMGRE.test(o.value)) return o.value;
+  }
+  return (am && am.value) || (sel && sel.value);
+}
+
+function downscaleJPEG(dataUrl, maxW=1280, q=0.85){
+  return new Promise(function(resolve, reject){
+    const im = new Image();
+    im.onload = function(){
+      const w = im.naturalWidth || im.width, h = im.naturalHeight || im.height;
+      const scale = Math.min(1, maxW / w);
+      const c = document.createElement('canvas');
+      c.width = Math.round(w*scale); c.height = Math.round(h*scale);
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', q));
+    };
+    im.onerror = function(){ reject(new Error('image decode failed')); };
+    im.src = dataUrl;
+  });
+}
+
+const VISION_RECON_SYS = 'You are a scientific-figure reconstruction engine. You convert one rendered paper figure into editable scene nodes. Output STRICT JSON only, no commentary.';
+
+function visionReconPrompt(){
+  return 'Decompose the attached figure into editable nodes on a 1600x900 canvas. Return exactly one JSON object: {"nodes":[ ... ]}.\n'
+    + 'Each node is one of:\n'
+    + '{"type":"text","x":0,"y":0,"w":0,"h":0,"text":"Exact wording","fontSize":16,"bold":false,"fill":"#111827"}\n'
+    + '{"type":"rect","x":0,"y":0,"w":0,"h":0,"fill":"#ffffff","stroke":"#334155","strokeWidth":1.5}\n'
+    + '{"type":"line","x":0,"y":0,"x2":0,"y2":0,"stroke":"#334155","strokeWidth":1.5,"arrow":true}\n'
+    + 'Rules: coordinates are pixels on a 1600x900 canvas. Transcribe EVERY visible text string as a text node, exactly as written (English, short labels). '
+    + 'Every panel / box / card is a rect. Every connector with an arrowhead is a line node with "arrow":true. '
+    + 'Use the observed palette as #RRGGBB. Output only the JSON, no prose.';
+}
+
+async function visionReconstruct(){
+  const st = window.__ffExportState;
+  const status = $('#reconStatus');
+  const say = function(k,v){ if(status) status.textContent = tt(k,v); };
+  const src = bitmapToDataUrl(st.bitmap);
+  if(!src){ say('recon.nobitmap'); return false; }
+  say('recon.vision');
+  const model = parserModelId();
+  if(!model) throw new Error(tt('analyze.needmodel'));
+  const jpeg = await downscaleJPEG(src);
+  const cfgv = cfg(), relay = $('#baseOverride').value.trim();
+  let txt;
+  if(cfgv.proto==='anthropic' && !relay){
+    const body = { model:model, max_tokens:4000, system:VISION_RECON_SYS,
+      messages:[{ role:'user', content:[
+        { type:'image', source:{type:'base64', media_type:'image/jpeg', data:jpeg.split(',')[1]} },
+        { type:'text', text:visionReconPrompt() } ] }] };
+    const r = await fetch(baseURL()+'/v1/messages',{method:'POST',headers:anthropicHeaders(cleanKey($('#key').value)),body:JSON.stringify(body)});
+    txt = await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
+    const d = JSON.parse(txt);
+    txt = (d.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('');
+  } else {
+    const body = { model:model, temperature:0.1,
+      messages:[{role:'system',content:VISION_RECON_SYS},
+                {role:'user',content:[
+                  {type:'image_url',image_url:{url:jpeg}},
+                  {type:'text',text:visionReconPrompt()}]}] };
+    if($('#provider').value==='ark') body.thinking = {type:'disabled'};
+    const r = await postJSON(baseURL(),'/chat/completions',body,cleanKey($('#key').value),undefined,180000);
+    txt = await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
+    const d = JSON.parse(txt);
+    txt = (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '';
+  }
+  const m = txt.match(/\{[\s\S]*\}/);
+  if(!m) throw new Error(tt('recon.badjson'));
+  let j; try{ j = JSON.parse(m[0]); }catch(e){ throw new Error(tt('recon.badjson')); }
+  const raw = Array.isArray(j.nodes) ? j.nodes : [];
+  const hex = v => /^#[0-9a-fA-F]{6}$/.test(v||'') ? v : null;
+  const num = (v,fb)=>{ v=Number(v); return Number.isFinite(v)?v:fb; };
+  // the bitmap itself stays as a base image node; model nodes sit on top of it
+  const nodes = [{type:'image',x:0,y:0,w:1600,h:900,href:src}];
+  raw.forEach(function(n){
+    if(!n || typeof n!=='object') return;
+    const t = n.type;
+    if(t==='text'){
+      const text = String(n.text||'').replace(/[\r\n]+/g,' ').trim();
+      if(!text) return;
+      nodes.push({type:'text', text:text,
+        x:num(n.x,0), y:num(n.y,0), w:num(n.w, text.length*10), h:num(n.h,20),
+        fontSize:Math.min(64,Math.max(10,num(n.fontSize,16))),
+        fill:hex(n.fill)||'#111827', bold:!!n.bold, anchor:'start'});
+    } else if(t==='rect'){
+      nodes.push({type:'rect', x:num(n.x,0),y:num(n.y,0),w:Math.max(10,num(n.w,50)),h:Math.max(10,num(n.h,30)),
+        fill:hex(n.fill)||'#ffffff', stroke:hex(n.stroke)||'#334155',
+        strokeWidth:Math.max(0.5,num(n.strokeWidth,1.5)), radius:0});
+    } else if(t==='line'||t==='arrow'){
+      nodes.push({type:'line', x:num(n.x,0),y:num(n.y,0),x2:num(n.x2,0),y2:num(n.y2,0),
+        stroke:hex(n.stroke)||'#334155', strokeWidth:Math.max(0.5,num(n.strokeWidth,1.5)), arrow:!!n.arrow});
+    }
+  });
+  if(nodes.length<2) throw new Error(tt('recon.notext'));
+  const scene = { schema:'figureforge.scene.v2', canvas:{w:1600,h:900}, nodes:nodes };
+  const svg = sceneToSvgString(scene);
+  Object.assign(st, { scene:scene, svg:svg, baseSvg:svg, source:'bitmap',
+                     recon:{ vision:true, nodes:nodes.length-1 } });
+  renderEditableExportCard();
+  applyExportFont(st.font||'original');
+  say('recon.visionDone', {n:nodes.length-1});
+  return true;
+}
+
+/* The whole step: find the label areas, ask for their wording, draw the text, and
+   hand the result to the existing export path. */
+async function runReconstruction(){
+  const st = window.__ffExportState;
+  const status = $('#reconStatus');
+  const say = function(k, vars){ if(status) status.textContent = tt(k, vars); };
+  const src = bitmapToDataUrl(st.bitmap);
+  if(!src){ say('recon.nobitmap'); return false; }
+  try{
+    say('recon.reading');
+    const im = await loadImage(src);
+    const canvas = document.createElement('canvas');
+    canvas.width = im.naturalWidth || im.width;
+    canvas.height = im.naturalHeight || im.height;
+    canvas.getContext('2d').drawImage(im, 0, 0);
+    const blocks = detectContentBlocks(canvas);
+    const anchors = labelAnchorsFromBlocks(blocks, canvas.width, canvas.height);
+    if(!anchors.length){ say('recon.noboxes'); return false; }
+
+    say('recon.labelling', { n: anchors.length });
+    const labels = await requestRegionLabels(anchors, canvas);
+    // Prefer the model's own position, snapped onto a blank region. If the model gave
+    // no position, fall back to reading order against the detected regions.
+    const placed = [];
+    const taken = [];
+    labels.forEach(function(lb, i){
+      if(!lb.text) return;
+      // The model may suggest a position; otherwise keep the anchor it belongs to.
+      const anchor = anchors[i] || anchors[0];
+      const wanted = (lb.x || lb.y) ? { x:lb.x, y:lb.y, w:lb.w || anchor.w, h:lb.h || anchor.h } : anchor;
+      const overUses = taken.filter(function(p){
+        return Math.abs(p.x - wanted.x) < 12 && Math.abs(p.y - wanted.y) < 12;
+      }).length;
+      if(overUses) return;
+      const finalBox = snapToBlankPixels(canvas, wanted);
+      taken.push(finalBox);
+      placed.push({ region:finalBox, text:lb.text });
+    });
+    if(!placed.length){ say('recon.notext'); return false; }
+
+    const scene = buildReconScene(canvas, placed, $('#paper') ? $('#paper').value : '');
+    const svg = sceneToSvgString(scene);
+    const audit = auditReconScene(scene);
+    Object.assign(st, { scene:scene, svg:svg, baseSvg:svg, source:'bitmap',
+                       recon:{ anchors:anchors.length, labels:placed.length, audit:audit } });
+    renderEditableExportCard();
+    applyExportFont(st.font || 'original');
+    say(audit.defects.length ? 'recon.audit' : 'recon.done',
+        { n: placed.length, d: audit.defects.length });
+    return true;
+  }catch(err){
+    console.warn('reconstruction failed', err);
+    const msg = String(err && err.message || err);
+    say(msg && msg.length < 200 ? 'recon.failedDetail' : 'recon.failed', { msg: msg });
+    return false;
+  }
+}
+
+/* Only the wording is requested here; nothing is painted from these strings. */
+async function requestRegionLabels(regions, canvas){
+  const cfgv = cfg(), relay = $('#baseOverride').value.trim();
+  const paper = (($('#paper') && $('#paper').value) || '').slice(0, 2500);
+  const list = regions.slice(0, 24).map(function(r, i){
+    const place = (r.y < 160) ? 'top of the figure' : (r.w > 300 ? 'wide band, likely a panel title' : 'narrow strip, likely a box label');
+    return (i+1) + '. ' + r.w + 'x' + r.h + ' px at (' + r.x + ',' + r.y + ') — ' + place;
+  }).join('\n');
+  const prompt = reconPrompt(regions.slice(0,24).length) + '\n\nDetected areas:\n' + list +
+    '\n\nPaper content:\n' + paper;
+  const model = ($('#analyzeModel') && $('#analyzeModel').value) || $('#model').value;
+  if(!model) throw new Error(tt('analyze.needmodel'));
+
+  let txt;
+  if(cfgv.proto === 'anthropic' && !relay){
+    const body = { model:model, max_tokens:1200, system:ANALYZE_SYS,
+                   messages:[{ role:'user', content:[{ type:'text', text:prompt }] }] };
+    const r = await fetch(baseURL() + '/v1/messages',
+      { method:'POST', headers:anthropicHeaders(cleanKey($('#key').value)), body:JSON.stringify(body) });
+    txt = await r.text();
+    if(!r.ok) throw new Error(friendlyHttp(r.status, txt));
+    const d = JSON.parse(txt);
+    txt = (d.content||[]).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text; }).join('');
+  }else{
+    const body = { model:model, temperature:0.2,
+                   messages:[{ role:'system', content:ANALYZE_SYS },
+                             { role:'user', content:prompt }] };
+    if($('#provider').value === 'ark') body.thinking = { type:'disabled' };
+    const r = await postJSON(baseURL(), '/chat/completions', body, cleanKey($('#key').value));
+    txt = await r.text();
+    if(!r.ok) throw new Error(friendlyHttp(r.status, txt));
+    const d = JSON.parse(txt);
+    txt = (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '';
+  }
+  let j;
+  try{ j = extractJSON(txt); }
+  catch(err){ throw new Error(tt('recon.badjson')); }
+  const raw = Array.isArray(j && j.labels) ? j.labels : [];
+  // accept both the object form and a plain list of strings
+  return raw.map(function(item){
+    if(item && typeof item === 'object'){
+      return { text:String(item.text || '').replace(/[\r\n]+/g,' ').slice(0, 48),
+               x:Number(item.x) || 0, y:Number(item.y) || 0,
+               w:Number(item.w) || 0, h:Number(item.h) || 0 };
+    }
+    return { text:String(item || '').replace(/[\r\n]+/g,' ').slice(0, 48), x:0, y:0, w:0, h:0 };
+  });
+}
+
+/* Deterministic checks on the reconstructed scene, so a broken result is caught
+   here rather than in Visio or PowerPoint. */
+function auditReconScene(scene){
+  const c = scene.canvas, defects = [];
+  const text = scene.nodes.filter(function(n){ return n.type === 'text'; });
+  text.forEach(function(n){
+    if(n.x < 0 || n.y < 0 || n.x + n.w > c.w || n.y > c.h){
+      defects.push({ id:n.id, kind:'out-of-canvas' });
+    }
+    if(!n.text || !n.text.trim()) defects.push({ id:n.id, kind:'empty-label' });
+  });
+  // overlapping label boxes are a layout bug worth reporting
+  for(let i=0;i<text.length;i++){
+    for(let j=i+1;j<text.length;j++){
+      const a = text[i], b = text[j];
+      const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
+      const oy = Math.min(a.y, a.y + a.h) - Math.max(a.y, b.y);
+      if(ox > 2 && oy > 2) defects.push({ id:a.id + '+' + b.id, kind:'overlap' });
+    }
+  }
+  return { ok: defects.length === 0, defects: defects };
+}
+
+function renderEditableExportCard(){
+  // The card is always visible so the four-step flow is legible, but until a draft exists
+  // it is shown locked: the format buttons are disabled and the status line says what to do
+  // first. Hiding the whole card made step 4 look missing.
+  const card=$('#card4'), state=window.__ffExportState;
+  if(!card) return;
+  const locked = !state.svg;
+  card.classList.toggle('export-locked', locked);
+  const font=$('#exportFont'); if(font) font.value=state.font||'original';
+  // Only a bitmap draft needs the rebuild panel: that is the case where the export
+  // would otherwise carry a picture instead of editable text.
+  const box=$('#exportRecon'); if(box) box.hidden = locked || state.source !== 'bitmap';
+  const status=$('#exportStatus');
+  if(locked){
+    setExportStatus(status, tt('export.waiting'));
+  } else {
+    setExportStatus(status, (state.source === 'bitmap' && !state.recon) ? tt('export.needRecon') : tt('export.ready'));
+  }
+  document.querySelectorAll('#exportActions [data-export]').forEach(btn=>btn.disabled = locked);
+  const confirm=$('#exportConfirm'); if(confirm) confirm.disabled = locked || !state.target;
+  if(!locked) syncExportSelection();
+}
+function syncExportSelection(){
+  const state=window.__ffExportState;
+  document.querySelectorAll('#exportActions [data-export]').forEach(btn=>{
+    const selected=!!state.svg && btn.dataset.export===state.target;
+    btn.classList.toggle('selected',selected);
+    btn.setAttribute('aria-pressed',String(selected));
+  });
+  const confirm=$('#exportConfirm');
+  if(confirm) confirm.disabled=!state.svg || !state.target;
+}
+/* Accepts either a bare SVG string (the SVG path) or
+   { svg, source, bitmap } (the bitmap path). Both call sites exist, and a mismatch here
+   silently leaves the export buttons disabled, so the shape is normalised up front. */
+function showEditableExportStep(svgOrSource){
+  const src = (svgOrSource && typeof svgOrSource === 'object')
+    ? svgOrSource
+    : { svg: svgOrSource, source: 'svg' };
+  const svg = src.svg || '';
+  try{
+    window.__ffExportState = Object.assign(window.__ffExportState, {
+      svg: svg, baseSvg: svg,
+      source: src.source || 'svg',
+      bitmap: src.bitmap || '',
+      recon: null,
+      scene: svg ? parseSvgScene(svg) : null,
+      target: 'svg', font:'original',
+    });
+    renderEditableExportCard();
+  }
+  catch(e){ console.warn('editable export scene parse failed', e); return; }
+  const card=$('#card4'); if(card) card.scrollIntoView({behavior:'smooth',block:'start'});
+}
+
+/* A finished file is offered as a link as well as auto-downloaded: the browser can drop
+   an automatic download without telling anyone, and then a successful export looks like
+   nothing happened. */
+function offerDownload(container, filename, blobOrText, mime){
+  if(!container) return;
+  const blob = (blobOrText instanceof Blob) ? blobOrText : new Blob([blobOrText], {type:mime||'application/octet-stream'});
+  const url = URL.createObjectURL(blob);
+  const size = blob.size < 1024 ? (blob.size + ' B') : (Math.round(blob.size/1024) + ' KB');
+  const row = document.createElement('div');
+  row.className = 'export-dl';
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.textContent = tt('export.getFile', { format: filename });
+  /* Some embedded browsers do not honor download="..." for a blob: URL.  Keep a
+     self-contained data URL ready for the visible fallback link, and recreate a
+     fresh object URL if the user clicks before FileReader finishes. */
+  if(typeof FileReader !== 'undefined'){
+    const reader = new FileReader();
+    reader.onload = function(){
+      if(document.body.contains(a) && typeof reader.result === 'string'){
+        a.dataset.dataUrl = reader.result;
+        a.href = reader.result;
+      }
+    };
+    reader.readAsDataURL(blob);
+  }
+  a.addEventListener('click', function(){
+    if(!a.dataset.dataUrl && a.href.indexOf('blob:') === 0){
+      const fresh = URL.createObjectURL(blob);
+      a.href = fresh;
+      setTimeout(function(){ try{ URL.revokeObjectURL(fresh); }catch(e){} }, 30000);
+    }
+  });
+  const s = document.createElement('span');
+  s.textContent = tt('export.fileReady', { size: size });
+  row.appendChild(a); row.appendChild(s);
+  const old = container.querySelector('.export-dl');
+  if(old){
+    // Release the previous export's object URL only now, when it is being replaced.
+    // The automatic download frees its own URL after a few seconds, but this link has to
+    // stay usable for as long as it is on screen: revoking it on a timer is what made a
+    // later click do nothing.
+    if(old.dataset.objectUrl) { try{ URL.revokeObjectURL(old.dataset.objectUrl); }catch(e){} }
+    old.remove();
+  }
+  row.dataset.objectUrl = url;
+  container.appendChild(row);
+}
+
+/* Some strings must never degrade into a raw key. If the dictionary is a cached older
+   copy it can be missing a key entirely, and tt() then returns the key itself, so the
+   user reads "export.getFile". These fallbacks keep the export usable in that case. */
+const EXPORT_TEXT = {
+  en: { 'export.getFile':'Download {format}', 'export.fileReady':'{size} ready - click if it did not start',
+        'export.building':'Building {format}...', 'export.ready':'Choose a format, then click "Confirm and export".',
+        'export.needRecon':'Exported as a picture for now. Use the rebuild button above to turn it into editable text.' },
+  zh: { 'export.getFile':'下载 {format}', 'export.fileReady':'{size} 已生成——若未自动下载请点这里',
+        'export.building':'正在生成 {format}…', 'export.ready':'请选择格式，然后点击“确认设置并导出”。',
+        'export.needRecon':'当前导出为图片。点上方按钮可转为可编辑文字。' }
+};
+function exportText(key, vars){
+  let s = tt(key, vars);
+  // tt() returns the key itself when the dictionary has no entry for it
+  if(s === key){
+    const lang = (window.GAL_I18N && window.GAL_I18N.lang) || 'en';
+    const table = EXPORT_TEXT[lang] || EXPORT_TEXT.en;
+    s = table[key] || EXPORT_TEXT.en[key] || key;
+  }
+  if(vars) s = String(s).replace(/\{(\w+)\}/g, function(m, k){ return vars[k] != null ? vars[k] : m; });
+  return s;
+}
+
+/* Write the message into a child element rather than into the container's textContent:
+   assigning textContent clears every child, which would wipe the download link that the
+   export puts in the same box. The container's original static text is cleared once, so
+   the seed message from the markup cannot linger beside the live one. */
+function setExportStatus(container, text){
+  if(!container) return;
+  let msg = container.querySelector('.export-msg');
+  if(!msg){
+    msg = document.createElement('div');
+    msg.className = 'export-msg';
+    container.insertBefore(msg, container.firstChild);
+    Array.prototype.slice.call(container.childNodes).forEach(function(node){
+      if(node !== msg && node.nodeType === 3) container.removeChild(node);
+    });
+  }
+  msg.textContent = text;
+}
+
+/* A determinate bar for the export. The work runs in stages whose counts are known, so
+   the bar reports real progress instead of an indefinite spinner. */
+function showExportProgress(container, label){
+  if(!container) return null;
+  let box = container.querySelector('.export-progress');
+  if(!box){
+    box = document.createElement('div');
+    box.className = 'export-progress';
+    box.innerHTML = '<div class="export-progress-label"></div>' +
+                    '<div class="export-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">' +
+                    '<div class="export-progress-fill"></div></div>';
+    const msg = container.querySelector('.export-msg');
+    if(msg && msg.nextSibling) container.insertBefore(box, msg.nextSibling);
+    else container.appendChild(box);
+  }
+  const lab = box.querySelector('.export-progress-label');
+  if(lab) lab.textContent = label || '';
+  // Reset to empty here, not only when the element is created: a second export reuses the
+  // same bar, and a bar left showing the previous run reads as "no progress at all".
+  const fill = box.querySelector('.export-progress-fill');
+  if(fill) fill.style.width = '0%';
+  const track = box.querySelector('.export-progress-track');
+  if(track) track.setAttribute('aria-valuenow', '0');
+  return box;
+}
+function setExportProgress(container, percent){
+  const box = container && container.querySelector('.export-progress');
+  if(!box) return;
+  const clamped = Math.max(0, Math.min(100, Math.round(percent)));
+  const fill = box.querySelector('.export-progress-fill');
+  const track = box.querySelector('.export-progress-track');
+  if(fill) fill.style.width = clamped + '%';
+  if(track) track.setAttribute('aria-valuenow', String(clamped));
+}
+function clearExportProgress(container){
+  const box = container && container.querySelector('.export-progress');
+  if(box) box.remove();
+}
+
+/* Advance the bar across the stages the export actually performs. The label carries the
+   stage name only; the status message above it already says what is being built, so
+   repeating it here would read as duplicated text. */
+function runStagedProgress(container, label, steps, task){
+  const box = showExportProgress(container, steps[0].label || '');
+  setExportProgress(container, steps[0].at * 100);
+  let i = 1;
+  const timer = setInterval(function(){
+    if(i >= steps.length){ clearInterval(timer); return; }
+    setExportProgress(container, steps[i].at * 100);
+    const lab = box && box.querySelector('.export-progress-label');
+    if(lab) lab.textContent = steps[i].label || '';
+    i++;
+  }, 140);
+  const done = function(){ clearInterval(timer); };
+  return Promise.resolve()
+    .then(task)
+    .then(function(v){ done(); setExportProgress(container, 97); return v; },
+          function(e){ done(); setExportProgress(container, 1); throw e; });
+}
+
+/* Keep the label visible while work runs, so a slow build never looks like a no-op. */
+function setBusy(btn, busy, label){
+  if(!btn) return;
+  btn.disabled = !!busy;
+  btn.setAttribute('aria-busy', busy ? 'true' : 'false');
+  btn.classList.toggle('is-busy', !!busy);
+  if(busy){
+    if(btn.dataset.idle === undefined) btn.dataset.idle = btn.textContent;
+    btn.textContent = '';
+    const sp = document.createElement('span');
+    sp.className = 'btn-spin';
+    sp.setAttribute('aria-hidden', 'true');
+    btn.appendChild(sp);
+    const tx = document.createElement('span');
+    tx.textContent = label || tt('export.working');
+    btn.appendChild(tx);
+  }else{
+    btn.classList.remove('is-busy');
+    if(btn.dataset.idle !== undefined){ btn.textContent = btn.dataset.idle; delete btn.dataset.idle; }
+  }
+}
+
+function initEditableExport(){
+  const actions=$('#exportActions'); if(!actions || actions.dataset.bound) return; actions.dataset.bound='1';
+  actions.addEventListener('click',e=>{
+    const btn=e.target.closest('[data-export]'); if(!btn) return; const st=window.__ffExportState;
+    if(!st.svg){
+      setExportStatus($('#exportStatus'), tt('export.waiting'));
+      return;
+    }
+    st.target=btn.dataset.export; syncExportSelection();
+    // Not written into the status box: that would clear the progress bar or the download
+    // link an in-flight export had put there.
+    st.selectionNote = tt('export.selection',{format:st.target.toUpperCase()});
+  });
+  $('#exportConfirm')?.addEventListener('click', async ()=>{
+    const st=window.__ffExportState;
+    if(!st.svg || !st.target){
+      const s2=$('#exportStatus');
+      if(s2) s2.textContent = tt('export.waiting');
+      return;
+    }
+    const target=st.target, status=$('#exportStatus'), btn=$('#exportConfirm');
+    const setStatus=(k,vars)=>{ setExportStatus(status, tt(k,vars)); };
+    // Declared before anything uses it: the progress helpers below need the format name,
+    // and a const in the temporal dead zone would throw and skip the bar entirely.
+    const fmtName = (target==='drawio') ? 'drawio' : target.toUpperCase();
+    showExportProgress(status, '');
+    setExportProgress(status, 0.08);
+    const scene=st.scene || (st.scene = (function(){ try{ return parseSvgScene(st.svg); }catch(e){ return null; } })());
+    setExportProgress(status, 0.34);
+    if(!scene){
+      setStatus('export.failed',{format:target.toUpperCase()});
+      return;
+    }
+    const fontChoice = st.font && st.font!=='original' ? st.font : 'Arial';
+    setBusy(btn, true, exportText('export.building', { format: fmtName }));
+    if(status) status.classList.add('export-busy');
+    setExportStatus(status, exportText('export.building', { format: fmtName }));
+    // The stages below match what the code actually does, so the bar reflects real work:
+    // read the scene, build the format, pack it, hand over the file.
+    const STEPS = [
+      { at:0.08, label:'' },
+      { at:0.34, label:'· ' + tt('export.stage.scene') },
+      { at:0.68, label:'· ' + tt('export.stage.build') },
+      { at:0.88, label:'· ' + tt('export.stage.pack') },
+    ];
+    try{
+      let dlName = 'figure-forge-editable.' + (target==='drawio' ? 'drawio' : target);
+      let dlData = null, dlMime = '';
+      if(target==='svg'){
+        dlData = st.svg; dlMime = 'image/svg+xml;charset=utf-8';
+        downloadText(dlName, st.svg, dlMime);
+      } else if(target==='drawio'){
+        dlData = sceneToDrawio(scene); dlMime = 'application/xml;charset=utf-8';
+        downloadText(dlName, dlData, dlMime);
+      } else if(target==='pptx'){
+        dlData = await buildPptx(scene); dlMime = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+        downloadBlob(dlName, dlData);
+      } else if(target==='vsdx'){
+        dlData = zipStore(sceneToVsdxFiles(scene, fontChoice)); dlMime = 'application/vnd.ms-visio.drawing';
+        downloadBlob(dlName, dlData);
+      }
+      setExportProgress(status, 100);
+      // also offered as a link, so the result is visible even if the automatic
+      // download was blocked or dropped
+      offerDownload(status, dlName, dlData, dlMime);
+      setExportStatus(status, exportText('export.finished',{format:target==='drawio'?'draw.io':target.toUpperCase()}));
+    }catch(err){
+      console.warn('editable export failed', err);
+      clearExportProgress(status);
+      setExportStatus(status, exportText('export.failed',{format:target==='drawio'?'draw.io':target.toUpperCase()}));
+    }finally{
+      setBusy(btn, false);
+      if(status) status.classList.remove('export-busy');
+    }
+  });
+  $('#exportFont')?.addEventListener('change',e=>applyExportFont(e.target.value));
+}
 initEditableExport();
 
 window.__ffRenderSVG = (...args) => renderSVG(...args);
+
+/* Exposed the same way as __ffRenderSVG: the rebuild is otherwise module-scoped. */
+window.__ffReconstruct = () => runReconstruction();
+/* Kept alongside the other hooks so the card can be re-rendered from outside. */
+window.__ffRefreshExportCard = () => renderEditableExportCard();
+
+/* Step 4 button: vision decomposition first; on failure, fall back to the
+   deterministic pixel-band reconstruction. */
+$('#reconBtn')?.addEventListener('click', async function(){
+  const btn = $('#reconBtn');
+  btn.disabled = true;
+  try{
+    try{
+      await visionReconstruct();
+    }catch(ve){
+      console.warn('vision recon failed, falling back to pixel-band recon', ve);
+      await runReconstruction();
+    }
+  }finally{ btn.disabled = false; }
+});
 
 function renderSVG(svg, usedVision, useIds, truncated, auditRes){
   const blob = new Blob([svg],{type:'image/svg+xml'});
@@ -2200,12 +3993,9 @@ function renderSVG(svg, usedVision, useIds, truncated, auditRes){
 }
 
 async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
-  const useIds = refIds||[...refs];
+  const useIds = (refIds||[...refs]).slice(0,3);
   const tg = TARGETS[$('#target').value] || TARGETS.overview;
-  const guide = layoutGuide
-    ? `Follow this gallery-derived layout style guide precisely (panel division, arrows, palette, hierarchy):\n${layoutGuide}\n\n`
-    : '';
-  const imgPrompt = `${guide}${tg.img}. White background, flat modern scientific illustration style, elegant layout, minimal accurate labels. Paper content: ${content.slice(0,2000)}`;
+  const imgPrompt = `${tg.img}. White background, flat modern scientific illustration style, elegant layout, minimal accurate labels. Paper content: ${content.slice(0,2000)}`;
   const body = {model, prompt:imgPrompt};
   if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
   else if(p==='sf'){ body.image_size='1024x1024'; body.batch_size=1; }
@@ -2245,13 +4035,15 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const d = JSON.parse(txt);
   const item = d.data?.[0] || d.images?.[0];
   if(!item) throw new Error(tt('img.abnormal',{t:txt.slice(0,200)}));
+  const st = window.__ffExportState;
   const imgSrc = item.url || ('data:image/png;base64,'+item.b64_json);
   const exportImgSrc = item.b64_json ? `data:image/png;base64,${item.b64_json}` : imgSrc;
   $('#out').style.display='block';
   $('#out').innerHTML = `<img src="${esc(imgSrc)}" alt="draft">
     <div class="dl"><button class="btn-primary" id="dlImg">${tt('img.download')}</button>
     <span class="hint">${usedRefs?tt('img.hintRef',{n:useIds.length}):tt('img.hint')}</span></div>`;
-  showEditableExportStep('', {raster:true, sourceImage:exportImgSrc});
+  st.source = 'bitmap'; st.bitmap = exportImgSrc; st.recon = null;
+  showEditableExportStep({ svg: rasterToExportSvg(exportImgSrc), source:'bitmap', bitmap: exportImgSrc });
   $('#dlImg').onclick = async ()=>{
     try{
       const rr = await fetch(imgSrc); const blob = await rr.blob();
@@ -2286,11 +4078,14 @@ document.addEventListener('langchange',()=>{
   syncBaseHint();
   refreshStepOneText();
   if(MAN) $('#manifestHint').textContent=tt('manifest.hint',{d:MAN.updated});
-  if(window.__ffExportState && window.__ffExportState.svg) renderEditableExportCard();
 });
 syncLangBtn();
 GAL_I18N.apply();
 syncContentMode();
+// Run once at startup, at top level: without a draft this puts step 4 into its locked
+// state, so the card is visible and explains what it is waiting for. Placing this inside
+// the langchange listener above would only run it when the language is switched.
+renderEditableExportCard();
 
 /* ---------------- go ---------------- */
 await boot();

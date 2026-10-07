@@ -59,7 +59,7 @@ FigureForge drafts your Figure 1 from the gallery: describe your paper, and 3,45
 
 1. **Describe the paper.** Paste the title and abstract, upload the PDF (the Step 1 model reads it and summarizes the sections matching overview / architecture / pipeline / results), or type one sentence giving the "input → method → output" story.
 2. **Pick a pattern.** `framework` for system or multi-agent overviews, `pipeline` for end-to-end flows, `architecture` for internal model structure, `conceptual` for visual metaphors; also `teaser` and `taxonomy`.
-3. **Tick references.** A CLIP + BM25 hybrid search ranks all 3,452 figures; the score is shown on each card. Tick 8–10 same-pattern cards for two-stage mode, or 2–3 for direct mode.
+3. **Tick references.** A CLIP + BM25 hybrid search ranks all 3,452 figures; the score is shown on each card. Tick at least 4 same-pattern cards for two-stage mode, or 2–3 for direct mode.
 
    ![Pick references](forge/tutorial/02_pick_refs.png)
 
@@ -112,11 +112,11 @@ FigureForge 基于画廊生成你的 Figure 1 初稿：描述论文，3,452 张�
 
 1. **输入论文**：粘贴标题和摘要、上传 PDF（步骤一的模型直接阅读，按概览、架构、流程、结果总结相关章节），或写一句话讲清「输入 → 方法 → 输出」。
 2. **选模式**：系统或多智能体总览选 `framework`，端到端流程选 `pipeline`，模型内部结构选 `architecture`，视觉隐喻选 `conceptual`；另有 `teaser`、`taxonomy`。
-3. **勾选参考图**：CLIP + BM25 混合检索全量 3,452 张图，卡片上显示相关度评分。两阶段模式勾 8–10 张同类型图，直接模式勾 2–3 张。
+3. **勾选参考图**：CLIP + BM25 混合检索全量 3,452 张图，卡片上显示相关度评分。两阶段模式勾至少 4 张同类型图（最多 10 张，越接近 10 张版式参考越充分），直接模式勾 2–4 张。
 
    ![挑选参考图](forge/tutorial/02_pick_refs.png)
 
-4. **两阶段：先归纳，再生成**：视觉模型先读参考图，归纳共同的布局、元素、配色和层级，挑出 2–3 张代表图，再生成。
+4. **两阶段：先归纳，再生成**：视觉模型先读参考图，归纳共同的布局、元素、配色和层级，挑出 4–6 张代表图，再生成。
 
    ![两阶段归纳](forge/tutorial/03_analyze.png?v=20261002)
 
