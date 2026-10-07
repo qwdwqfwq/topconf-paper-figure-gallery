@@ -1613,7 +1613,7 @@ async function analyzeReferences(){
   if(useAnthropic){
     const blocks=uris.map(u=>{const p=dataURIToParts(u);return {type:'image',source:{type:'base64',media_type:p.media,data:p.data}};});
     blocks.push({type:'text',text:buildAnalyzePrompt(ordered.length, ordered)});
-    const body={model:$('#analyzeModel').value||$('#model').value,max_tokens:8000,system:ANALYZE_SYS,messages:[{role:'user',content:blocks}]};
+    const body={model:$('#analyzeModel').value||$('#model').value,max_tokens:16000,system:ANALYZE_SYS,messages:[{role:'user',content:blocks}]};
     const r=await fetch(baseURL()+'/v1/messages',{method:'POST',headers:anthropicHeaders(cleanKey($('#key').value)),body:JSON.stringify(body)});
     txt=await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
     const d=JSON.parse(txt); txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
@@ -1622,7 +1622,7 @@ async function analyzeReferences(){
     if(!am) throw new Error(tt('analyze.needmodel'));
     const parts=uris.map(u=>({type:'image_url',image_url:{url:u}}));
     parts.push({type:'text',text:buildAnalyzePrompt(ordered.length, ordered)});
-    const body={model:am,temperature:0.2,max_tokens:8000,messages:[{role:'system',content:ANALYZE_SYS},{role:'user',content:parts}]};
+    const body={model:am,temperature:0.2,max_tokens:16000,messages:[{role:'system',content:ANALYZE_SYS},{role:'user',content:parts}]};
     if($('#provider').value==='ark') body.thinking={type:'disabled'};
     let r;
     try{ r=await postJSON(baseURL(),'/chat/completions',body,cleanKey($('#key').value)); }
