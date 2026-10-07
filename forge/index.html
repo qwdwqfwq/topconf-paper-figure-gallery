@@ -1535,18 +1535,21 @@ document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
 $('#model').onchange = e=>localStorage.setItem('ff_model_'+$('#provider').value, e.target.value);
 
 /* ---------------- pass 1: analyze references ---------------- */
-const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference figures of the SAME target visual type. Recover the visual grammar without averaging away the canonical composition: identify one primary layout anchor, supporting style evidence, exact palette, relative panel geometry, density, spacing, typography and stroke conventions. Return STRICT JSON only.';
+const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference figures of the SAME target visual type. Treat the first supplied figure as the single primary layout anchor; later figures are supporting style evidence only. Recover the anchor\'s concrete composition, zones, nesting, topology and density without averaging layouts, then use the other figures only to corroborate palette, strokes, typography and illustration language. Return STRICT JSON only.';
 function buildAnalyzePrompt(n, idList){
   const ids = (idList||[]).join(', ');
   return `Here are ${n} top-conference paper figures, all of the target visual type for the figure I want to design.
-Analyze their COMMON design grammar and return one JSON object with EXACTLY these keys:
+Analyze the PRIMARY ANCHOR (the first supplied image) and return one JSON object with EXACTLY these keys:
 {"density":{"containers":0,"modulesPerPanel":0,"solidBorders":0,"dashedBorders":0,"connectors":0,"boxFillPercent":0,
-            "nesting":"the levels, e.g. panel > 6 module boxes > each holds an icon or mini chart"},
+            "nesting":"the levels, e.g. panel > 6 module boxes > each holds an icon or mini chart",
+            "variety":"the kinds of visual modules present and how neighbouring modules differ",
+            "fill":"one sentence describing how fully the anchor's boxes are occupied"},
  "strokes":{"box":0,"arrow":0,"connector":0},
  "typography":{"title":0,"panelHeader":0,"label":0,"note":0},
  "palette":{"background":"#hex","primary":"#hex","accent":"#hex","neutral":"#hex","others":["#hex"]},
  "layout":"how the canvas is divided (number/arrangement of panels) and reading direction",
  "panels":[{"name":"panel name","role":"what this panel shows","x":0,"y":0,"w":0,"h":0}],
+ "layoutBlueprint":[{"id":"zone-1","role":"what this concrete zone or slot contains","x":0,"y":0,"w":0,"h":0,"moduleCount":0,"occupancy":0,"moduleKinds":["icon","chart"],"nesting":"local nesting","flow":"local reading direction"}],
  "topology":{"anchor":"the canonical composition to preserve","zones":"relative columns/rows and nesting","flow":"reading direction and connector routes","spacing":"gaps, margins and whitespace rhythm"},
  "styleFingerprint":{"background":"surface treatment","panelShape":"corner radius and container treatment","moduleShape":"module box treatment","iconStyle":"icon/illustration language","arrowStyle":"arrow and connector language","textTreatment":"title, header and label treatment"},
  "elements":"recurring visual elements: box styles, arrow types, icon/illustration conventions",
@@ -1555,7 +1558,9 @@ Analyze their COMMON design grammar and return one JSON object with EXACTLY thes
  "imageRefIds":["ids of 1-3 figures that are the strongest visual anchors for a bitmap model"],
  "refinedPrompt":"a detailed self-contained English description of what is drawn: each panel and its contents, the module blocks and their connections, arrow directions and flow, the visual levels, and the icon or illustration style"}
 Rules: output JSON only, no markdown or commentary.
+The FIRST supplied figure is the ONLY layout master. Do not average the layouts or invent a new composition. Use later figures only as supporting evidence for palette, strokes, icon language and chart treatment.
 panels: 2-6 entries. x/y/w/h are integers in a 1600x900 coordinate space with the origin at the top-left; they must not overlap and must stay inside 1600x900. Preserve the actual relative arrangement: do not turn stacked zones into side-by-side panels and do not invent a symmetric grid.
+layoutBlueprint: derive 4-12 concrete zones, grouping frames or module slots from the FIRST figure. Coordinates are integers in the same 1600x900 space. Preserve their order, relative area, nesting and connector routes. Zones may nest or overlap intentionally. Do not add zones that are absent from the anchor. moduleCount is the number of distinct visual modules in that zone; occupancy is the approximate percent of its area occupied by meaningful content; moduleKinds names the visible kinds (icon, chart, matrix, photo, formula, flow strip, table, diagram fragment, etc.).
 palette: every value MUST be a real #rrggbb hex string.
 typography: integer pixel sizes for a 1600x900 canvas (title 36-56, panelHeader 26-36, label 20-30, note 16-22).
 strokes: integer pixel widths (box 2-4, arrow 2-4, connector 1-3).
@@ -1575,7 +1580,8 @@ density: COUNT what you actually see, as integers. Use the median only for genui
   fill  one sentence on how FULL the boxes are in these figures — how much of a typical box is
     occupied by its element — so fullness is matched without resorting to copies.
 representative: use the figure ids EXACTLY as listed below, 2-4 of them, no indices. The first id is the primary layout anchor; the remaining ids are supporting style references, not images to blend equally.
-imageRefIds: use 1-3 of the listed ids, no indices. Prefer the primary anchor plus at most two supporting references; do not select a visually incompatible outlier.
+representative: the FIRST id MUST be the first supplied id. Add 1-3 supporting ids only after it; they are style references, not equal layout references.
+imageRefIds: the FIRST id MUST be the first supplied id. Add at most two supporting ids; do not select a visually incompatible outlier.
 Available figure ids: ${ids}
 topology, styleFingerprint and refinedPrompt must describe visible layout and styling, not the paper's scientific claims. refinedPrompt should be 120-180 concrete English words about panels, arrows, palette, spacing, hierarchy and illustration language. It is used as a visual guide, not as a request to copy reference labels. Keep the prose compact so the whole JSON answer fits in one response.`;
 }
@@ -1618,25 +1624,21 @@ async function analyzeReferences(){
   // Representative figures may come back as ids (preferred, unambiguous) or as
   // 1-based indices (older models). Accept either, but only ids that really exist
   // in the analysed set, so a miscount can no longer silently pick the wrong figure.
-  const validIds = ordered.filter(id=>data.figs.some(f=>f.id===id));
-  let reps = (j.representative||[]).map(x=>{
-    const s = String(x).trim();
+  const validIds = [...new Set(ordered)].filter(id=>data.figs.some(f=>f.id===id));
+  const primaryId = validIds[0] || null;
+  const resolveRefId = x=>{
+    const s=String(x).trim();
     if(validIds.includes(s)) return s;
-    const n = +s;
-    if(isFinite(n) && n>=1 && n<=ordered.length) return ordered[n-1];
-    return null;
-  }).filter(Boolean);
-  reps=[...new Set(reps)].slice(0,6);
-  if(reps.length<2) reps=ordered.slice(0,3);
-  let imageRefIds = (j.imageRefIds||[]).map(x=>{
-    const s = String(x).trim();
-    if(validIds.includes(s)) return s;
-    const n = +s;
-    if(isFinite(n) && n>=1 && n<=ordered.length) return ordered[n-1];
-    return null;
-  }).filter(Boolean);
+    const n=+s;
+    return Number.isInteger(n)&&n>=1&&n<=validIds.length ? validIds[n-1] : null;
+  };
+  let reps=[primaryId,...(Array.isArray(j.representative)?j.representative:[]).map(resolveRefId)].filter(Boolean);
+  reps=[...new Set(reps)].slice(0,4);
+  if(reps.length<2) reps=[...new Set([primaryId,...validIds])].filter(Boolean).slice(0,4);
+  let imageRefIds=[primaryId,...(Array.isArray(j.imageRefIds)?j.imageRefIds:[]).map(resolveRefId)].filter(Boolean);
   imageRefIds=[...new Set(imageRefIds)].slice(0,3);
   if(!imageRefIds.length) imageRefIds=reps.slice(0,3);
+  j.primaryId=primaryId;
   // Two style guides, because the two output paths consume them differently.
   const contract = designContractText(j);
   const prose = (j.refinedPrompt||'').trim();
@@ -1711,6 +1713,7 @@ function paletteMarkup(palette){
 function imageStyleText(j){
   if(!j) return '';
   const rows = [];
+  rows.push('- reference role: the first supplied figure is the single layout master; later figures are style evidence only. Preserve the master\'s zone order, relative geometry, nesting and whitespace rhythm rather than averaging layouts.');
   const pal = j.palette;
   if(pal && !Array.isArray(pal) && typeof pal === 'object'){
     const used = ['background','primary','accent','neutral'].filter(k=>pal[k]).map(k=>`${k} ${pal[k]}`);
@@ -1738,6 +1741,8 @@ function imageStyleText(j){
       bits.push(`${dn.solidBorders||0} solid and ${dn.dashedBorders||0} dashed borders`);
     if(dn.connectors != null) bits.push(`${dn.connectors} separate arrows/connectors`);
     if(dn.boxFillPercent != null) bits.push(`boxes about ${dn.boxFillPercent}% filled with content`);
+    if(dn.variety != null) bits.push(`visual variety target: ${dn.variety}`);
+    if(dn.fill != null) bits.push(`overall canvas fill target: ${dn.fill}`);
     if(bits.length) rows.push(`- counted in a typical reference figure: ${bits.join(', ')} — match these counts`);
     if(dn.nesting) rows.push(`- nesting: ${dn.nesting}`);
   }
@@ -1764,6 +1769,17 @@ function imageStyleText(j){
     }).filter(Boolean);
     if(names.length) rows.push(`- panels: ${names.join(' | ')}`);
   }
+  if(Array.isArray(j.layoutBlueprint) && j.layoutBlueprint.length){
+    const blueprint = j.layoutBlueprint.slice(0,14).map((z,i)=>{
+      if(!z || typeof z!=='object') return '';
+      const vals=[z.x,z.y,z.w,z.h];
+      const geo=vals.every(v=>Number.isFinite(Number(v)))
+        ? ` @ x=${Math.round(Number(z.x))} y=${Math.round(Number(z.y))} w=${Math.round(Number(z.w))} h=${Math.round(Number(z.h))}` : '';
+      const kinds=Array.isArray(z.moduleKinds) ? z.moduleKinds.join(', ') : (z.moduleKinds||'');
+      return `${i+1}. ${z.id||z.name||('zone-'+(i+1))} role=${z.role||'unspecified'}${geo} modules=${z.moduleCount??'?'} occupancy=${z.occupancy??'?'}%${kinds?' kinds='+kinds:''}${z.nesting?' nesting='+z.nesting:''}${z.flow?' flow='+z.flow:''}`;
+    }).filter(Boolean);
+    if(blueprint.length) rows.push('- anchor layout blueprint (copy these zones and slots exactly; do not add or remove zones):\n  '+blueprint.join('\n  '));
+  }
   rows.push('- density target: fill the defined module regions with meaningful diagrams, mini charts, icons, thumbnails or short labels; preserve intentional gutters but avoid conspicuous empty white areas.');
   return rows;
 }
@@ -1771,6 +1787,7 @@ function imageStyleText(j){
 function designContractText(j){
   if(!j) return '';
   const rows = [];
+  rows.push('- layout authority: the first selected reference is the only composition anchor; all other references contribute style cues only.');
   if(j.layout) rows.push(`- canvas & panel division: ${j.layout}`);
   if(j.topology && typeof j.topology==='object'){
     const top=[];
@@ -1793,6 +1810,17 @@ function designContractText(j){
     });
     rows.push(`- panel geometry (canvas 1600x900, origin top-left): ${panels.join(' | ')}`);
   }
+  if(Array.isArray(j.layoutBlueprint) && j.layoutBlueprint.length){
+    const blueprint=j.layoutBlueprint.slice(0,14).map((z,i)=>{
+      if(!z || typeof z!=='object') return '';
+      const vals=[z.x,z.y,z.w,z.h];
+      const geo=vals.every(v=>Number.isFinite(Number(v)))
+        ? ` @ x=${Math.round(Number(z.x))} y=${Math.round(Number(z.y))} w=${Math.round(Number(z.w))} h=${Math.round(Number(z.h))}` : '';
+      const kinds=Array.isArray(z.moduleKinds) ? z.moduleKinds.join(', ') : (z.moduleKinds||'');
+      return `${i+1}. ${z.id||z.name||('zone-'+(i+1))} role=${z.role||'unspecified'}${geo} modules=${z.moduleCount??'?'} occupancy=${z.occupancy??'?'}%${kinds?' kinds='+kinds:''}${z.nesting?' nesting='+z.nesting:''}${z.flow?' flow='+z.flow:''}`;
+    }).filter(Boolean);
+    if(blueprint.length) rows.push('- anchor layout blueprint (preserve exact zone order and relative slots):\n  '+blueprint.join('\n  '));
+  }
   const pal = j.palette;
   if(pal){
     if(Array.isArray(pal)) rows.push(`- palette (use these exact hex values): ${pal.join(', ')}`);
@@ -1814,6 +1842,12 @@ function designContractText(j){
   }
   if(j.elements) rows.push(`- recurring elements: ${j.elements}`);
   if(j.hierarchy) rows.push(`- information hierarchy: ${j.hierarchy}`);
+  if(j.density && typeof j.density==='object'){
+    const d=[];
+    if(j.density.variety!=null) d.push('variety='+j.density.variety);
+    if(j.density.fill!=null) d.push('fill='+j.density.fill);
+    if(d.length) rows.push('- density targets: '+d.join(', '));
+  }
   rows.push('- composition priority: preserve the anchor topology and fill its module regions densely; no conspicuous empty panels or unused white areas.');
   return rows.join('\n');
 }
@@ -1831,7 +1865,7 @@ function buildPrompt(content, layoutGuide, refIds){
     return tt('ref.note',{i:idx+1, t:f.title, v:f.venue.toUpperCase(), y:f.year, p:f.pattern, id:f.id});
   }).join('\n');
   const guide = layoutGuide
-    ? `## Design contract (merged from ${refs.size} same-type gallery figures — follow the panel division, arrows, palette and hierarchy strictly)\n${layoutGuide}\n\n`
+    ? `## Design contract (primary anchor + style evidence — follow the anchor topology, module slots, arrows, palette and hierarchy strictly)\n首张参考图是唯一的版式母版；后续参考图只补充配色、笔触、图标和图表语言，不要把多张图平均融合。必须优先复刻母版的区域顺序、相对面积、嵌套分组、模块槽位、连接线拓扑和视觉密度。\n${layoutGuide}\n\n`
     : '';
   return `你是顶尖 ML 论文的配图设计师。我要：${TARGETS[t].label}。
 ${guide}${targetInfo}
@@ -3830,14 +3864,13 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     + `Preserve the anchor's panel topology, relative proportions, nesting, reading direction, spacing rhythm, palette, stroke language and visual density. Do not impose a generic 3-5 side-by-side grid or a new symmetric layout. `
     + `Publication-quality Figure 1 for a top-tier ML paper. `
     + `Use a prominent bold TITLE line across the top only when the primary reference uses one; otherwise preserve the reference's top region. `
-    + `Below it, an information-rich composition of labelled sections. Let the CONTENT decide how `
-    + `many sections there are and how wide each one is: three to five is common, but use as many as `
-    + `the method really has, and size them by how much they hold rather than splitting the canvas `
-    + `evenly. Each section carries its own bold header. `
-    + `ORGANISE THE FIGURE IN LEVELS, the way a strong conference figure does. Three levels are typical: `
-    + `the section container; inside it one or more grouping frames that hold a related cluster; and `
-    + `inside those, module boxes. Put an illustration, a mini chart, a table, a formula, a photo `
-    + `thumbnail or an icon inside a module box when the content calls for one. `
+    + `Below it, reproduce the primary anchor's exact zone count, order, relative widths/heights and module slots from the design contract. `
+    + `Do not add, remove, average or evenly redistribute zones. Treat the blueprint as a construction plan; every defined slot must receive `
+    + `one concrete content module from this paper, with the same nesting and approximate occupied area as the anchor. Each zone carries its `
+    + `own header only when the anchor shows one. `
+    + `Use nested grouping exactly where the anchor blueprint shows it: section containers, grouping frames and module boxes are not interchangeable. `
+    + `Inside each prescribed slot, use the module kind named by the blueprint — illustration, mini chart, table, formula, photo thumbnail, icon, `
+    + `matrix, timeline or flow strip — and keep its footprint and alignment. Do not collapse several slots into one large generic card. `
     + `FILL EVERY SECTION, BUT NEVER WITH COPIES. Each section's interior should be occupied by module `
     + `boxes, not left as a large empty area; what must not happen is filling it with near-identical `
     + `blocks. Make the contents of neighbouring boxes genuinely different in kind: an icon module, a `
