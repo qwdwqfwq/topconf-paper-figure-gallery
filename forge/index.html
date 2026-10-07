@@ -2418,6 +2418,9 @@ function auditSummaryText(res){
    PptxGenJS; draw.io and VSDX are written here). The only network call is the
    optional bitmap reconstruction, which is an explicit button, never automatic. */
 window.__ffExportState = {svg:'', baseSvg:'', scene:null, target:'svg', font:'original', source:'svg', bitmap:'', reconBitmap:'', recon:null, reconPending:false, reconFailed:false, reconError:''};
+// Keep the Step 3 raster in a durable page-level slot.  The async reconstruction
+// can fail or refresh the export card without meaning that Step 3 lost its image.
+window.__ffStep3Bitmap = '';
 
 /* ---------- canvas units ---------- */
 const EXPORT_CANVAS = {w:1600, h:900};
@@ -3611,7 +3614,7 @@ async function requestEditableScene(imageDataUri, W, H){
    hand the result to the existing export path. */
 function currentStep3Bitmap(){
   const st=window.__ffExportState||{};
-  const candidates=[st.reconBitmap,st.bitmap,st.generatedBitmap,st.generatedImage,st.image,st.outputImage];
+  const candidates=[window.__ffStep3Bitmap,st.reconBitmap,st.bitmap,st.generatedBitmap,st.generatedImage,st.image,st.outputImage];
   const out=$('#out'), img=out && out.querySelector('img');
   if(img) candidates.push(img.currentSrc||img.src);
   return candidates.find(function(v){ return typeof v==='string' && v.trim(); }) || '';
@@ -3620,8 +3623,9 @@ function syncStep3Bitmap(){
   const st=window.__ffExportState||{};
   const src=currentStep3Bitmap();
   if(src){
-    st.bitmap=st.bitmap||src;
-    st.reconBitmap=st.reconBitmap||src;
+    window.__ffStep3Bitmap=src;
+    st.bitmap=src;
+    st.reconBitmap=src;
   }
   return src;
 }
@@ -3843,12 +3847,14 @@ function showEditableExportStep(svgOrSource){
     : { svg: svgOrSource, source: 'svg' };
   const svg = src.svg || '';
   const current = window.__ffExportState || {};
+  const bitmap = src.bitmap || src.reconBitmap || current.bitmap || current.reconBitmap || window.__ffStep3Bitmap || '';
+  if(bitmap) window.__ffStep3Bitmap = bitmap;
   try{
     window.__ffExportState = Object.assign(window.__ffExportState, {
       svg: svg, baseSvg: svg,
       source: src.source || 'svg',
-      bitmap: src.bitmap || current.bitmap || '',
-      reconBitmap: src.reconBitmap || current.reconBitmap || '',
+      bitmap: bitmap,
+      reconBitmap: src.reconBitmap || bitmap,
       recon: null,
       reconPending: !!src.reconPending,
       reconFailed: src.reconFailed === undefined ? (svg ? false : !!current.reconFailed) : !!src.reconFailed,
@@ -4287,6 +4293,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const st = window.__ffExportState;
   const imgSrc = item.url || ('data:image/png;base64,'+item.b64_json);
   const exportImgSrc = item.b64_json ? `data:image/png;base64,${item.b64_json}` : imgSrc;
+  window.__ffStep3Bitmap = exportImgSrc;
   $('#out').style.display='block';
   $('#out').innerHTML = `<img src="${esc(imgSrc)}" alt="draft">
     <div class="dl"><button class="btn-primary" id="dlImg">${tt('img.download')}</button>
