@@ -1586,9 +1586,23 @@ Available figure ids: ${ids}
 topology, styleFingerprint and refinedPrompt must describe visible layout and styling, not the paper's scientific claims. refinedPrompt should be 120-180 concrete English words about panels, arrows, palette, spacing, hierarchy and illustration language. It is used as a visual guide, not as a request to copy reference labels. Keep the prose compact so the whole JSON answer fits in one response.`;
 }
 function extractJSON(txt){
-  const m = txt.match(/\{[\s\S]*\}/);
+  let s = String(txt||'').trim().replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
+  const m = s.match(/\{[\s\S]*\}/);
   if(!m) throw new Error(tt('err.analyze1'));
-  try{ return JSON.parse(m[0]); }catch(e){ throw new Error(tt('err.analyze2')); }
+  let raw = m[0];
+  const noTrailing = raw.replace(/,(\s*[}\]])/g,'$1');
+  for(const cand of [raw, noTrailing]){
+    try{ return JSON.parse(cand); }catch(e){}
+  }
+  // Truncated output: repeatedly drop the last partial key and close the object.
+  let cut = noTrailing;
+  for(let i=0;i<16;i++){
+    const k = cut.lastIndexOf(',');
+    if(k<0) break;
+    cut = cut.slice(0,k) + '\n}';
+    try{ return JSON.parse(cut); }catch(e){}
+  }
+  throw new Error(tt('err.analyze2'));
 }
 async function analyzeReferences(){
   const ordered=[...refs];
@@ -1618,7 +1632,9 @@ async function analyzeReferences(){
       throw new Error(diag || tt('analyze.blocked'));
     }
     txt=await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
-    const d=JSON.parse(txt); txt=d.choices?.[0]?.message?.content||'';
+    const d=JSON.parse(txt);
+    if(d.choices?.[0]?.finish_reason==='length') throw new Error(tt('err.analyze3'));
+    txt=d.choices?.[0]?.message?.content||'';
   }
   const j=extractJSON(txt);
   // Representative figures may come back as ids (preferred, unambiguous) or as
