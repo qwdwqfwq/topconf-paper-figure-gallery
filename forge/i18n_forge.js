@@ -228,7 +228,7 @@ en:{
  "pass.warn1":"Two-stage mode needs at least 4 same-type references.",
  "modelLabel.svg":"Model (chat / vision)", "modelLabel.image":"Model (image)",
 
- "recon.reading":"Finding the label areas in the base image...",
+ "recon.reading":"Calling the vision API to rebuild each element; this can take a few minutes...",
  "recon.labelling":"Naming {n} areas from your paper...",
  "recon.done":"Rebuilt: {n} real text labels placed.",
  "recon.audit":"Rebuilt {n} labels, but {d} need a look (overlapping or outside the canvas).",
@@ -477,7 +477,7 @@ zh:{
  "pass.warn1":"两阶段模式至少需要 4 张同类型参考图。",
  "modelLabel.svg":"模型（对话 / 视觉模型）", "modelLabel.image":"模型（图像模型）",
 
- "recon.reading":"正在从底图中找出标签框…",
+ "recon.reading":"正在调用视觉 API 逐元素重建，可等待几分钟…",
  "recon.labelling":"正在根据论文内容为 {n} 个区域命名…",
  "recon.done":"已重建：放置了 {n} 个真实文字标签。",
  "recon.audit":"已重建 {n} 个标签，其中 {d} 个需要检查（重叠或超出画布）。",

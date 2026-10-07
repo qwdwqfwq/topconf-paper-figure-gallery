@@ -1383,6 +1383,21 @@ async function refDataURIs(refIds){
   }
   return out;
 }
+/* Preserve the generated bitmap for later vector reconstruction/export. The
+   older helper above intentionally shrinks JPEGs for ordinary generation, but
+   shrinking before OCR/geometry extraction destroys the small labels and tiles
+   that the editable export needs. */
+async function refDataURIsOriginal(refIds){
+  const out = [];
+  for(const id of (refIds||[...refs])){
+    const f = data.figs.find(x=>x.id===id);
+    if(!f) continue;
+    const r = await fetch('../'+f.image);
+    if(!r.ok) throw new Error(tt('ref.fail',{f:f.image}));
+    out.push(await fileToDataURI(await r.blob()));
+  }
+  return out;
+}
 function dataURIToParts(uri){
   const m = uri.match(/^data:(.*?);base64,(.*)$/);
   return m ? {media:m[1]||'image/jpeg', data:m[2]} : null;
@@ -1544,36 +1559,37 @@ document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
 $('#model').onchange = e=>localStorage.setItem('ff_model_'+$('#provider').value, e.target.value);
 
 /* ---------------- pass 1: analyze references ---------------- */
-const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference figures of the SAME target visual type. Extract their shared layout grammar as a CONCRETE design contract: exact hex colours, panel rectangles as numbers on a 1600x900 canvas, a numeric type scale and stroke widths. Return STRICT JSON only.';
+const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference figures of the SAME target visual type. Infer the shared visual grammar across all supplied figures: recurring panel divisions, density, element counts, borders, arrows, palette, typography and hierarchy. Do not treat any single figure as a layout master and do not copy a particular figure. Return STRICT JSON only.';
+const RECON_SYS = 'You are a meticulous scientific-figure vectorization service. Reconstruct the supplied figure as a complete editable scene, preserving every visible primitive and its geometry. Return STRICT JSON only, never markdown or commentary. Never replace the scene with one full-canvas bitmap; split panels, borders, arrows, text, icons, charts and image regions into separate nodes.';
 function buildAnalyzePrompt(n, idList){
   const ids = (idList||[]).join(', ');
   return `Here are ${n} top-conference paper figures, all of the target visual type for the figure I want to design.
-Analyze their COMMON design grammar and return one JSON object with EXACTLY these keys:
+Analyze the COMMON VISUAL GRAMMAR across all supplied images and return one JSON object with EXACTLY these keys:
 {"density":{"containers":0,"modulesPerPanel":0,"solidBorders":0,"dashedBorders":0,"connectors":0,"boxFillPercent":0,
             "nesting":"the levels, e.g. panel > 6 module boxes > each holds an icon or mini chart",
             "variety":"the kinds of visual modules present and how neighbouring modules differ",
-            "fill":"one sentence describing how fully the anchor's boxes are occupied"},
+ "fill":"one sentence describing how fully the typical boxes are occupied"},
  "strokes":{"box":0,"arrow":0,"connector":0},
  "typography":{"title":0,"panelHeader":0,"label":0,"note":0},
  "palette":{"background":"#hex","primary":"#hex","accent":"#hex","neutral":"#hex","others":["#hex"]},
  "layout":"how the canvas is divided (number/arrangement of panels) and reading direction",
  "panels":[{"name":"panel name","role":"what this panel shows","x":0,"y":0,"w":0,"h":0}],
  "layoutBlueprint":[{"id":"zone-1","role":"what this concrete zone or slot contains","x":0,"y":0,"w":0,"h":0,"moduleCount":0,"occupancy":0,"moduleKinds":["icon","chart"],"nesting":"local nesting","flow":"local reading direction"}],
- "topology":{"anchor":"the canonical composition to preserve","zones":"relative columns/rows and nesting","flow":"reading direction and connector routes","spacing":"gaps, margins and whitespace rhythm"},
+ "topology":{"anchor":"the recurring composition grammar shared by the figures","zones":"relative columns/rows and nesting that recur","flow":"reading direction and connector routes","spacing":"gaps, margins and whitespace rhythm"},
  "styleFingerprint":{"background":"surface treatment","panelShape":"corner radius and container treatment","moduleShape":"module box treatment","iconStyle":"icon/illustration language","arrowStyle":"arrow and connector language","textTreatment":"title, header and label treatment"},
  "elements":"recurring visual elements: box styles, arrow types, icon/illustration conventions",
  "hierarchy":"information hierarchy: what is emphasised and how",
- "representative":["ids of the 4-6 figures among these whose layout is the RICHEST: the most panels, the most labelled modules and the most varied elements - the goal is to reproduce that density, not a typical average"],
- "imageRefIds":["ids of the 1-3 figures with the richest, most complete layout among these"],
+ "representative":["ids of the 2-4 figures that best represent the shared composition and richest detail; select them by commonality, not upload order"],
+ "imageRefIds":["ids of 1-3 figures that are the strongest visual anchors for a bitmap model"],
  "refinedPrompt":"a detailed self-contained English description of what is drawn: each panel and its contents, the module blocks and their connections, arrow directions and flow, the visual levels, and the icon or illustration style"}
 Rules: output JSON only, no markdown or commentary.
-Extract the COMMON grammar across the supplied figures - shared panel division, palette, strokes, typography and hierarchy - rather than copying any single figure. The goal is to reproduce the density and module variety of the richest examples while every element reflects the new paper's content.
-panels: 2-6 entries. x/y/w/h are integers in a 1600x900 coordinate space with the origin at the top-left; they must not overlap and must stay inside 1600x900. Preserve the actual relative arrangement: do not turn stacked zones into side-by-side panels and do not invent a symmetric grid.
-layoutBlueprint: derive 4-12 concrete zones, grouping frames or module slots from the FIRST figure. Coordinates are integers in the same 1600x900 space. Preserve their order, relative area, nesting and connector routes. Zones may nest or overlap intentionally. Do not add zones that are absent from the anchor. moduleCount is the number of distinct visual modules in that zone; occupancy is the approximate percent of its area occupied by meaningful content; moduleKinds names the visible kinds (icon, chart, matrix, photo, formula, flow strip, table, diagram fragment, etc.).
+Infer the shared grammar from all figures; do not average them into a bland layout, but do not copy any one composition. The output must be a fresh paper-specific composition that mirrors the recurring density and element vocabulary.
+panels: 3-5 entries whenever the references support that density. x/y/w/h are integers in a 1600x900 coordinate space with the origin at the top-left; they must not overlap and must stay inside 1600x900. Preserve recurring relative arrangements and reading directions while allowing a new composition.
+layoutBlueprint: derive 6-16 concrete zones, grouping frames or module slots from the recurring patterns across the figures. Coordinates are integers in the same 1600x900 space. Preserve common nesting and connector routes, while allowing new content and arrangement. Every zone should contain a meaningful image, formula, chart, matrix, icon or other visual module; avoid conspicuous empty boxes. moduleCount is the number of distinct visual modules in that zone; occupancy is the approximate percent of its area occupied by meaningful content; moduleKinds names the visible kinds (icon, chart, matrix, photo, formula, flow strip, table, diagram fragment, etc.).
 palette: every value MUST be a real #rrggbb hex string.
 typography: integer pixel sizes for a 1600x900 canvas (title 36-56, panelHeader 26-36, label 20-30, note 16-22).
 strokes: integer pixel widths (box 2-4, arrow 2-4, connector 1-3).
-density: COUNT what you actually see, as integers. Use the median only for genuinely shared quantities; keep the anchor's topology and density when the figures differ materially — never report 0 for something you can see:
+density: COUNT what you actually see, as integers. Use the median only for genuinely shared quantities; keep the strongest recurring topology and density when the figures differ materially — never report 0 for something you can see:
   containers  how many outer panel/container boxes one typical figure has,
   modulesPerPanel  how many module boxes are drawn inside ONE panel,
   solidBorders and dashedBorders  how many borders use each style in that figure,
@@ -1588,9 +1604,8 @@ density: COUNT what you actually see, as integers. Use the median only for genui
     or a result thumbnail. The generator uses this list as its vocabulary.
   fill  one sentence on how FULL the boxes are in these figures — how much of a typical box is
     occupied by its element — so fullness is matched without resorting to copies.
-representative: use the figure ids EXACTLY as listed below, 2-4 of them, no indices. The first id is the primary layout anchor; the remaining ids are supporting style references, not images to blend equally.
-representative: the FIRST id MUST be the first supplied id. Add 1-3 supporting ids only after it; they are style references, not equal layout references.
-imageRefIds: the FIRST id MUST be the first supplied id. Add at most two supporting ids; do not select a visually incompatible outlier.
+representative: use the figure ids EXACTLY as listed below, 2-4 of them, no indices. Select figures that best expose the shared grammar and complementary details, regardless of upload order.
+imageRefIds: choose 1-3 figures that collectively show the shared panel, palette and element language; do not force the first supplied id and do not select a visually incompatible outlier.
 Available figure ids: ${ids}
 topology, styleFingerprint and refinedPrompt must describe visible layout and styling, not the paper's scientific claims. refinedPrompt should be 120-180 concrete English words about panels, arrows, palette, spacing, hierarchy and illustration language. It is used as a visual guide, not as a request to copy reference labels. Keep the prose compact so the whole JSON answer fits in one response.`;
 }
@@ -1669,20 +1684,21 @@ async function analyzeReferences(){
   // 1-based indices (older models). Accept either, but only ids that really exist
   // in the analysed set, so a miscount can no longer silently pick the wrong figure.
   const validIds = [...new Set(ordered)].filter(id=>data.figs.some(f=>f.id===id));
-  const primaryId = validIds[0] || null;
   const resolveRefId = x=>{
     const s=String(x).trim();
     if(validIds.includes(s)) return s;
     const n=+s;
     return Number.isInteger(n)&&n>=1&&n<=validIds.length ? validIds[n-1] : null;
   };
-  let reps=[primaryId,...(Array.isArray(j.representative)?j.representative:[]).map(resolveRefId)].filter(Boolean);
+  let reps=(Array.isArray(j.representative)?j.representative:[]).map(resolveRefId).filter(Boolean);
   reps=[...new Set(reps)].slice(0,4);
-  if(reps.length<2) reps=[...new Set([primaryId,...validIds])].filter(Boolean).slice(0,4);
-  let imageRefIds=[primaryId,...(Array.isArray(j.imageRefIds)?j.imageRefIds:[]).map(resolveRefId)].filter(Boolean);
+  if(reps.length<2) reps=[...new Set(validIds)].slice(0,4);
+  let imageRefIds=(Array.isArray(j.imageRefIds)?j.imageRefIds:[]).map(resolveRefId).filter(Boolean);
   imageRefIds=[...new Set(imageRefIds)].slice(0,3);
   if(!imageRefIds.length) imageRefIds=reps.slice(0,3);
-  j.primaryId=primaryId;
+  // Kept for backwards-compatible UI metadata only; it is never used as a
+  // composition authority or forced into the selected reference set.
+  j.primaryId=reps[0] || validIds[0] || null;
   // Two style guides, because the two output paths consume them differently.
   const contract = designContractText(j);
   const prose = (j.refinedPrompt||'').trim();
@@ -1757,7 +1773,7 @@ function paletteMarkup(palette){
 function imageStyleText(j){
   if(!j) return '';
   const rows = [];
-  rows.push('- reference role: the first supplied figure is the single layout master; later figures are style evidence only. Preserve the master\'s zone order, relative geometry, nesting and whitespace rhythm rather than averaging layouts.');
+  rows.push('- reference role: merge the common visual grammar across all selected figures. Preserve recurring panel divisions, density, element counts, nesting, whitespace rhythm, palette, border shapes and arrow language; create a new composition instead of copying one figure.');
   const pal = j.palette;
   if(pal && !Array.isArray(pal) && typeof pal === 'object'){
     const used = ['background','primary','accent','neutral'].filter(k=>pal[k]).map(k=>`${k} ${pal[k]}`);
@@ -1799,7 +1815,7 @@ function imageStyleText(j){
     if(Array.isArray(j.topology.zones)) top.push('zones: '+j.topology.zones.join(' | '));
     if(j.topology.flow) top.push('flow: '+j.topology.flow);
     if(j.topology.spacing) top.push('spacing: '+j.topology.spacing);
-    if(top.length) rows.push('- canonical topology (preserve this arrangement; do not invent a generic grid): '+top.join('; '));
+    if(top.length) rows.push('- shared topology (preserve recurring relationships while composing fresh content; do not invent a generic sparse grid): '+top.join('; '));
   }
   if(j.styleFingerprint && typeof j.styleFingerprint==='object'){
     const sf = ['background','panelShape','moduleShape','iconStyle','arrowStyle','textTreatment'].filter(k=>j.styleFingerprint[k]).map(k=>k+': '+j.styleFingerprint[k]);
@@ -1822,16 +1838,16 @@ function imageStyleText(j){
       const kinds=Array.isArray(z.moduleKinds) ? z.moduleKinds.join(', ') : (z.moduleKinds||'');
       return `${i+1}. ${z.id||z.name||('zone-'+(i+1))} role=${z.role||'unspecified'}${geo} modules=${z.moduleCount??'?'} occupancy=${z.occupancy??'?'}%${kinds?' kinds='+kinds:''}${z.nesting?' nesting='+z.nesting:''}${z.flow?' flow='+z.flow:''}`;
     }).filter(Boolean);
-    if(blueprint.length) rows.push('- anchor layout blueprint (copy these zones and slots exactly; do not add or remove zones):\n  '+blueprint.join('\n  '));
+    if(blueprint.length) rows.push('- dense shared layout blueprint (mirror the recurring panel/module density and element count; every slot must contain a meaningful image, formula, chart, matrix, icon or diagram fragment; adapt zone positions to the new content):\n  '+blueprint.join('\n  '));
   }
-  rows.push('- density target: fill the defined module regions with meaningful diagrams, mini charts, icons, thumbnails or short labels; preserve intentional gutters but avoid conspicuous empty white areas.');
+  rows.push('- density target: use 3–5 substantial panels with coarse outer borders and fine module borders, mixing solid and dashed lines; fill every module region with meaningful diagrams, mini charts, icons, thumbnails, formulas or short labels and mirror the references\' element count.');
   return rows;
 }
 
 function designContractText(j){
   if(!j) return '';
   const rows = [];
-  rows.push('- layout authority: the first selected reference is the only composition anchor; all other references contribute style cues only.');
+  rows.push('- layout authority: no single reference is a master. Synthesize the recurring panel divisions, density, element count, palette, border shapes, arrow language and hierarchy across all selected figures into a fresh composition.');
   if(j.layout) rows.push(`- canvas & panel division: ${j.layout}`);
   if(j.topology && typeof j.topology==='object'){
     const top=[];
@@ -1839,7 +1855,7 @@ function designContractText(j){
     if(Array.isArray(j.topology.zones)) top.push('zones: '+j.topology.zones.join(' | '));
     if(j.topology.flow) top.push('flow: '+j.topology.flow);
     if(j.topology.spacing) top.push('spacing: '+j.topology.spacing);
-    if(top.length) rows.push('- canonical topology (highest priority): '+top.join('; '));
+    if(top.length) rows.push('- shared topology (highest priority, while allowing fresh content and arrangement): '+top.join('; '));
   }
   if(j.styleFingerprint && typeof j.styleFingerprint==='object'){
     const sf=['background','panelShape','moduleShape','iconStyle','arrowStyle','textTreatment'].filter(k=>j.styleFingerprint[k]).map(k=>k+'='+j.styleFingerprint[k]);
@@ -1863,7 +1879,7 @@ function designContractText(j){
       const kinds=Array.isArray(z.moduleKinds) ? z.moduleKinds.join(', ') : (z.moduleKinds||'');
       return `${i+1}. ${z.id||z.name||('zone-'+(i+1))} role=${z.role||'unspecified'}${geo} modules=${z.moduleCount??'?'} occupancy=${z.occupancy??'?'}%${kinds?' kinds='+kinds:''}${z.nesting?' nesting='+z.nesting:''}${z.flow?' flow='+z.flow:''}`;
     }).filter(Boolean);
-    if(blueprint.length) rows.push('- anchor layout blueprint (preserve exact zone order and relative slots):\n  '+blueprint.join('\n  '));
+    if(blueprint.length) rows.push('- dense shared blueprint (mirror recurring zone density, nesting and element counts; every zone must contain a concrete visual module):\n  '+blueprint.join('\n  '));
   }
   const pal = j.palette;
   if(pal){
@@ -1892,7 +1908,7 @@ function designContractText(j){
     if(j.density.fill!=null) d.push('fill='+j.density.fill);
     if(d.length) rows.push('- density targets: '+d.join(', '));
   }
-  rows.push('- composition priority: preserve the anchor topology and fill its module regions densely; no conspicuous empty panels or unused white areas.');
+  rows.push('- composition priority: preserve the shared topology and fill its module regions densely; no conspicuous empty panels or unused white areas.');
   return rows.join('\n');
 }
 
@@ -1909,7 +1925,7 @@ function buildPrompt(content, layoutGuide, refIds){
     return tt('ref.note',{i:idx+1, t:f.title, v:f.venue.toUpperCase(), y:f.year, p:f.pattern, id:f.id});
   }).join('\n');
   const guide = layoutGuide
-    ? `## Design contract (primary anchor + style evidence — follow the anchor topology, module slots, arrows, palette and hierarchy strictly)\n首张参考图是唯一的版式母版；后续参考图只补充配色、笔触、图标和图表语言，不要把多张图平均融合。必须优先复刻母版的区域顺序、相对面积、嵌套分组、模块槽位、连接线拓扑和视觉密度。\n${layoutGuide}\n\n`
+    ? `## Design contract (shared visual grammar — synthesize recurring structure across all references)\n没有单一母版。必须从所有参考图提取反复出现的面板划分、相对密度、嵌套分组、模块槽位、连接线拓扑、配色和层级，再生成一张内容全新的图；不要按上传顺序偏向第一张，也不要把任意一张图整图照抄。\n${layoutGuide}\n\n`
     : '';
   return `你是顶尖 ML 论文的配图设计师。我要：${TARGETS[t].label}。
 ${guide}${targetInfo}
@@ -1919,7 +1935,7 @@ ${content}
 
 ${refLines}
 
-请输出一张完整、可编辑的 SVG（viewBox 1600x900，横向，白色背景）。设计契约和参考图中识别出的主锚点拓扑、相对比例、模块密度、配色、线型、间距和阅读方向是最高优先级；不要强行套用固定的面板数量、横向并排网格或统一的顶部标题栏。方块/箭头/文字标签对齐；面板外框线明显粗于内部模块框，并用虚线区分可选/概念/重复的块；不得出现 lorem ipsum 或占位数字。
+请输出一张完整、可编辑的 SVG（viewBox 1600x900，横向，白色背景）。设计契约和参考图中识别出的共同拓扑、相对比例、模块密度、配色、线型、间距和阅读方向是最高优先级；不要把第一张参考图当成整图母版，也不要照抄任何一张图的具体内容。方块/箭头/文字标签对齐；面板外框线明显粗于内部模块框，并用虚线区分可选/概念/重复的块；不得出现 lorem ipsum 或占位数字。
 若上面的设计契约给出了面板坐标与字号，请直接按其数值排版，不要自行改变比例。
 保持参考图的整体阅读路径和层级，在定义好的每个模块区域中填入有意义的结构：小型流程、网络/模型图、数据表、迷你图表、缩略图、图例、短标签或局部放大，不要留下明显的大块空白；保留有意的边距和分组间隙。内容丰富度和排版覆盖率优先于长文字的逐字准确，文字用可编辑的英文短标签或短语即可，后续会在步骤四校正。把重复样式放进 <defs> 复用；为控制长度，元素总量保持合理，务必在一次输出内以 </svg> 正常结尾。
 布局硬性要求（会自动检查）：所有可见文字必须完全落在 x=0..1600、y=0..900 之内；任何标签的文字宽度不得超过它所处方块的宽度（放不下就缩短文字、减小字号或加宽方块）；不同标签的文字包围盒不得相互重叠。
@@ -1934,7 +1950,7 @@ ${refLines}
 - 输出前检查所有文字与图形都在画布内，并以 </svg> 正常结尾。
 Output a complete SVG. ALL visible text (panel headers, module names, axes, legends, annotations) MUST be in English — no Chinese characters anywhere. Output only the <svg> code, no explanation.`;
 }
-const SVG_SYS = 'You are a world-class scientific figure designer. Based on the user paper content and the attached reference figures, output exactly ONE complete, self-contained SVG. Treat the supplied reference-derived design contract as the highest-priority visual constraint: preserve its canonical panel topology, relative proportions, nesting, spacing rhythm, density, palette, stroke language and reading direction. Do not force a fixed number of side-by-side panels or a generic grid. Produce a richly populated, publication-quality composition: fill most reference-defined module regions with meaningful diagrams, mini charts, thumbnails, icons, legends or short labels, while preserving intentional gutters and avoiding conspicuous empty areas. Exact wording is secondary to layout richness because labels will be edited later; use short readable English labels and clean editable text slots rather than paragraphs. Preserve editable export semantics: give every visible element a stable id plus data-role and data-editable="true"; keep labels as SVG <text>, use basic shapes and paths, avoid masks/filters/outlined text, use viewBox="0 0 1600 900", and never flatten the whole figure into one bitmap. Output SVG markup only, no explanations or code fences.';
+const SVG_SYS = 'You are a world-class scientific figure designer. Based on the user paper content and the attached reference figures, output exactly ONE complete, self-contained SVG. Treat the supplied reference-derived design contract as the highest-priority visual constraint: preserve its shared panel topology, relative proportions, nesting, spacing rhythm, density, palette, stroke language and reading direction. Do not force a fixed number of side-by-side panels or a generic grid. Produce a richly populated, publication-quality composition: fill most reference-defined module regions with meaningful diagrams, mini charts, thumbnails, icons, legends or short labels, while preserving intentional gutters and avoiding conspicuous empty areas. Exact wording is secondary to layout richness because labels will be edited later; use short readable English labels and clean editable text slots rather than paragraphs. Preserve editable export semantics: give every visible element a stable id plus data-role and data-editable="true"; keep labels as SVG <text>, use basic shapes and paths, avoid masks/filters/outlined text, use viewBox="0 0 1600 900", and never flatten the whole figure into one bitmap. Output SVG markup only, no explanations or code fences.';
 
 /* ---------------- HTTP helpers ---------------- */
 function showErr(msg){
@@ -2401,7 +2417,7 @@ function auditSummaryText(res){
    Everything below runs in the browser and works offline (PPTX uses the vendored
    PptxGenJS; draw.io and VSDX are written here). The only network call is the
    optional bitmap reconstruction, which is an explicit button, never automatic. */
-window.__ffExportState = {svg:'', baseSvg:'', scene:null, target:'svg', font:'original', source:'svg', bitmap:'', recon:null};
+window.__ffExportState = {svg:'', baseSvg:'', scene:null, target:'svg', font:'original', source:'svg', bitmap:'', recon:null, reconPending:false};
 
 /* ---------- canvas units ---------- */
 const EXPORT_CANVAS = {w:1600, h:900};
@@ -2742,10 +2758,18 @@ function loadPptxGenJS(){
   return pptxLibPromise;
 }
 
-function pptxColor(hex){ return hex || null; }
+function pptxColor(hex){
+  const s=String(hex==null?'':hex).trim();
+  if(!s || s==='none' || s==='transparent') return null;
+  return s.replace(/^#/,'').toUpperCase();
+}
 
 function buildPptx(scene){
-  const canvas = scene.canvas;
+  const rawCanvas = scene.canvas || {};
+  const canvas = {
+    width: Number(rawCanvas.width || rawCanvas.w || EXPORT_CANVAS.w),
+    height: Number(rawCanvas.height || rawCanvas.h || EXPORT_CANVAS.h),
+  };
   const scale = 10 / canvas.width;                    // canvas units -> inches (10in wide)
   const slideW = 13.333, slideH = 7.5;
   const offX = (slideW - canvas.width*scale) / 2;
@@ -2850,23 +2874,38 @@ function buildPptx(scene){
   });
 }
 
+function exportColor(value, fallback){
+  const s=String(value==null?'':value).trim();
+  if(!s || s==='none' || s==='transparent') return fallback || 'none';
+  return s.replace(/^#/,'');
+}
+function drawioColor(value, fallback){
+  const c=exportColor(value,fallback);
+  return c==='none' ? 'none' : '#'+c;
+}
+
 /* ---------- draw.io ----------
    Emits real mxCell geometry, not an embedded picture, so every box and label is
    individually editable inside draw.io. This file can also be exported to VSDX
    from draw.io, which is the supported path to Visio. */
 function sceneToDrawio(scene){
-  const c = scene.canvas;
+  const rawCanvas = scene.canvas || {};
+  const c = Object.assign({}, rawCanvas, {
+    width: Number(rawCanvas.width || rawCanvas.w || EXPORT_CANVAS.w),
+    height: Number(rawCanvas.height || rawCanvas.h || EXPORT_CANVAS.h),
+  });
   const cells = [];
   let seq = 10;
   const nextId = ()=> 'ff' + (seq++);
   const xml = s => xmlEscape(s);
 
   scene.nodes.forEach(function(n){
+    if(n.export===false) return;
     const id = nextId();
     if(n.type==='text'){
       const anchor = n.anchor==='middle' ? 'center' : (n.anchor==='end' ? 'right' : 'left');
       const style = 'text;html=1;strokeColor=none;fillColor=none;align='+anchor+';verticalAlign=middle;'+
-                    'fontSize='+Math.round((n.fontSize||16)*0.75)+';fontColor=#'+(n.fill||'000000')+
+                    'fontSize='+Math.round((n.fontSize||16)*0.75)+';fontColor='+drawioColor(n.fill,'000000')+
                     (n.bold?';fontStyle=1':'')+(n.italic?';fontStyle=2':'')+';whiteSpace=wrap;';
       const w = Math.max(n.w*1.04, 8), h = Math.max((n.fontSize||16)*1.3, 8);
       const x = n.anchor==='middle' ? n.x - w/2 : (n.anchor==='end' ? n.x - w : n.x);
@@ -2875,27 +2914,27 @@ function sceneToDrawio(scene){
       return;
     }
     if(n.type==='line'){
-      const style = 'endArrow='+(n.arrow?'classic':'none')+';html=1;strokeColor=#'+(n.stroke||'000000')+';strokeWidth='+(n.strokeWidth||1)+';';
+      const style = 'endArrow='+(n.arrow?'classic':'none')+';html=1;strokeColor='+drawioColor(n.stroke,'000000')+';strokeWidth='+(n.strokeWidth||1)+';';
       cells.push('<mxCell id="'+id+'" style="'+style+'" edge="1" parent="1">'+
                  '<mxGeometry relative="1" as="geometry"><mxPoint x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" as="sourcePoint"/>'+
                  '<mxPoint x="'+Math.round(n.x2)+'" y="'+Math.round(n.y2)+'" as="targetPoint"/></mxGeometry></mxCell>');
       return;
     }
     if(n.type==='ellipse'){
-      const style = 'ellipse;whiteSpace=wrap;html=1;fillColor=#'+(n.fill||'none')+';strokeColor=#'+(n.stroke||'000000')+';strokeWidth='+(n.strokeWidth||1)+';';
+      const style = 'ellipse;whiteSpace=wrap;html=1;fillColor='+drawioColor(n.fill,'none')+';strokeColor='+drawioColor(n.stroke,'000000')+';strokeWidth='+(n.strokeWidth||1)+';';
       cells.push('<mxCell id="'+id+'" style="'+style+'" vertex="1" parent="1">'+
                  '<mxGeometry x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" width="'+Math.round(n.w)+'" height="'+Math.round(n.h)+'" as="geometry"/></mxCell>');
       return;
     }
     if(n.type==='rect'){
       const rounded = n.radius>0 ? 'rounded=1;arcSize='+Math.max(4, Math.min(50, Math.round(n.radius/Math.max(1,Math.min(n.w,n.h))*100)))+';' : '';
-      const style = rounded+'whiteSpace=wrap;html=1;fillColor=#'+(n.fill||'none')+';strokeColor=#'+(n.stroke||'none')+';strokeWidth='+(n.strokeWidth||1)+';';
+      const style = rounded+'whiteSpace=wrap;html=1;fillColor='+drawioColor(n.fill,'none')+';strokeColor='+drawioColor(n.stroke,'none')+';strokeWidth='+(n.strokeWidth||1)+';';
       cells.push('<mxCell id="'+id+'" style="'+style+'" vertex="1" parent="1">'+
                  '<mxGeometry x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" width="'+Math.round(n.w)+'" height="'+Math.round(n.h)+'" as="geometry"/></mxCell>');
       return;
     }
     if(n.type==='path' || n.type==='polyline'){
-      const style = 'shape=stencil;whiteSpace=wrap;html=1;fillColor=#'+(n.fill||'none')+';strokeColor=#'+(n.stroke||'000000')+';strokeWidth='+(n.strokeWidth||1)+';';
+      const style = 'shape=stencil;whiteSpace=wrap;html=1;fillColor='+drawioColor(n.fill,'none')+';strokeColor='+drawioColor(n.stroke,'000000')+';strokeWidth='+(n.strokeWidth||1)+';';
       cells.push('<mxCell id="'+id+'" value="" style="'+style+'" vertex="1" parent="1">'+
                  '<mxGeometry x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" width="'+Math.round(Math.max(n.w,4))+'" height="'+Math.round(Math.max(n.h,4))+'" as="geometry"/></mxCell>');
       return;
@@ -2926,7 +2965,16 @@ function sceneToDrawio(scene){
    that PowerPoint-grade guarantees do not cover. draw.io's own VSDX export (from
    the .drawio file next to this one) is the validated alternative. */
 function sceneToVsdxFiles(scene, font){
-  const c = scene.canvas;
+  const imageNodes = (scene && Array.isArray(scene.nodes)) ? scene.nodes.filter(n=>n && n.type==='image') : [];
+  const canvasAudit = (scene && scene.canvas) || {};
+  const canvasAreaAudit = Math.max(1, Number(canvasAudit.width||canvasAudit.w||EXPORT_CANVAS.w) * Number(canvasAudit.height||canvasAudit.h||EXPORT_CANVAS.h));
+  if(imageNodes.some(n=>!/^data:image\//i.test(String(n.href||'')))) throw new Error('VSDX export requires cropped image parts; reconstruct again');
+  if(imageNodes.some(n=>Number(n.w||0)*Number(n.h||0) > canvasAreaAudit*0.55)) throw new Error('VSDX export blocked: reconstruction still contains a dominant full-canvas bitmap');
+  const rawCanvas = scene.canvas || {};
+  const c = Object.assign({}, rawCanvas, {
+    width: Number(rawCanvas.width || rawCanvas.w || EXPORT_CANVAS.w),
+    height: Number(rawCanvas.height || rawCanvas.h || EXPORT_CANVAS.h),
+  });
   const PX_PER_IN = c.width/10;                    // keep the same 10in width as PPTX
   const inches = v => (v/PX_PER_IN);
   const shapes = [];
@@ -2985,6 +3033,7 @@ function sceneToVsdxFiles(scene, font){
   }
 
   scene.nodes.forEach(function(n, idx){
+    if(n.export === false) return;
     const ID = idx+1;
     const st = { fill:(n.fill||'none'), line:(n.stroke||'none'), weight:(n.strokeWidth||0) };
     let xml = '';
@@ -3027,7 +3076,7 @@ function sceneToVsdxFiles(scene, font){
             '<Cell N="LocPinX" V="'+inches(Math.max(len,0.5)/2).toFixed(4)+'"/><Cell N="LocPinY" V="0"/>'+
             '<Cell N="Angle" V="'+ang.toFixed(4)+'"/>'+
             '<Cell N="EndArrow" V="'+(n.arrow?4:0)+'"/>'+
-            '<Cell N="LineColor" V="'+(n.stroke? '#'+n.stroke : '#000000')+'"/>'+
+            '<Cell N="LineColor" V="#'+exportColor(n.stroke,'000000')+'"/>'+
             '<Cell N="LineWeight" V="'+(inches(Math.max(n.strokeWidth||1,1))*72).toFixed(3)+'"/>'+
             '<Cell N="ShapeType" V="Line"/>'+
             '</Shape>';
@@ -3045,7 +3094,7 @@ function sceneToVsdxFiles(scene, font){
             '<Cell N="VerticalAlign" V="1"/><Cell N="HorzAlign" V="'+(n.anchor==='middle'?1:(n.anchor==='end'?2:0))+'"/>'+
             '<Cell N="ShapeType" V="Text"/>'+
             '<Section N="Character"><Row IX="0"><Cell N="Size" V="'+sizePt.toFixed(2)+'"/>'+
-              '<Cell N="Color" V="#'+(n.fill||'000000')+'"/><Cell N="Style" V="'+(n.bold?1:0)+'"/>'+
+              '<Cell N="Color" V="#'+exportColor(n.fill,'000000')+'"/><Cell N="Style" V="'+(n.bold?1:0)+'"/>'+
               '<Cell N="Font" V="'+(font||'Arial')+'"/></Row></Section>'+
             '<Text>'+text+'</Text>'+
             '</Shape>';
@@ -3063,9 +3112,9 @@ function sceneToVsdxFiles(scene, font){
 
   function fillCells(st){
     const parts = [];
-    parts.push('<Cell N="FillForegnd" V="'+(st.fill && st.fill!=='none' ? '#'+st.fill : '#FFFFFF')+'"/>');
+    parts.push('<Cell N="FillForegnd" V="#'+exportColor(st.fill,'FFFFFF')+'"/>');
     parts.push('<Cell N="FillPattern" V="'+(st.fill && st.fill!=='none' ? 1 : 0)+'"/>');
-    parts.push('<Cell N="LineColor" V="'+(st.line && st.line!=='none' ? '#'+st.line : '#000000')+'"/>');
+    parts.push('<Cell N="LineColor" V="#'+exportColor(st.line,'000000')+'"/>');
     parts.push('<Cell N="LinePattern" V="'+(st.line && st.line!=='none' ? 1 : 0)+'"/>');
     parts.push('<Cell N="LineWeight" V="'+(inches(Math.max(st.weight,1))*72).toFixed(3)+'"/>');
     return parts.join('');
@@ -3415,200 +3464,137 @@ function buildReconScene(baseCanvas, placed, paperText){
       bold: false,
     });
   });
-  return { schema:'figureforge.scene.v3', canvas:{ w:W, h:H },
+  return { schema:'figureforge.scene.v3', canvas:{ width:W, height:H, w:W, h:H },
            nodes:nodes, counts:{ shapes:1, text:placed.length } };
 }
 
 function sceneToSvgString(scene){
-  const c = scene.canvas;
+  const raw = scene.canvas || {};
+  const W = Number(raw.width || raw.w || EXPORT_CANVAS.w), H = Number(raw.height || raw.h || EXPORT_CANVAS.h);
+  const color = function(v, fallback){
+    const s = String(v == null ? '' : v).trim();
+    if(!s || s === 'none' || s === 'transparent') return s || (fallback || 'none');
+    return s[0] === '#' ? s : ('#' + s.replace(/^#/,''));
+  };
+  const num = function(v, d){ const n = Number(v); return Number.isFinite(n) ? n : (d || 0); };
   const parts = ['<?xml version="1.0" encoding="UTF-8"?>',
     '<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" ' +
-    'viewBox="0 0 ' + c.w + ' ' + c.h + '" width="' + c.w + '" height="' + c.h + '">',
-    '<defs><marker id="arrowhead" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">' +
-    '<path d="M0,0 L10,4 L0,8 z" fill="#334155"/></marker></defs>',
-    '<rect x="0" y="0" width="' + c.w + '" height="' + c.h + '" fill="#ffffff"/>'];
-  scene.nodes.forEach(function(n, i){
-    const id = n.id || ('n' + i);
+    'viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '">',
+    '<defs><marker id="ff-arrow" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#334155"/></marker></defs>',
+    '<rect x="0" y="0" width="' + W + '" height="' + H + '" fill="#ffffff"/>'];
+  (scene.nodes || []).forEach(function(n, i){
+    if(n.export === false) return;
+    const id = escapeSvgAttr(n.id || ('n' + i));
+    const x=num(n.x), y=num(n.y), w=Math.max(0,num(n.w)), h=Math.max(0,num(n.h));
+    const stroke = color(n.stroke, 'none'), fill = color(n.fill, 'none');
+    const sw = Math.max(0,num(n.strokeWidth,1));
+    const dash = n.dash || n.dashed ? ' stroke-dasharray="8 6"' : '';
     if(n.type === 'image'){
-      parts.push('<image id="' + id + '" data-role="base" data-editable="true" x="' + n.x + '" y="' + n.y +
-        '" width="' + n.w + '" height="' + n.h + '" xlink:href="' + n.href + '"/>');
-    } else if(n.type === 'rect'){
-      parts.push('<rect id="' + id + '" data-role="panel" data-editable="true" x="' + n.x + '" y="' + n.y +
-        '" width="' + n.w + '" height="' + n.h + '" rx="' + (n.radius||0) +
-        '" fill="' + (n.fill||'#ffffff') + '" stroke="' + (n.stroke||'none') +
-        '" stroke-width="' + (n.strokeWidth||1) + '"/>');
-    } else if(n.type === 'line' || n.type === 'arrow'){
-      parts.push('<line id="' + id + '" data-role="connector" data-editable="true" x1="' + n.x + '" y1="' + n.y +
-        '" x2="' + n.x2 + '" y2="' + n.y2 + '" stroke="' + (n.stroke||'#000000') +
-        '" stroke-width="' + (n.strokeWidth||1.5) + '" marker-end="' + (n.arrow ? 'url(#arrowhead)' : '') + '"/>');
+      parts.push('<image id="'+id+'" data-role="image" data-editable="true" x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" preserveAspectRatio="none" href="'+escapeSvgAttr(n.href||'')+'" xlink:href="'+escapeSvgAttr(n.href||'')+'"/>');
     } else if(n.type === 'text'){
-      parts.push('<text id="' + id + '" data-role="label" data-editable="true" x="' + n.x + '" y="' + n.y +
-        '" font-family="Arial, Helvetica, sans-serif" font-size="' + n.fontSize +
-        '" fill="#' + (n.fill || '111827') + '"' + (n.bold ? ' font-weight="bold"' : '') + '>' +
-        xmlEscape(n.text) + '</text>');
+      const anchor = n.anchor==='middle' ? 'middle' : (n.anchor==='end' ? 'end' : 'start');
+      parts.push('<text id="'+id+'" data-role="label" data-editable="true" x="'+x+'" y="'+y+'" text-anchor="'+anchor+'" dominant-baseline="'+(n.baseline||'auto')+'" font-family="'+escapeSvgAttr(n.fontFamily||'Arial, Helvetica, sans-serif')+'" font-size="'+Math.max(1,num(n.fontSize,16))+'" fill="'+color(n.fill,'#111827')+'"'+(n.bold?' font-weight="bold"':'')+(n.italic?' font-style="italic"':'')+'>'+xmlEscape(n.text||'')+'</text>');
+    } else if(n.type === 'rect'){
+      parts.push('<rect id="'+id+'" data-editable="true" x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="'+Math.max(0,num(n.radius))+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+dash+'/>');
+    } else if(n.type === 'ellipse'){
+      parts.push('<ellipse id="'+id+'" data-editable="true" cx="'+(x+w/2)+'" cy="'+(y+h/2)+'" rx="'+(w/2)+'" ry="'+(h/2)+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+dash+'/>');
+    } else if(n.type === 'line'){
+      parts.push('<line id="'+id+'" data-editable="true" x1="'+x+'" y1="'+y+'" x2="'+num(n.x2,x+w)+'" y2="'+num(n.y2,y+h)+'" stroke="'+color(n.stroke,'#334155')+'" stroke-width="'+sw+'" fill="none"'+(n.arrow?' marker-end="url(#ff-arrow)"':'')+dash+'/>');
+    } else if(n.type === 'polyline'){
+      parts.push('<polyline id="'+id+'" data-editable="true" points="'+escapeSvgAttr(n.points||'')+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+dash+'/>');
+    } else if(n.type === 'path'){
+      parts.push('<path id="'+id+'" data-editable="true" d="'+escapeSvgAttr(n.d||'')+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+dash+'/>');
     }
   });
   parts.push('</svg>');
   return parts.join('\n');
 }
 
-/* Step 4 core: send the rendered bitmap to the Step-1 chat/vision model and ask
-   it to decompose every visible element into editable scene nodes (text, panels,
-   arrows). The same provider/key/base from Step 1 is reused. On failure the old
-   pixel-band reconstruction runs as a fallback. */
-function parserModelId(){
-  const am = $('#analyzeModel');
-  if(am && am.value && !IMGRE.test(am.value)) return am.value;
-  const sel = $('#model');
-  if(sel && sel.value && !IMGRE.test(sel.value)) return sel.value;
-  for(const o of (sel ? sel.options : [])){
-    if(o.value && !IMGRE.test(o.value)) return o.value;
-  }
-  return (am && am.value) || (sel && sel.value);
+async function ensureBitmapDataUrl(src){
+  if(!src) return null;
+  if(/^data:image\//i.test(String(src))) return String(src);
+  const r = await fetch(src);
+  if(!r.ok) throw new Error('Reference image could not be read');
+  return fileToDataURI(await r.blob());
 }
 
-function downscaleJPEG(dataUrl, maxW=1280, q=0.85){
-  return new Promise(function(resolve, reject){
-    const im = new Image();
-    im.onload = function(){
-      const w = im.naturalWidth || im.width, h = im.naturalHeight || im.height;
-      const scale = Math.min(1, maxW / w);
-      const c = document.createElement('canvas');
-      c.width = Math.round(w*scale); c.height = Math.round(h*scale);
-      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
-      resolve(c.toDataURL('image/jpeg', q));
-    };
-    im.onerror = function(){ reject(new Error('image decode failed')); };
-    im.src = dataUrl;
+function editableScenePrompt(W,H,paper){
+  return 'Reconstruct this scientific figure as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Text must be OCR transcription, not a description. Do not merge adjacent boxes, graph nodes, text, or arrows. Do not return a single full-canvas bitmap as a substitute. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor}, and image {x,y,w,h,href}. Use image only for photographic/illustrative content that cannot be decomposed, and include a crop object when possible. Keep z-order from background to foreground. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
+}
+
+function sceneNumber(v, fallback){ const n=Number(v); return Number.isFinite(n) ? n : fallback; }
+function materializeEditableScene(raw, W, H){
+  const canvas = raw && raw.canvas || {};
+  const nodes = Array.isArray(raw && raw.nodes) ? raw.nodes : [];
+  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, sceneNumber(v, lo)));
+  const cleanColor = (v, fallback) => {
+    const s=String(v==null?'':v).trim();
+    if(!s || s==='none' || s==='transparent') return s || fallback;
+    return s[0]==='#' ? s : '#'+s;
+  };
+  const out=[];
+  nodes.forEach(function(n, i){
+    if(!n || !n.type) return;
+    const type=String(n.type).toLowerCase();
+    const x=clamp(n.x,0,W), y=clamp(n.y,0,H);
+    const w=clamp(n.w,1,W-x), h=clamp(n.h,1,H-y);
+    const base={id:String(n.id||('v'+i)), x, y, w, h, fill:cleanColor(n.fill,'none'), stroke:cleanColor(n.stroke,'#334155'), strokeWidth:clamp(n.strokeWidth,1,12)};
+    if(type==='rect') out.push(Object.assign(base,{type:'rect',radius:clamp(n.radius,0,Math.min(w,h)/2),dash:!!(n.dash||n.dashed)}));
+    else if(type==='ellipse') out.push(Object.assign(base,{type:'ellipse'}));
+    else if(type==='line') out.push(Object.assign(base,{type:'line',x2:clamp(n.x2,0,W),y2:clamp(n.y2,0,H),arrow:!!n.arrow,dash:!!(n.dash||n.dashed)}));
+    else if(type==='polyline' && n.points) out.push(Object.assign(base,{type:'polyline',points:String(n.points),dash:!!(n.dash||n.dashed)}));
+    else if(type==='path' && n.d) out.push(Object.assign(base,{type:'path',d:String(n.d),dash:!!(n.dash||n.dashed)}));
+    else if(type==='text' && String(n.text||'').trim()) out.push(Object.assign(base,{type:'text',text:String(n.text).replace(/[\r\n]+/g,' ').trim().slice(0,300),fontSize:clamp(n.fontSize,6,120),fontFamily:n.fontFamily||'Arial, Helvetica, sans-serif',bold:!!n.bold,italic:!!n.italic,anchor:n.anchor==='middle'||n.anchor==='end'?n.anchor:'start',baseline:n.baseline||'auto'}));
+    else if(type==='image') out.push(Object.assign(base,{type:'image',href:n.href?String(n.href):''}));
   });
+  return {schema:'figureforge.scene.v4',canvas:{width:W,height:H,w:W,h:H},nodes:out,counts:{total:out.length,text:out.filter(n=>n.type==='text').length,shapes:out.filter(n=>n.type!=='text'&&n.type!=='image').length,images:out.filter(n=>n.type==='image').length}};
 }
 
-const VISION_RECON_SYS = 'You are a scientific-figure reconstruction engine. You convert one rendered paper figure into editable scene nodes. Output STRICT JSON only, no commentary.';
-
-function visionReconPrompt(){
-  return 'TASK: reconstruct the attached figure as a complete list of editable objects on a 1600x900 canvas. A typical figure contains 20-80 boxes and 15-60 text labels. You MUST enumerate EVERY visible object; an answer that lists only a few labels is a failure.\n'
-    + 'Return exactly one JSON object, no prose:\n'
-    + '{"boxes":[{"x":0,"y":0,"w":0,"h":0,"fill":"#hex or null","stroke":"#hex","strokeWidth":1.5,"rounded":false}],\n'
-    + ' "arrows":[{"x":0,"y":0,"x2":0,"y2":0,"stroke":"#hex","strokeWidth":1.5}],\n'
-    + ' "labels":[{"x":0,"y":0,"w":0,"h":0,"text":"exact wording","fontSize":16,"bold":false,"fill":"#hex"}]}\n'
-    + 'Rules:\n'
-    + '1. Coordinates are pixels measured on the image as displayed, origin top-left. Use the SAME scale for every object.\n'
-    + '2. boxes: every panel, container, module card, database cylinder frame, chart frame and coloured region is one box. Panels first (outer containers), then every inner module box. Do not skip small boxes.\n'
-    + '3. arrows: every connector line or arrowhead, including bidirectional and loop-back arrows.\n'
-    + '4. labels: transcribe EVERY visible text string VERBATIM, character by character: the title, every panel header, module name, axis label, number and equation. Do not paraphrase, translate or invent text; omit unreadable labels.\n'
-    + '5. Colours as #RRGGBB sampled from the image. Output the JSON only.';
-}
-
-async function visionReconstruct(){
-  const st = window.__ffExportState;
-  const status = $('#reconStatus');
-  const say = function(k,v){ if(status) status.textContent = tt(k,v); };
-  const src = bitmapToDataUrl(st.bitmap);
-  if(!src){ say('recon.nobitmap'); return false; }
-  say('recon.vision');
-  const model = parserModelId();
+async function requestEditableScene(imageDataUri, W, H){
+  const cfgv=cfg(), relay=$('#baseOverride').value.trim(), model=($('#analyzeModel')&&$('#analyzeModel').value)||$('#model').value;
   if(!model) throw new Error(tt('analyze.needmodel'));
-  const jpeg = await downscaleJPEG(src, 1600, 0.9);
-  const cfgv = cfg(), relay = $('#baseOverride').value.trim();
-  let txt;
-  if(cfgv.proto==='anthropic' && !relay){
-    const body = { model:model, max_tokens:4000, system:VISION_RECON_SYS,
-      messages:[{ role:'user', content:[
-        { type:'image', source:{type:'base64', media_type:'image/jpeg', data:jpeg.split(',')[1]} },
-        { type:'text', text:visionReconPrompt() } ] }] };
-    const r = await fetch(baseURL()+'/v1/messages',{method:'POST',headers:anthropicHeaders(cleanKey($('#key').value)),body:JSON.stringify(body)});
-    txt = await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
-    const d = JSON.parse(txt);
-    txt = (d.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('');
-  } else {
-    const body = { model:model, temperature:0.1, max_tokens:8000,
-      messages:[{role:'system',content:VISION_RECON_SYS},
-                {role:'user',content:[
-                  {type:'image_url',image_url:{url:jpeg}},
-                  {type:'text',text:visionReconPrompt()}]}] };
-    if($('#provider').value==='ark') body.thinking = {type:'disabled'};
-    const r = await postJSON(baseURL(),'/chat/completions',body,cleanKey($('#key').value),undefined,180000);
-    txt = await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
-    const d = JSON.parse(txt);
-    txt = (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '';
-  }
-  const m = txt.match(/\{[\s\S]*\}/);
-  if(!m) throw new Error(tt('recon.badjson'));
-  let j; try{ j = extractJSON(m[0]); }catch(e){ throw new Error(tt('recon.badjson')); }
-  // Accept either {"nodes":[...]} or the explicit {"boxes":[],"arrows":[],"labels":[]} schema.
-  const raw = Array.isArray(j.nodes) ? j.nodes : [];
-  const boxArr = Array.isArray(j.boxes) ? j.boxes : [];
-  const arrowArr = Array.isArray(j.arrows) ? j.arrows : [];
-  const labelArr = Array.isArray(j.labels) ? j.labels : [];
-  const hex = v => /^#[0-9a-fA-F]{6}$/.test(v||'') ? v : null;
-  const num = (v,fb)=>{ v=Number(v); return Number.isFinite(v)?v:fb; };
-  // Models sometimes answer in the image's natural pixel scale instead of
-  // 1600x900: measure the observed extent and rescale every coordinate onto the
-  // export canvas.
-  const allItems = raw.concat(boxArr, arrowArr, labelArr);
-  let maxX=0, maxY=0;
-  allItems.forEach(function(n){
-    if(!n||typeof n!=='object') return;
-    maxX=Math.max(maxX, num(n.x,0), num(n.x2,0), num(n.x,0)+num(n.w,0));
-    maxY=Math.max(maxY, num(n.y,0), num(n.y2,0), num(n.y,0)+num(n.h,0));
-  });
-  const sx = maxX>1600 ? 1600/maxX : 1;
-  const sy = maxY>900 ? 900/maxY : 1;
-  const X = v => num(v,0)*sx, Y = v => num(v,0)*sy;
-  // No background picture node: every element the model decomposed must be a
-  // native editable shape, so PPTX / VSDX / draw.io exports contain selectable
-  // boxes, arrows and text — not one embedded bitmap. The original bitmap stays
-  // downloadable from step 3.
-  const nodes = [];
-  const addLabel = function(n){
-    const text = String(n.text||'').replace(/[\r\n]+/g,' ').trim();
-    if(!text) return;
-    nodes.push({type:'text', text:text,
-      x:X(n.x), y:Y(n.y), w:Math.max(20,num(n.w, text.length*10)*sx), h:Math.max(12,num(n.h,20)*sy),
-      fontSize:Math.min(64,Math.max(9,num(n.fontSize,16)*Math.min(sx,sy))),
-      fill:hex(n.fill)||'#111827', bold:!!n.bold, anchor:'start'});
-  };
-  const addBox = function(n){
-    nodes.push({type:'rect', x:X(n.x),y:Y(n.y),w:Math.max(8,num(n.w,50)*sx),h:Math.max(8,num(n.h,30)*sy),
-      fill:hex(n.fill)||'#ffffff', stroke:hex(n.stroke)||'#334155',
-      strokeWidth:Math.max(0.5,num(n.strokeWidth,1.5)), radius:n.rounded?8:0});
-  };
-  const addArrow = function(n){
-    nodes.push({type:'line', x:X(n.x),y:Y(n.y),x2:X(n.x2),y2:Y(n.y2),
-      stroke:hex(n.stroke)||'#334155', strokeWidth:Math.max(0.5,num(n.strokeWidth,1.5)), arrow:true});
-  };
-  labelArr.forEach(addLabel);
-  boxArr.forEach(addBox);
-  arrowArr.forEach(addArrow);
-  raw.forEach(function(n){
-    if(!n || typeof n!=='object') return;
-    const t = n.type;
-    if(t==='text') addLabel(n);
-    else if(t==='rect') addBox(n);
-    else if(t==='line'||t==='arrow'){
-      if(t==='arrow') n.arrow = true;
-      nodes.push({type:'line', x:X(n.x),y:Y(n.y),x2:X(n.x2),y2:Y(n.y2),
-        stroke:hex(n.stroke)||'#334155', strokeWidth:Math.max(0.5,num(n.strokeWidth,1.5)), arrow:!!n.arrow});
+  const audit=(window.__ffApiAudit||(window.__ffApiAudit={})).reconstruction={state:'pending',startedAt:Date.now(),model,provider:cfgv.proto,endpoint:baseURL()};
+  const prompt=editableScenePrompt(W,H,$('#paper')?$('#paper').value:'');
+  const parts=dataURIToParts(imageDataUri);
+  let txt='';
+  try{
+    if(cfgv.proto==='anthropic' && !relay){
+      const body={model,max_tokens:12000,system:RECON_SYS,messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image',source:{type:'base64',media_type:parts.media,data:parts.data}}]}]};
+      const r=await fetchWithTimeout(baseURL()+'/v1/messages',{method:'POST',headers:anthropicHeaders(cleanKey($('#key').value)),body:JSON.stringify(body)},600000); txt=await r.text();
+      if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
+      const d=JSON.parse(txt); txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    }else{
+      const body={model,temperature:0.1,max_tokens:12000,messages:[{role:'system',content:RECON_SYS},{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:imageDataUri,detail:'high'}}]}]};
+      if($('#provider').value==='ark') body.thinking={type:'disabled'};
+      const r=await postJSON(baseURL(),'/chat/completions',body,cleanKey($('#key').value),undefined,600000); txt=await r.text();
+      if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
+      const d=JSON.parse(txt); txt=(d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||'';
     }
-  });
-  if(!nodes.length) throw new Error(tt('recon.notext'));
-  const scene = { schema:'figureforge.scene.v2', canvas:{w:1600,h:900}, nodes:nodes };
-  const svg = sceneToSvgString(scene);
-  Object.assign(st, { scene:scene, svg:svg, baseSvg:svg, source:'bitmap',
-                     recon:{ vision:true, nodes:nodes.length } });
-  renderEditableExportCard();
-  applyExportFont(st.font||'original');
-  say('recon.visionDone', {n:nodes.length});
-  return true;
+    let parsed; try{ parsed=extractJSON(txt); }catch(_){ throw new Error(tt('recon.badjson')); }
+    const scene=materializeEditableScene(parsed,W,H);
+    const sourceImage=await loadImage(imageDataUri);
+    for(const n of scene.nodes){
+      if(n.type!=='image') continue;
+      const c=document.createElement('canvas');
+      const w=Math.max(1,Math.round(n.w||1)), h=Math.max(1,Math.round(n.h||1)); c.width=w; c.height=h;
+      const sx=Math.max(0,Math.round((Number(n.x||0)/W)*sourceImage.width)), sy=Math.max(0,Math.round((Number(n.y||0)/H)*sourceImage.height));
+      const sw=Math.max(1,Math.min(sourceImage.width-sx,Math.round((w/W)*sourceImage.width))), sh=Math.max(1,Math.min(sourceImage.height-sy,Math.round((h/H)*sourceImage.height)));
+      c.getContext('2d').drawImage(sourceImage,sx,sy,sw,sh,0,0,w,h); n.href=c.toDataURL('image/png'); n.crop={x:Number(n.x||0)/W,y:Number(n.y||0)/H,w:Number(n.w||0)/W,h:Number(n.h||0)/H};
+    }
+    if(scene.nodes.filter(n=>n.type!=='image').length<3) throw new Error('Vision model returned too few editable primitives');
+    audit.state='succeeded'; audit.finishedAt=Date.now(); audit.durationMs=audit.finishedAt-audit.startedAt; audit.nodeCount=scene.nodes.length;
+    return scene;
+  }catch(err){ audit.state='failed'; audit.finishedAt=Date.now(); audit.durationMs=audit.finishedAt-audit.startedAt; audit.error=String(err&&err.message||err); throw err; }
 }
 
 /* The whole step: find the label areas, ask for their wording, draw the text, and
    hand the result to the existing export path. */
-async function runReconstruction(){
+async function runReconstruction(options){
+  const automatic=!!(options&&options.automatic);
   const st = window.__ffExportState;
   const status = $('#reconStatus');
   const say = function(k, vars){ if(status) status.textContent = tt(k, vars); };
-  const src = bitmapToDataUrl(st.bitmap);
+  const src = await ensureBitmapDataUrl(st.reconBitmap || st.bitmap);
   if(!src){ say('recon.nobitmap'); return false; }
   try{
     say('recon.reading');
@@ -3617,6 +3603,21 @@ async function runReconstruction(){
     canvas.width = im.naturalWidth || im.width;
     canvas.height = im.naturalHeight || im.height;
     canvas.getContext('2d').drawImage(im, 0, 0);
+    say('recon.labelling', { n: 0 });
+    try{
+      const scene = await requestEditableScene(src, canvas.width, canvas.height);
+      const svg = sceneToSvgString(scene), audit = auditReconScene(scene);
+      if(automatic && (audit.dominantBitmap || audit.primitiveCount < 6)){
+        throw new Error('Vision model returned a dominant bitmap or too few editable primitives');
+      }
+      Object.assign(st,{scene,svg,baseSvg:svg,source:'bitmap',recon:{mode:'vector',nodes:scene.nodes.length,audit}});
+      renderEditableExportCard(); applyExportFont(st.font || 'original');
+      say(audit.defects.length ? 'recon.audit' : 'recon.done',{n:scene.nodes.length,d:audit.defects.length});
+      return true;
+    }catch(vectorErr){
+      console.warn('vector reconstruction failed',vectorErr);
+      if(automatic){ say('recon.failed'); return false; }
+    }
     const blocks = detectContentBlocks(canvas);
     const anchors = labelAnchorsFromBlocks(blocks, canvas.width, canvas.height);
     if(!anchors.length){ say('recon.noboxes'); return false; }
@@ -3712,10 +3713,20 @@ async function requestRegionLabels(regions, canvas){
 /* Deterministic checks on the reconstructed scene, so a broken result is caught
    here rather than in Visio or PowerPoint. */
 function auditReconScene(scene){
-  const c = scene.canvas, defects = [];
-  const text = scene.nodes.filter(function(n){ return n.type === 'text'; });
+  const raw = scene.canvas || {};
+  const c = { width:Number(raw.width || raw.w || EXPORT_CANVAS.w),
+              height:Number(raw.height || raw.h || EXPORT_CANVAS.h) };
+  const defects = [];
+  const nodes = Array.isArray(scene.nodes) ? scene.nodes : [];
+  const images = nodes.filter(function(n){ return n.type === 'image'; });
+  const primitives = nodes.filter(function(n){ return n.type !== 'image'; });
+  const canvasArea = Math.max(1, c.width * c.height);
+  const dominantBitmap = images.some(function(n){ return Number(n.w||0) * Number(n.h||0) > canvasArea * 0.55; });
+  if(dominantBitmap) defects.push({ kind:'dominant-bitmap' });
+  if(primitives.length < 6) defects.push({ kind:'too-few-primitives' });
+  const text = nodes.filter(function(n){ return n.type === 'text'; });
   text.forEach(function(n){
-    if(n.x < 0 || n.y < 0 || n.x + n.w > c.w || n.y > c.h){
+    if(n.x < 0 || n.y < 0 || n.x + n.w > c.width || n.y + n.h > c.height){
       defects.push({ id:n.id, kind:'out-of-canvas' });
     }
     if(!n.text || !n.text.trim()) defects.push({ id:n.id, kind:'empty-label' });
@@ -3729,7 +3740,7 @@ function auditReconScene(scene){
       if(ox > 2 && oy > 2) defects.push({ id:a.id + '+' + b.id, kind:'overlap' });
     }
   }
-  return { ok: defects.length === 0, defects: defects };
+  return { ok: defects.length === 0, defects: defects, primitiveCount:primitives.length, imageCount:images.length, dominantBitmap:dominantBitmap };
 }
 
 function renderEditableExportCard(){
@@ -3738,14 +3749,16 @@ function renderEditableExportCard(){
   // first. Hiding the whole card made step 4 look missing.
   const card=$('#card4'), state=window.__ffExportState;
   if(!card) return;
-  const locked = !state.svg;
+  const locked = !state.svg || state.reconPending;
   card.classList.toggle('export-locked', locked);
   const font=$('#exportFont'); if(font) font.value=state.font||'original';
   // Only a bitmap draft needs the rebuild panel: that is the case where the export
   // would otherwise carry a picture instead of editable text.
-  const box=$('#exportRecon'); if(box) box.hidden = locked || state.source !== 'bitmap';
+  const box=$('#exportRecon'); if(box) box.hidden = state.source !== 'bitmap';
   const status=$('#exportStatus');
-  if(locked){
+  if(state.reconPending){
+    setExportStatus(status, tt('recon.reading'));
+  } else if(locked){
     setExportStatus(status, tt('export.waiting'));
   } else {
     setExportStatus(status, (state.source === 'bitmap' && !state.recon) ? tt('export.needRecon') : tt('export.ready'));
@@ -3762,7 +3775,7 @@ function syncExportSelection(){
     btn.setAttribute('aria-pressed',String(selected));
   });
   const confirm=$('#exportConfirm');
-  if(confirm) confirm.disabled=!state.svg || !state.target;
+  if(confirm) confirm.disabled=!state.svg || state.reconPending || !state.target;
 }
 /* Accepts either a bare SVG string (the SVG path) or
    { svg, source, bitmap } (the bitmap path). Both call sites exist, and a mismatch here
@@ -3778,6 +3791,7 @@ function showEditableExportStep(svgOrSource){
       source: src.source || 'svg',
       bitmap: src.bitmap || '',
       recon: null,
+      reconPending: !!src.reconPending,
       scene: svg ? parseSvgScene(svg) : null,
       target: 'svg', font:'original',
     });
@@ -3962,7 +3976,7 @@ function initEditableExport(){
   const actions=$('#exportActions'); if(!actions || actions.dataset.bound) return; actions.dataset.bound='1';
   actions.addEventListener('click',e=>{
     const btn=e.target.closest('[data-export]'); if(!btn) return; const st=window.__ffExportState;
-    if(!st.svg){
+    if(!st.svg || st.reconPending){
       setExportStatus($('#exportStatus'), tt('export.waiting'));
       return;
     }
@@ -3973,7 +3987,7 @@ function initEditableExport(){
   });
   $('#exportConfirm')?.addEventListener('click', async ()=>{
     const st=window.__ffExportState;
-    if(!st.svg || !st.target){
+    if(!st.svg || st.reconPending || !st.target){
       const s2=$('#exportStatus');
       if(s2) s2.textContent = tt('export.waiting');
       return;
@@ -4044,19 +4058,17 @@ window.__ffReconstruct = () => runReconstruction();
 /* Kept alongside the other hooks so the card can be re-rendered from outside. */
 window.__ffRefreshExportCard = () => renderEditableExportCard();
 
-/* Step 4 button: vision decomposition first; on failure, fall back to the
-   deterministic pixel-band reconstruction. */
+/* Step 4 always enters the real vision reconstruction path.  runReconstruction
+   performs the API call, waits for the structured scene, and only uses its
+   deterministic fallback when explicitly running a manual retry. */
 $('#reconBtn')?.addEventListener('click', async function(){
   const btn = $('#reconBtn');
-  btn.disabled = true;
+  if(btn) btn.disabled = true;
   try{
-    try{
-      await visionReconstruct();
-    }catch(ve){
-      console.warn('vision recon failed, falling back to pixel-band recon', ve);
-      await runReconstruction();
-    }
-  }finally{ btn.disabled = false; }
+    await runReconstruction();
+  }finally{
+    if(btn) btn.disabled = false;
+  }
 });
 
 function renderSVG(svg, usedVision, useIds, truncated, auditRes){
@@ -4077,44 +4089,106 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const useIds = refIds||[...refs];
   const tg = TARGETS[$('#target').value] || TARGETS.overview;
   const guide = layoutGuide
-    ? `Follow this gallery-derived layout style guide precisely (panel division, arrows, palette, hierarchy):\n${layoutGuide}\n\n`
+    ? `COMMON VISUAL GRAMMAR extracted across all selected references (highest priority; synthesize recurring panel topology, relative geometry, density, palette, spacing, arrows and hierarchy):\n${layoutGuide}\n\n`
     : '';
   const imgPrompt = `${guide}`
-    + `${tg.img}. Publication-quality Figure 1 for a top-tier ML paper. `
-    + `Include a prominent bold TITLE line running across the top of the figure, above all panels. `
-    + `Below it, a DENSE information-rich multi-panel composition of 3-5 boxed panels side by side, `
-    + `each panel carrying its own bold header, several labelled module boxes, arrows showing the data `
-    + `flow between components, and small sub-diagrams or result thumbnails inside the panels. `
+    + `${tg.img}. Derive a fresh composition from the recurring visual grammar shared by all supplied references; no single reference is a master and no reference is privileged by upload order. `
+    + `Mirror the common panel divisions, relative proportions, nesting, reading direction, spacing rhythm, palette, stroke language, arrow language and visual density, while inventing new paper-specific contents. `
+    + `When the references support it, use 3-5 dense panels with thick outer containers and finer module borders, mixed solid/dashed frames, and a meaningful visual element in every slot. `
+    + `Do not copy any one reference's exact composition, subject matter, text, thumbnails, icons or image pixels, and do not create a generic empty grid. `
+    + `Publication-quality Figure 1 for a top-tier ML paper. `
+    + `Use a prominent bold TITLE line when that is a recurring convention in the references, otherwise keep a compact top region. `
+    + `Use the recurring zone count, order, relative widths/heights and module-slot density from the design contract, allowing a new arrangement that combines the shared structure. `
+    + `Do not collapse the shared structure into a sparse or symmetric generic grid. Treat the blueprint as a construction plan; every defined slot must receive `
+    + `one concrete content module from this paper, with the same nesting and approximate occupied area as the shared blueprint. Each zone carries its `
+    + `own header only when the shared blueprint calls for one. `
+    + `Use nested grouping where the shared blueprint shows it: section containers, grouping frames and module boxes are not interchangeable. `
+    + `Inside each prescribed slot, use the module kind named by the blueprint — illustration, mini chart, table, formula, photo thumbnail, icon, `
+    + `matrix, timeline or flow strip — and keep its footprint and alignment. Do not collapse several slots into one large generic card. `
+    + `FILL EVERY SECTION, BUT NEVER WITH COPIES. Each section's interior should be occupied by module `
+    + `boxes, not left as a large empty area; what must not happen is filling it with near-identical `
+    + `blocks. Make the contents of neighbouring boxes genuinely different in kind: an icon module, a `
+    + `small chart or plot, a formula, a matrix or grid, a diagram fragment, a photo thumbnail, a `
+    + `flow strip, a table. `
+    + `Every element must earn its place by being relevant to THIS paper: take the modules and parts of `
+    + `the reference figures as your vocabulary, but fill them with the components, variables, stages `
+    + `and results that the paper content below actually describes. An element that could belong to any `
+    + `paper is filler; an element that shows this method's own parts is content. `
+    + `Keep the boxes tightly packed within a section, with even small gaps between them so the eye `
+    + `separates them; the gaps belong between boxes, not as an empty region inside a section. `
+    + `USE DASHED FRAMES FOR A REASON: an optional or future stage, an iterative loop, a repeated `
+    + `group, or something outside the core method. A dashed frame that means nothing is worse than `
+    + `no frame. `
+    + `Keep the geometry square and orderly: axis-aligned rectangles with at most a slight corner `
+    + `radius, even gaps between boxes, and crisp straight arrows. `
+    + `USE COLOUR TO SEPARATE GROUPS — do not paint everything one tint. `
+    + `Give each panel a DIFFERENT pale background tint, so the panels read apart at a glance. `
+    + `Within a panel, give the module boxes fills that differ from each other and from the panel `
+    + `behind them, drawn from the palette above; do not repeat a single fill for every box. `
+    + `Let a saturated accent colour mark the one or two most important blocks, and keep grouping `
+    + `frames lighter or neutral so the nested levels stay readable. Aim for the same colour variety `
+    + `as the reference figures, where a reader can tell the panels and the individual modules apart `
+    + `by fill alone. `
+    + `Draw MANY borders: not one outline per panel, but a border around every module box inside it, `
+    + `plus arrows and dashed grouping frames. Vary the border style — SOLID for concrete modules, `
+    + `arrows and data-flow steps, DASHED for optional, repeated, conceptual or grouped blocks — so the `
+    + `levels are obvious at a glance. `
+    + `Arrows show the data flow between components, and they carry much of the structure: long `
+    + `connectors that span the whole figure, dashed feedback loops that route back to an earlier `
+    + `stage, and short arrows inside a group. Small elements may also sit OUTSIDE the main sections `
+    + `— a legend, a partner or dataset icon, a training-loop inset at the side, a result thumbnail `
+    + `beside its stage — which is how real figures keep their middle from looking stuffed. `
     + `Line weight and line style carry meaning here: draw each panel's outer container border clearly `
     + `THICKER than the module boxes inside it, and vary the strokes — dashed borders for optional, `
     + `conceptual or repeated blocks, solid borders for concrete modules — so groups stay distinct. `
-    + `Faithfully FUSE the panel division, colour palette, box shapes, border weights and arrow style of `
-    + `the reference figures: mirror their density and element count. Fill the canvas with meaningful `
-    + `structure — rich and detailed, never sparse. White background, clean flat vector illustration, `
-    + `crisp aligned shapes, clearly readable short English labels. `
+    + `Follow the shared section division, colour palette, box shapes, border weights `
+    + `and arrow style: mirror the common topology, density and spacing rhythm while using the paper content below `
+    + `to populate new semantic roles. `
+    + `Exact wording is secondary to layout richness because Step 4 will edit labels later. Use short readable `
+    + `English labels or clean editable-looking label slots; never spend composition budget on paragraphs or `
+    + `let uncertain text reduce the number of visual modules. `
+    + `White background, clean flat vector illustration, crisp aligned shapes, clearly readable short `
+    + `English labels. `
+    + `FINAL CHECK before you finish. Read the figure as a reviewer would. `
+    + `Is any section still holding a large empty area? Fill it with further module boxes that show `
+    + `this method's own parts. `
+    + `Is any box a near-duplicate of its neighbour, or an element that could sit in any paper? `
+    + `Replace it with a different kind of element that is specific to this method. `
+    + `Can a reader name what every box contains by looking at it? If a box is generic, make it `
+    + `concrete: name the variable, the stage, the metric or the component it stands for. `
+    + `Does every dashed frame stand for something a reader could name? If not, make it solid or drop it. `
+    + `Can a reader follow the flow from the arrows alone? Add a connector if a step is unclear. `
+    + `Is the colour varied enough that sections and groups read apart, without turning garish? `
+    + `The goal is a figure that is full, varied and specific to this paper — what a top-conference `
+    + `reviewer would find clear and well judged. `
     + `Paper content: ${content.slice(0,2000)}`;
-  const body = {model, prompt:imgPrompt};
+  let body;
+  let endpoint='/images/generations';
+  let usedRefs=false;
+  body = {model, prompt:imgPrompt};
   if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
   else if(p==='sf'){ body.image_size='1024x1024'; body.batch_size=1; }
   else if(p==='glm'){ body.size='1024x1024'; }
   else if(p==='oai'){ body.size='1536x1024'; }
-  let usedRefs=false;
   if(useIds.length && p!=='glm'){
     const uris = await refDataURIs(useIds);
     body.image = (p==='sf') ? uris[0] : uris;
     usedRefs=true;
   }
   let r;
-  try{ r = await postJSON(base,'/images/generations',body,key,undefined,300000); }
+  try{ r = await postJSON(base,endpoint,body,key,undefined,300000); }
   catch(e){
     if(e.name==='TimeoutError') throw new Error(tt('img.timeout'));
     const diag=await diagnoseConnection(base,key,model,'image');
     throw new Error(diag || tt('svg.blocked'));
   }
   let txt = await r.text();
+  /* A normal generation request can retry without references when a provider
+     rejects image input. The prompt still carries the shared visual grammar,
+     so this retry remains a fresh multi-reference composition. */
   if(!r.ok && usedRefs){
     delete body.image; usedRefs=false;
-    try{ r = await postJSON(base,'/images/generations',body,key,undefined,300000); txt=await r.text(); }catch(e){}
+    try{ r = await postJSON(base,endpoint,body,key,undefined,300000); txt=await r.text(); }catch(e){}
   }
   if(!r.ok){
     if(r.status===404){
@@ -4139,13 +4213,26 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   $('#out').innerHTML = `<img src="${esc(imgSrc)}" alt="draft">
     <div class="dl"><button class="btn-primary" id="dlImg">${tt('img.download')}</button>
     <span class="hint">${usedRefs?tt('img.hintRef',{n:useIds.length}):tt('img.hint')}</span></div>`;
-  st.source = 'bitmap'; st.bitmap = exportImgSrc; st.recon = null;
-  showEditableExportStep({ svg: rasterToExportSvg(exportImgSrc), source:'bitmap', bitmap: exportImgSrc });
-  // Auto-run step-4 vision decomposition so the exports are editable without a
-  // manual click. Vision first, pixel-band fallback inside runReconstruction.
-  setTimeout(async function(){
-    const btn = $('#reconBtn'); if(btn) btn.click();
-  }, 400);
+  st.source = 'bitmap'; st.bitmap = exportImgSrc; st.recon = null; st.reconBitmap = exportImgSrc; st.reconPending = true;
+  /* Keep Step 4 visibly pending while the vision API reconstructs the scene.
+     Do not expose a raster-wrapped SVG as if it were editable. */
+  showEditableExportStep({ svg:'', source:'bitmap', bitmap:exportImgSrc, reconPending:true });
+  /* Step 4 is a real vision-model reconstruction. Keep the generation flow
+     pending until the API returns, just as the client does, instead of showing
+     an instant fake editable result. */
+  let reconOk = false;
+  try{ reconOk = await runReconstruction({automatic:true}); }
+  catch(e){ console.warn('automatic editable reconstruction failed', e); }
+  st.reconPending = false;
+  if(!reconOk){
+    const reconStatus=$('#reconStatus');
+    if(reconStatus) reconStatus.textContent=tt('recon.failed');
+    /* Do not leave a raster-wrapped SVG selectable as if it were editable. */
+    st.svg=''; st.baseSvg=''; st.scene=null; st.recon=null;
+    renderEditableExportCard();
+  } else {
+    renderEditableExportCard();
+  }
   $('#dlImg').onclick = async ()=>{
     try{
       const rr = await fetch(imgSrc); const blob = await rr.blob();
