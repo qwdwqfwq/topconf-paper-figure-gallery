@@ -3397,6 +3397,121 @@ function sceneToSvgString(scene){
   return parts.join('\n');
 }
 
+/* Step 4 core: send the rendered bitmap to the Step-1 chat/vision model and ask
+   it to decompose every visible element into editable scene nodes (text, panels,
+   arrows). The same provider/key/base from Step 1 is reused. On failure the old
+   pixel-band reconstruction runs as a fallback. */
+function parserModelId(){
+  const am = $('#analyzeModel');
+  if(am && am.value && !IMGRE.test(am.value)) return am.value;
+  const sel = $('#model');
+  if(sel && sel.value && !IMGRE.test(sel.value)) return sel.value;
+  for(const o of (sel ? sel.options : [])){
+    if(o.value && !IMGRE.test(o.value)) return o.value;
+  }
+  return (am && am.value) || (sel && sel.value);
+}
+
+function downscaleJPEG(dataUrl, maxW=1280, q=0.85){
+  return new Promise(function(resolve, reject){
+    const im = new Image();
+    im.onload = function(){
+      const w = im.naturalWidth || im.width, h = im.naturalHeight || im.height;
+      const scale = Math.min(1, maxW / w);
+      const c = document.createElement('canvas');
+      c.width = Math.round(w*scale); c.height = Math.round(h*scale);
+      c.getContext('2d').drawImage(im, 0, 0, c.width, c.height);
+      resolve(c.toDataURL('image/jpeg', q));
+    };
+    im.onerror = function(){ reject(new Error('image decode failed')); };
+    im.src = dataUrl;
+  });
+}
+
+const VISION_RECON_SYS = 'You are a scientific-figure reconstruction engine. You convert one rendered paper figure into editable scene nodes. Output STRICT JSON only, no commentary.';
+
+function visionReconPrompt(){
+  return 'Decompose the attached figure into editable nodes on a 1600x900 canvas. Return exactly one JSON object: {"nodes":[ ... ]}.\n'
+    + 'Each node is one of:\n'
+    + '{"type":"text","x":0,"y":0,"w":0,"h":0,"text":"Exact wording","fontSize":16,"bold":false,"fill":"#111827"}\n'
+    + '{"type":"rect","x":0,"y":0,"w":0,"h":0,"fill":"#ffffff","stroke":"#334155","strokeWidth":1.5}\n'
+    + '{"type":"line","x":0,"y":0,"x2":0,"y2":0,"stroke":"#334155","strokeWidth":1.5,"arrow":true}\n'
+    + 'Rules: coordinates are pixels on a 1600x900 canvas. Transcribe EVERY visible text string as a text node, exactly as written (English, short labels). '
+    + 'Every panel / box / card is a rect. Every connector with an arrowhead is a line node with "arrow":true. '
+    + 'Use the observed palette as #RRGGBB. Output only the JSON, no prose.';
+}
+
+async function visionReconstruct(){
+  const st = window.__ffExportState;
+  const status = $('#reconStatus');
+  const say = function(k,v){ if(status) status.textContent = tt(k,v); };
+  const src = bitmapToDataUrl(st.bitmap);
+  if(!src){ say('recon.nobitmap'); return false; }
+  say('recon.vision');
+  const model = parserModelId();
+  if(!model) throw new Error(tt('analyze.needmodel'));
+  const jpeg = await downscaleJPEG(src);
+  const cfgv = cfg(), relay = $('#baseOverride').value.trim();
+  let txt;
+  if(cfgv.proto==='anthropic' && !relay){
+    const body = { model:model, max_tokens:4000, system:VISION_RECON_SYS,
+      messages:[{ role:'user', content:[
+        { type:'image', source:{type:'base64', media_type:'image/jpeg', data:jpeg.split(',')[1]} },
+        { type:'text', text:visionReconPrompt() } ] }] };
+    const r = await fetch(baseURL()+'/v1/messages',{method:'POST',headers:anthropicHeaders(cleanKey($('#key').value)),body:JSON.stringify(body)});
+    txt = await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
+    const d = JSON.parse(txt);
+    txt = (d.content||[]).filter(function(b){return b.type==='text';}).map(function(b){return b.text;}).join('');
+  } else {
+    const body = { model:model, temperature:0.1,
+      messages:[{role:'system',content:VISION_RECON_SYS},
+                {role:'user',content:[
+                  {type:'image_url',image_url:{url:jpeg}},
+                  {type:'text',text:visionReconPrompt()}]}] };
+    if($('#provider').value==='ark') body.thinking = {type:'disabled'};
+    const r = await postJSON(baseURL(),'/chat/completions',body,cleanKey($('#key').value),undefined,180000);
+    txt = await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
+    const d = JSON.parse(txt);
+    txt = (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || '';
+  }
+  const m = txt.match(/\{[\s\S]*\}/);
+  if(!m) throw new Error(tt('recon.badjson'));
+  let j; try{ j = JSON.parse(m[0]); }catch(e){ throw new Error(tt('recon.badjson')); }
+  const raw = Array.isArray(j.nodes) ? j.nodes : [];
+  const hex = v => /^#[0-9a-fA-F]{6}$/.test(v||'') ? v : null;
+  const num = (v,fb)=>{ v=Number(v); return Number.isFinite(v)?v:fb; };
+  // the bitmap itself stays as a base image node; model nodes sit on top of it
+  const nodes = [{type:'image',x:0,y:0,w:1600,h:900,href:src}];
+  raw.forEach(function(n){
+    if(!n || typeof n!=='object') return;
+    const t = n.type;
+    if(t==='text'){
+      const text = String(n.text||'').replace(/[\r\n]+/g,' ').trim();
+      if(!text) return;
+      nodes.push({type:'text', text:text,
+        x:num(n.x,0), y:num(n.y,0), w:num(n.w, text.length*10), h:num(n.h,20),
+        fontSize:Math.min(64,Math.max(10,num(n.fontSize,16))),
+        fill:hex(n.fill)||'#111827', bold:!!n.bold, anchor:'start'});
+    } else if(t==='rect'){
+      nodes.push({type:'rect', x:num(n.x,0),y:num(n.y,0),w:Math.max(10,num(n.w,50)),h:Math.max(10,num(n.h,30)),
+        fill:hex(n.fill)||'#ffffff', stroke:hex(n.stroke)||'#334155',
+        strokeWidth:Math.max(0.5,num(n.strokeWidth,1.5)), radius:0});
+    } else if(t==='line'||t==='arrow'){
+      nodes.push({type:'line', x:num(n.x,0),y:num(n.y,0),x2:num(n.x2,0),y2:num(n.y2,0),
+        stroke:hex(n.stroke)||'#334155', strokeWidth:Math.max(0.5,num(n.strokeWidth,1.5)), arrow:!!n.arrow});
+    }
+  });
+  if(nodes.length<2) throw new Error(tt('recon.notext'));
+  const scene = { schema:'figureforge.scene.v2', canvas:{w:1600,h:900}, nodes:nodes };
+  const svg = sceneToSvgString(scene);
+  Object.assign(st, { scene:scene, svg:svg, baseSvg:svg, source:'bitmap',
+                     recon:{ vision:true, nodes:nodes.length-1 } });
+  renderEditableExportCard();
+  applyExportFont(st.font||'original');
+  say('recon.visionDone', {n:nodes.length-1});
+  return true;
+}
+
 /* The whole step: find the label areas, ask for their wording, draw the text, and
    hand the result to the existing export path. */
 async function runReconstruction(){
@@ -3838,6 +3953,21 @@ window.__ffRenderSVG = (...args) => renderSVG(...args);
 window.__ffReconstruct = () => runReconstruction();
 /* Kept alongside the other hooks so the card can be re-rendered from outside. */
 window.__ffRefreshExportCard = () => renderEditableExportCard();
+
+/* Step 4 button: vision decomposition first; on failure, fall back to the
+   deterministic pixel-band reconstruction. */
+$('#reconBtn')?.addEventListener('click', async function(){
+  const btn = $('#reconBtn');
+  btn.disabled = true;
+  try{
+    try{
+      await visionReconstruct();
+    }catch(ve){
+      console.warn('vision recon failed, falling back to pixel-band recon', ve);
+      await runReconstruction();
+    }
+  }finally{ btn.disabled = false; }
+});
 
 function renderSVG(svg, usedVision, useIds, truncated, auditRes){
   const blob = new Blob([svg],{type:'image/svg+xml'});
