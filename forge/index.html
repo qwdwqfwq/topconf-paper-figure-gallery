@@ -3645,15 +3645,22 @@ async function requestEditableScene(imageDataUri, W, H){
 
 /* The whole step: find the label areas, ask for their wording, draw the text, and
    hand the result to the existing export path. */
+function isStep3BitmapSource(src){
+  const s=String(src||'').trim();
+  return /^(data:image\/|https?:|blob:)/i.test(s);
+}
+function ensureExportState(){
+  return window.__ffExportState || (window.__ffExportState={});
+}
 function rememberStep3Bitmap(src){
-  if(typeof src!=='string' || !src.trim()) return;
+  if(!isStep3BitmapSource(src)) return;
   window.__ffStep3Bitmap=src;
   window.__ffLastGeneratedImage=src;
   try{ sessionStorage.setItem('__ffStep3Bitmap',src); }catch(_){ }
 }
 function markStep3Output(src){
-  if(typeof src!=='string' || !src.trim()) return '';
-  const st=window.__ffExportState || (window.__ffExportState={});
+  if(!isStep3BitmapSource(src)) return '';
+  const st=ensureExportState();
   rememberStep3Bitmap(src);
   st.source='bitmap';
   st.bitmap=src;
@@ -3665,7 +3672,7 @@ function currentStep3Bitmap(){
   const candidates=[window.__ffLastGeneratedImage,window.__ffStep3Bitmap,st.reconBitmap,st.bitmap,st.generatedBitmap,st.generatedImage,st.image,st.outputImage];
   // Only the generated output is a valid fallback. Reference thumbnails must
   // never become the reconstruction input when no Step 3 result exists.
-  document.querySelectorAll('#out img[data-step3-output="true"], #out img').forEach(function(img){ candidates.push(img.currentSrc||img.src||img.getAttribute('src')||''); });
+  document.querySelectorAll('#out img[data-step3-output="true"]').forEach(function(img){ candidates.push(img.currentSrc||img.src||img.getAttribute('src')||''); });
   try{ candidates.push(sessionStorage.getItem('__ffStep3Bitmap')||''); }catch(_){ }
   return candidates.find(function(v){
     const s=String(v||'').trim();
@@ -3673,7 +3680,7 @@ function currentStep3Bitmap(){
   }) || '';
 }
 function syncStep3Bitmap(){
-  const st=window.__ffExportState||{};
+  const st=ensureExportState();
   const src=currentStep3Bitmap();
   if(src){
     rememberStep3Bitmap(src);
@@ -3685,7 +3692,7 @@ function syncStep3Bitmap(){
 }
 async function runReconstruction(options){
   const automatic=!!(options&&options.automatic);
-  const st = window.__ffExportState;
+  const st = ensureExportState();
   const status = $('#reconStatus');
   const say = function(k, vars){ if(status) status.textContent = tt(k, vars); };
   st.reconFailed = false;
@@ -3863,7 +3870,7 @@ function renderEditableExportCard(){
   // The card is always visible so the four-step flow is legible, but until a draft exists
   // it is shown locked: the format buttons are disabled and the status line says what to do
   // first. Hiding the whole card made step 4 look missing.
-  const card=$('#card4'), state=window.__ffExportState;
+  const card=$('#card4'), state=ensureExportState();
   if(!card) return;
   const bitmapSource=syncStep3Bitmap();
   const hasBitmap=!!bitmapSource;
@@ -3893,7 +3900,7 @@ function renderEditableExportCard(){
   if(!locked) syncExportSelection();
 }
 function syncExportSelection(){
-  const state=window.__ffExportState;
+  const state=ensureExportState();
   document.querySelectorAll('#exportActions [data-export]').forEach(btn=>{
     const selected=!!state.svg && btn.dataset.export===state.target;
     btn.classList.toggle('selected',selected);
@@ -3910,11 +3917,11 @@ function showEditableExportStep(svgOrSource){
     ? svgOrSource
     : { svg: svgOrSource, source: 'svg' };
   const svg = src.svg || '';
-  const current = window.__ffExportState || {};
+  const current = ensureExportState();
   const bitmap = src.bitmap || src.reconBitmap || current.bitmap || current.reconBitmap || currentStep3Bitmap() || '';
   if(bitmap) markStep3Output(bitmap);
   try{
-    window.__ffExportState = Object.assign(window.__ffExportState, {
+    window.__ffExportState = Object.assign(current, {
       svg: svg, baseSvg: svg,
       source: src.source || 'svg',
       bitmap: bitmap,
@@ -4353,7 +4360,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const d = JSON.parse(txt);
   const item = d.data?.[0] || d.images?.[0];
   if(!item) throw new Error(tt('img.abnormal',{t:txt.slice(0,200)}));
-  const st = window.__ffExportState;
+  const st = ensureExportState();
   const imgSrc = item.url || ('data:image/png;base64,'+item.b64_json);
   const exportImgSrc = item.b64_json ? `data:image/png;base64,${item.b64_json}` : imgSrc;
       markStep3Output(exportImgSrc);
