@@ -2417,7 +2417,7 @@ function auditSummaryText(res){
    Everything below runs in the browser and works offline (PPTX uses the vendored
    PptxGenJS; draw.io and VSDX are written here). The only network call is the
    optional bitmap reconstruction, which is an explicit button, never automatic. */
-window.__ffExportState = {svg:'', baseSvg:'', scene:null, target:'svg', font:'original', source:'svg', bitmap:'', reconBitmap:'', recon:null, reconPending:false, reconFailed:false, reconError:''};
+window.__ffExportState = {svg:'', baseSvg:'', scene:null, target:'svg', font:'original', source:'svg', bitmap:'', reconBitmap:'', recon:null, reconPending:false, reconFailed:false, reconError:'', hasStep3Output:false};
 // Keep the Step 3 raster in a durable page-level slot.  The async reconstruction
 // can fail or refresh the export card without meaning that Step 3 lost its image.
 window.__ffStep3Bitmap = '';
@@ -3665,6 +3665,7 @@ function markStep3Output(src){
   st.source='bitmap';
   st.bitmap=src;
   st.reconBitmap=src;
+  st.hasStep3Output=true;
   return src;
 }
 function currentStep3Bitmap(){
@@ -3687,6 +3688,7 @@ function syncStep3Bitmap(){
     st.source='bitmap';
     st.bitmap=src;
     st.reconBitmap=src;
+    st.hasStep3Output=true;
   }
   return src;
 }
@@ -3695,8 +3697,6 @@ async function runReconstruction(options){
   const st = ensureExportState();
   const status = $('#reconStatus');
   const say = function(k, vars){ if(status) status.textContent = tt(k, vars); };
-  st.reconFailed = false;
-  st.reconError = '';
   let src = '';
   try{
     src = await ensureBitmapDataUrl(syncStep3Bitmap());
@@ -3708,6 +3708,8 @@ async function runReconstruction(options){
     return false;
   }
   if(!src){ st.reconFailed = true; st.reconError = 'No bitmap source'; renderEditableExportCard(); say('recon.nobitmap'); return false; }
+  st.reconFailed = false;
+  st.reconError = '';
   try{
     say('recon.reading');
     const im = await loadImage(src);
@@ -3776,10 +3778,10 @@ async function runReconstruction(options){
   }catch(err){
     console.warn('reconstruction failed', err);
     const msg = String(err && err.message || err);
-    say(msg && msg.length < 200 ? 'recon.failedDetail' : 'recon.failed', { msg: msg });
     st.reconFailed = true;
-    renderEditableExportCard();
     st.reconError = msg || 'Reconstruction failed';
+    say(msg && msg.length < 200 ? 'recon.failedDetail' : 'recon.failed', { msg: msg });
+    renderEditableExportCard();
     return false;
   }
 }
@@ -3886,7 +3888,7 @@ function renderEditableExportCard(){
   if(state.reconPending){
     setExportStatus(status, tt('recon.reading'));
   } else if(!state.svg && state.reconFailed){
-    setExportStatus(status, tt(bitmapSource ? 'export.reconFailed' : 'export.reconNoBitmap'));
+      setExportStatus(status, tt(bitmapSource || state.hasStep3Output ? 'export.reconFailed' : 'export.reconNoBitmap'));
     const detail=$('#reconStatus');
     if(detail && state.reconError) detail.textContent=tt('recon.failedDetail',{msg:state.reconError});
   } else if(locked){
@@ -3926,6 +3928,7 @@ function showEditableExportStep(svgOrSource){
       source: src.source || 'svg',
       bitmap: bitmap,
       reconBitmap: src.reconBitmap || bitmap,
+      hasStep3Output: src.hasStep3Output === undefined ? (current.hasStep3Output || !!bitmap || src.source === 'bitmap') : !!src.hasStep3Output,
       recon: null,
       reconPending: !!src.reconPending,
       reconFailed: src.reconFailed === undefined ? (svg ? false : !!current.reconFailed) : !!src.reconFailed,
@@ -4210,8 +4213,6 @@ $('#reconBtn')?.addEventListener('click', async function(){
   const btn = $('#reconBtn');
   const st = window.__ffExportState;
   st.reconPending = true;
-  st.reconFailed = false;
-  st.reconError = '';
   renderEditableExportCard();
   let ok = false;
   if(btn) btn.disabled = true;
