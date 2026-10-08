@@ -3654,9 +3654,9 @@ function rememberStep3Bitmap(src){
 function currentStep3Bitmap(){
   const st=window.__ffExportState||{};
   const candidates=[window.__ffLastGeneratedImage,window.__ffStep3Bitmap,st.reconBitmap,st.bitmap,st.generatedBitmap,st.generatedImage,st.image,st.outputImage];
-  // Older layouts placed the generated draft outside #out.  Scan every image
-  // as a final fallback so a valid Step 3 result cannot be mistaken for no input.
-  document.querySelectorAll('#out img,#card3 img,img').forEach(function(img){ candidates.push(img.currentSrc||img.src||img.getAttribute('src')||''); });
+  // Only the generated output is a valid fallback. Reference thumbnails must
+  // never become the reconstruction input when no Step 3 result exists.
+  document.querySelectorAll('#out img').forEach(function(img){ candidates.push(img.currentSrc||img.src||img.getAttribute('src')||''); });
   try{ candidates.push(sessionStorage.getItem('__ffStep3Bitmap')||''); }catch(_){ }
   return candidates.find(function(v){
     const s=String(v||'').trim();
@@ -3860,8 +3860,7 @@ function renderEditableExportCard(){
   const locked = !state.svg || state.reconPending;
   // A failed rebuild still has a valid Step 3 bitmap. Keep the rebuild control
   // usable and avoid presenting the whole card as if Step 3 never ran.
-  const retryableFailure=!state.svg && state.reconFailed && hasBitmap;
-  card.classList.toggle('export-locked', locked && !retryableFailure);
+  card.classList.toggle('export-locked', locked && !hasBitmap);
   const font=$('#exportFont'); if(font) font.value=state.font||'original';
   // Only a bitmap draft needs the rebuild panel: that is the case where the export
   // would otherwise carry a picture instead of editable text.
@@ -3871,8 +3870,10 @@ function renderEditableExportCard(){
     setExportStatus(status, tt('recon.reading'));
   } else if(!state.svg && state.reconFailed){
     setExportStatus(status, tt(bitmapSource ? 'export.reconFailed' : 'export.reconNoBitmap'));
+    const detail=$('#reconStatus');
+    if(detail && state.reconError) detail.textContent=tt('recon.failedDetail',{msg:state.reconError});
   } else if(locked){
-    setExportStatus(status, tt('export.waiting'));
+    setExportStatus(status, tt(hasBitmap ? 'export.reconRequired' : 'export.waiting'));
   } else {
     setExportStatus(status, (state.source === 'bitmap' && !state.recon) ? tt('export.needRecon') : tt('export.ready'));
   }
@@ -4204,7 +4205,6 @@ $('#reconBtn')?.addEventListener('click', async function(){
     st.reconPending = false;
     if(!ok) st.reconFailed = true;
     renderEditableExportCard();
-    if(btn) btn.disabled = false;
   }
 });
 
