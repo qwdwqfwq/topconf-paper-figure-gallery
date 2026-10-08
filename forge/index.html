@@ -607,7 +607,7 @@
 </div>
 
 <script src="./i18n.js"></script>
-<script src="./i18n_forge.js?v=20261008"></script>
+<script src="./i18n_forge.js?v=20261009"></script>
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 
@@ -1609,41 +1609,74 @@ imageRefIds: choose 1-3 figures that collectively show the shared panel, palette
 Available figure ids: ${ids}
 topology, styleFingerprint and refinedPrompt must describe visible layout and styling, not the paper's scientific claims. refinedPrompt should be 120-180 concrete English words about panels, arrows, palette, spacing, hierarchy and illustration language. It is used as a visual guide, not as a request to copy reference labels. Keep the prose compact so the whole JSON answer fits in one response.`;
 }
-function firstCloseBrace(s){
-  let depth=0,inStr=false,esc=false;
+function jsonCandidateSlices(txt){
+  const s=String(txt||'');
+  const out=[];
+  const pairs={'{':'}','[':']'};
+  for(let start=0;start<s.length;start++){
+    if(s[start]!=='{' && s[start]!=='[') continue;
+    const stack=[];
+    let inStr=false,esc=false;
+    for(let i=start;i<s.length;i++){
+      const c=s[i];
+      if(inStr){
+        if(esc) esc=false;
+        else if(c==='\\') esc=true;
+        else if(c==='"') inStr=false;
+        continue;
+      }
+      if(c==='"'){ inStr=true; continue; }
+      if(c==='{' || c==='[') stack.push(pairs[c]);
+      else if(c==='}' || c===']'){
+        if(!stack.length || stack.pop()!==c) break;
+        if(!stack.length){ out.push(s.slice(start,i+1)); break; }
+      }
+    }
+  }
+  return out;
+}
+function closeJsonCandidate(txt){
+  let s=String(txt||'').trim().replace(/,\s*([}\]])/g,'$1');
+  const stack=[],pairs={'{':'}','[':']'};
+  let inStr=false,esc=false;
   for(let i=0;i<s.length;i++){
     const c=s[i];
-    if(inStr){ if(esc){esc=false;} else if(c==='\\'){esc=true;} else if(c==='"'){inStr=false;} continue; }
-    if(c==='"'){inStr=true;}
-    else if(c==='{'){depth++;}
-    else if(c==='}'){depth--; if(depth===0) return i;}
+    if(inStr){
+      if(esc) esc=false;
+      else if(c==='\\') esc=true;
+      else if(c==='"') inStr=false;
+      continue;
+    }
+    if(c==='"'){ inStr=true; continue; }
+    if(c==='{' || c==='[') stack.push(pairs[c]);
+    else if(c===']' || c==='}'){
+      if(stack.length && stack[stack.length-1]===c) stack.pop();
+    }
   }
-  return -1;
+  if(inStr){
+    const quote=s.lastIndexOf('"');
+    if(quote>0) s=s.slice(0,quote);
+  }
+  s=s.replace(/,\s*("[^"]*")\s*:\s*[^,}\]]*$/,'');
+  s=s.replace(/,\s*$/,'');
+  while(stack.length) s+=stack.pop();
+  return s;
 }
 function extractJSON(txt){
-  let s = String(txt||'').trim().replace(/^```(?:json)?/i,'').replace(/```$/,'').trim();
-  const m = s.match(/\{[\s\S]*\}/);
-  if(!m) throw new Error(tt('err.analyze1'));
-  let raw = m[0];
-  const noTrailing = raw.replace(/,(\s*[}\]])/g,'$1');
-  for(const cand of [raw, noTrailing]){
+  const fence=String.fromCharCode(96);
+  const s=String(txt||'').trim()
+    .replace(new RegExp(fence+'{3}(?:json)?','ig'),'')
+    .replace(new RegExp(fence+'{3}','g'),'')
+    .trim();
+  const candidates=jsonCandidateSlices(s);
+  for(const cand of candidates){
     try{ return JSON.parse(cand); }catch(e){}
+    try{ return JSON.parse(cand.replace(/,\s*([}\]])/g,'$1')); }catch(e){}
+    try{ return JSON.parse(closeJsonCandidate(cand)); }catch(e){}
   }
-  // The model closed the root object early and stranded more root-level keys
-  // after it: merge the tail back into the root object.
-  const fc = firstCloseBrace(noTrailing);
-  if(fc>=0 && fc<noTrailing.length-1){
-    const tail = noTrailing.slice(fc+1).replace(/^[\s,]*/,'');
-    const merged = noTrailing.slice(0,fc) + ',' + tail;
-    try{ return JSON.parse(merged); }catch(e){}
-  }
-  // Truncated output: repeatedly drop the last partial key and close the object.
-  let cut = noTrailing;
-  for(let i=0;i<16;i++){
-    const k = cut.lastIndexOf(',');
-    if(k<0) break;
-    cut = cut.slice(0,k) + '\n}';
-    try{ return JSON.parse(cut); }catch(e){}
+  const first=s.search(/[{\[]/);
+  if(first>=0){
+    try{ return JSON.parse(closeJsonCandidate(s.slice(first))); }catch(e){}
   }
   throw new Error(tt('err.analyze2'));
 }
@@ -3529,34 +3562,102 @@ function editableScenePrompt(W,H,paper){
   return 'Reconstruct this scientific figure as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Text must be OCR transcription, not a description. Do not merge adjacent boxes, graph nodes, text, or arrows. Do not return a single full-canvas bitmap as a substitute. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor}, and image {x,y,w,h,href}. Use image only for photographic/illustrative content that cannot be decomposed, and include a crop object when possible. Keep z-order from background to foreground. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
 }
 
-function sceneNumber(v, fallback){ const n=Number(v); return Number.isFinite(n) ? n : fallback; }
-function materializeEditableScene(raw, W, H){
-  const canvas = raw && raw.canvas || {};
-  const nodes = Array.isArray(raw && raw.nodes) ? raw.nodes : [];
-  const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, sceneNumber(v, lo)));
-  const cleanColor = (v, fallback) => {
-    const s=String(v==null?'':v).trim();
-    if(!s || s==='none' || s==='transparent') return s || fallback;
-    return s[0]==='#' ? s : '#'+s;
+function sceneNumber(v, fallback){
+  const n=Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+function materializeEditableScene(raw,W,H){
+  const root=raw&&typeof raw==='object'?(raw.scene||raw.diagram||raw.result||raw.data||raw.payload||raw.output||raw):raw;
+  const rawNodes=Array.isArray(root)
+    ? root
+    : (root&&(root.nodes||root.elements||root.objects||root.items||root.shapes||root.components))||[];
+  const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,sceneNumber(v,lo)));
+  const cleanColor=(v,fallback)=>{
+    const value=String(v==null?'':v).trim();
+    if(!value || value==='none' || value==='transparent') return value||fallback;
+    if(/^#|^rgb|^rgba|^hsl|^hsla|^[a-z]+$/i.test(value)) return value;
+    return '#'+value;
+  };
+  const pick=(o,keys,fallback)=>{
+    for(const k of keys){
+      if(o[k]!==undefined && o[k]!==null && o[k]!=='') return o[k];
+    }
+    return fallback;
   };
   const out=[];
-  nodes.forEach(function(n, i){
-    if(!n || !n.type) return;
-    const type=String(n.type).toLowerCase();
-    const x=clamp(n.x,0,W), y=clamp(n.y,0,H);
-    const w=clamp(n.w,1,W-x), h=clamp(n.h,1,H-y);
-    const base={id:String(n.id||('v'+i)), x, y, w, h, fill:cleanColor(n.fill,'none'), stroke:cleanColor(n.stroke,'#334155'), strokeWidth:clamp(n.strokeWidth,1,12)};
-    if(type==='rect') out.push(Object.assign(base,{type:'rect',radius:clamp(n.radius,0,Math.min(w,h)/2),dash:!!(n.dash||n.dashed)}));
+  rawNodes.forEach(function(n,i){
+    if(!n || typeof n!=='object') return;
+    let type=String(pick(n,['type','kind','shape','nodeType'],'')).toLowerCase().replace(/[\s_-]+/g,'');
+    if(!type && (n.text!=null || n.content!=null || n.label!=null)) type='text';
+    const aliases={
+      rectangle:'rect',roundedrectangle:'rect',box:'rect',group:'rect',panel:'rect',container:'rect',
+      circle:'ellipse',oval:'ellipse',
+      arrow:'line',connector:'line',segment:'line',
+      label:'text',caption:'text',
+      bitmap:'image',photo:'image',raster:'image'
+    };
+    type=aliases[type]||type;
+    const xRaw=pick(n,['x','left','cx'],0);
+    const yRaw=pick(n,['y','top','cy'],0);
+    const right=pick(n,['right'],null);
+    const bottom=pick(n,['bottom'],null);
+    const wRaw=pick(n,['w','width'],right!=null?sceneNumber(right,0)-sceneNumber(xRaw,0):1);
+    const hRaw=pick(n,['h','height'],bottom!=null?sceneNumber(bottom,0)-sceneNumber(yRaw,0):1);
+    const x=clamp(xRaw,0,W), y=clamp(yRaw,0,H);
+    const w=clamp(wRaw,1,W-x), h=clamp(hRaw,1,H-y);
+    const base={
+      id:String(n.id||('v'+i)),
+      x,y,w,h,
+      fill:cleanColor(pick(n,['fill','fillColor','background'],''),'none'),
+      stroke:cleanColor(pick(n,['stroke','strokeColor','borderColor'],''),'#334155'),
+      strokeWidth:clamp(pick(n,['strokeWidth','lineWidth','borderWidth'],1),1,12)
+    };
+    if(type==='rect') out.push(Object.assign(base,{
+      type:'rect',
+      radius:clamp(pick(n,['radius','cornerRadius'],0),0,Math.min(w,h)/2),
+      dash:!!(n.dash||n.dashed||n.strokeDasharray)
+    }));
     else if(type==='ellipse') out.push(Object.assign(base,{type:'ellipse'}));
-    else if(type==='line') out.push(Object.assign(base,{type:'line',x2:clamp(n.x2,0,W),y2:clamp(n.y2,0,H),arrow:!!n.arrow,dash:!!(n.dash||n.dashed)}));
-    else if(type==='polyline' && n.points) out.push(Object.assign(base,{type:'polyline',points:String(n.points),dash:!!(n.dash||n.dashed)}));
-    else if(type==='path' && n.d) out.push(Object.assign(base,{type:'path',d:String(n.d),dash:!!(n.dash||n.dashed)}));
-    else if(type==='text' && String(n.text||'').trim()) out.push(Object.assign(base,{type:'text',text:String(n.text).replace(/[\r\n]+/g,' ').trim().slice(0,300),fontSize:clamp(n.fontSize,6,120),fontFamily:n.fontFamily||'Arial, Helvetica, sans-serif',bold:!!n.bold,italic:!!n.italic,anchor:n.anchor==='middle'||n.anchor==='end'?n.anchor:'start',baseline:n.baseline||'auto'}));
-    else if(type==='image') out.push(Object.assign(base,{type:'image',href:n.href?String(n.href):''}));
+    else if(type==='line') out.push(Object.assign(base,{
+      type:'line',
+      x2:clamp(pick(n,['x2','right'],x+w),0,W),
+      y2:clamp(pick(n,['y2','bottom'],y+h),0,H),
+      arrow:!!(n.arrow||n.markerEnd||n.arrowhead),
+      dash:!!(n.dash||n.dashed||n.strokeDasharray)
+    }));
+    else if(type==='polyline' && pick(n,['points','vertices'],''))
+      out.push(Object.assign(base,{type:'polyline',points:String(pick(n,['points','vertices'],'')),dash:!!(n.dash||n.dashed)}));
+    else if(type==='path' && pick(n,['d','path'],''))
+      out.push(Object.assign(base,{type:'path',d:String(pick(n,['d','path'],''))}));
+    else if(type==='text' && String(pick(n,['text','content','label','value'],'')).trim()){
+      out.push(Object.assign(base,{
+        type:'text',
+        text:String(pick(n,['text','content','label','value'],'')).replace(/[\r\n]+/g,' ').trim().slice(0,300),
+        fontSize:clamp(pick(n,['fontSize','font_size','size'],18),6,120),
+        fontFamily:pick(n,['fontFamily','font','family'],'Arial, Helvetica, sans-serif'),
+        bold:!!(n.bold||n.fontWeight==='bold'||Number(n.fontWeight)>=600),
+        italic:!!(n.italic||n.fontStyle==='italic'),
+        anchor:n.anchor==='middle'||n.anchor==='end'?n.anchor:'start',
+        baseline:n.baseline||'auto'
+      }));
+    }
+    else if(type==='image') out.push(Object.assign(base,{
+      type:'image',
+      href:String(pick(n,['href','src','url','image'],'')||'')
+    }));
   });
-  return {schema:'figureforge.scene.v4',canvas:{width:W,height:H,w:W,h:H},nodes:out,counts:{total:out.length,text:out.filter(n=>n.type==='text').length,shapes:out.filter(n=>n.type!=='text'&&n.type!=='image').length,images:out.filter(n=>n.type==='image').length}};
+  return {
+    schema:'figureforge.scene.v4',
+    canvas:{width:W,height:H,w:W,h:H},
+    nodes:out,
+    counts:{
+      total:out.length,
+      text:out.filter(n=>n.type==='text').length,
+      shapes:out.filter(n=>n.type!=='text'&&n.type!=='image').length,
+      images:out.filter(n=>n.type==='image').length
+    }
+  };
 }
-
 function editableReconstructionModel(){
   const cfgv=cfg();
   const vision=Array.isArray(cfgv.vision) ? cfgv.vision : [];
@@ -3606,41 +3707,100 @@ function editableResponseText(d){
   return walk(d,0) || parseResponseText(d) || '';
 }
 
-async function requestEditableScene(imageDataUri, W, H){
+async function requestEditableScene(imageDataUri,W,H){
   const cfgv=cfg(), relay=$('#baseOverride').value.trim(), model=editableReconstructionModel();
   if(!model) throw new Error(tt('analyze.needmodel'));
-  const audit=(window.__ffApiAudit||(window.__ffApiAudit={})).reconstruction={state:'pending',startedAt:Date.now(),model,provider:cfgv.proto,endpoint:baseURL()};
+  const audit=(window.__ffApiAudit||(window.__ffApiAudit={})).reconstruction={
+    state:'pending',startedAt:Date.now(),model,provider:cfgv.proto,endpoint:baseURL(),attempt:0
+  };
   const prompt=editableScenePrompt(W,H,$('#paper')?$('#paper').value:'');
   const parts=dataURIToParts(imageDataUri);
-  let txt='';
-  try{
-    if(cfgv.proto==='anthropic' && !relay){
-      const body={model,max_tokens:12000,system:RECON_SYS,messages:[{role:'user',content:[{type:'text',text:prompt},{type:'image',source:{type:'base64',media_type:parts.media,data:parts.data}}]}]};
-      const r=await fetchWithTimeout(baseURL()+'/v1/messages',{method:'POST',headers:anthropicHeaders(cleanKey($('#key').value)),body:JSON.stringify(body)},600000); txt=await r.text();
-      if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
-      const d=JSON.parse(txt); txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
-    }else{
-      const body={model,temperature:0.1,max_tokens:12000,messages:[{role:'system',content:RECON_SYS},{role:'user',content:[{type:'text',text:prompt},{type:'image_url',image_url:{url:imageDataUri}}]}]};
-      if($('#provider').value==='ark') body.thinking={type:'disabled'};
-      const r=await postJSON(baseURL(),'/chat/completions',body,cleanKey($('#key').value),undefined,600000); txt=await r.text();
-      if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
-      const d=JSON.parse(txt); txt=editableResponseText(d);
+  const isFatal=(err)=>/401|403|invalid\s+api\s*key|permission|quota|insufficient|billing/i.test(String(err&&err.message||err));
+  let lastError=null;
+  for(let attempt=1;attempt<=3;attempt++){
+    audit.attempt=attempt;
+    try{
+      const attemptPrompt=attempt===1
+        ? prompt
+        : prompt+'\n\nRetry '+attempt+': the previous response was not usable. Return ONLY a complete valid JSON scene object, with at least 3 non-image editable primitives. Do not use Markdown fences or explanatory text.';
+      let txt='';
+      if(cfgv.proto==='anthropic' && !relay){
+        const body={
+          model,
+          max_tokens:12000,
+          system:RECON_SYS,
+          messages:[{role:'user',content:[
+            {type:'text',text:attemptPrompt},
+            {type:'image',source:{type:'base64',media_type:parts.media,data:parts.data}}
+          ]}]
+        };
+        const r=await fetchWithTimeout(baseURL()+'/v1/messages',{
+          method:'POST',
+          headers:anthropicHeaders(cleanKey($('#key').value)),
+          body:JSON.stringify(body)
+        },600000);
+        txt=await r.text();
+        if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
+        const d=JSON.parse(txt);
+        txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+      }else{
+        const body={
+          model,
+          temperature:0.1,
+          max_tokens:12000,
+          messages:[
+            {role:'system',content:RECON_SYS},
+            {role:'user',content:[
+              {type:'text',text:attemptPrompt},
+              {type:'image_url',image_url:{url:imageDataUri}}
+            ]}
+          ]
+        };
+        if($('#provider').value==='ark') body.thinking={type:'disabled'};
+        const r=await postJSON(baseURL(),'/chat/completions',body,cleanKey($('#key').value),undefined,600000);
+        txt=await r.text();
+        if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
+        const d=JSON.parse(txt);
+        txt=editableResponseText(d);
+      }
+      let parsed;
+      try{ parsed=extractJSON(txt); }catch(_){ throw new Error(tt('recon.badjson')); }
+      const scene=materializeEditableScene(parsed,W,H);
+      const sourceImage=await loadImage(imageDataUri);
+      for(const n of scene.nodes){
+        if(n.type!=='image') continue;
+        const c=document.createElement('canvas');
+        const w=Math.max(1,Math.round(n.w||1)), h=Math.max(1,Math.round(n.h||1));
+        c.width=w; c.height=h;
+        const sx=Math.max(0,Math.round((Number(n.x||0)/W)*sourceImage.width));
+        const sy=Math.max(0,Math.round((Number(n.y||0)/H)*sourceImage.height));
+        const sw=Math.max(1,Math.min(sourceImage.width-sx,Math.round((w/W)*sourceImage.width)));
+        const sh=Math.max(1,Math.min(sourceImage.height-sy,Math.round((h/H)*sourceImage.height)));
+        c.getContext('2d').drawImage(sourceImage,sx,sy,sw,sh,0,0,w,h);
+        n.href=c.toDataURL('image/png');
+        n.crop={x:Number(n.x||0)/W,y:Number(n.y||0)/H,w:Number(n.w||0)/W,h:Number(n.h||0)/H};
+      }
+      if(scene.nodes.filter(n=>n.type!=='image').length<3){
+        throw new Error('Vision model returned too few editable primitives');
+      }
+      audit.state='succeeded';
+      audit.finishedAt=Date.now();
+      audit.durationMs=audit.finishedAt-audit.startedAt;
+      audit.nodeCount=scene.nodes.length;
+      audit.attempts=attempt;
+      return scene;
+    }catch(err){
+      lastError=err;
+      audit.lastError=String(err&&err.message||err);
+      if(isFatal(err) || attempt===3) break;
     }
-    let parsed; try{ parsed=extractJSON(txt); }catch(_){ throw new Error(tt('recon.badjson')); }
-    const scene=materializeEditableScene(parsed,W,H);
-    const sourceImage=await loadImage(imageDataUri);
-    for(const n of scene.nodes){
-      if(n.type!=='image') continue;
-      const c=document.createElement('canvas');
-      const w=Math.max(1,Math.round(n.w||1)), h=Math.max(1,Math.round(n.h||1)); c.width=w; c.height=h;
-      const sx=Math.max(0,Math.round((Number(n.x||0)/W)*sourceImage.width)), sy=Math.max(0,Math.round((Number(n.y||0)/H)*sourceImage.height));
-      const sw=Math.max(1,Math.min(sourceImage.width-sx,Math.round((w/W)*sourceImage.width))), sh=Math.max(1,Math.min(sourceImage.height-sy,Math.round((h/H)*sourceImage.height)));
-      c.getContext('2d').drawImage(sourceImage,sx,sy,sw,sh,0,0,w,h); n.href=c.toDataURL('image/png'); n.crop={x:Number(n.x||0)/W,y:Number(n.y||0)/H,w:Number(n.w||0)/W,h:Number(n.h||0)/H};
-    }
-    if(scene.nodes.filter(n=>n.type!=='image').length<3) throw new Error('Vision model returned too few editable primitives');
-    audit.state='succeeded'; audit.finishedAt=Date.now(); audit.durationMs=audit.finishedAt-audit.startedAt; audit.nodeCount=scene.nodes.length;
-    return scene;
-  }catch(err){ audit.state='failed'; audit.finishedAt=Date.now(); audit.durationMs=audit.finishedAt-audit.startedAt; audit.error=String(err&&err.message||err); throw err; }
+  }
+  audit.state='failed';
+  audit.finishedAt=Date.now();
+  audit.durationMs=audit.finishedAt-audit.startedAt;
+  audit.attempts=audit.attempt||3;
+  audit.error=String(lastError&&lastError.message||lastError||tt('recon.badjson'));
+  throw lastError||new Error(tt('recon.badjson'));
 }
 
 /* The whole step: find the label areas, ask for their wording, draw the text, and
