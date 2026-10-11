@@ -1,11 +1,49 @@
 // Pure geometry helpers shared by the browser reconstruction flow and tests.
 import {geometrySegments} from './editable-native.mjs';
 export function extractEditableNodes(raw){
-  const root=raw&&typeof raw==='object'?(raw.scene||raw.diagram||raw.result||raw.data||raw.payload||raw.output||raw):raw;
-  if(Array.isArray(root)) return root;
-  for(const key of ['nodes','elements','objects','items','shapes','components']){
-    if(root&&Array.isArray(root[key])) return root[key];
+  const nodeKeys=['nodes','elements','objects','items','shapes','components','primitives'];
+  const wrapperKeys=['scene','diagram','result','data','payload','output','response','figure','drawing','vector','content','layers','groups'];
+  const seen=new Set();
+  const nodeLike=v=>v&&typeof v==='object'&&!Array.isArray(v)&&
+    (typeof v.type==='string'||typeof v.kind==='string'||typeof v.shape==='string'||
+      v.x!==undefined||v.y!==undefined||v.points!==undefined||v.text!==undefined);
+  function find(value,depth,fromNodeKey=false){
+    if(typeof value==='string' && /^[\[{]/.test(value.trim())){
+      try{ return find(JSON.parse(value),depth+1,fromNodeKey); }catch(_){ return null; }
+    }
+    if(!value||typeof value!=='object'||depth>10||seen.has(value)) return null;
+    seen.add(value);
+    if(Array.isArray(value)){
+      if(value.length===0) return fromNodeKey?[]:null;
+      if(value.every(nodeLike)) return value;
+      const nested=value.map(item=>find(item,depth+1)).filter(Boolean);
+      return nested.length?nested.flat():null;
+    }
+    for(const key of nodeKeys){
+      if(value[key]!==undefined){
+        const found=find(value[key],depth+1,true);
+        if(found) return found;
+      }
+    }
+    for(const key of wrapperKeys){
+      if(value[key]!==undefined){
+        const found=find(value[key],depth+1);
+        if(found) return found;
+      }
+    }
+    // Relays and models sometimes invent one more envelope name. Only traverse
+    // objects/arrays; metadata strings cannot become scene nodes.
+    for(const [key,child] of Object.entries(value)){
+      if(nodeKeys.includes(key)||wrapperKeys.includes(key)) continue;
+      if(child&&typeof child==='object'){
+        const found=find(child,depth+1);
+        if(found) return found;
+      }
+    }
+    return null;
   }
+  const found=find(raw,0);
+  if(found) return found;
   throw new Error('Vision model returned JSON without an editable nodes array');
 }
 export function planReconstructionTiles(width, height, target=900, overlap=28){
@@ -20,6 +58,19 @@ export function planReconstructionTiles(width, height, target=900, overlap=28){
     tiles.push({index:tiles.length+1,x,y,w:right-x,h:bottom-y,coreX,coreY,coreRight,coreBottom});
   }
   return tiles;
+}
+
+export function subdivideReconstructionTile(parent, target=450, overlap=14){
+  return planReconstructionTiles(parent.w,parent.h,target,overlap).map(child=>({
+    ...child,
+    index:`${parent.index}.${child.index}`,
+    x:parent.x+child.x,
+    y:parent.y+child.y,
+    coreX:Math.max(parent.coreX,parent.x+child.coreX),
+    coreY:Math.max(parent.coreY,parent.y+child.coreY),
+    coreRight:Math.min(parent.coreRight,parent.x+child.coreRight),
+    coreBottom:Math.min(parent.coreBottom,parent.y+child.coreBottom)
+  })).filter(child=>child.coreRight>child.coreX && child.coreBottom>child.coreY);
 }
 
 function movedPoints(points,dx,dy){

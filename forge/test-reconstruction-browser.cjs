@@ -56,7 +56,7 @@ const server = http.createServer((req,res)=>{
           const w=Number(match[1]),h=Number(match[2]);
           const nodes=Array.from({length:8},(_,i)=>({type:'rect',x:20+i*45,y:30,w:35,h:35,fill:'#abcdef',stroke:'#123456'}));
           nodes.push({type:'text',x:15,y:90,w:200,h:30,text:'Editable test'});
-          return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({canvas:{width:w,height:h},nodes})}}]}),{status:200,headers:{'Content-Type':'application/json'}});
+          return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({output:{result:{scene:{canvas:{width:w,height:h},nodes}}}})}}]}),{status:200,headers:{'Content-Type':'application/json'}});
         }
         return original(url,options);
       };
@@ -85,6 +85,32 @@ const server = http.createServer((req,res)=>{
       if(format==='drawio') assert.match(bytes.toString('utf8'),/<mxfile/);
       assert.match(await page.locator('#exportStatus').innerText(),/已生成|完成|finished|ready/i);
     }
+    const recovered=await page.evaluate(async()=>{
+      const original=window.fetch;
+      let calls=0;
+      window.fetch=async(url,options)=>{
+        if(String(url).endsWith('/chat/completions')){
+          calls++;
+          const body=JSON.parse(options.body);
+          const match=body.messages[1].content[0].text.match(/"width":(\d+),"height":(\d+)/);
+          const w=Number(match[1]),h=Number(match[2]);
+          const content=calls>=3&&calls<=6
+            ? JSON.stringify({result:{description:'summary only'}})
+            : JSON.stringify({nodes:[{type:'rect',x:20,y:20,w:30,h:30,fill:'#123456'}]});
+          return new Response(JSON.stringify({choices:[{message:{content}}]}),{status:200,headers:{'Content-Type':'application/json'}});
+        }
+        return original(url,options);
+      };
+      const canvas=document.createElement('canvas');canvas.width=3200;canvas.height=1600;
+      canvas.getContext('2d').fillStyle='#ffffff';canvas.getContext('2d').fillRect(0,0,3200,1600);
+      window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
+      const ok=await window.__ffReconstruct();
+      return {ok,calls,audit:window.__ffApiAudit.reconstruction,nodes:window.__ffExportState.scene?.nodes.length};
+    });
+    assert.equal(recovered.ok,true,JSON.stringify(recovered));
+    assert.ok(recovered.audit.totalTiles>8,'failed third crop must be subdivided');
+    assert.equal(recovered.audit.completedTiles,recovered.audit.totalTiles,'all replacement crops must complete');
+    assert.ok(recovered.nodes>0,'recovered result remains editable');
     const failed=await page.evaluate(async()=>{
       const original=window.fetch;
       window.fetch=async(url,options)=>{

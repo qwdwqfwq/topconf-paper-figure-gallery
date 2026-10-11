@@ -1,14 +1,22 @@
 import assert from 'node:assert/strict';
-import {extractEditableNodes,planReconstructionTiles,mergeReconstructionTiles} from './reconstruction-core.mjs';
+import {extractEditableNodes,planReconstructionTiles,subdivideReconstructionTile,mergeReconstructionTiles} from './reconstruction-core.mjs';
 
 assert.deepEqual(extractEditableNodes({scene:{nodes:[]}}),[],'blank crops must be valid');
 assert.deepEqual(extractEditableNodes({result:{shapes:[{type:'rect'}]}}),[{type:'rect'}]);
+assert.deepEqual(extractEditableNodes({output:{result:{scene:{nodes:[{type:'text',text:'Nested'}]}}}}),[{type:'text',text:'Nested'}]);
+assert.deepEqual(extractEditableNodes({payload:{figure:JSON.stringify({elements:[{type:'rect'}]})}}),[{type:'rect'}]);
+assert.deepEqual(extractEditableNodes({customEnvelope:{layers:[{objects:[{type:'rect'}]}]}}),[{type:'rect'}]);
 assert.throws(()=>extractEditableNodes({message:'provider error'}),/nodes array/);
 
 const tiles=planReconstructionTiles(1600,900);
 assert.equal(tiles.length,2);
 assert.deepEqual(tiles.map(t=>[t.coreX,t.coreRight]),[[0,800],[800,1600]]);
 assert.ok(tiles[0].x+tiles[0].w>tiles[1].x,'adjacent crops must overlap');
+const children=subdivideReconstructionTile(tiles[0],450,14);
+assert.ok(children.length>1,'a failed crop must be subdivided');
+assert.ok(children.every(t=>t.x>=tiles[0].x&&t.y>=tiles[0].y&&t.coreX>=tiles[0].coreX&&t.coreRight<=tiles[0].coreRight));
+assert.equal(children.reduce((area,t)=>area+(t.coreRight-t.coreX)*(t.coreBottom-t.coreY),0),
+  (tiles[0].coreRight-tiles[0].coreX)*(tiles[0].coreBottom-tiles[0].coreY),'subdivision cores cover the original core');
 
 const left={tile:tiles[0],scene:{nodes:[
   {id:'cube-front',type:'polyline',points:'730,250 790,250 790,310 730,310',closed:true,fill:'#77AADA'},
