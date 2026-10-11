@@ -611,7 +611,7 @@
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 import {buildNativePptx, geometrySegments} from './editable-native.mjs';
-import {extractEditableNodes, planReconstructionTiles, mergeReconstructionTiles} from './reconstruction-core.mjs';
+import {extractEditableNodes, planReconstructionTiles, subdivideReconstructionTile, mergeReconstructionTiles} from './reconstruction-core.mjs';
 
 // Keep the large local index/CLIP assets across reloads and page re-entry.
 // The worker is same-origin and never sees API keys or provider requests.
@@ -3743,6 +3743,25 @@ function materializeEditableScene(raw,W,H){
     }
   };
 }
+function parseEditableSceneResponse(txt,W,H){
+  // A provider may prepend a valid JSON status object before the actual scene.
+  // extractJSON returns that first object, so inspect every balanced candidate.
+  let lastError=null;
+  try{ return materializeEditableScene(extractJSON(txt),W,H); }
+  catch(err){ lastError=err; }
+  const candidates=jsonCandidateSlices(String(txt||''));
+  for(const candidate of candidates){
+    try{
+      const parsed=JSON.parse(candidate);
+      return materializeEditableScene(parsed,W,H);
+    }catch(err){ lastError=err; }
+  }
+  const err=new Error(lastError && /nodes array/.test(String(lastError.message))
+    ? 'Vision model returned JSON without an editable nodes array'
+    : tt('recon.badjson'));
+  err.sceneFormatFailure=true;
+  throw err;
+}
 function editableReconstructionModel(){
   const cfgv=cfg();
   const vision=Array.isArray(cfgv.vision) ? cfgv.vision : [];
@@ -3851,9 +3870,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit){
         const d=JSON.parse(txt);
         txt=editableResponseText(d);
       }
-      let parsed;
-      try{ parsed=extractJSON(txt); }catch(_){ throw new Error(tt('recon.badjson')); }
-      const scene=materializeEditableScene(parsed,W,H);
+      const scene=parseEditableSceneResponse(txt,W,H);
       const sourceImage=await loadImage(imageDataUri);
       for(const n of scene.nodes){
         if(n.type!=='image') continue;
@@ -3966,26 +3983,38 @@ async function runReconstruction(){
       state:'pending',startedAt:Date.now(),totalTiles:tiles.length,completedTiles:0,tiles:[]
     };
     const results=[];
+    const reconstructTile=async function(tile,depth){
+      const crop=document.createElement('canvas');
+      crop.width=tile.w; crop.height=tile.h;
+      crop.getContext('2d').drawImage(canvas,tile.x,tile.y,tile.w,tile.h,0,0,tile.w,tile.h);
+      const tileAudit={index:tile.index,depth};
+      reconstructionAudit.tiles.push(tileAudit);
+      try{
+        const partial=await requestEditableScene(crop.toDataURL('image/png'),tile.w,tile.h,tileAudit);
+        reconstructionAudit.completedTiles++;
+        say('recon.tile',{i:reconstructionAudit.completedTiles,n:reconstructionAudit.totalTiles});
+        return [{tile,scene:partial}];
+      }catch(err){
+        if(err.sceneFormatFailure && depth<2 && Math.max(tile.w,tile.h)>350){
+          const subtiles=subdivideReconstructionTile(tile,Math.max(220,Math.ceil(Math.max(tile.w,tile.h)/2)),14);
+          if(subtiles.length>1){
+            tileAudit.state='subdivided';
+            tileAudit.subtiles=subtiles.length;
+            reconstructionAudit.totalTiles+=subtiles.length-1;
+            const recovered=[];
+            for(const child of subtiles) recovered.push(...await reconstructTile(child,depth+1));
+            return recovered;
+          }
+        }
+        throw new Error('Tile '+tile.index+'/'+reconstructionAudit.totalTiles+': '+String(err&&err.message||err));
+      }
+    };
     // Two requests at a time keep large diagrams responsive without flooding
     // a provider with all tiles at once. Each crop has local pixel coordinates.
     for(let start=0;start<tiles.length;start+=2){
       const batch=tiles.slice(start,start+2);
-      const resolved=await Promise.all(batch.map(async tile=>{
-        const crop=document.createElement('canvas');
-        crop.width=tile.w; crop.height=tile.h;
-        crop.getContext('2d').drawImage(canvas,tile.x,tile.y,tile.w,tile.h,0,0,tile.w,tile.h);
-        const tileAudit={index:tile.index};
-        reconstructionAudit.tiles.push(tileAudit);
-        try{
-          const partial=await requestEditableScene(crop.toDataURL('image/png'),tile.w,tile.h,tileAudit);
-          reconstructionAudit.completedTiles++;
-          say('recon.tile',{i:reconstructionAudit.completedTiles,n:tiles.length});
-          return {tile,scene:partial};
-        }catch(err){
-          throw new Error('Tile '+tile.index+'/'+tiles.length+': '+String(err&&err.message||err));
-        }
-      }));
-      results.push(...resolved);
+      const resolved=await Promise.all(batch.map(tile=>reconstructTile(tile,0)));
+      results.push(...resolved.flat());
     }
     const scene=mergeReconstructionTiles(results,canvas.width,canvas.height);
     const svg = sceneToSvgString(scene), audit = auditReconScene(scene);
