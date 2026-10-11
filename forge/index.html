@@ -611,6 +611,7 @@
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 import {buildNativePptx, geometrySegments} from './editable-native.mjs';
+import {extractEditableNodes, planReconstructionTiles, mergeReconstructionTiles} from './reconstruction-core.mjs';
 
 // Keep the large local index/CLIP assets across reloads and page re-entry.
 // The worker is same-origin and never sees API keys or provider requests.
@@ -2033,6 +2034,25 @@ function fetchWithTimeout(url, options={}, timeoutMs=300000){
   const ac=new AbortController();
   const to=setTimeout(()=>ac.abort(new DOMException('timeout','TimeoutError')),timeoutMs);
   return fetch(url,{...options,signal:ac.signal}).finally(()=>clearTimeout(to));
+}
+function safeExportError(err){
+  let message=String(err&&err.message||err||'Unknown error');
+  const key=cleanKey($('#key')?.value||'');
+  if(key) message=message.split(key).join('[redacted]');
+  return message.replace(/Bearer\s+\S+/gi,'Bearer [redacted]').slice(0,500);
+}
+// Keep the timer active while the response body streams. A fulfilled fetch()
+// only means headers arrived; the previous timer was cleared before r.text().
+async function fetchTextWithTimeout(url, options={}, timeoutMs=180000){
+  const ac=new AbortController();
+  const to=setTimeout(()=>ac.abort(),timeoutMs);
+  try{
+    const r=await fetch(url,{...options,signal:ac.signal});
+    return {ok:r.ok,status:r.status,text:await r.text()};
+  }catch(err){
+    if(ac.signal.aborted) throw new Error('Vision API timed out after '+Math.round(timeoutMs/1000)+' seconds');
+    throw err;
+  }finally{ clearTimeout(to); }
 }
 /* When a POST fails at network level, find out WHY. Some providers (Ark) do
    not allow browser CORS on /models, and omit CORS headers on error responses,
@@ -3632,10 +3652,7 @@ function sceneNumber(v, fallback){
   return Number.isFinite(n) ? n : fallback;
 }
 function materializeEditableScene(raw,W,H){
-  const root=raw&&typeof raw==='object'?(raw.scene||raw.diagram||raw.result||raw.data||raw.payload||raw.output||raw):raw;
-  const rawNodes=Array.isArray(root)
-    ? root
-    : (root&&(root.nodes||root.elements||root.objects||root.items||root.shapes||root.components))||[];
+  const rawNodes=extractEditableNodes(raw);
   const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,sceneNumber(v,lo)));
   const cleanColor=(v,fallback)=>{
     const value=String(v==null?'':v).trim();
@@ -3775,22 +3792,21 @@ function editableResponseText(d){
   return walk(d,0) || parseResponseText(d) || '';
 }
 
-async function requestEditableScene(imageDataUri,W,H){
+async function requestEditableScene(imageDataUri,W,H,tileAudit){
   const cfgv=cfg(), relay=$('#baseOverride').value.trim(), model=editableReconstructionModel();
   if(!model) throw new Error(tt('analyze.needmodel'));
-  const audit=(window.__ffApiAudit||(window.__ffApiAudit={})).reconstruction={
-    state:'pending',startedAt:Date.now(),model,provider:cfgv.proto,endpoint:baseURL(),attempt:0
-  };
+  const audit=tileAudit||{};
+  Object.assign(audit,{state:'pending',startedAt:Date.now(),model,provider:cfgv.proto,endpoint:baseURL(),attempt:0});
   const prompt=editableScenePrompt(W,H,$('#paper')?$('#paper').value:'');
   const parts=dataURIToParts(imageDataUri);
-  const isFatal=(err)=>/401|403|invalid\s+api\s*key|permission|quota|insufficient|billing/i.test(String(err&&err.message||err));
+  const isFatal=(err)=>/\b400\b|\b401\b|\b403\b|\b404\b|invalid\s+api\s*key|permission|quota|insufficient|billing/i.test(String(err&&err.message||err));
   let lastError=null;
-  for(let attempt=1;attempt<=3;attempt++){
+  for(let attempt=1;attempt<=2;attempt++){
     audit.attempt=attempt;
     try{
       const attemptPrompt=attempt===1
         ? prompt
-        : prompt+'\n\nRetry '+attempt+': the previous response was not usable. Return ONLY a complete valid JSON scene object, with at least 3 non-image editable primitives. Do not use Markdown fences or explanatory text.';
+        : prompt+'\n\nRetry '+attempt+': the previous response was not usable. Return ONLY a complete valid JSON scene object containing all visible editable primitives. An empty nodes array is valid only for a blank crop. Do not use Markdown fences or explanatory text.';
       let txt='';
       if(cfgv.proto==='anthropic' && !relay){
         const body={
@@ -3802,13 +3818,13 @@ async function requestEditableScene(imageDataUri,W,H){
             {type:'image',source:{type:'base64',media_type:parts.media,data:parts.data}}
           ]}]
         };
-        const r=await fetchWithTimeout(baseURL()+'/v1/messages',{
+        const r=await fetchTextWithTimeout(baseURL()+'/v1/messages',{
           method:'POST',
           headers:anthropicHeaders(cleanKey($('#key').value)),
           body:JSON.stringify(body)
-        },600000);
-        txt=await r.text();
-        if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
+        },150000);
+        txt=r.text;
+        if(!r.ok) throw new Error('HTTP '+r.status+': '+friendlyHttp(r.status,txt));
         const d=JSON.parse(txt);
         txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
       }else{
@@ -3825,9 +3841,13 @@ async function requestEditableScene(imageDataUri,W,H){
           ]
         };
         if($('#provider').value==='ark') body.thinking={type:'disabled'};
-        const r=await postJSON(baseURL(),'/chat/completions',body,cleanKey($('#key').value),undefined,600000);
-        txt=await r.text();
-        if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
+        const r=await fetchTextWithTimeout(baseURL()+'/chat/completions',{
+          method:'POST',
+          headers:{'Content-Type':'application/json',Authorization:'Bearer '+cleanKey($('#key').value)},
+          body:JSON.stringify(body)
+        },150000);
+        txt=r.text;
+        if(!r.ok) throw new Error('HTTP '+r.status+': '+friendlyHttp(r.status,txt));
         const d=JSON.parse(txt);
         txt=editableResponseText(d);
       }
@@ -3848,9 +3868,6 @@ async function requestEditableScene(imageDataUri,W,H){
         n.href=c.toDataURL('image/png');
         n.crop={x:Number(n.x||0)/W,y:Number(n.y||0)/H,w:Number(n.w||0)/W,h:Number(n.h||0)/H};
       }
-      if(scene.nodes.filter(n=>n.type!=='image').length<3){
-        throw new Error('Vision model returned too few editable primitives');
-      }
       audit.state='succeeded';
       audit.finishedAt=Date.now();
       audit.durationMs=audit.finishedAt-audit.startedAt;
@@ -3860,13 +3877,13 @@ async function requestEditableScene(imageDataUri,W,H){
     }catch(err){
       lastError=err;
       audit.lastError=String(err&&err.message||err);
-      if(isFatal(err) || attempt===3) break;
+      if(isFatal(err) || attempt===2) break;
     }
   }
   audit.state='failed';
   audit.finishedAt=Date.now();
   audit.durationMs=audit.finishedAt-audit.startedAt;
-  audit.attempts=audit.attempt||3;
+  audit.attempts=audit.attempt||2;
   audit.error=String(lastError&&lastError.message||lastError||tt('recon.badjson'));
   throw lastError||new Error(tt('recon.badjson'));
 }
@@ -3929,9 +3946,9 @@ async function runReconstruction(){
     src = await ensureBitmapDataUrl(syncStep3Bitmap());
   }catch(err){
     st.reconFailed = true;
-    st.reconError = String(err && err.message || err || 'Bitmap preparation failed');
+    st.reconError = safeExportError(err);
     renderEditableExportCard();
-    say('recon.failed');
+    say('recon.failedDetail',{msg:st.reconError});
     return false;
   }
   if(!src){ st.reconFailed = true; st.reconError = 'No bitmap source'; renderEditableExportCard(); say('recon.nobitmap'); return false; }
@@ -3944,22 +3961,52 @@ async function runReconstruction(){
     canvas.width = im.naturalWidth || im.width;
     canvas.height = im.naturalHeight || im.height;
     canvas.getContext('2d').drawImage(im, 0, 0);
-    say('recon.labelling', { n: 0 });
-    const scene = await requestEditableScene(src, canvas.width, canvas.height);
+    const tiles=planReconstructionTiles(canvas.width,canvas.height);
+    const reconstructionAudit=(window.__ffApiAudit||(window.__ffApiAudit={})).reconstruction={
+      state:'pending',startedAt:Date.now(),totalTiles:tiles.length,completedTiles:0,tiles:[]
+    };
+    const results=[];
+    // Two requests at a time keep large diagrams responsive without flooding
+    // a provider with all tiles at once. Each crop has local pixel coordinates.
+    for(let start=0;start<tiles.length;start+=2){
+      const batch=tiles.slice(start,start+2);
+      const resolved=await Promise.all(batch.map(async tile=>{
+        const crop=document.createElement('canvas');
+        crop.width=tile.w; crop.height=tile.h;
+        crop.getContext('2d').drawImage(canvas,tile.x,tile.y,tile.w,tile.h,0,0,tile.w,tile.h);
+        const tileAudit={index:tile.index};
+        reconstructionAudit.tiles.push(tileAudit);
+        try{
+          const partial=await requestEditableScene(crop.toDataURL('image/png'),tile.w,tile.h,tileAudit);
+          reconstructionAudit.completedTiles++;
+          say('recon.tile',{i:reconstructionAudit.completedTiles,n:tiles.length});
+          return {tile,scene:partial};
+        }catch(err){
+          throw new Error('Tile '+tile.index+'/'+tiles.length+': '+String(err&&err.message||err));
+        }
+      }));
+      results.push(...resolved);
+    }
+    const scene=mergeReconstructionTiles(results,canvas.width,canvas.height);
     const svg = sceneToSvgString(scene), audit = auditReconScene(scene);
-    if(audit.dominantBitmap || audit.primitiveCount < 6){
-      throw new Error('Vision model returned a dominant bitmap or too few editable primitives');
+    if(audit.dominantBitmap){
+      throw new Error('Vision model returned a dominant bitmap instead of editable objects');
     }
     Object.assign(st,{scene,svg,baseSvg:svg,source:'bitmap',recon:{mode:'vector',nodes:scene.nodes.length,audit},reconFailed:false,reconError:''});
+    reconstructionAudit.state='succeeded';
+    reconstructionAudit.finishedAt=Date.now();
+    reconstructionAudit.nodeCount=scene.nodes.length;
     renderEditableExportCard(); applyExportFont(st.font || 'original');
     say(audit.defects.length ? 'recon.audit' : 'recon.done',{n:scene.nodes.length,d:audit.defects.length});
     return true;
   }catch(err){
     console.warn('reconstruction failed', err);
-    const msg = String(err && err.message || err);
+    const reconstructionAudit=window.__ffApiAudit&&window.__ffApiAudit.reconstruction;
+    if(reconstructionAudit){ reconstructionAudit.state='failed'; reconstructionAudit.finishedAt=Date.now(); reconstructionAudit.error=String(err&&err.message||err); }
+    const msg = safeExportError(err);
     st.reconFailed = true;
     st.reconError = msg || 'Reconstruction failed';
-    say(msg && msg.length < 200 ? 'recon.failedDetail' : 'recon.failed', { msg: msg });
+    say('recon.failedDetail', { msg: msg });
     renderEditableExportCard();
     return false;
   }
@@ -4067,7 +4114,9 @@ function renderEditableExportCard(){
   if(state.reconPending){
     setExportStatus(status, tt('recon.reading'));
   } else if(!state.svg && state.reconFailed){
-      setExportStatus(status, tt(bitmapSource || state.hasStep3Output ? 'export.reconFailed' : 'export.reconNoBitmap'));
+      setExportStatus(status, state.reconError
+        ? tt('recon.failedDetail',{msg:state.reconError})
+        : tt(bitmapSource || state.hasStep3Output ? 'export.reconFailed' : 'export.reconNoBitmap'));
     const detail=$('#reconStatus');
     if(detail && state.reconError) detail.textContent=tt('recon.failedDetail',{msg:state.reconError});
   } else if(locked){
@@ -4133,26 +4182,8 @@ function offerDownload(container, filename, blobOrText, mime){
   row.className = 'export-dl';
   const a = document.createElement('a');
   a.href = url; a.download = filename; a.textContent = tt('export.getFile', { format: filename });
-  /* Some embedded browsers do not honor download="..." for a blob: URL.  Keep a
-     self-contained data URL ready for the visible fallback link, and recreate a
-     fresh object URL if the user clicks before FileReader finishes. */
-  if(typeof FileReader !== 'undefined'){
-    const reader = new FileReader();
-    reader.onload = function(){
-      if(document.body.contains(a) && typeof reader.result === 'string'){
-        a.dataset.dataUrl = reader.result;
-        a.href = reader.result;
-      }
-    };
-    reader.readAsDataURL(blob);
-  }
-  a.addEventListener('click', function(){
-    if(!a.dataset.dataUrl && a.href.indexOf('blob:') === 0){
-      const fresh = URL.createObjectURL(blob);
-      a.href = fresh;
-      setTimeout(function(){ try{ URL.revokeObjectURL(fresh); }catch(e){} }, 30000);
-    }
-  });
+  // Keep a single object URL alive for the visible fallback link. Encoding the
+  // entire OOXML file again as a data URL doubled peak memory for large figures.
   const s = document.createElement('span');
   s.textContent = tt('export.fileReady', { size: size });
   row.appendChild(a); row.appendChild(s);
@@ -4299,7 +4330,7 @@ function initEditableExport(){
     const bitmapSource=syncStep3Bitmap();
     if(!st.svg || st.reconPending){
       const status = st.reconFailed
-        ? tt(bitmapSource ? 'export.reconFailed' : 'export.reconNoBitmap')
+        ? (st.reconError ? tt('recon.failedDetail',{msg:st.reconError}) : tt(bitmapSource ? 'export.reconFailed' : 'export.reconNoBitmap'))
         : st.reconPending ? tt('recon.reading') : tt('export.waiting');
       setExportStatus($('#exportStatus'), status);
       return;
@@ -4315,7 +4346,7 @@ function initEditableExport(){
     if(!st.svg || st.reconPending || !st.target){
       const s2=$('#exportStatus');
       if(s2) s2.textContent = st.reconFailed
-        ? tt(bitmapSource ? 'export.reconFailed' : 'export.reconNoBitmap')
+        ? (st.reconError ? tt('recon.failedDetail',{msg:st.reconError}) : tt(bitmapSource ? 'export.reconFailed' : 'export.reconNoBitmap'))
         : st.reconPending ? tt('recon.reading') : tt('export.waiting');
       return;
     }
@@ -4329,7 +4360,7 @@ function initEditableExport(){
     const scene=st.scene || (st.scene = (function(){ try{ return parseSvgScene(st.svg); }catch(e){ return null; } })());
     setExportProgress(status, 0.34);
     if(!scene){
-      setStatus('export.failed',{format:target.toUpperCase()});
+      setStatus('export.failedDetail',{format:target.toUpperCase(),msg:'Editable scene could not be parsed'});
       return;
     }
     const fontChoice = st.font && st.font!=='original' ? st.font : 'Arial';
@@ -4368,7 +4399,7 @@ function initEditableExport(){
     }catch(err){
       console.warn('editable export failed', err);
       clearExportProgress(status);
-      setExportStatus(status, exportText('export.failed',{format:target==='drawio'?'draw.io':target.toUpperCase()}));
+      setExportStatus(status, tt('export.failedDetail',{format:target==='drawio'?'draw.io':target.toUpperCase(),msg:safeExportError(err)}));
     }finally{
       setBusy(btn, false);
       if(status) status.classList.remove('export-busy');
@@ -4555,12 +4586,12 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
      an instant fake editable result. */
   let reconOk = false;
   try{ reconOk = await runReconstruction(); }
-  catch(e){ console.warn('automatic editable reconstruction failed', e); }
+  catch(e){ st.reconError=safeExportError(e); console.warn('automatic editable reconstruction failed', e); }
   st.reconPending = false;
   if(!reconOk){
     const reconStatus=$('#reconStatus');
     const reconError=String(st.reconError||'Editable reconstruction failed');
-    const reconMessage=reconError.length<200 ? tt('recon.failedDetail',{msg:reconError}) : tt('recon.failed');
+    const reconMessage=tt('recon.failedDetail',{msg:reconError});
     if(reconStatus) reconStatus.textContent=reconMessage;
     /* Do not leave a raster-wrapped SVG selectable as if it were editable. */
     st.svg=''; st.baseSvg=''; st.scene=null; st.recon=null;
