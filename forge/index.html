@@ -610,6 +610,7 @@
 <script src="./i18n_forge.js?v=20261009"></script>
 <script type="module">
 import * as T from './vendor/transformers.min.js';
+import {buildNativePptx, geometrySegments} from './editable-native.mjs';
 
 // Keep the large local index/CLIP assets across reloads and page re-entry.
 // The worker is same-origin and never sees API keys or provider requests.
@@ -2447,9 +2448,9 @@ function auditSummaryText(res){
    written by exactly the same renderers. That step is what turns a bitmap into an
    editable figure, and it is the only place a model is involved at all.
 
-   Everything below runs in the browser and works offline (PPTX uses the vendored
-   PptxGenJS; draw.io and VSDX are written here). The only network call is the
-   optional bitmap reconstruction, which is an explicit button, never automatic. */
+   Export packaging runs in the browser. A Step 3 bitmap automatically triggers
+   vision reconstruction through the configured provider before downloads unlock;
+   its scene is then written into native PPTX, VSDX, SVG and draw.io elements. */
 window.__ffExportState = {svg:'', baseSvg:'', scene:null, target:'svg', font:'original', source:'svg', bitmap:'', reconBitmap:'', recon:null, reconPending:false, reconFailed:false, reconError:'', hasStep3Output:false};
 // Keep the Step 3 raster in a durable page-level slot.  The async reconstruction
 // can fail or refresh the export card without meaning that Step 3 lost its image.
@@ -2923,6 +2924,28 @@ function drawioColor(value, fallback){
   const c=exportColor(value,fallback);
   return c==='none' ? 'none' : '#'+c;
 }
+function encodeDrawioStencil(stencil){
+  // draw.io's Graph.decompress expects URI-encoded XML in a raw DEFLATE
+  // stream. Stored DEFLATE blocks keep this dependency-free in the browser.
+  const source=new TextEncoder().encode(encodeURIComponent(stencil));
+  const blocks=[];
+  for(let offset=0;offset<source.length;){
+    const count=Math.min(65535,source.length-offset);
+    const block=new Uint8Array(5+count);
+    block[0]=offset+count===source.length?1:0;
+    block[1]=count&255; block[2]=count>>8;
+    block[3]=~count&255; block[4]=(~count>>8)&255;
+    block.set(source.subarray(offset,offset+count),5);
+    blocks.push(block);
+    offset+=count;
+  }
+  let binary='';
+  for(const block of blocks){
+    for(let offset=0;offset<block.length;offset+=8192)
+      binary+=String.fromCharCode(...block.subarray(offset,offset+8192));
+  }
+  return btoa(binary);
+}
 
 /* ---------- draw.io ----------
    Emits real mxCell geometry, not an embedded picture, so every box and label is
@@ -2974,9 +2997,16 @@ function sceneToDrawio(scene){
       return;
     }
     if(n.type==='path' || n.type==='polyline'){
-      const style = 'shape=stencil;whiteSpace=wrap;html=1;fillColor='+drawioColor(n.fill,'none')+';strokeColor='+drawioColor(n.stroke,'000000')+';strokeWidth='+(n.strokeWidth||1)+';';
+      const segments=geometrySegments(n), points=segments.flatMap(s=>s.points);
+      if(!points.length) return;
+      const minX=Math.min(...points.map(p=>p.x)), minY=Math.min(...points.map(p=>p.y));
+      const maxX=Math.max(...points.map(p=>p.x)), maxY=Math.max(...points.map(p=>p.y));
+      const bw=Math.max(1,maxX-minX), bh=Math.max(1,maxY-minY);
+      const pathXml=segments.map(s=>'<path><move x="'+((s.points[0].x-minX)/bw*100).toFixed(4)+'" y="'+((s.points[0].y-minY)/bh*100).toFixed(4)+'"/>'+s.points.slice(1).map(p=>'<line x="'+((p.x-minX)/bw*100).toFixed(4)+'" y="'+((p.y-minY)/bh*100).toFixed(4)+'"/>').join('')+(s.closed?'<close/>':'')+'</path>'+(s.closed&&n.fill&&n.fill!=='none'?'<fillstroke/>':'<stroke/>')).join('');
+      const stencil='<shape name="FigureForge Path" w="100" h="100" aspect="variable" strokewidth="inherit"><foreground>'+pathXml+'</foreground></shape>';
+      const style = 'shape=stencil('+encodeDrawioStencil(stencil)+');whiteSpace=wrap;html=1;fillColor='+drawioColor(n.fill,'none')+';strokeColor='+drawioColor(n.stroke,'000000')+';strokeWidth='+(n.strokeWidth||1)+';';
       cells.push('<mxCell id="'+id+'" value="" style="'+style+'" vertex="1" parent="1">'+
-                 '<mxGeometry x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" width="'+Math.round(Math.max(n.w,4))+'" height="'+Math.round(Math.max(n.h,4))+'" as="geometry"/></mxCell>');
+                 '<mxGeometry x="'+minX.toFixed(3)+'" y="'+minY.toFixed(3)+'" width="'+bw.toFixed(3)+'" height="'+bh.toFixed(3)+'" as="geometry"/></mxCell>');
       return;
     }
     if(n.type==='image'){
@@ -2996,14 +3026,8 @@ function sceneToDrawio(scene){
 }
 
 /* ---------- VSDX ----------
-   Minimal but valid Visio package: one page, native Rectangle / Ellipse / Line /
-   Text shapes. Layout uses explicit PinX/PinY in inches, so shapes land exactly
-   where the SVG had them.
-
-   Honest limitation: this was written against the VSDX package structure and is
-   delivered without a Visio installation to open it with, so treat it as a draft
-   that PowerPoint-grade guarantees do not cover. draw.io's own VSDX export (from
-   the .drawio file next to this one) is the validated alternative. */
+   Native Visio geometry, text and bitmap parts on a ten-inch page. Each visible
+   face of a prism remains its own editable shape. */
 function sceneToVsdxFiles(scene, font){
   const imageNodes = (scene && Array.isArray(scene.nodes)) ? scene.nodes.filter(n=>n && n.type==='image') : [];
   const canvasAudit = (scene && scene.canvas) || {};
@@ -3021,6 +3045,27 @@ function sceneToVsdxFiles(scene, font){
   const media = [];                                // {name, bytes, contentType, ext}
   const mediaRels = [];                            // relationship entries for page1
   let mediaSeq = 0;
+
+  function geometrySection(points, closed, filled){
+    const rows = points.map((p,i)=>'<Row T="'+(i?'RelLineTo':'RelMoveTo')+'" IX="'+(i+1)+'"><Cell N="X" V="'+p[0].toFixed(6)+'"/><Cell N="Y" V="'+p[1].toFixed(6)+'"/></Row>');
+    if(closed) rows.push('<Row T="RelLineTo" IX="'+(points.length+1)+'"><Cell N="X" V="'+points[0][0].toFixed(6)+'"/><Cell N="Y" V="'+points[0][1].toFixed(6)+'"/></Row>');
+    return '<Section N="Geometry" IX="0"><Cell N="NoFill" V="'+(filled?0:1)+'"/><Cell N="NoLine" V="0"/>'+rows.join('')+'</Section>';
+  }
+
+  function boxGeometry(type, radius, w, h){
+    if(type==='ellipse') return geometrySection(Array.from({length:48},(_,i)=>{
+      const a=2*Math.PI*i/48; return [0.5+0.5*Math.cos(a),0.5+0.5*Math.sin(a)];
+    }), true, true);
+    const r=Math.max(0,Math.min(Number(radius)||0,w/2,h/2));
+    if(!r) return geometrySection([[0,0],[1,0],[1,1],[0,1]],true,true);
+    const rx=r/w, ry=r/h, points=[];
+    for(const [cx,cy,a0] of [[1-rx,ry,-Math.PI/2],[1-rx,1-ry,0],[rx,1-ry,Math.PI/2],[rx,ry,Math.PI]]){
+      for(let j=0;j<=6;j++){
+        const a=a0+j*Math.PI/12; points.push([cx+rx*Math.cos(a),cy+ry*Math.sin(a)]);
+      }
+    }
+    return geometrySection(points,true,true);
+  }
 
   function dataUriParts(uri){
     const m = /^data:(image\/(png|jpeg|jpg|gif|webp));base64,([A-Za-z0-9+/=\s]+)$/.exec(String(uri||'').trim());
@@ -3104,7 +3149,7 @@ function sceneToVsdxFiles(scene, font){
             '<Cell N="LocPinX" V="'+inches(Math.max(n.w,1)/2).toFixed(4)+'"/><Cell N="LocPinY" V="'+inches(Math.max(n.h,1)/2).toFixed(4)+'"/>'+
             fillCells(st)+
             '<Cell N="Rounding" V="'+(n.radius? inches(n.radius).toFixed(4) : '0')+'"/>'+
-            '<Cell N="ShapeType" V="'+master+'"/>'+
+            '<Cell N="ShapeType" V="'+master+'"/>'+boxGeometry(n.type,n.radius,n.w,n.h)+
             '</Shape>';
     } else if(n.type==='line'){
       const x1=n.x, y1=n.y, x2=n.x2, y2=n.y2;
@@ -3117,9 +3162,29 @@ function sceneToVsdxFiles(scene, font){
             '<Cell N="Angle" V="'+ang.toFixed(4)+'"/>'+
             '<Cell N="EndArrow" V="'+(n.arrow?4:0)+'"/>'+
             '<Cell N="LineColor" V="#'+exportColor(n.stroke,'000000')+'"/>'+
-            '<Cell N="LineWeight" V="'+(inches(Math.max(n.strokeWidth||1,1))*72).toFixed(3)+'"/>'+
+            '<Cell N="LineWeight" V="'+inches(Math.max(n.strokeWidth||1,1)).toFixed(5)+'"/>'+
             '<Cell N="ShapeType" V="Line"/>'+
+            geometrySection([[0,0],[1,0]],false,false)+
             '</Shape>';
+    } else if(n.type==='path' || n.type==='polyline'){
+      const segments=geometrySegments(n), points=segments.flatMap(s=>s.points);
+      if(!points.length) return;
+      const minX=Math.min(...points.map(p=>p.x)), minY=Math.min(...points.map(p=>p.y));
+      const maxX=Math.max(...points.map(p=>p.x)), maxY=Math.max(...points.map(p=>p.y));
+      const bw=Math.max(1,maxX-minX), bh=Math.max(1,maxY-minY);
+      let row=1;
+      const geometry=segments.map(s=>{
+        const rel=p=>'<Cell N="X" V="'+((p.x-minX)/bw).toFixed(6)+'"/><Cell N="Y" V="'+(1-(p.y-minY)/bh).toFixed(6)+'"/>';
+        let rows='<Row T="RelMoveTo" IX="'+row+++'">'+rel(s.points[0])+'</Row>';
+        for(const p of s.points.slice(1)) rows+='<Row T="RelLineTo" IX="'+row+++'">'+rel(p)+'</Row>';
+        if(s.closed) rows+='<Row T="RelLineTo" IX="'+row+++'">'+rel(s.points[0])+'</Row>';
+        return rows;
+      }).join('');
+      xml='<Shape ID="'+ID+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'+
+        '<Cell N="PinX" V="'+inches(minX+bw/2).toFixed(4)+'"/><Cell N="PinY" V="'+inches(c.height-(minY+bh/2)).toFixed(4)+'"/>'+
+        '<Cell N="Width" V="'+inches(bw).toFixed(4)+'"/><Cell N="Height" V="'+inches(bh).toFixed(4)+'"/>'+
+        '<Cell N="LocPinX" V="'+inches(bw/2).toFixed(4)+'"/><Cell N="LocPinY" V="'+inches(bh/2).toFixed(4)+'"/>'+
+        fillCells(st)+'<Section N="Geometry" IX="0"><Cell N="NoFill" V="'+(segments.some(s=>s.closed)?0:1)+'"/><Cell N="NoLine" V="0"/>'+geometry+'</Section></Shape>';
     } else if(n.type==='text'){
       const text = String(n.text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
       const sizePt = (n.fontSize||16)*PT_PER_UNIT;
@@ -3133,7 +3198,7 @@ function sceneToVsdxFiles(scene, font){
             '<Cell N="LinePattern" V="0"/>'+
             '<Cell N="VerticalAlign" V="1"/><Cell N="HorzAlign" V="'+(n.anchor==='middle'?1:(n.anchor==='end'?2:0))+'"/>'+
             '<Cell N="ShapeType" V="Text"/>'+
-            '<Section N="Character"><Row IX="0"><Cell N="Size" V="'+sizePt.toFixed(2)+'"/>'+
+            '<Section N="Character"><Row IX="0"><Cell N="Size" V="'+(sizePt/72).toFixed(5)+'"/>'+
               '<Cell N="Color" V="#'+exportColor(n.fill,'000000')+'"/><Cell N="Style" V="'+(n.bold?1:0)+'"/>'+
               '<Cell N="Font" V="'+(font||'Arial')+'"/></Row></Section>'+
             '<Text>'+text+'</Text>'+
@@ -3156,7 +3221,7 @@ function sceneToVsdxFiles(scene, font){
     parts.push('<Cell N="FillPattern" V="'+(st.fill && st.fill!=='none' ? 1 : 0)+'"/>');
     parts.push('<Cell N="LineColor" V="#'+exportColor(st.line,'000000')+'"/>');
     parts.push('<Cell N="LinePattern" V="'+(st.line && st.line!=='none' ? 1 : 0)+'"/>');
-    parts.push('<Cell N="LineWeight" V="'+(inches(Math.max(st.weight,1))*72).toFixed(3)+'"/>');
+    parts.push('<Cell N="LineWeight" V="'+inches(Math.max(st.weight,1)).toFixed(5)+'"/>');
     return parts.join('');
   }
 
@@ -3541,7 +3606,7 @@ function sceneToSvgString(scene){
     } else if(n.type === 'line'){
       parts.push('<line id="'+id+'" data-editable="true" x1="'+x+'" y1="'+y+'" x2="'+num(n.x2,x+w)+'" y2="'+num(n.y2,y+h)+'" stroke="'+color(n.stroke,'#334155')+'" stroke-width="'+sw+'" fill="none"'+(n.arrow?' marker-end="url(#ff-arrow)"':'')+dash+'/>');
     } else if(n.type === 'polyline'){
-      parts.push('<polyline id="'+id+'" data-editable="true" points="'+escapeSvgAttr(n.points||'')+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+dash+'/>');
+      parts.push('<'+(n.closed?'polygon':'polyline')+' id="'+id+'" data-editable="true" points="'+escapeSvgAttr(n.points||'')+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+dash+'/>');
     } else if(n.type === 'path'){
       parts.push('<path id="'+id+'" data-editable="true" d="'+escapeSvgAttr(n.d||'')+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+dash+'/>');
     }
@@ -3559,7 +3624,7 @@ async function ensureBitmapDataUrl(src){
 }
 
 function editableScenePrompt(W,H,paper){
-  return 'Reconstruct this scientific figure as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Text must be OCR transcription, not a description. Do not merge adjacent boxes, graph nodes, text, or arrows. Do not return a single full-canvas bitmap as a substitute. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor}, and image {x,y,w,h,href}. Use image only for photographic/illustrative content that cannot be decomposed, and include a crop object when possible. Keep z-order from background to foreground. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
+  return 'Reconstruct this scientific figure as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Text must be OCR transcription, not a description. Do not merge adjacent boxes, graph nodes, text, or arrows. For 3D-looking bars, cubes, prisms, or beveled objects, draw the front, top, and side faces as separate closed polygons with their own fill colors and edges; never flatten them to a rectangle. Preserve geometry and layer order. Do not return a single full-canvas bitmap as a substitute. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,closed,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor}, and image {x,y,w,h,href}. Use image only for photographic/illustrative content that cannot be decomposed, and include a crop object when possible. Keep z-order from background to foreground. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
 }
 
 function sceneNumber(v, fallback){
@@ -3591,7 +3656,7 @@ function materializeEditableScene(raw,W,H){
     if(!type && (n.text!=null || n.content!=null || n.label!=null)) type='text';
     const aliases={
       rectangle:'rect',roundedrectangle:'rect',box:'rect',group:'rect',panel:'rect',container:'rect',
-      circle:'ellipse',oval:'ellipse',
+      circle:'ellipse',oval:'ellipse',polygon:'polyline',
       arrow:'line',connector:'line',segment:'line',
       label:'text',caption:'text',
       bitmap:'image',photo:'image',raster:'image'
@@ -3625,8 +3690,11 @@ function materializeEditableScene(raw,W,H){
       arrow:!!(n.arrow||n.markerEnd||n.arrowhead),
       dash:!!(n.dash||n.dashed||n.strokeDasharray)
     }));
-    else if(type==='polyline' && pick(n,['points','vertices'],''))
-      out.push(Object.assign(base,{type:'polyline',points:String(pick(n,['points','vertices'],'')),dash:!!(n.dash||n.dashed)}));
+    else if(type==='polyline' && pick(n,['points','vertices'],'')){
+      const vertices=pick(n,['points','vertices'],[]);
+      const points=Array.isArray(vertices) ? vertices.map(p=>Array.isArray(p)?p.join(','):(p&&typeof p==='object'?p.x+','+p.y:String(p))).join(' ') : String(vertices);
+      out.push(Object.assign(base,{type:'polyline',points,closed:!!(n.closed||n.isClosed||String(n.type).toLowerCase()==='polygon'),dash:!!(n.dash||n.dashed)}));
+    }
     else if(type==='path' && pick(n,['d','path'],''))
       out.push(Object.assign(base,{type:'path',d:String(pick(n,['d','path'],''))}));
     else if(type==='text' && String(pick(n,['text','content','label','value'],'')).trim()){
@@ -3852,8 +3920,7 @@ function syncStep3Bitmap(){
   }
   return src;
 }
-async function runReconstruction(options){
-  const automatic=!!(options&&options.automatic);
+async function runReconstruction(){
   const st = ensureExportState();
   const status = $('#reconStatus');
   const say = function(k, vars){ if(status) status.textContent = tt(k, vars); };
@@ -3868,8 +3935,8 @@ async function runReconstruction(options){
     return false;
   }
   if(!src){ st.reconFailed = true; st.reconError = 'No bitmap source'; renderEditableExportCard(); say('recon.nobitmap'); return false; }
-  st.reconFailed = false;
-  st.reconError = '';
+  Object.assign(st,{svg:'',baseSvg:'',scene:null,recon:null,reconFailed:false,reconError:''});
+  renderEditableExportCard();
   try{
     say('recon.reading');
     const im = await loadImage(src);
@@ -3878,62 +3945,14 @@ async function runReconstruction(options){
     canvas.height = im.naturalHeight || im.height;
     canvas.getContext('2d').drawImage(im, 0, 0);
     say('recon.labelling', { n: 0 });
-    try{
-      const scene = await requestEditableScene(src, canvas.width, canvas.height);
-      const svg = sceneToSvgString(scene), audit = auditReconScene(scene);
-      if(automatic && (audit.dominantBitmap || audit.primitiveCount < 6)){
-        throw new Error('Vision model returned a dominant bitmap or too few editable primitives');
-      }
-      Object.assign(st,{scene,svg,baseSvg:svg,source:'bitmap',recon:{mode:'vector',nodes:scene.nodes.length,audit},reconFailed:false,reconError:''});
-      renderEditableExportCard(); applyExportFont(st.font || 'original');
-      say(audit.defects.length ? 'recon.audit' : 'recon.done',{n:scene.nodes.length,d:audit.defects.length});
-      return true;
-    }catch(vectorErr){
-      console.warn('vector reconstruction failed',vectorErr);
-      if(automatic){ st.reconFailed = true; st.reconError = String(vectorErr && vectorErr.message || vectorErr || 'Vector reconstruction failed'); renderEditableExportCard(); say('recon.failedDetail',{msg:st.reconError}); return false; }
-    }
-    const blocks = detectContentBlocks(canvas);
-    const anchors = labelAnchorsFromBlocks(blocks, canvas.width, canvas.height);
-    if(!anchors.length){ st.reconFailed = true; st.reconError = 'No editable regions detected'; renderEditableExportCard(); say('recon.noboxes'); return false; }
-
-    say('recon.labelling', { n: anchors.length });
-    const labels = await requestRegionLabels(anchors, canvas);
-    // Prefer the model's own position, snapped onto a blank region. If the model gave
-    // no position, fall back to reading order against the detected regions.
-    const placed = [];
-    const taken = [];
-    labels.forEach(function(lb, i){
-      if(!lb.text) return;
-      // The model may suggest a position; otherwise keep the anchor it belongs to.
-      const anchor = anchors[i] || anchors[0];
-      const wanted = (lb.x || lb.y) ? { x:lb.x, y:lb.y, w:lb.w || anchor.w, h:lb.h || anchor.h } : anchor;
-      const overUses = taken.filter(function(p){
-        return Math.abs(p.x - wanted.x) < 12 && Math.abs(p.y - wanted.y) < 12;
-      }).length;
-      if(overUses) return;
-      const finalBox = snapToBlankPixels(canvas, wanted);
-      taken.push(finalBox);
-      placed.push({ region:finalBox, text:lb.text });
-    });
-    if(!placed.length){ st.reconFailed = true; st.reconError = 'No editable text detected'; renderEditableExportCard(); say('recon.notext'); return false; }
-
-    const scene = buildReconScene(canvas, placed, $('#paper') ? $('#paper').value : '');
-    const svg = sceneToSvgString(scene);
-    const audit = auditReconScene(scene);
+    const scene = await requestEditableScene(src, canvas.width, canvas.height);
+    const svg = sceneToSvgString(scene), audit = auditReconScene(scene);
     if(audit.dominantBitmap || audit.primitiveCount < 6){
-      st.reconFailed = true;
-      st.reconError = '重建结果缺少足够的独立可编辑元素';
-      renderEditableExportCard();
-      say('recon.failedDetail',{msg:st.reconError});
-      return false;
+      throw new Error('Vision model returned a dominant bitmap or too few editable primitives');
     }
-    Object.assign(st, { scene:scene, svg:svg, baseSvg:svg, source:'bitmap',
-                       recon:{ anchors:anchors.length, labels:placed.length, audit:audit },
-                       reconFailed:false, reconError:'' });
-    renderEditableExportCard();
-    applyExportFont(st.font || 'original');
-    say(audit.defects.length ? 'recon.audit' : 'recon.done',
-        { n: placed.length, d: audit.defects.length });
+    Object.assign(st,{scene,svg,baseSvg:svg,source:'bitmap',recon:{mode:'vector',nodes:scene.nodes.length,audit},reconFailed:false,reconError:''});
+    renderEditableExportCard(); applyExportFont(st.font || 'original');
+    say(audit.defects.length ? 'recon.audit' : 'recon.done',{n:scene.nodes.length,d:audit.defects.length});
     return true;
   }catch(err){
     console.warn('reconstruction failed', err);
@@ -4021,7 +4040,7 @@ function auditReconScene(scene){
     for(let j=i+1;j<text.length;j++){
       const a = text[i], b = text[j];
       const ox = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x);
-      const oy = Math.min(a.y, a.y + a.h) - Math.max(a.y, b.y);
+      const oy = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y);
       if(ox > 2 && oy > 2) defects.push({ id:a.id + '+' + b.id, kind:'overlap' });
     }
   }
@@ -4335,7 +4354,7 @@ function initEditableExport(){
         dlData = sceneToDrawio(scene); dlMime = 'application/xml;charset=utf-8';
         downloadText(dlName, dlData, dlMime);
       } else if(target==='pptx'){
-        dlData = await buildPptx(scene); dlMime = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+        dlData = await buildNativePptx(scene, zipStore); dlMime = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
         downloadBlob(dlName, dlData);
       } else if(target==='vsdx'){
         dlData = zipStore(sceneToVsdxFiles(scene, fontChoice)); dlMime = 'application/vnd.ms-visio.drawing';
@@ -4366,9 +4385,7 @@ window.__ffReconstruct = () => runReconstruction();
 /* Kept alongside the other hooks so the card can be re-rendered from outside. */
 window.__ffRefreshExportCard = () => renderEditableExportCard();
 
-/* Step 4 always enters the real vision reconstruction path.  runReconstruction
-   performs the API call, waits for the structured scene, and only uses its
-   deterministic fallback when explicitly running a manual retry. */
+/* Step 4 and its manual retry use the same vision reconstruction path. */
 $('#reconBtn')?.addEventListener('click', async function(){
   const btn = $('#reconBtn');
   const st = window.__ffExportState;
@@ -4537,7 +4554,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
      pending until the API returns, just as the client does, instead of showing
      an instant fake editable result. */
   let reconOk = false;
-  try{ reconOk = await runReconstruction({automatic:true}); }
+  try{ reconOk = await runReconstruction(); }
   catch(e){ console.warn('automatic editable reconstruction failed', e); }
   st.reconPending = false;
   if(!reconOk){
