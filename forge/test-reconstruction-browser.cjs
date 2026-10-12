@@ -111,6 +111,37 @@ const server = http.createServer((req,res)=>{
     assert.ok(recovered.audit.totalTiles>8,'failed third crop must be subdivided');
     assert.equal(recovered.audit.completedTiles,recovered.audit.totalTiles,'all replacement crops must complete');
     assert.ok(recovered.nodes>0,'recovered result remains editable');
+    const fallback=await page.evaluate(async()=>{
+      const original=window.fetch;
+      let calls=0;
+      window.fetch=async(url,options)=>{
+        if(String(url).endsWith('/chat/completions')){
+          calls++;
+          return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({description:'summary only'})}}]}),{status:200,headers:{'Content-Type':'application/json'}});
+        }
+        return original(url,options);
+      };
+      const canvas=document.createElement('canvas');canvas.width=240;canvas.height=160;
+      const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,240,160);
+      ctx.fillStyle='#123456';ctx.fillRect(30,25,100,80);
+      window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
+      const ok=await window.__ffReconstruct();
+      return {ok,calls,audit:window.__ffApiAudit.reconstruction,nodes:window.__ffExportState.scene?.nodes.length,
+        status:document.querySelector('#reconStatus').textContent};
+    });
+    assert.equal(fallback.ok,true,JSON.stringify(fallback));
+    assert.equal(fallback.calls,2,'malformed response should get one schema retry');
+    assert.equal(fallback.audit.fallbackTiles,1,'terminal malformed response must use editable fallback');
+    assert.ok(fallback.nodes>0,'fallback must contain native vector nodes');
+    assert.match(fallback.status,/可编辑色块|editable color blocks/);
+    for(const format of ['svg','pptx','vsdx','drawio']){
+      await page.locator(`#exportActions [data-export="${format}"]`).click();
+      const downloadPromise=page.waitForEvent('download',{timeout:30000});
+      await page.locator('#exportConfirm').click();
+      const download=await downloadPromise;
+      const bytes=fs.readFileSync(await download.path());
+      assert.ok(bytes.length>100,`${format} fallback download must contain content`);
+    }
     const failed=await page.evaluate(async()=>{
       const original=window.fetch;
       window.fetch=async(url,options)=>{
