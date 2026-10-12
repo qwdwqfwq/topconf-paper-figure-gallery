@@ -3682,13 +3682,18 @@ function materializeEditableScene(raw,W,H){
       bitmap:'image',photo:'image',raster:'image'
     };
     type=aliases[type]||type;
-    const xRaw=pick(n,['x','left','cx'],0);
-    const yRaw=pick(n,['y','top','cy'],0);
+    const lineStart=n.start||n.from||{};
+    const lineEnd=n.end||n.to||{};
+    const xRaw=type==='line' ? pick(n,['x','x1','startX','fromX'],pick(lineStart,['x'],null)) : pick(n,['x','left','cx'],null);
+    const yRaw=type==='line' ? pick(n,['y','y1','startY','fromY'],pick(lineStart,['y'],null)) : pick(n,['y','top','cy'],null);
+    // A missing position must never silently become the tile origin. That
+    // produced hundreds of spurious diagonals in real Ark vision output.
+    if((xRaw===null || yRaw===null) && type!=='polyline' && type!=='path') return;
     const right=pick(n,['right'],null);
     const bottom=pick(n,['bottom'],null);
     const wRaw=pick(n,['w','width'],right!=null?sceneNumber(right,0)-sceneNumber(xRaw,0):1);
     const hRaw=pick(n,['h','height'],bottom!=null?sceneNumber(bottom,0)-sceneNumber(yRaw,0):1);
-    const x=clamp(xRaw,0,W), y=clamp(yRaw,0,H);
+    const x=clamp(xRaw??0,0,W), y=clamp(yRaw??0,0,H);
     const w=clamp(wRaw,1,W-x), h=clamp(hRaw,1,H-y);
     const base={
       id:String(n.id||('v'+i)),
@@ -3703,13 +3708,18 @@ function materializeEditableScene(raw,W,H){
       dash:!!(n.dash||n.dashed||n.strokeDasharray)
     }));
     else if(type==='ellipse') out.push(Object.assign(base,{type:'ellipse'}));
-    else if(type==='line') out.push(Object.assign(base,{
-      type:'line',
-      x2:clamp(pick(n,['x2','right'],x+w),0,W),
-      y2:clamp(pick(n,['y2','bottom'],y+h),0,H),
-      arrow:!!(n.arrow||n.markerEnd||n.arrowhead),
-      dash:!!(n.dash||n.dashed||n.strokeDasharray)
-    }));
+    else if(type==='line'){
+      const endX=pick(n,['x2','endX','toX','right'],pick(lineEnd,['x'],null));
+      const endY=pick(n,['y2','endY','toY','bottom'],pick(lineEnd,['y'],null));
+      if(endX===null || endY===null) return;
+      const x2=clamp(endX,0,W), y2=clamp(endY,0,H);
+      if(Math.hypot(x2-x,y2-y)<0.5) return;
+      out.push(Object.assign(base,{
+        type:'line',x2,y2,
+        arrow:!!(n.arrow||n.markerEnd||n.arrowhead),
+        dash:!!(n.dash||n.dashed||n.strokeDasharray)
+      }));
+    }
     else if(type==='polyline' && pick(n,['points','vertices'],'')){
       const vertices=pick(n,['points','vertices'],[]);
       const points=Array.isArray(vertices) ? vertices.map(p=>Array.isArray(p)?p.join(','):(p&&typeof p==='object'?p.x+','+p.y:String(p))).join(' ') : String(vertices);
@@ -3718,10 +3728,25 @@ function materializeEditableScene(raw,W,H){
     else if(type==='path' && pick(n,['d','path'],''))
       out.push(Object.assign(base,{type:'path',d:String(pick(n,['d','path'],''))}));
     else if(type==='text' && String(pick(n,['text','content','label','value'],'')).trim()){
+      const label=String(pick(n,['text','content','label','value'],'')).replace(/[\r\n]+/g,' ').trim().slice(0,300);
+      let fontSize=clamp(pick(n,['fontSize','font_size','size'],18),6,120);
+      // The model may report a size from a magnified crop. Respect its
+      // explicit label bounds so adjacent editable labels do not collide.
+      const explicitW=sceneNumber(pick(n,['w','width'],null),0);
+      const explicitH=sceneNumber(pick(n,['h','height'],null),0);
+      if(explicitH>0) fontSize=Math.min(fontSize,Math.max(6,explicitH*1.15));
+      if(explicitW>0){
+        const font=String(pick(n,['fontFamily','font','family'],'Arial'));
+        const measure=document.createElement('canvas').getContext('2d');
+        measure.font=`${n.bold?'bold ':''}${fontSize}px ${font}`;
+        const measured=measure.measureText(label).width;
+        if(measured>explicitW*1.12) fontSize=Math.max(6,fontSize*explicitW*1.12/measured);
+      }
       out.push(Object.assign(base,{
         type:'text',
-        text:String(pick(n,['text','content','label','value'],'')).replace(/[\r\n]+/g,' ').trim().slice(0,300),
-        fontSize:clamp(pick(n,['fontSize','font_size','size'],18),6,120),
+        text:label,
+        fill:cleanColor(pick(n,['fill','fillColor','color','textColor'],'#111827'),'#111827'),
+        fontSize,
         fontFamily:pick(n,['fontFamily','font','family'],'Arial, Helvetica, sans-serif'),
         bold:!!(n.bold||n.fontWeight==='bold'||Number(n.fontWeight)>=600),
         italic:!!(n.italic||n.fontStyle==='italic'),
