@@ -51,7 +51,11 @@ const childTile={index:'6.3',x:676,y:1160,w:380,h:424,
 const cleaned=mergeReconstructionTiles([
   {tile:rayTile,scene:{nodes:[
     {id:'bad-ray',type:'line',x:0,y:0,x2:337,y2:358,stroke:'#333'},
+    {id:'bad-edge-ray',type:'line',x:0,y:100,x2:337,y2:458,stroke:'#333'},
+    {id:'bad-polyline-ray',type:'polyline',points:'0,0 337,358',stroke:'#333'},
+    {id:'bad-path-ray',type:'path',d:'M 0 0 L 337 358',stroke:'#333'},
     {id:'real-connector',type:'line',x:120,y:140,x2:260,y2:190,stroke:'#333'},
+    {id:'real-panel-border',type:'line',x:0,y:180,x2:600,y2:180,stroke:'#333'},
     {id:'short-corner-tick',type:'line',x:0,y:0,x2:24,y2:12,stroke:'#333'}
   ]}},
   {tile:childTile,scene:{nodes:[
@@ -59,8 +63,21 @@ const cleaned=mergeReconstructionTiles([
     {id:'cube-face',type:'polyline',points:'130,90 170,90 170,130 130,130',closed:true}
   ]}}
 ],2816,1584);
-assert.equal(cleaned.counts.filteredArtifactLines,2);
+assert.equal(cleaned.counts.filteredArtifactLines,5);
 assert.deepEqual(cleaned.nodes.map(n=>n.id),[
-  'tile4_real-connector','tile4_short-corner-tick','tile6.3_cube-face'
+  'tile4_real-connector','tile4_real-panel-border','tile4_short-corner-tick','tile6.3_cube-face'
 ]);
+const titleTiles=planReconstructionTiles(2816,1584);
+const titleParts=[
+  {text:'Diffusion',x:360,y:78,w:372},
+  {text:'on Policy for One-S',x:0,y:62,w:760},
+  {text:'-Shot Robot Manip',x:-10,y:70,w:780},
+  {text:'ipulation',x:-18,y:78,w:382}
+];
+const titleMerge=mergeReconstructionTiles(titleTiles.slice(0,4).map((tile,i)=>({tile,scene:{nodes:[
+  {id:`title-${i}`,type:'text',...titleParts[i],h:110,fontSize:92,fill:'#111'}
+]}})),2816,1584);
+assert.equal(titleMerge.nodes.length,1,'seam title fragments must become one editable text shape');
+assert.equal(titleMerge.nodes[0].text,'Diffusion Policy for One-Shot Robot Manipulation');
+assert.equal(titleMerge.counts.stitchedTextFragments,4);
 console.log('reconstruction tile geometry and overlap: OK');

@@ -80,29 +80,97 @@ function movedPoints(points,dx,dy){
   return out.join(' ');
 }
 
-// Vision models sometimes use a crop corner as a placeholder endpoint for a
-// line they cannot locate. Once the crop is moved onto the full canvas, these
-// become the long diagonal rays seen in every exported format. Remove only
-// long lines anchored at a crop corner; keep short ticks and real interior
-// connectors. This must happen before the shared scene reaches any exporter.
-function isCropCornerArtifactLine(n,tile){
-  if(n.type!=='line') return false;
-  const coordinates=[n.x,n.y,n.x2,n.y2].map(Number);
-  if(coordinates.some(v=>!Number.isFinite(v))) return true;
-  const [x1,y1,x2,y2]=coordinates;
+function boundaryTextStitches(results){
+  const fragments=[];
+  results.forEach(({tile,scene},tileIndex)=>{
+    (scene.nodes||[]).forEach((node,nodeIndex)=>{
+      if(node.type!=='text'||typeof node.text!=='string'||!node.text.trim()) return;
+      const x=Number(node.x), y=Number(node.y), w=Number(node.w??node.width);
+      const font=Number(node.fontSize||node.size);
+      if(![x,y,w,font].every(Number.isFinite)||w<=0||font<28) return;
+      fragments.push({tile,tileIndex,nodeIndex,node,x,y,w,font,
+        left:x<=36,right:x+w>=tile.w-36,globalY:tile.y+y});
+    });
+  });
+  const used=new Set(),skip=new Map(),stitched=[];
+  const key=f=>`${f.tileIndex}:${f.nodeIndex}`;
+  function overlap(a,b){
+    const limit=Math.min(a.length,b.length,32);
+    for(let n=limit;n>=2;n--) if(a.slice(-n)===b.slice(0,n)) return n;
+    return 0;
+  }
+  for(const first of fragments){
+    if(used.has(key(first))||!first.right||first.left) continue;
+    const chain=[first];
+    let combined=first.node.text;
+    while(true){
+      const prev=chain.at(-1);
+      const options=fragments.filter(next=>!used.has(key(next))&&!chain.includes(next)&&next.left&&
+        next.tile.coreX===prev.tile.coreRight&&next.tile.coreY===prev.tile.coreY&&
+        Math.abs(next.globalY-prev.globalY)<=Math.max(next.font,prev.font)*0.3&&
+        Math.abs(next.font-prev.font)<=Math.max(next.font,prev.font)*0.2);
+      const match=options.map(next=>({next,n:overlap(combined,next.node.text)}))
+        .filter(item=>item.n>=2).sort((a,b)=>b.n-a.n)[0];
+      if(!match) break;
+      chain.push(match.next);
+      combined+=match.next.node.text.slice(match.n);
+    }
+    if(chain.length<2) continue;
+    for(const part of chain){
+      used.add(key(part));
+      if(!skip.has(part.tileIndex)) skip.set(part.tileIndex,new Set());
+      skip.get(part.tileIndex).add(part.nodeIndex);
+    }
+    const last=chain.at(-1);
+    const globalX=first.tile.x+first.x;
+    stitched.push({...first.node,id:`stitched_${first.tile.index}_${last.tile.index}`,
+      text:combined,x:globalX,y:first.globalY,
+      w:Math.max(1,last.tile.x+last.x+last.w-globalX),
+      h:Math.max(...chain.map(part=>Number(part.node.h||part.node.height||part.font*1.2))),
+      fontSize:first.font,anchor:'start'});
+  }
+  return {skip,stitched};
+}
+
+// A model may hallucinate a line from a crop boundary to a distant object.
+// Relocating that crop turns it into the long rays seen in all four exports.
+// Reject those lines in the shared scene, before format-specific rendering.
+// Keep short edge ticks, axis-aligned panel borders and interior connectors.
+function isCropBoundaryArtifactLine(n,tile){
+  let pairs;
+  if(n.type==='line'){
+    const coordinates=[n.x,n.y,n.x2,n.y2].map(Number);
+    if(coordinates.some(v=>!Number.isFinite(v))) return true;
+    pairs=[coordinates];
+  }else if(n.type==='polyline'||n.type==='path'){
+    const segments=geometrySegments(n);
+    if(segments.length!==1||segments[0].closed||segments[0].points.length!==2) return false;
+    const [a,b]=segments[0].points;
+    pairs=[[a.x,a.y,b.x,b.y]];
+  }else return false;
+  const edge=(x,y)=>Math.abs(x)<=1||Math.abs(x-tile.w)<=1
+    ||Math.abs(y)<=1||Math.abs(y-tile.h)<=1;
   const corner=(x,y)=>(Math.abs(x)<=1||Math.abs(x-tile.w)<=1)
     && (Math.abs(y)<=1||Math.abs(y-tile.h)<=1);
-  return (corner(x1,y1)||corner(x2,y2))
-    && Math.hypot(x2-x1,y2-y1)>=Math.max(100,0.16*Math.min(tile.w,tile.h));
+  return pairs.some(([x1,y1,x2,y2])=>{
+    const dx=Math.abs(x2-x1),dy=Math.abs(y2-y1);
+    const length=Math.hypot(dx,dy);
+    if((corner(x1,y1)||corner(x2,y2)) && length>=Math.max(100,0.16*Math.min(tile.w,tile.h))) return true;
+    return (edge(x1,y1)||edge(x2,y2))
+      && length>=Math.max(160,0.5*Math.min(tile.w,tile.h))
+      && dx>=Math.max(30,0.08*tile.w) && dy>=Math.max(30,0.08*tile.h);
+  });
 }
 
 export function mergeReconstructionTiles(results,width,height){
   const nodes=[];
   let filteredArtifactLines=0;
-  for(const {tile,scene} of results){
-    for(const source of scene.nodes||[]){
+  const {skip,stitched}=boundaryTextStitches(results);
+  for(const [tileIndex,{tile,scene}] of results.entries()){
+    for(const [nodeIndex,source] of (scene.nodes||[]).entries()){
+      if(skip.get(tileIndex)?.has(nodeIndex)) continue;
       const n={...source,id:`tile${tile.index}_${source.id||nodes.length}`};
-      if(isCropCornerArtifactLine(n,tile)){
+      if(isCropBoundaryArtifactLine(n,tile)){
         filteredArtifactLines++;
         continue;
       }
@@ -133,9 +201,10 @@ export function mergeReconstructionTiles(results,width,height){
       nodes.push(n);
     }
   }
+  nodes.push(...stitched);
   return {schema:'figureforge.scene.v4',canvas:{width,height,w:width,h:height},nodes,
     counts:{total:nodes.length,text:nodes.filter(n=>n.type==='text').length,
       shapes:nodes.filter(n=>n.type!=='text'&&n.type!=='image').length,
       images:nodes.filter(n=>n.type==='image').length,
-      filteredArtifactLines}};
+      filteredArtifactLines,stitchedTextFragments:[...skip.values()].reduce((sum,parts)=>sum+parts.size,0)}};
 }
