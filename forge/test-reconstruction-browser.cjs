@@ -56,6 +56,10 @@ const server = http.createServer((req,res)=>{
           const w=Number(match[1]),h=Number(match[2]);
           const nodes=Array.from({length:8},(_,i)=>({type:'rect',x:20+i*45,y:30,w:35,h:35,fill:'#abcdef',stroke:'#123456'}));
           nodes.push({type:'text',x:15,y:90,w:200,h:30,text:'Editable test'});
+          nodes.push({type:'line',x1:12,y1:14,x2:70,y2:14,stroke:'#123456'});
+          nodes.push({type:'line',x2:70,y2:14,stroke:'#123456'}); // Invalid origin must not become (0,0).
+          nodes.push({type:'text',x:15,y:140,w:80,h:20,text:'Oversized label',fontSize:100});
+          nodes.push({type:'polyline',points:'12,180 70,180',stroke:'#123456'});
           return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({output:{result:{scene:{canvas:{width:w,height:h},nodes}}}})}}]}),{status:200,headers:{'Content-Type':'application/json'}});
         }
         return original(url,options);
@@ -66,11 +70,21 @@ const server = http.createServer((req,res)=>{
       const ok=await window.__ffReconstruct();
       const scene=window.__ffExportState.scene;
       return {ok,calls,nodes:scene&&scene.nodes.length,svg:window.__ffExportState.svg,
+        lines:scene?.nodes.filter(n=>n.type==='line').map(n=>({x:n.x,y:n.y,x2:n.x2,y2:n.y2})),
+        fittedText:scene?.nodes.filter(n=>n.type==='text'&&n.text==='Oversized label').map(n=>n.fontSize),
+        polylines:(window.__ffExportState.svg.match(/<polyline\b/g)||[]).length,
+        textColor:(window.__ffExportState.svg.match(/<text[^>]*fill="([^"]+)"/)||[])[1],
         status:document.querySelector('#reconStatus').textContent};
     });
     assert.equal(result.ok,true,JSON.stringify(result));
     assert.equal(result.calls,2,'1200px bitmap must use two vision requests');
     assert.ok(result.nodes>=16,'editable primitives must survive tile merge');
+    assert.equal(result.lines.length,2,'only valid line coordinates survive');
+    assert.ok(result.lines.every(n=>n.x>=12 && n.y===14 && n.x2-n.x===58),'x1/y1 aliases must preserve line geometry');
+    assert.equal(result.fittedText.length,2,'oversized labels must remain editable');
+    assert.ok(result.fittedText.every(size=>size<=23),'text must fit its explicit bounding box');
+    assert.equal(result.polylines,2,'point-only polylines must survive');
+    assert.equal(result.textColor,'#111827','text without model color must remain visible');
     assert.match(result.svg,/<svg/);
     for(const format of ['svg','pptx','vsdx','drawio']){
       await page.locator(`#exportActions [data-export="${format}"]`).click();
