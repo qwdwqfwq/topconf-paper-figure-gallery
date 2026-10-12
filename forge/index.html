@@ -3646,6 +3646,9 @@ async function ensureBitmapDataUrl(src){
 function editableScenePrompt(W,H,paper){
   return 'Reconstruct this scientific figure as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Text must be OCR transcription, not a description. Do not merge adjacent boxes, graph nodes, text, or arrows. For 3D-looking bars, cubes, prisms, or beveled objects, draw the front, top, and side faces as separate closed polygons with their own fill colors and edges; never flatten them to a rectangle. Preserve geometry and layer order. Do not return a single full-canvas bitmap as a substitute. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,closed,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor}, and image {x,y,w,h,href}. Use image only for photographic/illustrative content that cannot be decomposed, and include a crop object when possible. Keep z-order from background to foreground. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
 }
+function editableSceneRetryPrompt(W,H){
+  return 'The previous answer could not be used. Inspect the attached image crop and return ONLY a JSON object with this exact outer shape: {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[{"type":"rect","x":0,"y":0,"w":10,"h":10,"fill":"#ffffff"}]}. Replace the example node with the actual visible, separately editable rectangles, lines, arrows, text, polygons and photographic regions. Coordinates are pixels within this crop. Every node needs a type. For text use {"type":"text","x":0,"y":0,"w":100,"h":20,"text":"actual words","fontSize":14,"fill":"#000000"}. For a completely blank white crop, nodes may be empty. No descriptions, analysis, Markdown, or other keys are needed.';
+}
 
 function sceneNumber(v, fallback){
   const n=Number(v);
@@ -3825,8 +3828,9 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit){
     try{
       const attemptPrompt=attempt===1
         ? prompt
-        : prompt+'\n\nRetry '+attempt+': the previous response was not usable. Return ONLY a complete valid JSON scene object containing all visible editable primitives. An empty nodes array is valid only for a blank crop. Do not use Markdown fences or explanatory text.';
+        : editableSceneRetryPrompt(W,H);
       let txt='';
+      let responseDiagnostics='';
       if(cfgv.proto==='anthropic' && !relay){
         const body={
           model,
@@ -3845,6 +3849,8 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit){
         txt=r.text;
         if(!r.ok) throw new Error('HTTP '+r.status+': '+friendlyHttp(r.status,txt));
         const d=JSON.parse(txt);
+        responseDiagnostics='stop_reason='+String(d.stop_reason||'unknown')+', output_chars='+txt.length;
+        audit.responseDiagnostics=responseDiagnostics;
         txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
       }else{
         const body={
@@ -3869,8 +3875,17 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit){
         if(!r.ok) throw new Error('HTTP '+r.status+': '+friendlyHttp(r.status,txt));
         const d=JSON.parse(txt);
         txt=editableResponseText(d);
+        const choice=d.choices&&d.choices[0]||{};
+        responseDiagnostics='finish_reason='+String(choice.finish_reason||'unknown')+', content_chars='+txt.length+
+          (d.usage&&d.usage.completion_tokens!==undefined?', completion_tokens='+d.usage.completion_tokens:'');
+        audit.responseDiagnostics=responseDiagnostics;
       }
-      const scene=parseEditableSceneResponse(txt,W,H);
+      let scene;
+      try{ scene=parseEditableSceneResponse(txt,W,H); }
+      catch(err){
+        if(err.sceneFormatFailure) err.message+=' ('+responseDiagnostics+')';
+        throw err;
+      }
       const sourceImage=await loadImage(imageDataUri);
       for(const n of scene.nodes){
         if(n.type!=='image') continue;
@@ -3980,9 +3995,41 @@ async function runReconstruction(){
     canvas.getContext('2d').drawImage(im, 0, 0);
     const tiles=planReconstructionTiles(canvas.width,canvas.height);
     const reconstructionAudit=(window.__ffApiAudit||(window.__ffApiAudit={})).reconstruction={
-      state:'pending',startedAt:Date.now(),totalTiles:tiles.length,completedTiles:0,tiles:[]
+      state:'pending',startedAt:Date.now(),totalTiles:tiles.length,completedTiles:0,fallbackTiles:0,tiles:[]
     };
     const results=[];
+    // An API may repeatedly answer with a prose/summary object, even for a
+    // small crop. Preserve an editable result by tracing that crop into native
+    // filled rectangles. This is explicitly reported as a fidelity fallback.
+    const traceFailedTile=function(tile,crop){
+      const left=tile.coreX-tile.x, top=tile.coreY-tile.y;
+      const width=tile.coreRight-tile.coreX, height=tile.coreBottom-tile.coreY;
+      const step=Math.max(2,Math.ceil(Math.sqrt(width*height/3200)));
+      const cols=Math.ceil(width/step), rows=Math.ceil(height/step);
+      const sampled=document.createElement('canvas');
+      sampled.width=cols; sampled.height=rows;
+      const ctx=sampled.getContext('2d',{willReadFrequently:true});
+      ctx.drawImage(crop,left,top,width,height,0,0,cols,rows);
+      const pixels=ctx.getImageData(0,0,cols,rows).data;
+      const nodes=[];
+      const colorAt=function(col,row){
+        const i=(row*cols+col)*4;
+        const channel=k=>Math.min(255,Math.round(pixels[i+k]/8)*8);
+        return '#'+[channel(0),channel(1),channel(2)].map(n=>n.toString(16).padStart(2,'0')).join('');
+      };
+      for(let row=0;row<rows;row++){
+        let col=0;
+        while(col<cols){
+          const first=col, fill=colorAt(col,row);
+          while(col+1<cols&&colorAt(col+1,row)===fill) col++;
+          const x=left+first*step, y=top+row*step;
+          nodes.push({type:'rect',x,y,w:Math.min(width,(col+1)*step)-first*step,
+            h:Math.min(step,height-row*step),fill,stroke:'none',strokeWidth:0});
+          col++;
+        }
+      }
+      return {canvas:{width:tile.w,height:tile.h},nodes};
+    };
     const reconstructTile=async function(tile,depth){
       const crop=document.createElement('canvas');
       crop.width=tile.w; crop.height=tile.h;
@@ -4006,6 +4053,16 @@ async function runReconstruction(){
             return recovered;
           }
         }
+        if(err.sceneFormatFailure){
+          const partial=traceFailedTile(tile,crop);
+          tileAudit.state='pixel-vector-fallback';
+          tileAudit.fallbackReason=String(err&&err.message||err);
+          tileAudit.nodeCount=partial.nodes.length;
+          reconstructionAudit.fallbackTiles++;
+          reconstructionAudit.completedTiles++;
+          say('recon.tile',{i:reconstructionAudit.completedTiles,n:reconstructionAudit.totalTiles});
+          return [{tile,scene:partial}];
+        }
         throw new Error('Tile '+tile.index+'/'+reconstructionAudit.totalTiles+': '+String(err&&err.message||err));
       }
     };
@@ -4026,7 +4083,11 @@ async function runReconstruction(){
     reconstructionAudit.finishedAt=Date.now();
     reconstructionAudit.nodeCount=scene.nodes.length;
     renderEditableExportCard(); applyExportFont(st.font || 'original');
-    say(audit.defects.length ? 'recon.audit' : 'recon.done',{n:scene.nodes.length,d:audit.defects.length});
+    if(reconstructionAudit.fallbackTiles){
+      status.textContent=GAL_I18N.lang==='zh'
+        ? '已生成 '+scene.nodes.length+' 个可编辑对象；'+reconstructionAudit.fallbackTiles+' 个区域因视觉 API 返回非图形内容，使用可编辑色块保底。请检查这些区域的文字和细节。'
+        : 'Generated '+scene.nodes.length+' editable objects; '+reconstructionAudit.fallbackTiles+' regions used editable color blocks because the vision API did not return shapes. Check text and fine details in those regions.';
+    }else say(audit.defects.length ? 'recon.audit' : 'recon.done',{n:scene.nodes.length,d:audit.defects.length});
     return true;
   }catch(err){
     console.warn('reconstruction failed', err);
