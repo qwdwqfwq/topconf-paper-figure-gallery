@@ -105,6 +105,37 @@ const server = http.createServer((req,res)=>{
       if(format==='drawio') assert.match(bytes.toString('utf8'),/<mxfile/);
       assert.match(await page.locator('#exportStatus').innerText(),/已生成|完成|finished|ready/i);
     }
+    const repaired=await page.evaluate(async()=>{
+      const original=window.fetch;
+      let calls=0,revisionSeen=false;
+      window.fetch=async(url,options)=>{
+        if(String(url).endsWith('/chat/completions')){
+          calls++;
+          const body=JSON.parse(options.body);
+          const prompt=body.messages[1].content[0].text;
+          const match=prompt.match(/"width":(\d+),"height":(\d+)/);
+          const w=Number(match[1]),h=Number(match[2]);
+          const images=body.messages[1].content.filter(part=>part.type==='image_url').length;
+          if(images===2) revisionSeen=true;
+          const fill=images===2?'#e02020':'#2020e0';
+          const content=JSON.stringify({canvas:{width:w,height:h},nodes:[{type:'rect',x:20,y:20,w:180,h:110,fill,stroke:'none'}]});
+          return new Response(JSON.stringify({choices:[{message:{content}}]}),{status:200,headers:{'Content-Type':'application/json'}});
+        }
+        return original(url,options);
+      };
+      const canvas=document.createElement('canvas');canvas.width=240;canvas.height=160;
+      const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,240,160);
+      ctx.fillStyle='#e02020';ctx.fillRect(20,20,180,110);
+      window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
+      const ok=await window.__ffReconstruct();
+      return {ok,calls,revisionSeen,audit:window.__ffApiAudit.reconstruction,
+        fill:window.__ffExportState.scene?.nodes.find(n=>n.type==='rect')?.fill};
+    });
+    assert.equal(repaired.ok,true,JSON.stringify(repaired));
+    assert.equal(repaired.calls,2,'one vision pass and one visual revision');
+    assert.equal(repaired.revisionSeen,true,'revision must receive both source and rendered preview');
+    assert.equal(repaired.fill,'#e02020','accepted repair must improve the editable scene');
+    assert.equal(repaired.audit.tiles[0].repairAccepted,true);
     const recovered=await page.evaluate(async()=>{
       const original=window.fetch;
       let calls=0;
