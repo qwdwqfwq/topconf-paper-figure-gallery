@@ -549,8 +549,8 @@
       <div class="export-font-row" id="exportModeRow" hidden>
         <label for="exportMode">导出方式</label>
         <select id="exportMode">
-          <option value="fidelity">高保真（可独立编辑的校正图片块 + 原生图形）</option>
-          <option value="vector">纯原生图形（便于编辑，细节可能有偏差）</option>
+          <option value="vector">原生可编辑图形（自动渲染对照）</option>
+          <option value="fidelity">位图校正层（裁片内不可逐元素编辑）</option>
         </select>
       </div>
       <div class="export-font-row">
@@ -3680,6 +3680,36 @@ function sceneToSvgString(scene){
   return parts.join('\n');
 }
 
+// Render the actual editable SVG before accepting it. This measures visible
+// error against the bitmap, not merely whether the JSON has valid geometry.
+async function compareEditableRender(sourceCanvas,scene){
+  const scale=Math.min(1,480/Math.max(sourceCanvas.width,sourceCanvas.height));
+  const w=Math.max(1,Math.round(sourceCanvas.width*scale));
+  const h=Math.max(1,Math.round(sourceCanvas.height*scale));
+  const ref=document.createElement('canvas'),out=document.createElement('canvas');
+  ref.width=out.width=w; ref.height=out.height=h;
+  const rc=ref.getContext('2d',{willReadFrequently:true});
+  const oc=out.getContext('2d',{willReadFrequently:true});
+  rc.fillStyle=oc.fillStyle='#ffffff';
+  rc.fillRect(0,0,w,h); oc.fillRect(0,0,w,h);
+  rc.drawImage(sourceCanvas,0,0,w,h);
+  const url=URL.createObjectURL(new Blob([sceneToSvgString(scene)],{type:'image/svg+xml'}));
+  try{oc.drawImage(await loadImage(url),0,0,w,h);}
+  finally{URL.revokeObjectURL(url);}
+  const a=rc.getImageData(0,0,w,h).data,b=oc.getImageData(0,0,w,h).data;
+  let globalError=0,inkError=0,inkPixels=0,sourceInkPixels=0;
+  for(let i=0;i<a.length;i+=4){
+    const delta=(Math.abs(a[i]-b[i])+Math.abs(a[i+1]-b[i+1])+Math.abs(a[i+2]-b[i+2]))/(3*255);
+    globalError+=delta;
+    const sourceInk=Math.min(a[i],a[i+1],a[i+2])<245;
+    if(sourceInk) sourceInkPixels++;
+    if(sourceInk || Math.min(b[i],b[i+1],b[i+2])<245){inkError+=delta;inkPixels++;}
+  }
+  const pixels=w*h;
+  return {score:Math.max(0,1-.35*globalError/pixels-.65*inkError/Math.max(1,inkPixels)),
+    inkFraction:sourceInkPixels/pixels,preview:out.toDataURL('image/png')};
+}
+
 // Keep the model's shapes and text as individually editable objects, then put
 // independently selectable source-image tiles above them for exact appearance.
 // A tile is an image object: its internal pixels cannot be edited as shapes.
@@ -3917,7 +3947,7 @@ function editableResponseText(d){
   return walk(d,0) || parseResponseText(d) || '';
 }
 
-async function requestEditableScene(imageDataUri,W,H,tileAudit){
+async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   const cfgv=cfg(), relay=$('#baseOverride').value.trim(), model=editableReconstructionModel();
   if(!model) throw new Error(tt('analyze.needmodel'));
   const audit=tileAudit||{};
@@ -3929,9 +3959,9 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit){
   for(let attempt=1;attempt<=2;attempt++){
     audit.attempt=attempt;
     try{
-      const attemptPrompt=attempt===1
-        ? prompt
-        : editableSceneRetryPrompt(W,H);
+      const attemptPrompt=revision
+        ? 'The first attached image is the ORIGINAL reference. The second is your previous editable reconstruction rendered to pixels. Compare them carefully and repair missing, misplaced, wrong-colored or spurious objects. Return the COMPLETE corrected scene, not only a patch. Previous comparison score: '+revision.score.toFixed(3)+'.\n'+prompt
+        : attempt===1 ? prompt : editableSceneRetryPrompt(W,H);
       let txt='';
       let responseDiagnostics='';
       if(cfgv.proto==='anthropic' && !relay){
@@ -3941,7 +3971,8 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit){
           system:RECON_SYS,
           messages:[{role:'user',content:[
             {type:'text',text:attemptPrompt},
-            {type:'image',source:{type:'base64',media_type:parts.media,data:parts.data}}
+            {type:'image',source:{type:'base64',media_type:parts.media,data:parts.data}},
+            ...(revision?[{type:'image',source:{type:'base64',media_type:'image/png',data:dataURIToParts(revision.preview).data}}]:[])
           ]}]
         };
         const r=await fetchTextWithTimeout(baseURL()+'/v1/messages',{
@@ -3964,7 +3995,8 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit){
             {role:'system',content:RECON_SYS},
             {role:'user',content:[
               {type:'text',text:attemptPrompt},
-              {type:'image_url',image_url:{url:imageDataUri}}
+              {type:'image_url',image_url:{url:imageDataUri}},
+              ...(revision?[{type:'image_url',image_url:{url:revision.preview}}]:[])
             ]}
           ]
         };
@@ -4104,9 +4136,11 @@ async function runReconstruction(){
     canvas.getContext('2d').drawImage(im, 0, 0);
     const tiles=planReconstructionTiles(canvas.width,canvas.height);
     const reconstructionAudit=(window.__ffApiAudit||(window.__ffApiAudit={})).reconstruction={
-      state:'pending',startedAt:Date.now(),totalTiles:tiles.length,completedTiles:0,fallbackTiles:0,tiles:[]
+      state:'pending',startedAt:Date.now(),totalTiles:tiles.length,completedTiles:0,
+      fallbackTiles:0,repairCalls:0,revisions:[],tiles:[]
     };
     const results=[];
+    const repairCandidates=[];
     // An API may repeatedly answer with a prose/summary object, even for a
     // small crop. Preserve an editable result by tracing that crop into native
     // filled rectangles. This is explicitly reported as a fidelity fallback.
@@ -4147,9 +4181,18 @@ async function runReconstruction(){
       reconstructionAudit.tiles.push(tileAudit);
       try{
         const partial=await requestEditableScene(crop.toDataURL('image/png'),tile.w,tile.h,tileAudit);
+        const result={tile,scene:partial};
+        // Measure every tile before spending correction calls, so the largest
+        // visible discrepancies get the limited budget first.
+        try{
+          const qa=await compareEditableRender(crop,partial);
+          tileAudit.initialScore=qa.score;
+          if(qa.inkFraction>.003 && qa.score<.82)
+            repairCandidates.push({result,tileAudit,qa,crop});
+        }catch(qaError){tileAudit.qaError=String(qaError&&qaError.message||qaError);}
         reconstructionAudit.completedTiles++;
         say('recon.tile',{i:reconstructionAudit.completedTiles,n:reconstructionAudit.totalTiles});
-        return [{tile,scene:partial}];
+        return [result];
       }catch(err){
         if(err.sceneFormatFailure && depth<2 && Math.max(tile.w,tile.h)>350){
           const subtiles=subdivideReconstructionTile(tile,Math.max(220,Math.ceil(Math.max(tile.w,tile.h)/2)),14);
@@ -4182,6 +4225,33 @@ async function runReconstruction(){
       const resolved=await Promise.all(batch.map(tile=>reconstructTile(tile,0)));
       results.push(...resolved.flat());
     }
+    repairCandidates.sort((a,b)=>a.qa.score-b.qa.score);
+    const repairBudget=Math.min(8,Math.max(4,Math.ceil(results.length/4)));
+    reconstructionAudit.repairCandidates=repairCandidates.length;
+    reconstructionAudit.repairBudget=repairBudget;
+    for(const item of repairCandidates.slice(0,repairBudget)){
+      reconstructionAudit.repairCalls++;
+      const repairAudit={index:item.tileAudit.index,depth:item.tileAudit.depth,repair:true};
+      reconstructionAudit.revisions.push(repairAudit);
+      try{
+        const candidate=await requestEditableScene(item.crop.toDataURL('image/png'),
+          item.crop.width,item.crop.height,repairAudit,
+          {score:item.qa.score,preview:item.qa.preview});
+        const revisedQa=await compareEditableRender(item.crop,candidate);
+        item.tileAudit.revisedScore=revisedQa.score;
+        if(revisedQa.score>item.qa.score+.01){
+          item.result.scene=candidate;
+          item.tileAudit.repairAccepted=true;
+        }
+      }catch(repairError){
+        const message=String(repairError&&repairError.message||repairError);
+        item.tileAudit.repairError=message;
+        if(/\b403\b|quota|insufficient|billing/i.test(message)){
+          reconstructionAudit.repairStoppedReason=message;
+          break;
+        }
+      }
+    }
     const scene=mergeReconstructionTiles(results,canvas.width,canvas.height);
     const svg = sceneToSvgString(scene), audit = auditReconScene(scene);
     if(audit.dominantBitmap){
@@ -4189,13 +4259,19 @@ async function runReconstruction(){
     }
     const fidelityScene=buildFidelityScene(scene,canvas);
     const fidelitySvg=sceneToSvgString(fidelityScene);
-    Object.assign(st,{scene:fidelityScene,svg:fidelitySvg,baseSvg:fidelitySvg,
-      vectorScene:scene,vectorSvg:svg,fidelityScene,fidelitySvg,exportMode:'fidelity',
-      source:'bitmap',recon:{mode:'fidelity',nodes:scene.nodes.length,
-        fidelityTiles:fidelityScene.counts.fidelityTiles,audit},reconFailed:false,reconError:''});
+    let quality=null;
+    try{
+      const measured=await compareEditableRender(canvas,scene);
+      quality={score:measured.score,sourceInkFraction:measured.inkFraction};
+    }catch(qaError){quality={error:String(qaError&&qaError.message||qaError)};}
+    Object.assign(st,{scene,svg,baseSvg:svg,
+      vectorScene:scene,vectorSvg:svg,fidelityScene,fidelitySvg,exportMode:'vector',
+      source:'bitmap',recon:{mode:'vector',nodes:scene.nodes.length,
+        fidelityTiles:fidelityScene.counts.fidelityTiles,audit,quality},reconFailed:false,reconError:''});
     reconstructionAudit.state='succeeded';
     reconstructionAudit.finishedAt=Date.now();
     reconstructionAudit.nodeCount=scene.nodes.length;
+    reconstructionAudit.quality=quality;
     renderEditableExportCard(); applyExportFont(st.font || 'original');
     if(reconstructionAudit.fallbackTiles){
       status.textContent=GAL_I18N.lang==='zh'
@@ -4208,8 +4284,8 @@ async function runReconstruction(){
         : '; filtered '+scene.counts.filteredArtifactLines+' invalid lines from crop boundaries.';
     }
     status.textContent += GAL_I18N.lang==='zh'
-      ? ' 默认高保真模式含 '+fidelityScene.counts.fidelityTiles+' 个可单独选中的原图裁片，裁片内像素不可逐元素编辑；可切换纯原生图形模式。'
-      : '; fidelity mode adds '+fidelityScene.counts.fidelityTiles+' independently selectable source tiles. Pixels inside tiles are not editable as shapes; switch to native-vector mode for that.';
+      ? ' 已进行 '+reconstructionAudit.repairCalls+' 次渲染对照修正；默认导出原生可编辑图形。'+(quality&&quality.score!==undefined?' 自动相似度估计 '+Math.round(quality.score*100)+'%（非像素级保证）。':' 渲染对照不可用，请人工检查。')+' 可切换原图裁片校正层。'
+      : '; '+reconstructionAudit.repairCalls+' render-comparison repairs. Native editable objects are the default.'+(quality&&quality.score!==undefined?' Estimated similarity '+Math.round(quality.score*100)+'% (not a pixel-perfect guarantee).':' Render comparison unavailable; review manually.')+' Optional source-image tiles improve appearance.';
     return true;
   }catch(err){
     console.warn('reconstruction failed', err);
