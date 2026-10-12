@@ -41,4 +41,26 @@ const path=merged.nodes.find(n=>n.id==='tile2_right-path_part1');
 assert.equal(path.type,'polyline');
 assert.ok(path.points.startsWith(`${tiles[1].x+40},500`));
 assert.equal(merged.counts.total,merged.nodes.length);
+
+// Regression: the supplied failed export contained rays from exact crop
+// origins (for example 2084,0 and 676,1160) across unrelated panels.
+const rayTile={index:'4',x:2084,y:0,w:732,h:820,
+  coreX:2084,coreY:0,coreRight:2816,coreBottom:792};
+const childTile={index:'6.3',x:676,y:1160,w:380,h:424,
+  coreX:676,coreY:1160,coreRight:1056,coreBottom:1584};
+const cleaned=mergeReconstructionTiles([
+  {tile:rayTile,scene:{nodes:[
+    {id:'bad-ray',type:'line',x:0,y:0,x2:337,y2:358,stroke:'#333'},
+    {id:'real-connector',type:'line',x:120,y:140,x2:260,y2:190,stroke:'#333'},
+    {id:'short-corner-tick',type:'line',x:0,y:0,x2:24,y2:12,stroke:'#333'}
+  ]}},
+  {tile:childTile,scene:{nodes:[
+    {id:'bad-child-ray',type:'line',x:0,y:0,x2:100,y2:326,stroke:'#333'},
+    {id:'cube-face',type:'polyline',points:'130,90 170,90 170,130 130,130',closed:true}
+  ]}}
+],2816,1584);
+assert.equal(cleaned.counts.filteredArtifactLines,2);
+assert.deepEqual(cleaned.nodes.map(n=>n.id),[
+  'tile4_real-connector','tile4_short-corner-tick','tile6.3_cube-face'
+]);
 console.log('reconstruction tile geometry and overlap: OK');

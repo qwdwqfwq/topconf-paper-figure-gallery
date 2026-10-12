@@ -80,11 +80,32 @@ function movedPoints(points,dx,dy){
   return out.join(' ');
 }
 
+// Vision models sometimes use a crop corner as a placeholder endpoint for a
+// line they cannot locate. Once the crop is moved onto the full canvas, these
+// become the long diagonal rays seen in every exported format. Remove only
+// long lines anchored at a crop corner; keep short ticks and real interior
+// connectors. This must happen before the shared scene reaches any exporter.
+function isCropCornerArtifactLine(n,tile){
+  if(n.type!=='line') return false;
+  const coordinates=[n.x,n.y,n.x2,n.y2].map(Number);
+  if(coordinates.some(v=>!Number.isFinite(v))) return true;
+  const [x1,y1,x2,y2]=coordinates;
+  const corner=(x,y)=>(Math.abs(x)<=1||Math.abs(x-tile.w)<=1)
+    && (Math.abs(y)<=1||Math.abs(y-tile.h)<=1);
+  return (corner(x1,y1)||corner(x2,y2))
+    && Math.hypot(x2-x1,y2-y1)>=Math.max(100,0.16*Math.min(tile.w,tile.h));
+}
+
 export function mergeReconstructionTiles(results,width,height){
   const nodes=[];
+  let filteredArtifactLines=0;
   for(const {tile,scene} of results){
     for(const source of scene.nodes||[]){
       const n={...source,id:`tile${tile.index}_${source.id||nodes.length}`};
+      if(isCropCornerArtifactLine(n,tile)){
+        filteredArtifactLines++;
+        continue;
+      }
       // The overlap supplies visual context. The owning core contributes each
       // object's centre once, so labels at a seam are not duplicated.
       const segments=(n.type==='path'||n.type==='polyline') ? geometrySegments(n) : [];
@@ -115,5 +136,6 @@ export function mergeReconstructionTiles(results,width,height){
   return {schema:'figureforge.scene.v4',canvas:{width,height,w:width,h:height},nodes,
     counts:{total:nodes.length,text:nodes.filter(n=>n.type==='text').length,
       shapes:nodes.filter(n=>n.type!=='text'&&n.type!=='image').length,
-      images:nodes.filter(n=>n.type==='image').length}};
+      images:nodes.filter(n=>n.type==='image').length,
+      filteredArtifactLines}};
 }

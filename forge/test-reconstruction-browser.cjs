@@ -58,6 +58,7 @@ const server = http.createServer((req,res)=>{
           nodes.push({type:'text',x:15,y:90,w:200,h:30,text:'Editable test'});
           nodes.push({type:'line',x1:12,y1:14,x2:70,y2:14,stroke:'#123456'});
           nodes.push({type:'line',x2:70,y2:14,stroke:'#123456'}); // Invalid origin must not become (0,0).
+          nodes.push({type:'line',x:0,y:0,x2:500,y2:240,stroke:'#123456'}); // Crop-corner hallucination must not become a page-wide ray.
           nodes.push({type:'text',x:15,y:140,w:80,h:20,text:'Oversized label',fontSize:100});
           nodes.push({type:'polyline',points:'12,180 70,180',stroke:'#123456'});
           return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({output:{result:{scene:{canvas:{width:w,height:h},nodes}}}})}}]}),{status:200,headers:{'Content-Type':'application/json'}});
@@ -81,6 +82,7 @@ const server = http.createServer((req,res)=>{
     assert.ok(result.nodes>=16,'editable primitives must survive tile merge');
     assert.equal(result.lines.length,2,'only valid line coordinates survive');
     assert.ok(result.lines.every(n=>n.x>=12 && n.y===14 && n.x2-n.x===58),'x1/y1 aliases must preserve line geometry');
+    assert.match(result.status,/已过滤 2 条|filtered 2/i,'two crop-corner rays must be reported');
     assert.equal(result.fittedText.length,2,'oversized labels must remain editable');
     assert.ok(result.fittedText.every(size=>size<=23),'text must fit its explicit bounding box');
     assert.equal(result.polylines,2,'point-only polylines must survive');
