@@ -1,4 +1,4 @@
-const CACHE_NAME = 'figureforge-static-v6';
+const CACHE_NAME = 'figureforge-static-v7';
 const STATIC_FILE = /\.(?:html|css|js|mjs|wasm|onnx|json|bin|png|gif)(?:$|\?)/i;
 
 // Keep the manifest network-first so a newly published model/data version is
@@ -50,9 +50,11 @@ self.addEventListener('fetch', event => {
 
   const key = cacheRequest(request);
 
-  // The manifest is tiny and controls the data-version query used below. It
-  // must be checked on each visit, with the last good copy available offline.
-  if(url.pathname.endsWith('/manifest.json')){
+  // App code must be network-first too. Otherwise a deployed reconstruction
+  // fix is hidden indefinitely by the old service worker's cached .mjs file.
+  // Preserve cache-first behavior for the large model and vendor assets.
+  const appCode=/\.(?:m?js|css)$/i.test(url.pathname) && !url.pathname.includes('/vendor/');
+  if(url.pathname.endsWith('/manifest.json')||appCode){
     event.respondWith((async() => {
       try{
         const response = await fetch(request);

@@ -611,7 +611,7 @@
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 import {buildNativePptx, geometrySegments} from './editable-native.mjs';
-import {extractEditableNodes, planReconstructionTiles, subdivideReconstructionTile, mergeReconstructionTiles} from './reconstruction-core.mjs';
+import {extractEditableNodes, planReconstructionTiles, subdivideReconstructionTile, mergeReconstructionTiles} from './reconstruction-core.mjs?v=20261012';
 
 // Keep the large local index/CLIP assets across reloads and page re-entry.
 // The worker is same-origin and never sees API keys or provider requests.
@@ -3207,8 +3207,21 @@ function sceneToVsdxFiles(scene, font){
         fillCells(st)+'<Section N="Geometry" IX="0"><Cell N="NoFill" V="'+(segments.some(s=>s.closed)?0:1)+'"/><Cell N="NoLine" V="0"/>'+geometry+'</Section></Shape>';
     } else if(n.type==='text'){
       const text = String(n.text).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-      const sizePt = (n.fontSize||16)*PT_PER_UNIT;
-      const boxW = Math.max(n.w*1.04, 20), boxH = (n.fontSize||16)*1.4;
+      // The Visio page is ten inches wide. SVG font sizes are canvas pixels,
+      // so convert through that page scale instead of the PPTX point heuristic.
+      // The old multiplier enlarged text by ~1.8x in Visio.
+      const fontPx = Math.max(1, Number(n.fontSize)||16);
+      const sizePt = fontPx*72/PX_PER_IN;
+      // Visio wraps text to the shape's Width even when the SVG/PPTX text is
+      // allowed to overhang its measured crop box. Size the native text box
+      // from the font metrics as well, while preserving its original anchor.
+      const lines = String(n.text).split(/\r?\n/);
+      const glyphUnits = Math.max(...lines.map(line => Array.from(line).reduce((sum, ch) =>
+        sum + (/[^\x00-\xff]/.test(ch) ? 1 : /[ilI.,:;!| ']/.test(ch) ? 0.3 : /[MW@#%]/.test(ch) ? 0.85 : 0.57), 0)));
+      const pxPerPt = PX_PER_IN/72;
+      const measuredW = Number.isFinite(Number(n.w)) ? Math.max(0,Number(n.w))*1.04 : 0;
+      const boxW = Math.max(measuredW, (glyphUnits+1.2)*sizePt*pxPerPt, 20);
+      const boxH = Math.max(fontPx*1.4, lines.length*sizePt*pxPerPt*1.35);
       const anchorX = n.anchor==='middle' ? n.x : (n.anchor==='end' ? n.x - boxW/2 : n.x + boxW/2);
       xml = '<Shape ID="'+ID+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'+
             '<Cell N="PinX" V="'+inches(anchorX).toFixed(4)+'"/><Cell N="PinY" V="'+inches(c.height-n.y).toFixed(4)+'"/>'+
@@ -3890,7 +3903,12 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit){
             ]}
           ]
         };
-        if($('#provider').value==='ark') body.thinking={type:'disabled'};
+        if($('#provider').value==='ark'){
+          body.thinking={type:'disabled'};
+          // Ark accepts JSON mode. Without it, successful 200 responses can
+          // contain malformed scene JSON, triggering costly tile subdivision.
+          body.response_format={type:'json_object'};
+        }
         const r=await fetchTextWithTimeout(baseURL()+'/chat/completions',{
           method:'POST',
           headers:{'Content-Type':'application/json',Authorization:'Bearer '+cleanKey($('#key').value)},
@@ -4115,8 +4133,8 @@ async function runReconstruction(){
     }else say(audit.defects.length ? 'recon.audit' : 'recon.done',{n:scene.nodes.length,d:audit.defects.length});
     if(scene.counts.filteredArtifactLines){
       status.textContent += GAL_I18N.lang==='zh'
-        ? '；已过滤 '+scene.counts.filteredArtifactLines+' 条从裁片角落发出的异常连线。'
-        : '; filtered '+scene.counts.filteredArtifactLines+' invalid lines from crop corners.';
+        ? '；已过滤 '+scene.counts.filteredArtifactLines+' 条从裁片边界发出的异常连线。'
+        : '; filtered '+scene.counts.filteredArtifactLines+' invalid lines from crop boundaries.';
     }
     return true;
   }catch(err){
