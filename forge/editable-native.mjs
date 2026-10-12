@@ -10,10 +10,10 @@ const rgb = (value, fallback='000000') => {
   if (/^[0-9a-f]{3}$/i.test(h)) return h.split('').map(c => c+c).join('').toUpperCase();
   return /^[0-9a-f]{6}$/i.test(h) ? h.toUpperCase() : fallback;
 };
-const xmlLine = n => {
+const xmlLine = (n, unit) => {
   const stroke = rgb(n.stroke);
   if (!stroke) return '<a:ln><a:noFill/></a:ln>';
-  const width = Math.max(1, Math.round(num(n.strokeWidth || 1) * 7200));
+  const width = Math.max(1, Math.round(num(n.strokeWidth || 1) * unit));
   return `<a:ln w="${width}"><a:solidFill><a:srgbClr val="${stroke}"/></a:solidFill>${n.dash ? '<a:prstDash val="dash"/>' : ''}${n.arrow ? '<a:tailEnd type="triangle"/>' : ''}</a:ln>`;
 };
 const xmlFill = n => {
@@ -113,16 +113,14 @@ function shapeXml(n,id,unit,media){
   if(n.type==='text'){
     const font=num(n.fontSize||16), boxW=Math.max(num(n.w),font*0.7),boxH=Math.max(num(n.h),font*1.3);
     w=boxW;h=boxH;
-    if(n.anchor==='middle') x-=w/2;
-    else if(n.anchor==='end') x-=w;
-    y-=font*0.9; // SVG y is a text baseline; DrawingML y is box top.
+    // Scene text coordinates are the top-left of its measured bounding box.
     const ptSize=Math.max(100,Math.round(font*unit/EMU*72*100));
     const color=rgb(n.fill)||'000000';
     const face=esc(String(n.fontFamily||'Arial').split(',')[0].replace(/["']/g,''));
     const tx=`<p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="t"/><a:lstStyle/><a:p><a:pPr algn="${n.anchor==='middle'?'ctr':n.anchor==='end'?'r':'l'}"/><a:r><a:rPr lang="en-US" sz="${ptSize}" b="${n.bold?1:0}" i="${n.italic?1:0}"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:latin typeface="${face}"/></a:rPr><a:t>${esc(n.text)}</a:t></a:r><a:endParaRPr lang="en-US"/></a:p></p:txBody>`;
     return `<p:sp>${nv}<p:spPr><a:xfrm><a:off x="${Math.round(x*unit)}" y="${Math.round(y*unit)}"/><a:ext cx="${Math.max(1,Math.round(w*unit))}" cy="${Math.max(1,Math.round(h*unit))}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>${tx}</p:sp>`;
   }
-  return `<p:sp>${nv}<p:spPr><a:xfrm><a:off x="${Math.round(x*unit)}" y="${Math.round(y*unit)}"/><a:ext cx="${Math.max(1,Math.round(w*unit))}" cy="${Math.max(1,Math.round(h*unit))}"/></a:xfrm>${geometry}${xmlFill(n)}${xmlLine(n)}</p:spPr></p:sp>`;
+  return `<p:sp>${nv}<p:spPr><a:xfrm><a:off x="${Math.round(x*unit)}" y="${Math.round(y*unit)}"/><a:ext cx="${Math.max(1,Math.round(w*unit))}" cy="${Math.max(1,Math.round(h*unit))}"/></a:xfrm>${geometry}${xmlFill(n)}${xmlLine(n,unit)}</p:spPr></p:sp>`;
 }
 
 let templatePromise;

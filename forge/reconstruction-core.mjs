@@ -85,8 +85,13 @@ function boundaryTextStitches(results){
   results.forEach(({tile,scene},tileIndex)=>{
     (scene.nodes||[]).forEach((node,nodeIndex)=>{
       if(node.type!=='text'||typeof node.text!=='string'||!node.text.trim()) return;
-      const x=Number(node.x), y=Number(node.y), w=Number(node.w??node.width);
+      const x=Number(node.x), y=Number(node.y);
       const font=Number(node.fontSize||node.size);
+      const explicitW=Number(node.w??node.width);
+      // Vision responses often omit text bounds for the first fragment of a
+      // heading. Estimate its extent so it can still be joined at a crop seam.
+      const w=Number.isFinite(explicitW)&&explicitW>0 ? explicitW :
+        font*0.57*node.text.length;
       if(![x,y,w,font].every(Number.isFinite)||w<=0||font<28) return;
       fragments.push({tile,tileIndex,nodeIndex,node,x,y,w,font,
         left:x<=36,right:x+w>=tile.w-36,globalY:tile.y+y});
@@ -148,10 +153,11 @@ function isCropBoundaryArtifactLine(n,tile){
     const [a,b]=segments[0].points;
     pairs=[[a.x,a.y,b.x,b.y]];
   }else return false;
-  const edge=(x,y)=>Math.abs(x)<=1||Math.abs(x-tile.w)<=1
-    ||Math.abs(y)<=1||Math.abs(y-tile.h)<=1;
-  const corner=(x,y)=>(Math.abs(x)<=1||Math.abs(x-tile.w)<=1)
-    && (Math.abs(y)<=1||Math.abs(y-tile.h)<=1);
+  const tolerance=8;
+  const edge=(x,y)=>Math.abs(x)<=tolerance||Math.abs(x-tile.w)<=tolerance
+    ||Math.abs(y)<=tolerance||Math.abs(y-tile.h)<=tolerance;
+  const corner=(x,y)=>(Math.abs(x)<=tolerance||Math.abs(x-tile.w)<=tolerance)
+    && (Math.abs(y)<=tolerance||Math.abs(y-tile.h)<=tolerance);
   return pairs.some(([x1,y1,x2,y2])=>{
     const dx=Math.abs(x2-x1),dy=Math.abs(y2-y1);
     const length=Math.hypot(dx,dy);
@@ -173,6 +179,35 @@ export function mergeReconstructionTiles(results,width,height){
       if(isCropBoundaryArtifactLine(n,tile)){
         filteredArtifactLines++;
         continue;
+      }
+      // A panel can be wider than its owning core. Centre-based ownership
+      // drops the entire fill on neighbouring cores, leaving large white
+      // holes. Keep only the intersection of each substantial filled panel
+      // with this tile's core; the cores form a non-overlapping partition.
+      if(n.type==='rect' && n.fill && n.fill!=='none' && Number(n.w)>40 && Number(n.h)>40){
+        const x=Number(n.x)+tile.x,y=Number(n.y)+tile.y;
+        const w=Number(n.w),h=Number(n.h);
+        if([x,y,w,h].every(Number.isFinite)){
+          const left=Math.max(x,tile.coreX,0),top=Math.max(y,tile.coreY,0);
+          const right=Math.min(x+w,tile.coreRight,width);
+          const bottom=Math.min(y+h,tile.coreBottom,height);
+          if(right>left&&bottom>top){
+            const clipped=left!==x||top!==y||right!==x+w||bottom!==y+h;
+            n.x=left;n.y=top;n.w=right-left;n.h=bottom-top;
+            if(clipped){n.stroke='none';n.radius=0;n.rx=0;n.ry=0;}
+            nodes.push(n);
+          }
+          continue;
+        }
+      }
+      // A clipped container is reported as a complete rectangle in each
+      // crop. Its newly invented stroke becomes a visible tile seam. Keep its
+      // editable fill, but omit that synthetic border on internal crop edges.
+      if((n.type==='rect'||n.type==='ellipse')&&Number(n.w)>40&&Number(n.h)>40){
+        const x=Number(n.x||0),y=Number(n.y||0),w=Number(n.w),h=Number(n.h);
+        if((tile.x>0&&x<=2)||(tile.y>0&&y<=2)||
+          (tile.x+tile.w<width&&x+w>=tile.w-2)||
+          (tile.y+tile.h<height&&y+h>=tile.h-2)) n.stroke='none';
       }
       // The overlap supplies visual context. The owning core contributes each
       // object's centre once, so labels at a seam are not duplicated.

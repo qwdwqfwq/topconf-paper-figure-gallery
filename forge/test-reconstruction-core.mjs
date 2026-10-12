@@ -42,6 +42,19 @@ assert.equal(path.type,'polyline');
 assert.ok(path.points.startsWith(`${tiles[1].x+40},500`));
 assert.equal(merged.counts.total,merged.nodes.length);
 
+// A large filled panel may have its centre outside this tile's owning core.
+// Its visible part must survive and must stop at the core boundary.
+const panelTiles=planReconstructionTiles(1600,900,800,28);
+const panel=mergeReconstructionTiles([{tile:panelTiles[0],scene:{nodes:[
+  {id:'spanning-panel',type:'rect',x:650,y:180,w:400,h:300,
+    fill:'#CDE7E8',stroke:'#333333',radius:22}
+]}}],1600,900);
+const visiblePanel=panel.nodes.find(n=>n.id==='tile1_spanning-panel');
+assert.ok(visiblePanel,'the intersecting panel fill must survive even when its centre is outside the core');
+assert.deepEqual([visiblePanel.x,visiblePanel.y,visiblePanel.w,visiblePanel.h],[650,180,150,270]);
+assert.equal(visiblePanel.stroke,'none','the synthetic crop seam must have no outline');
+assert.equal(visiblePanel.radius,0,'internal crop seams must not be rounded');
+
 // Regression: the supplied failed export contained rays from exact crop
 // origins (for example 2084,0 and 676,1160) across unrelated panels.
 const rayTile={index:'4',x:2084,y:0,w:732,h:820,
