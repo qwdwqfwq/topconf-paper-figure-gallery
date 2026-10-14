@@ -625,8 +625,8 @@
 <script src="./i18n_forge.js?v=20261009"></script>
 <script type="module">
 import * as T from './vendor/transformers.min.js';
-import {buildNativePptx, geometrySegments} from './editable-native.mjs';
-import {extractEditableNodes, planReconstructionTiles, subdivideReconstructionTile, mergeReconstructionTiles, reconstructionQualityDeficit, acceptReconstructionRepair} from './reconstruction-core.mjs?v=20261014';
+import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=20261015';
+import {extractEditableNodes, planReconstructionTiles, subdivideReconstructionTile, mergeReconstructionTiles, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion} from './reconstruction-core.mjs?v=20261015';
 import {calibrateEditableText} from './text-calibration.mjs?v=20261014';
 import {importDesktopScene} from './desktop-scene.mjs?v=20261014';
 
@@ -3011,6 +3011,7 @@ function encodeDrawioStencil(stencil){
    individually editable inside draw.io. This file can also be exported to VSDX
    from draw.io, which is the supported path to Visio. */
 function sceneToDrawio(scene){
+  scene=expandEditableTextPaths(scene);
   const rawCanvas = scene.canvas || {};
   const c = Object.assign({}, rawCanvas, {
     width: Number(rawCanvas.width || rawCanvas.w || EXPORT_CANVAS.w),
@@ -3028,7 +3029,8 @@ function sceneToDrawio(scene){
       const anchor = n.anchor==='middle' ? 'center' : (n.anchor==='end' ? 'right' : 'left');
       const style = 'text;html=1;strokeColor=none;fillColor=none;align='+anchor+';verticalAlign=top;spacing=0;'+
                     'fontSize='+Math.round(n.fontSize||16)+';fontColor='+drawioColor(n.fill,'000000')+
-                    (n.bold?';fontStyle=1':'')+(n.italic?';fontStyle=2':'')+';whiteSpace=wrap;';
+                    (n.bold?';fontStyle=1':'')+(n.italic?';fontStyle=2':'')+
+                    (Number.isFinite(Number(n.rotation))?';rotation='+Number(n.rotation).toFixed(3):'')+';whiteSpace=wrap;';
       const w = Math.max(n.w, 8), h = Math.max(n.h, (n.fontSize||16)*1.2, 8);
       const x = n.x;
       cells.push('<mxCell id="'+id+'" value="'+xml(n.text)+'" style="'+style+'" vertex="1" parent="1">'+
@@ -3088,6 +3090,7 @@ function sceneToDrawio(scene){
    Native Visio geometry, text and bitmap parts on a ten-inch page. Each visible
    face of a prism remains its own editable shape. */
 function sceneToVsdxFiles(scene, font){
+  scene=expandEditableTextPaths(scene);
   const imageNodes = (scene && Array.isArray(scene.nodes)) ? scene.nodes.filter(n=>n && n.type==='image') : [];
   const canvasAudit = (scene && scene.canvas) || {};
   const canvasAreaAudit = Math.max(1, Number(canvasAudit.width||canvasAudit.w||EXPORT_CANVAS.w) * Number(canvasAudit.height||canvasAudit.h||EXPORT_CANVAS.h));
@@ -3268,10 +3271,12 @@ function sceneToVsdxFiles(scene, font){
       const anchorX = n.anchor==='middle' ? n.x+Number(n.w||0)/2 :
         n.anchor==='end' ? n.x+Number(n.w||0)-boxW/2 : n.x+boxW/2;
       const anchorY = n.verticalAlign==='middle' ? n.y+Number(n.h||0)/2 : n.y+boxH/2;
+      const textAngle=Number.isFinite(Number(n.rotation)) ? -Number(n.rotation)*Math.PI/180 : 0;
       xml = '<Shape ID="'+ID+'" Type="Shape" LineStyle="0" FillStyle="0" TextStyle="0">'+
             '<Cell N="PinX" V="'+inches(anchorX).toFixed(4)+'"/><Cell N="PinY" V="'+inches(c.height-anchorY).toFixed(4)+'"/>'+
             '<Cell N="Width" V="'+inches(boxW).toFixed(4)+'"/><Cell N="Height" V="'+inches(boxH).toFixed(4)+'"/>'+
             '<Cell N="LocPinX" V="'+inches(boxW/2).toFixed(4)+'"/><Cell N="LocPinY" V="'+inches(boxH/2).toFixed(4)+'"/>'+
+            '<Cell N="Angle" V="'+textAngle.toFixed(6)+'"/>'+
             '<Cell N="FillForegnd" V="#FFFFFF"/><Cell N="FillPattern" V="0"/>'+
             '<Cell N="LinePattern" V="0"/>'+
             '<Cell N="VerticalAlign" V="'+(n.verticalAlign==='middle'?1:0)+'"/><Cell N="HorzAlign" V="'+(n.anchor==='middle'?1:(n.anchor==='end'?2:0))+'"/>'+
@@ -3652,6 +3657,7 @@ function buildReconScene(baseCanvas, placed, paperText){
 }
 
 function sceneToSvgString(scene){
+  scene=expandEditableTextPaths(scene);
   const raw = scene.canvas || {};
   const W = Number(raw.width || raw.w || EXPORT_CANVAS.w), H = Number(raw.height || raw.h || EXPORT_CANVAS.h);
   const color = function(v, fallback){
@@ -3679,7 +3685,8 @@ function sceneToSvgString(scene){
       const tx = anchor==='middle' ? x+w/2 : anchor==='end' ? x+w : x;
       const fs=Math.max(1,num(n.fontSize,16)), lines=String(n.text||'').split(/\r?\n/), lineH=fs*1.14;
       const ty=n.verticalAlign==='middle' ? y+(h-lines.length*lineH)/2+fs*.86 : y+fs*.84;
-      parts.push('<text id="'+id+'" data-role="label" data-editable="true" x="'+tx+'" y="'+ty+'" text-anchor="'+anchor+'" font-family="'+escapeSvgAttr(n.fontFamily||'Arial, Helvetica, sans-serif')+'" font-size="'+fs+'" fill="'+color(n.fill,'#111827')+'"'+(n.bold?' font-weight="bold"':'')+(n.italic?' font-style="italic"':'')+'>'+lines.map((line,j)=>'<tspan x="'+tx+'" dy="'+(j?lineH:0)+'">'+xmlEscape(line)+'</tspan>').join('')+'</text>');
+      const rotation=Number.isFinite(Number(n.rotation))&&Number(n.rotation)!==0?' transform="rotate('+num(n.rotation)+' '+(x+w/2)+' '+(y+h/2)+')"':'';
+      parts.push('<text id="'+id+'" data-role="label" data-editable="true" x="'+tx+'" y="'+ty+'" text-anchor="'+anchor+'"'+rotation+' font-family="'+escapeSvgAttr(n.fontFamily||'Arial, Helvetica, sans-serif')+'" font-size="'+fs+'" fill="'+color(n.fill,'#111827')+'"'+(n.bold?' font-weight="bold"':'')+(n.italic?' font-style="italic"':'')+'>'+lines.map((line,j)=>'<tspan x="'+tx+'" dy="'+(j?lineH:0)+'">'+xmlEscape(line)+'</tspan>').join('')+'</text>');
     } else if(n.type === 'rect'){
       parts.push('<rect id="'+id+'" data-editable="true" x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" rx="'+Math.max(0,num(n.radius))+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+dash+'/>');
     } else if(n.type === 'ellipse'){
@@ -3709,7 +3716,7 @@ async function compareEditableRender(sourceCanvas,scene,region){
   rc.fillStyle=oc.fillStyle='#ffffff';
   rc.fillRect(0,0,renderW,renderH); oc.fillRect(0,0,renderW,renderH);
   rc.drawImage(sourceCanvas,0,0,renderW,renderH);
-  const url=URL.createObjectURL(new Blob([sceneToSvgString(scene)],{type:'image/svg+xml'}));
+  const url=URL.createObjectURL(new Blob([typeof scene==='string'?scene:sceneToSvgString(scene)],{type:'image/svg+xml'}));
   try{oc.drawImage(await loadImage(url),0,0,renderW,renderH);}
   finally{URL.revokeObjectURL(url);}
   // Overlapping model crops are trimmed to their non-overlapping cores during
@@ -3772,7 +3779,8 @@ async function compareEditableRender(sourceCanvas,scene,region){
   const darkF1=harmonic(darkRecall,overlap(renderDark,sourceDark,1));
   // Inspect spatial coverage as well as global averages. A missing caption or
   // panel cannot be hidden by a large, correctly colored background elsewhere.
-  const columns=5,rows=4,cellSource=new Uint32Array(columns*rows),cellMatched=new Uint32Array(columns*rows);
+  // Finer cells expose a missed small icon or arrow that a whole panel can hide.
+  const columns=10,rows=8,cellSource=new Uint32Array(columns*rows),cellMatched=new Uint32Array(columns*rows);
   for(let p=0;p<pixels;p++) if(sourceDark[p]){
     const x=p%w,y=Math.floor(p/w);
     const cell=Math.min(rows-1,Math.floor(y*rows/h))*columns+
@@ -3837,7 +3845,7 @@ async function ensureBitmapDataUrl(src){
 }
 
 function editableScenePrompt(W,H,paper){
-  return 'Reconstruct this scientific figure as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. Every node MUST have a string "type" field, for example {"type":"rect","x":1,"y":2,"w":3,"h":4}; never nest it as {"rect":{...}}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Transcribe each text line character by character, preserving capitalization, punctuation, mathematical symbols and line breaks; give each separate label its own text node and tight bounding box. Text must be OCR transcription, not a description. Inspect dense modules for short connectors, dashed returns, repeated tiny boxes and axis ticks before returning JSON. Do not merge adjacent boxes, graph nodes, text, or arrows. For 3D-looking bars, cubes, prisms, or beveled objects, draw the front, top, and side faces as separate closed polygons with their own fill colors and edges; never flatten them to a rectangle. Preserve geometry and layer order. Do not return a single full-canvas bitmap as a substitute. For every line or arrow, both endpoints must coincide with visible endpoints in this crop. Never use (0,0), a crop corner, or a crop edge as a placeholder endpoint. Omit an uncertain line instead of inventing its geometry. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,closed,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor}, and image {x,y,w,h,href}. Use image only for photographic/illustrative content that cannot be decomposed, and include a crop object when possible. Keep z-order from background to foreground. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
+  return 'Reconstruct this scientific figure as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. Every node MUST have a string "type" field, for example {"type":"rect","x":1,"y":2,"w":3,"h":4}; never nest it as {"rect":{...}}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Transcribe each text line character by character, preserving capitalization, punctuation, mathematical symbols and line breaks; give each separate label its own text node and tight bounding box. Text must be OCR transcription, not a description. Inspect dense modules for short connectors, dashed returns, repeated tiny boxes and axis ticks before returning JSON. Do not merge adjacent boxes, graph nodes, text, or arrows. For curved arrows and rings use path d with SVG M/L/C/Q/A/Z commands; preserve true arcs and curves rather than polygonal approximations. For rotated text set rotation in degrees. For text following a ring or arc use a text node with textPath:{d:"M ... A ...",startOffset:0.5}; keep the text transcribed as editable characters. Treat each small icon, chart, and dense module as a whole object: reconstruct its complete outline and interior details, never stop at a crop boundary. For 3D-looking bars, cubes, prisms, or beveled objects, draw the front, top, and side faces as separate closed polygons with their own fill colors and edges; never flatten them to a rectangle. Preserve geometry and layer order. Do not return a single full-canvas bitmap as a substitute. For every line or arrow, both endpoints must coincide with visible endpoints in this crop. Never use (0,0), a crop corner, or a crop edge as a placeholder endpoint. Omit an uncertain line instead of inventing its geometry. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,closed,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor,rotation,textPath}, and image {x,y,w,h,href}. Use image only for photographic/illustrative content that cannot be decomposed, and include a crop object when possible. Keep z-order from background to foreground. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
 }
 function editableSceneRetryPrompt(W,H){
   return 'The previous answer could not be used. Inspect the attached image crop and return ONLY a JSON object with this exact outer shape: {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[{"type":"rect","x":0,"y":0,"w":10,"h":10,"fill":"#ffffff"}]}. Replace the example node with the actual visible, separately editable rectangles, lines, arrows, text, polygons and photographic regions. Coordinates are pixels within this crop. Every node needs a type. For text use {"type":"text","x":0,"y":0,"w":100,"h":20,"text":"actual words","fontSize":14,"fill":"#000000"}. For a completely blank white crop, nodes may be empty. No descriptions, analysis, Markdown, or other keys are needed.';
@@ -3942,8 +3950,10 @@ function materializeEditableScene(raw,W,H){
       const points=Array.isArray(vertices) ? vertices.map(p=>Array.isArray(p)?p.join(','):(p&&typeof p==='object'?p.x+','+p.y:String(p))).join(' ') : String(vertices);
       out.push(Object.assign(base,{type:'polyline',points,closed:!!(n.closed||n.isClosed||String(n.type).toLowerCase()==='polygon'),dash:!!(n.dash||n.dashed)}));
     }
-    else if(type==='path' && pick(n,['d','path'],''))
-      out.push(Object.assign(base,{type:'path',d:String(pick(n,['d','path'],''))}));
+    else if(type==='path' && pick(n,['d','path'],'')){
+      const d=String(pick(n,['d','path'],''));
+      if(parseEditablePath(d).length) out.push(Object.assign(base,{type:'path',d}));
+    }
     else if(type==='text' && String(pick(n,['text','content','label','value'],'')).trim()){
       const label=String(pick(n,['text','content','label','value'],'')).replace(/[\r\n]+/g,' ').trim().slice(0,300);
       let fontSize=clamp(pick(n,['fontSize','font_size','size'],18),6,120);
@@ -3953,7 +3963,7 @@ function materializeEditableScene(raw,W,H){
       const explicitH=sceneNumber(pick(n,['h','height'],null),0);
       if(explicitH>0) fontSize=Math.min(fontSize,Math.max(6,explicitH*1.15));
       const clippedAtTileEdge=x<=4 || x+explicitW>=W-4;
-      if(explicitW>0 && !clippedAtTileEdge){
+      if(explicitW>0 && !clippedAtTileEdge && !n.textPath && !n.rotation){
         const font=String(pick(n,['fontFamily','font','family'],'Arial'));
         const measure=document.createElement('canvas').getContext('2d');
         measure.font=`${n.bold?'bold ':''}${fontSize}px ${font}`;
@@ -3969,7 +3979,10 @@ function materializeEditableScene(raw,W,H){
         bold:!!(n.bold||n.fontWeight==='bold'||Number(n.fontWeight)>=600),
         italic:!!(n.italic||n.fontStyle==='italic'),
         anchor:n.anchor==='middle'||n.anchor==='end'?n.anchor:'start',
-        baseline:n.baseline||'auto'
+        baseline:n.baseline||'auto',
+        rotation:clamp(pick(n,['rotation','angle','rotate'],0),-360,360),
+        textPath:(()=>{const v=n.textPath;if(!v)return undefined;const spec=typeof v==='string'?{d:v}:v;
+          return spec&&parseEditablePath(spec.d).length?{d:String(spec.d),...(spec.startOffset==null?{}:{startOffset:sceneNumber(spec.startOffset,0)})}:undefined;})()
       }));
     }
     else if(type==='image') out.push(Object.assign(base,{
@@ -4495,6 +4508,44 @@ async function runReconstruction(){
     }catch(calibrationError){
       reconstructionAudit.calibrationError=String(calibrationError&&calibrationError.message||calibrationError);
     }
+    // Check the serialized PPTX itself, then use high-resolution crops that
+    // contain entire weak objects. Accept only repairs that improve that area.
+    try{
+      let pptxScene=await readNativePptxScene(await buildNativePptx(scene,zipStore),canvas.width,canvas.height);
+      let pptxQa=await compareEditableRender(canvas,pptxScene);
+      reconstructionAudit.pptxQuality={score:pptxQa.score,localRecall:pptxQa.localRecall};
+      const used=[];
+      for(const weak of (pptxQa.weakRegions||[]).slice(0,4)){
+        if(used.length>=2)break;
+        if(weak.recall>=.97)continue;
+        const region=planObjectRepairRegion(weak,scene,canvas.width,canvas.height);
+        if(!region||region.w<18||region.h<18||used.some(r=>
+          Math.max(0,Math.min(r.x+r.w,region.x+region.w)-Math.max(r.x,region.x))*
+          Math.max(0,Math.min(r.y+r.h,region.y+region.h))>region.w*region.h*.55))continue;
+        used.push(region);
+        const scale=Math.min(3,Math.max(1.35,1000/Math.max(region.w,region.h)));
+        const crop=document.createElement('canvas');
+        crop.width=Math.round(region.w*scale);crop.height=Math.round(region.h*scale);
+        crop.getContext('2d').drawImage(canvas,region.x,region.y,region.w,region.h,
+          0,0,crop.width,crop.height);
+        try{
+          const local=await requestEditableScene(crop.toDataURL('image/png'),crop.width,crop.height,
+            {objectRepair:true,region,requireCompleteObjects:true});
+          const candidate=replaceObjectRepairRegion(scene,region,local,scale);
+          const candidatePptx=await buildNativePptx(candidate,zipStore);
+          const rendered=await readNativePptxScene(candidatePptx,canvas.width,canvas.height);
+          const before=await compareEditableRender(canvas,pptxScene,region);
+          const after=await compareEditableRender(canvas,rendered,region);
+          reconstructionAudit.repairCalls++;
+          if(acceptReconstructionRepair(before,after)){
+            scene=candidate;pptxScene=rendered;pptxQa=await compareEditableRender(canvas,rendered);
+            reconstructionAudit.objectRepairs=(reconstructionAudit.objectRepairs||0)+1;
+            measuredQuality=pptxQa;
+          }
+        }catch(error){reconstructionAudit.objectRepairError=String(error?.message||error);}
+      }
+      measuredQuality=pptxQa;
+    }catch(error){reconstructionAudit.pptxQaError=String(error?.message||error);}
     const svg = sceneToSvgString(scene), audit = auditReconScene(scene);
     if(audit.dominantBitmap){
       throw new Error('Vision model returned a dominant bitmap instead of editable objects');
