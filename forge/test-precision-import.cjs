@@ -30,6 +30,8 @@ const server = http.createServer((req,res)=>{
     const page=await browser.newPage({acceptDownloads:true,serviceWorkers:'block'});
     const errors=[];page.on('pageerror',e=>errors.push(e.message));
     await page.goto(`http://127.0.0.1:${server.address().port}/forge/`,{waitUntil:'domcontentloaded'});
+    assert.equal(await page.locator('#precisionImportBtn, #precisionSceneFile, #precisionBitmapFile').count(),0);
+    assert.equal(await page.locator('#exportFont').count(),1);
     const source=process.env.PRECISION_BITMAP;
     let bitmap=source?`data:image/jpeg;base64,${fs.readFileSync(source).toString('base64')}`:null;
     if(!bitmap) bitmap=await page.evaluate(([w,h])=>{const canvas=document.createElement('canvas');canvas.width=w;canvas.height=h;canvas.getContext('2d').fillStyle='white';canvas.getContext('2d').fillRect(0,0,w,h);return canvas.toDataURL('image/png');},scene.canvas_px);
@@ -37,14 +39,12 @@ const server = http.createServer((req,res)=>{
       const imported=await window.__ffImportPrecisionScene(scene,bitmap);
       const state=window.__ffExportState;
       return {nodes:imported.nodes.length,images:imported.nodes.filter(n=>n.type==='image').length,
-        texts:imported.nodes.filter(n=>n.type==='text').length,svg:state.svg,
-        status:document.querySelector('#precisionImportStatus').textContent};
+        texts:imported.nodes.filter(n=>n.type==='text').length,svg:state.svg};
     },{scene,bitmap});
     assert.equal(result.nodes,scene.objects.length);
     assert.equal(result.images,scene.objects.filter(o=>o.kind==='image').length);
     assert.match(result.svg,/<text/);
     assert.match(result.svg,/<image/);
-    assert.match(result.status,/已导入/);
     for(const format of ['pptx','vsdx']){
       await page.locator(`#exportActions [data-export="${format}"]`).click();
       const downloadPromise=page.waitForEvent('download',{timeout:60000});

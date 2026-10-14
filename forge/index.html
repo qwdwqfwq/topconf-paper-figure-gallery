@@ -546,14 +546,6 @@
           <span class="recon-status" id="reconStatus"></span>
         </div>
       </div>
-      <div class="export-font-row" style="flex-wrap:wrap;gap:8px">
-        <label for="precisionSceneFile">精确场景复刻</label>
-        <input id="precisionSceneFile" type="file" accept=".json,application/json" aria-label="精确场景 JSON">
-        <input id="precisionBitmapFile" type="file" accept="image/png,image/jpeg,image/webp" aria-label="原始位图">
-        <button type="button" id="precisionImportBtn">导入并核对</button>
-        <span id="precisionImportStatus" role="status"></span>
-      </div>
-      <p class="bnote">将原图和逐项测量、校准的场景 JSON 一起导入；照片从原图裁切，文字、图形与箭头保留为可编辑对象。<a href="./examples/cdta-precise-scene.json" download>下载本图示例场景 JSON</a>。任意新图需先建立并核对相应的对象场景。</p>
       <div class="export-font-row" id="exportModeRow" hidden>
         <label for="exportMode">导出方式</label>
         <select id="exportMode">
@@ -4944,8 +4936,6 @@ async function importPrecisionScene(source, bitmap){
     recon:{qualityState:'needs-review',origin:'desktop-measured-scene'}});
   renderEditableExportCard();
   applyExportFont('original');
-  const status=$('#precisionImportStatus');
-  if(status) status.textContent=`已导入 ${scene.nodes.length} 个对象，其中 ${scene.nodes.filter(n=>n.type==='image').length} 个照片裁片。请核对预览后导出。`;
   return scene;
 }
 window.__ffImportPrecisionScene=importPrecisionScene;
@@ -5034,14 +5024,6 @@ function initEditableExport(){
   });
   $('#exportFont')?.addEventListener('change',e=>applyExportFont(e.target.value));
   $('#exportMode')?.addEventListener('change',e=>setExportMode(e.target.value));
-  $('#precisionImportBtn')?.addEventListener('click',async()=>{
-    const status=$('#precisionImportStatus'), sceneFile=$('#precisionSceneFile')?.files?.[0], bitmapFile=$('#precisionBitmapFile')?.files?.[0];
-    try{
-      if(!sceneFile) throw new Error('请选择精确场景 JSON');
-      if(status) status.textContent='正在导入对象和裁切照片…';
-      await importPrecisionScene(await sceneFile.text(),bitmapFile?await fileToDataURI(bitmapFile):null);
-    }catch(err){if(status) status.textContent=err.message||String(err);}
-  });
 }
 initEditableExport();
 
