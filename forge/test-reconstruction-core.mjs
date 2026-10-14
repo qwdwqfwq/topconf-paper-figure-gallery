@@ -1,11 +1,30 @@
 import assert from 'node:assert/strict';
-import {extractEditableNodes,planReconstructionTiles,subdivideReconstructionTile,mergeReconstructionTiles} from './reconstruction-core.mjs';
+import {extractEditableNodes,planReconstructionTiles,subdivideReconstructionTile,mergeReconstructionTiles,reconstructionQualityDeficit,acceptReconstructionRepair} from './reconstruction-core.mjs';
+
+assert.equal(reconstructionQualityDeficit({score:.82,darkRecall:.8,localRecall:.7,colorSimilarity:.9}),0);
+assert.equal(acceptReconstructionRepair(
+  {score:.73,darkRecall:.8,localRecall:.55,colorSimilarity:.9},
+  {score:.73,darkRecall:.8,localRecall:.68,colorSimilarity:.9}),true,
+  'a repair that restores missing weak-region details must be accepted even if overall score stays flat');
+assert.equal(acceptReconstructionRepair(
+  {score:.73,darkRecall:.8,localRecall:.55,colorSimilarity:.9},
+  {score:.76,darkRecall:.8,localRecall:.45,colorSimilarity:.9}),false,
+  'higher aggregate score must not hide lost weak-region details');
 
 assert.deepEqual(extractEditableNodes({scene:{nodes:[]}}),[],'blank crops must be valid');
 assert.deepEqual(extractEditableNodes({result:{shapes:[{type:'rect'}]}}),[{type:'rect'}]);
 assert.deepEqual(extractEditableNodes({output:{result:{scene:{nodes:[{type:'text',text:'Nested'}]}}}}),[{type:'text',text:'Nested'}]);
 assert.deepEqual(extractEditableNodes({payload:{figure:JSON.stringify({elements:[{type:'rect'}]})}}),[{type:'rect'}]);
 assert.deepEqual(extractEditableNodes({customEnvelope:{layers:[{objects:[{type:'rect'}]}]}}),[{type:'rect'}]);
+assert.deepEqual(extractEditableNodes({nodes:[
+  {rect:{x:1,y:2,w:3,h:4,fill:'#ffffff'}},
+  {x:5,y:6,w:7,h:8,fill:'#eeeeee'},
+  {text:{x:9,y:10,text:'Label'}},
+]}),[
+  {type:'rect',x:1,y:2,w:3,h:4,fill:'#ffffff'},
+  {type:'rect',x:5,y:6,w:7,h:8,fill:'#eeeeee'},
+  {type:'text',x:9,y:10,text:'Label'},
+],'normalize nested and untyped nodes returned by Ark');
 assert.throws(()=>extractEditableNodes({message:'provider error'}),/nodes array/);
 
 const tiles=planReconstructionTiles(1600,900);
@@ -54,6 +73,23 @@ assert.ok(visiblePanel,'the intersecting panel fill must survive even when its c
 assert.deepEqual([visiblePanel.x,visiblePanel.y,visiblePanel.w,visiblePanel.h],[650,180,150,270]);
 assert.equal(visiblePanel.stroke,'none','the synthetic crop seam must have no outline');
 assert.equal(visiblePanel.radius,0,'internal crop seams must not be rounded');
+
+// A fully visible panel in the overlap retains its native rounded border;
+// the neighbouring crop's clipped fragment must not paint over its contents.
+const overlapPanel=mergeReconstructionTiles([
+  {tile:panelTiles[0],scene:{nodes:[
+    {id:'whole-card',type:'rect',x:600,y:200,w:210,h:180,fill:'#CDE7E8',stroke:'#333333',radius:22},
+    {id:'card-label',type:'text',x:640,y:240,w:100,h:30,text:'Card'}
+  ]}},
+  {tile:panelTiles[1],scene:{nodes:[
+    {id:'cropped-card',type:'rect',x:0,y:200,w:38,h:180,fill:'#CDE7E8',stroke:'#333333',radius:22}
+  ]}}
+],1600,900);
+assert.equal(overlapPanel.nodes.filter(n=>n.fill==='#CDE7E8').length,1);
+assert.equal(overlapPanel.nodes[0].id,'tile1_whole-card');
+assert.equal(overlapPanel.nodes[0].radius,22);
+assert.equal(overlapPanel.nodes[0].stroke,'#333333');
+assert.ok(overlapPanel.nodes.findIndex(n=>n.text==='Card')>0,'card content must paint after its background');
 
 // Regression: the supplied failed export contained rays from exact crop
 // origins (for example 2084,0 and 676,1160) across unrelated panels.

@@ -75,6 +75,7 @@ const server = http.createServer((req,res)=>{
       const ok=await window.__ffReconstruct();
       const scene=window.__ffExportState.scene;
       return {ok,calls,nodes:scene&&scene.nodes.length,svg:window.__ffExportState.svg,
+        qualityState:window.__ffExportState.recon?.qualityState,
         lines:scene?.nodes.filter(n=>n.type==='line').map(n=>({x:n.x,y:n.y,x2:n.x2,y2:n.y2})),
         fittedText:scene?.nodes.filter(n=>n.type==='text'&&n.text==='Oversized label').map(n=>n.fontSize),
         polylines:(window.__ffExportState.svg.match(/<polyline\b/g)||[]).length,
@@ -82,6 +83,7 @@ const server = http.createServer((req,res)=>{
         status:document.querySelector('#reconStatus').textContent};
     });
     assert.equal(result.ok,true,JSON.stringify(result));
+    assert.equal(result.qualityState,'needs-review','a mismatched editable scene must not be labelled publication ready');
     assert.equal(result.calls,2,'1200px bitmap must use two vision requests');
     assert.ok(result.nodes>=16,'editable primitives must survive tile merge');
     assert.equal(result.lines.length,2,'only valid line coordinates survive');
@@ -132,10 +134,85 @@ const server = http.createServer((req,res)=>{
         fill:window.__ffExportState.scene?.nodes.find(n=>n.type==='rect')?.fill};
     });
     assert.equal(repaired.ok,true,JSON.stringify(repaired));
-    assert.equal(repaired.calls,2,'one vision pass and one visual revision');
+    assert.equal(repaired.calls,2,'one vision pass and one visual revision: '+JSON.stringify(repaired.audit));
     assert.equal(repaired.revisionSeen,true,'revision must receive both source and rendered preview');
     assert.equal(repaired.fill,'#e02020','accepted repair must improve the editable scene');
     assert.equal(repaired.audit.tiles[0].repairAccepted,true);
+    const split=await page.evaluate(async()=>{
+      const original=window.fetch;
+      let calls=0;
+      window.fetch=async(url,options)=>{
+        if(String(url).endsWith('/chat/completions')){
+          calls++;
+          const body=JSON.parse(options.body);
+          const match=body.messages[1].content[0].text.match(/"width":(\d+),"height":(\d+)/);
+          const w=Number(match[1]),h=Number(match[2]);
+          const fill=w<500?'#e02020':'#2020e0';
+          const content=JSON.stringify({canvas:{width:w,height:h},nodes:[
+            {type:'rect',x:0,y:0,w,h,fill,stroke:'none'}]});
+          return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content}}]}),
+            {status:200,headers:{'Content-Type':'application/json'}});
+        }
+        return original(url,options);
+      };
+      const canvas=document.createElement('canvas');canvas.width=700;canvas.height=500;
+      const ctx=canvas.getContext('2d');ctx.fillStyle='#e02020';ctx.fillRect(0,0,700,500);
+      window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
+      const ok=await window.__ffReconstruct();
+      return {ok,calls,audit:window.__ffApiAudit.reconstruction,
+        fills:window.__ffExportState.scene?.nodes.map(n=>n.fill)};
+    });
+    assert.equal(split.ok,true,JSON.stringify(split));
+    assert.equal(split.audit.tiles[0].splitAccepted,true,'smaller crops must replace a poor parent when rendered quality improves');
+    assert.ok(split.audit.splitCalls>=4,'dense parent must be reconstructed from smaller crops');
+    assert.ok(split.fills.every(fill=>fill==='#e02020'),'the accepted scene uses corrected native shapes');
+    const truncated=await page.evaluate(async()=>{
+      const original=window.fetch;
+      let calls=0;
+      window.fetch=async(url,options)=>{
+        if(String(url).endsWith('/chat/completions')){
+          calls++;
+          const body=JSON.parse(options.body);
+          if(body.max_tokens!==16000) throw Error('Reconstruction token budget was not raised');
+          const content=JSON.stringify({nodes:[{type:'rect',x:0,y:0,w:240,h:160,
+            fill:calls===1?'#2020e0':'#e02020'}]});
+          return new Response(JSON.stringify({choices:[{finish_reason:calls===1?'length':'stop',
+            message:{content}}]}),{status:200,headers:{'Content-Type':'application/json'}});
+        }
+        return original(url,options);
+      };
+      const canvas=document.createElement('canvas');canvas.width=240;canvas.height=160;
+      const ctx=canvas.getContext('2d');ctx.fillStyle='#e02020';ctx.fillRect(0,0,240,160);
+      window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
+      const ok=await window.__ffReconstruct();
+      return {ok,calls,fill:window.__ffExportState.scene?.nodes[0]?.fill};
+    });
+    assert.deepEqual(truncated,{ok:true,calls:2,fill:'#e02020'},
+      'a length-limited answer must be retried even when its JSON parses');
+    const largeTruncated=await page.evaluate(async()=>{
+      const original=window.fetch;
+      let calls=0;
+      window.fetch=async(url,options)=>{
+        if(String(url).endsWith('/chat/completions')){
+          calls++;
+          const body=JSON.parse(options.body);
+          const image=body.messages[1].content.find(part=>part.type==='image_url').image_url.url;
+          const im=new Image();im.src=image;await im.decode();
+          const content=JSON.stringify({nodes:[{type:'rect',x:0,y:0,w:im.width,h:im.height,fill:'#e02020'}]});
+          return new Response(JSON.stringify({choices:[{finish_reason:calls===1?'length':'stop',message:{content}}]}),
+            {status:200,headers:{'Content-Type':'application/json'}});
+        }
+        return original(url,options);
+      };
+      const canvas=document.createElement('canvas');canvas.width=700;canvas.height=500;
+      const ctx=canvas.getContext('2d');ctx.fillStyle='#e02020';ctx.fillRect(0,0,700,500);
+      window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
+      const ok=await window.__ffReconstruct();
+      return {ok,calls,first:window.__ffApiAudit.reconstruction.tiles[0]};
+    });
+    assert.equal(largeTruncated.ok,true,JSON.stringify(largeTruncated));
+    assert.equal(largeTruncated.calls,5,'large truncated crops should split without repeating the same request');
+    assert.equal(largeTruncated.first.state,'subdivided');
     const recovered=await page.evaluate(async()=>{
       const original=window.fetch;
       let calls=0;

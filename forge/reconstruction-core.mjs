@@ -1,12 +1,46 @@
 // Pure geometry helpers shared by the browser reconstruction flow and tests.
 import {geometrySegments} from './editable-native.mjs';
+const QUALITY_TARGETS={score:.82,darkRecall:.8,localRecall:.7,colorSimilarity:.9};
+export function reconstructionQualityDeficit(qa){
+  if(!qa) return Infinity;
+  let deficit=0;
+  for(const [key,target] of Object.entries(QUALITY_TARGETS)){
+    const value=Number(qa[key]);
+    if(!Number.isFinite(value)) return Infinity;
+    deficit+=Math.max(0,(target-value)/target);
+  }
+  return deficit;
+}
+export function acceptReconstructionRepair(before,after){
+  if(!before||!after) return false;
+  for(const key of Object.keys(QUALITY_TARGETS)){
+    if(!Number.isFinite(Number(after[key])) || Number(after[key])+0.01<Number(before[key])) return false;
+  }
+  return reconstructionQualityDeficit(after)<reconstructionQualityDeficit(before)-.005;
+}
 export function extractEditableNodes(raw){
   const nodeKeys=['nodes','elements','objects','items','shapes','components','primitives'];
   const wrapperKeys=['scene','diagram','result','data','payload','output','response','figure','drawing','vector','content','layers','groups'];
   const seen=new Set();
+  const explicitNodeTypes=['rect','rectangle','ellipse','circle','line','arrow','polyline','polygon','path','text','image'];
+  const normalizeNode=v=>{
+    if(!v||typeof v!=='object'||Array.isArray(v)) return v;
+    if(v.type||v.kind||v.shape) return v;
+    for(const type of explicitNodeTypes){
+      if(v[type]&&typeof v[type]==='object'&&!Array.isArray(v[type]))
+        return {type,...v[type]};
+    }
+    if(v.text!==undefined||v.content!==undefined||v.label!==undefined) return {type:'text',...v};
+    if(v.href!==undefined||v.src!==undefined) return {type:'image',...v};
+    if(v.x2!==undefined&&v.y2!==undefined) return {type:'line',...v};
+    if(v.x!==undefined&&v.y!==undefined&&
+      (v.w!==undefined||v.width!==undefined)) return {type:'rect',...v};
+    return v;
+  };
   const nodeLike=v=>v&&typeof v==='object'&&!Array.isArray(v)&&
     (typeof v.type==='string'||typeof v.kind==='string'||typeof v.shape==='string'||
-      v.x!==undefined||v.y!==undefined||v.points!==undefined||v.text!==undefined);
+      v.x!==undefined||v.y!==undefined||v.points!==undefined||v.text!==undefined||
+      explicitNodeTypes.some(type=>v[type]&&typeof v[type]==='object'));
   function find(value,depth,fromNodeKey=false){
     if(typeof value==='string' && /^[\[{]/.test(value.trim())){
       try{ return find(JSON.parse(value),depth+1,fromNodeKey); }catch(_){ return null; }
@@ -15,7 +49,7 @@ export function extractEditableNodes(raw){
     seen.add(value);
     if(Array.isArray(value)){
       if(value.length===0) return fromNodeKey?[]:null;
-      if(value.every(nodeLike)) return value;
+      if(value.every(nodeLike)) return value.map(normalizeNode);
       const nested=value.map(item=>find(item,depth+1)).filter(Boolean);
       return nested.length?nested.flat():null;
     }
@@ -170,6 +204,8 @@ function isCropBoundaryArtifactLine(n,tile){
 
 export function mergeReconstructionTiles(results,width,height){
   const nodes=[];
+  const completePanels=[];
+  const clippedPanels=[];
   let filteredArtifactLines=0;
   const {skip,stitched}=boundaryTextStitches(results);
   for(const [tileIndex,{tile,scene}] of results.entries()){
@@ -180,14 +216,22 @@ export function mergeReconstructionTiles(results,width,height){
         filteredArtifactLines++;
         continue;
       }
-      // A panel can be wider than its owning core. Centre-based ownership
-      // drops the entire fill on neighbouring cores, leaving large white
-      // holes. Keep only the intersection of each substantial filled panel
-      // with this tile's core; the cores form a non-overlapping partition.
+      // Preserve a panel's complete geometry when the crop actually shows all
+      // of its edges. Clipping every panel to a core destroyed rounded corners
+      // and made later tile fragments cover previously reconstructed details.
       if(n.type==='rect' && n.fill && n.fill!=='none' && Number(n.w)>40 && Number(n.h)>40){
         const x=Number(n.x)+tile.x,y=Number(n.y)+tile.y;
         const w=Number(n.w),h=Number(n.h);
         if([x,y,w,h].every(Number.isFinite)){
+          const touchesInternalEdge=(tile.x>0&&Number(n.x)<=2)
+            ||(tile.y>0&&Number(n.y)<=2)
+            ||(tile.x+tile.w<width&&Number(n.x)+w>=tile.w-2)
+            ||(tile.y+tile.h<height&&Number(n.y)+h>=tile.h-2);
+          if(!touchesInternalEdge){
+            n.x=x;n.y=y;
+            completePanels.push(n);
+            continue;
+          }
           const left=Math.max(x,tile.coreX,0),top=Math.max(y,tile.coreY,0);
           const right=Math.min(x+w,tile.coreRight,width);
           const bottom=Math.min(y+h,tile.coreBottom,height);
@@ -195,7 +239,7 @@ export function mergeReconstructionTiles(results,width,height){
             const clipped=left!==x||top!==y||right!==x+w||bottom!==y+h;
             n.x=left;n.y=top;n.w=right-left;n.h=bottom-top;
             if(clipped){n.stroke='none';n.radius=0;n.rx=0;n.ry=0;}
-            nodes.push(n);
+            clippedPanels.push(n);
           }
           continue;
         }
@@ -236,6 +280,24 @@ export function mergeReconstructionTiles(results,width,height){
       nodes.push(n);
     }
   }
+  const samePanel=(a,b)=>a.fill===b.fill
+    && Math.abs(Number(a.x)-Number(b.x))<=4
+    && Math.abs(Number(a.y)-Number(b.y))<=4
+    && Math.abs(Number(a.w)-Number(b.w))<=4
+    && Math.abs(Number(a.h)-Number(b.h))<=4;
+  const uniquePanels=[];
+  for(const panel of completePanels){
+    if(!uniquePanels.some(existing=>samePanel(existing,panel))) uniquePanels.push(panel);
+  }
+  const remainingFragments=clippedPanels.filter(fragment=>!uniquePanels.some(panel=>{
+    if(panel.fill!==fragment.fill) return false;
+    const overlapW=Math.max(0,Math.min(panel.x+panel.w,fragment.x+fragment.w)-Math.max(panel.x,fragment.x));
+    const overlapH=Math.max(0,Math.min(panel.y+panel.h,fragment.y+fragment.h)-Math.max(panel.y,fragment.y));
+    return overlapW*overlapH>=0.95*fragment.w*fragment.h;
+  }));
+  // Backgrounds and cards must precede their editable contents irrespective
+  // of which tile supplied each object. Larger backgrounds go first.
+  nodes.unshift(...[...uniquePanels,...remainingFragments].sort((a,b)=>b.w*b.h-a.w*a.h));
   nodes.push(...stitched);
   return {schema:'figureforge.scene.v4',canvas:{width,height,w:width,h:height},nodes,
     counts:{total:nodes.length,text:nodes.filter(n=>n.type==='text').length,
