@@ -1,7 +1,7 @@
 // Refine recognized text against the source pixels. The model supplies the
 // wording; this pass measures font metrics and placement without another API call.
 export function calibrateEditableText(scene, sourceCanvas, options={}){
-  const maxLabels=options.maxLabels??16;
+  const maxLabels=options.maxLabels??64;
   const width=sourceCanvas.width,height=sourceCanvas.height;
   const src=sourceCanvas.getContext('2d',{willReadFrequently:true}).getImageData(0,0,width,height).data;
   const colorCanvas=document.createElement('canvas');colorCanvas.width=colorCanvas.height=1;
@@ -15,7 +15,9 @@ export function calibrateEditableText(scene, sourceCanvas, options={}){
   };
   const labels=(scene.nodes||[]).filter(n=>n.type==='text'&&n.text&&
     Number(n.fontSize)>=13&&Number(n.fontSize)<=130&&n.text.length<=80)
-    .sort((a,b)=>Number(b.fontSize)-Number(a.fontSize)).slice(0,maxLabels);
+    // Small labels are the most vulnerable to OCR placement and font errors.
+    // Calibrate them first if a crowded figure exceeds the per-pass budget.
+    .sort((a,b)=>Number(a.fontSize)-Number(b.fontSize)).slice(0,maxLabels);
   let adjusted=0;
   for(const node of labels){
     const x=Number(node.x),y=Number(node.y),size=Number(node.fontSize);
