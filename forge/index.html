@@ -2067,7 +2067,11 @@ async function fetchTextWithTimeout(url, options={}, timeoutMs=180000){
     const r=await fetch(url,{...options,signal:ac.signal});
     return {ok:r.ok,status:r.status,text:await r.text()};
   }catch(err){
-    if(ac.signal.aborted) throw new Error('Vision API timed out after '+Math.round(timeoutMs/1000)+' seconds');
+    if(ac.signal.aborted){
+      const timeout=new Error('Vision API timed out after '+Math.round(timeoutMs/1000)+' seconds');
+      timeout.visionTimeout=true;
+      throw timeout;
+    }
     throw err;
   }finally{ clearTimeout(to); }
 }
@@ -4221,7 +4225,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
       audit.lastError=String(err&&err.message||err);
       // The same dense crop will hit the same limit again. Divide it into
       // smaller regions instead of spending another full-length request.
-      if(isFatal(err) || (err.outputTruncated && Math.max(W,H)>350) || attempt===2) break;
+      if(isFatal(err) || err.visionTimeout || (err.outputTruncated && Math.max(W,H)>350) || attempt===2) break;
     }
   }
   audit.state='failed';
@@ -4371,7 +4375,7 @@ async function runReconstruction(){
         say('recon.tile',{i:reconstructionAudit.completedTiles,n:reconstructionAudit.totalTiles});
         return [result];
       }catch(err){
-        if(err.sceneFormatFailure && depth<2 && Math.max(tile.w,tile.h)>350){
+        if((err.sceneFormatFailure || err.visionTimeout) && depth<2 && Math.max(tile.w,tile.h)>350){
           const subtiles=subdivideReconstructionTile(tile,Math.max(220,Math.ceil(Math.max(tile.w,tile.h)/2)),14);
           if(subtiles.length>1){
             tileAudit.state='subdivided';
@@ -4382,10 +4386,11 @@ async function runReconstruction(){
             return recovered;
           }
         }
-        if(err.sceneFormatFailure){
+        if(err.sceneFormatFailure || err.visionTimeout){
           const partial=traceFailedTile(tile,crop);
           tileAudit.state='pixel-vector-fallback';
           tileAudit.fallbackReason=String(err&&err.message||err);
+          tileAudit.fallbackCause=err.visionTimeout?'timeout':'scene-format';
           tileAudit.nodeCount=partial.nodes.length;
           reconstructionAudit.fallbackTiles++;
           reconstructionAudit.completedTiles++;
@@ -4578,9 +4583,10 @@ async function runReconstruction(){
         qualityState:reconstructionAudit.state},reconFailed:false,reconError:''});
     renderEditableExportCard(); applyExportFont(st.font || 'original');
     if(reconstructionAudit.fallbackTiles){
+      const timedOutTiles=reconstructionAudit.tiles.filter(tile=>tile.fallbackCause==='timeout').length;
       status.textContent=GAL_I18N.lang==='zh'
-        ? '已生成 '+scene.nodes.length+' 个可编辑对象；'+reconstructionAudit.fallbackTiles+' 个区域因视觉 API 返回非图形内容，使用可编辑色块保底。请检查这些区域的文字和细节。'
-        : 'Generated '+scene.nodes.length+' editable objects; '+reconstructionAudit.fallbackTiles+' regions used editable color blocks because the vision API did not return shapes. Check text and fine details in those regions.';
+        ? '已生成 '+scene.nodes.length+' 个可编辑对象；'+reconstructionAudit.fallbackTiles+' 个区域使用可编辑色块保底（其中 '+timedOutTiles+' 个区域因视觉 API 超时）。请检查这些区域的文字和细节。'
+        : 'Generated '+scene.nodes.length+' editable objects; '+reconstructionAudit.fallbackTiles+' regions used editable color blocks ('+timedOutTiles+' after a vision API timeout). Check text and fine details in those regions.';
     }else say(audit.defects.length ? 'recon.audit' : 'recon.done',{n:scene.nodes.length,d:audit.defects.length});
     if(scene.counts.filteredArtifactLines){
       status.textContent += GAL_I18N.lang==='zh'
