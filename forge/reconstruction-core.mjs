@@ -209,7 +209,7 @@ function boundaryTextStitches(results){
       // heading. Estimate its extent so it can still be joined at a crop seam.
       const w=Number.isFinite(explicitW)&&explicitW>0 ? explicitW :
         font*0.57*node.text.length;
-      if(![x,y,w,font].every(Number.isFinite)||w<=0||font<28) return;
+      if(![x,y,w,font].every(Number.isFinite)||w<=0||font<16) return;
       fragments.push({tile,tileIndex,nodeIndex,node,x,y,w,font,
         left:x<=36,right:x+w>=tile.w-36,globalY:tile.y+y});
     });
@@ -230,7 +230,7 @@ function boundaryTextStitches(results){
       const options=fragments.filter(next=>!used.has(key(next))&&!chain.includes(next)&&next.left&&
         next.tile.coreX===prev.tile.coreRight&&next.tile.coreY===prev.tile.coreY&&
         Math.abs(next.globalY-prev.globalY)<=Math.max(next.font,prev.font)*0.3&&
-        Math.abs(next.font-prev.font)<=Math.max(next.font,prev.font)*0.2);
+        Math.abs(next.font-prev.font)<=Math.max(next.font,prev.font)*0.3);
       const match=options.map(next=>({next,n:overlap(combined,next.node.text)}))
         .filter(item=>item.n>=2).sort((a,b)=>b.n-a.n)[0];
       if(!match) break;
@@ -252,6 +252,50 @@ function boundaryTextStitches(results){
       fontSize:first.font,anchor:'start'});
   }
   return {skip,stitched};
+}
+
+// OCR can return two overlapping pieces of one label inside the same crop.
+// Join only when their shared characters and measured baselines agree; nearby
+// independent labels must remain separate editable objects.
+function reconcileTextFragments(nodes){
+  let joined=0;
+  const removed=new Set();
+  const labels=nodes.map((node,index)=>({node,index})).filter(({node})=>
+    node.type==='text' && !node.textPath && !Number(node.rotation) &&
+    typeof node.text==='string' && node.text.trim() &&
+    [node.x,node.y,node.w,node.h,node.fontSize].every(v=>Number.isFinite(Number(v))));
+  for(const first of labels){
+    if(removed.has(first.index)) continue;
+    let a=first.node;
+    for(;;){
+      const size=Number(a.fontSize), right=Number(a.x)+Number(a.w);
+      const choices=labels.filter(b=>b.index!==first.index && !removed.has(b.index) &&
+        Number(b.node.x)>=Number(a.x)-2 &&
+        Number(b.node.x)-right>=-size*.8 && Number(b.node.x)-right<=size*.65 &&
+        Math.abs(Number(b.node.y)-Number(a.y))<=Math.max(size,Number(b.node.fontSize))*.22 &&
+        Math.abs(Number(b.node.fontSize)-size)<=Math.max(size,Number(b.node.fontSize))*.3 &&
+        String(b.node.fill||'').toLowerCase()===String(a.fill||'').toLowerCase() &&
+        !!b.node.bold===!!a.bold && !!b.node.italic===!!a.italic);
+      const matches=choices.map(b=>{
+        const left=String(a.text).trimEnd(),next=String(b.node.text).trimStart();
+        let shared=0;
+        for(let n=Math.min(left.length,next.length,24);n>=1;n--){
+          if(left.slice(-n)===next.slice(0,n)){shared=n;break;}
+        }
+        const punctuation=/[^\p{L}\p{N}]/u.test(left.slice(-1));
+        return {b,shared,valid:shared>=2 || (shared===1 && punctuation)};
+      }).filter(m=>m.valid).sort((x,y)=>y.shared-x.shared);
+      if(!matches.length) break;
+      const {b,shared}=matches[0];
+      const oldRight=Number(a.x)+Number(a.w);
+      a.text=String(a.text).trimEnd()+String(b.node.text).trimStart().slice(shared);
+      a.w=Math.max(oldRight,Number(b.node.x)+Number(b.node.w))-Number(a.x);
+      a.h=Math.max(Number(a.h),Number(b.node.h));
+      removed.add(b.index);joined++;
+    }
+  }
+  if(removed.size) for(const index of [...removed].sort((a,b)=>b-a)) nodes.splice(index,1);
+  return joined;
 }
 
 // A model may hallucinate a line from a crop boundary to a distant object.
@@ -379,9 +423,11 @@ export function mergeReconstructionTiles(results,width,height){
   // of which tile supplied each object. Larger backgrounds go first.
   nodes.unshift(...[...uniquePanels,...remainingFragments].sort((a,b)=>b.w*b.h-a.w*a.h));
   nodes.push(...stitched);
+  const reconciledTextFragments=reconcileTextFragments(nodes);
   return {schema:'figureforge.scene.v4',canvas:{width,height,w:width,h:height},nodes,
     counts:{total:nodes.length,text:nodes.filter(n=>n.type==='text').length,
       shapes:nodes.filter(n=>n.type!=='text'&&n.type!=='image').length,
       images:nodes.filter(n=>n.type==='image').length,
-      filteredArtifactLines,stitchedTextFragments:[...skip.values()].reduce((sum,parts)=>sum+parts.size,0)}};
+      filteredArtifactLines,reconciledTextFragments,
+      stitchedTextFragments:[...skip.values()].reduce((sum,parts)=>sum+parts.size,0)}};
 }

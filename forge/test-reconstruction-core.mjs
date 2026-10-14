@@ -135,6 +135,17 @@ const titleMerge=mergeReconstructionTiles(titleTiles.slice(0,4).map((tile,i)=>({
 assert.equal(titleMerge.nodes.length,1,'seam title fragments must become one editable text shape');
 assert.equal(titleMerge.nodes[0].text,'Diffusion Policy for One-Shot Robot Manipulation');
 assert.equal(titleMerge.counts.stitchedTextFragments,4);
+const labelTile={index:'label',x:0,y:0,w:500,h:180,
+  coreX:0,coreY:0,coreRight:500,coreBottom:180};
+const joinedLabel=mergeReconstructionTiles([{tile:labelTile,scene:{nodes:[
+  {id:'a',type:'text',x:20,y:35,w:70,h:24,text:'Input &',fontSize:20,fill:'#123456'},
+  {id:'b',type:'text',x:88,y:36,w:94,h:18,text:'& Encoding',fontSize:15,fill:'#123456'},
+  {id:'other',type:'text',x:220,y:35,w:70,h:24,text:'Output',fontSize:20,fill:'#123456'}
+]}}],500,180);
+assert.equal(joinedLabel.nodes.find(n=>n.text==='Input & Encoding')?.w,162,
+  'overlapping fragments with different OCR font estimates become one label');
+assert.ok(joinedLabel.nodes.some(n=>n.text==='Output'),'unrelated label stays separate');
+assert.equal(joinedLabel.counts.reconciledTextFragments,1);
 const arcScene={canvas:{width:400,height:300},nodes:[
   {id:'arc',type:'path',d:'M 120 140 A 50 50 0 0 1 220 140',stroke:'#111',fill:'none'},
   {id:'caption',type:'text',text:'Curve',textPath:{d:'M 120 140 A 50 50 0 0 1 220 140'},fontSize:16},

@@ -1,7 +1,7 @@
 // Refine recognized text against the source pixels. The model supplies the
 // wording; this pass measures font metrics and placement without another API call.
 export function calibrateEditableText(scene, sourceCanvas, options={}){
-  const maxLabels=options.maxLabels??64;
+  const maxLabels=options.maxLabels??96;
   const width=sourceCanvas.width,height=sourceCanvas.height;
   const src=sourceCanvas.getContext('2d',{willReadFrequently:true}).getImageData(0,0,width,height).data;
   const colorCanvas=document.createElement('canvas');colorCanvas.width=colorCanvas.height=1;
@@ -14,10 +14,12 @@ export function calibrateEditableText(scene, sourceCanvas, options={}){
     return [17,24,39];
   };
   const labels=(scene.nodes||[]).filter(n=>n.type==='text'&&n.text&&
+    !n.textPath&&!Number(n.rotation)&&
     Number(n.fontSize)>=13&&Number(n.fontSize)<=130&&n.text.length<=80)
-    // Small labels are the most vulnerable to OCR placement and font errors.
-    // Calibrate them first if a crowded figure exceeds the per-pass budget.
-    .sort((a,b)=>Number(a.fontSize)-Number(b.fontSize)).slice(0,maxLabels);
+    // Give prominent, legible labels priority. Tiny OCR guesses should not
+    // consume the entire calibration budget in dense figures.
+    .sort((a,b)=>Number(b.fontSize)*Math.min(String(b.text).length,24)-
+      Number(a.fontSize)*Math.min(String(a.text).length,24)).slice(0,maxLabels);
   let adjusted=0;
   for(const node of labels){
     const x=Number(node.x),y=Number(node.y),size=Number(node.fontSize);
@@ -43,9 +45,9 @@ export function calibrateEditableText(scene, sourceCanvas, options={}){
     const candidate=document.createElement('canvas');candidate.width=rw;candidate.height=rh;
     const ctx=candidate.getContext('2d',{willReadFrequently:true});
     const initialX=x-left,initialY=y-top;
-    const shift=Math.min(32,Math.max(8,Math.round(size*.35)));
+    const shift=Math.min(10,Math.max(2,Math.round(size*.16)));
     const shifts=[0,-1,1,-2,2].map(v=>v*shift/2);
-    let best=null;
+    let best=null,original=null;
     for(const font of uniqueFonts) for(const ratio of [.9,1,1.1]){
       const fontSize=Math.max(6,Math.round(size*ratio));
       ctx.font=`${node.bold?'bold ':''}${node.italic?'italic ':''}${fontSize}px "${font.replace(/"/g,'')}"`;
@@ -72,11 +74,16 @@ export function calibrateEditableText(scene, sourceCanvas, options={}){
           if(xx>=0&&xx<rw&&yy>=0&&yy<rh&&sourceMask[yy*rw+xx]) hit++;
         }
         const precision=hit/points.length;
-        const score=precision-.002*(Math.abs(dx)+Math.abs(dy));
+        const score=precision-.004*(Math.abs(dx)+Math.abs(dy))-
+          (font===preferredFont?0:.015)-Math.abs(fontSize-size)/size*.03;
+        if(font===preferredFont&&fontSize===Math.round(size)&&dx===0&&dy===0)
+          original={score,precision};
         if(!best||score>best.score) best={score,precision,font,fontSize,dx,dy};
       }
     }
-    if(best&&best.precision>.42&&best.score>.46){
+    // A nearby rule or neighbouring label can make a wrong candidate look
+    // convincing. Keep the original unless the local pixel fit clearly wins.
+    if(best&&original&&best.precision>.52&&best.score>original.score+.045){
       node.x=x+best.dx;node.y=y+best.dy;node.fontSize=best.fontSize;
       node.fontFamily=best.font;adjusted++;
     }
