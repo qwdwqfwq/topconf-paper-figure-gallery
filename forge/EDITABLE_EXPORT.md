@@ -12,7 +12,7 @@
 
 1. 第三步完成后，`syncStep3Bitmap()` 保存生成图。`ensureBitmapDataUrl()` 将其变成可供视觉模型读取的 data URI。`planReconstructionTiles()` 将图像划成目标尺寸约 900 px、边缘重叠 28 px 的区域，减少单次视觉请求的输出长度。
 2. `editableReconstructionModel()` 从第一步的视觉模型、主模型及该服务商模型表中选择视觉模型。页面沿用 `cfg()`、`baseURL()`、`cleanKey($('#key').value)`；无需第二把 API Key。
-3. `requestEditableScene()` 将每个区域的裁片和 `editableScenePrompt()` 一起发送；最多同时请求两个区域。OpenAI 兼容服务商（包括方舟）调用 `POST {baseURL}/chat/completions`，请求体含 `model`、`temperature:0.1`、`max_tokens:16000`、system 提示和 `image_url` data URI；Anthropic 原生配置调用 `POST {baseURL}/v1/messages`，使用 base64 image source。方舟请求禁用 thinking，以留出结构化输出空间。每次请求（包括接收完整响应体）限时 150 秒；对暂时失败或无效输出最多再试一次。400、401、403、404、配额或计费错误立即停止并在界面显示实际原因。
+3. `requestEditableScene()` 将每个区域的裁片和 `editableScenePrompt()` 一起发送；最多同时请求两个区域。OpenAI 兼容服务商（包括方舟）调用 `POST {baseURL}/chat/completions`，请求体含 `model`、`temperature:0.1`、`max_tokens:16000`、system 提示和 `image_url` data URI；Anthropic 原生配置调用 `POST {baseURL}/v1/messages`，使用 base64 image source。方舟请求禁用 thinking，以留出结构化输出空间。每次请求（包括接收完整响应体）限时 150 秒；对暂时失败或无效输出最多再试一次。超时裁片不重复发送原尺寸，而是细分后继续重建；若最小裁片仍超时，使用可编辑色块保底并标为“需检查”。400、401、403、404、配额或计费错误立即停止并在界面显示实际原因。
 4. 提示词要求裁片内的像素坐标和逐对象拆分：文字、容器、连线、箭头、图标、图表、照片区域各自成节点；立方体或棱柱的前、顶、侧面必须是独立闭合多边形。`extractJSON()` 和 `materializeEditableScene()` 解析、归一化类型、颜色与坐标。照片区域从相应裁片裁成独立 PNG。`mergeReconstructionTiles()` 先过滤视觉模型虚构的长线：如果任一端落在裁片角点的 1 px 范围内，且线长至少为 `max(100 px, 裁片短边的 16%)`，即视为角点伪影。短刻度线及内部连线保留，过滤数量显示在界面。随后把坐标平移回原图，用中心点归属去除重叠区域的重复对象，并保留每个面独立编辑。
 5. `auditReconScene()` 阻止用整页图片冒充可编辑图；重建失败时第四步保持禁用并显示错误，不把原位图作为“可编辑导出”交付。
 6. `sceneToSvgString()` 生成逐对象 SVG；`sceneToDrawio()` 写入独立 `mxCell`，自由轮廓用 stencil；`buildNativePptx()` 生成 DrawingML 原生形状和文字；`sceneToVsdxFiles()` 生成 Visio 原生几何、文字和独立照片。曲线路径以线段采样进入后三种格式。封装后的 PPTX/VSDX 是 OOXML ZIP，浏览器中直接下载。

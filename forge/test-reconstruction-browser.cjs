@@ -240,6 +240,68 @@ const server = http.createServer((req,res)=>{
     assert.equal(largeTruncated.ok,true,JSON.stringify(largeTruncated));
     assert.equal(largeTruncated.calls,5,'large truncated crops should split without repeating the same request');
     assert.equal(largeTruncated.first.state,'subdivided');
+    const timedOut=await page.evaluate(async()=>{
+      const originalFetch=window.fetch, originalSetTimeout=window.setTimeout;
+      let calls=0;
+      window.setTimeout=(fn,delay,...args)=>originalSetTimeout(fn,delay===150000?20:delay,...args);
+      window.fetch=async(url,options)=>{
+        if(String(url).endsWith('/chat/completions')){
+          calls++;
+          if(calls===1) return new Promise((resolve,reject)=>{
+            options.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true});
+          });
+          const body=JSON.parse(options.body);
+          const match=body.messages[1].content[0].text.match(/"width":(\d+),"height":(\d+)/);
+          const w=Number(match[1]),h=Number(match[2]);
+          const content=JSON.stringify({nodes:[{type:'rect',x:0,y:0,w,h,fill:'#e02020'}]});
+          return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content}}]}),{status:200});
+        }
+        return originalFetch(url,options);
+      };
+      try{
+        const canvas=document.createElement('canvas');canvas.width=700;canvas.height=500;
+        const ctx=canvas.getContext('2d');ctx.fillStyle='#e02020';ctx.fillRect(0,0,700,500);
+        window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
+        const ok=await window.__ffReconstruct();
+        return {ok,calls,audit:window.__ffApiAudit.reconstruction,
+          nodes:window.__ffExportState.scene?.nodes.length};
+      }finally{window.fetch=originalFetch;window.setTimeout=originalSetTimeout;}
+    });
+    assert.equal(timedOut.ok,true,JSON.stringify(timedOut));
+    assert.equal(timedOut.calls,5,'one timed out crop should split directly into four smaller requests');
+    assert.equal(timedOut.audit.tiles[0].state,'subdivided');
+    assert.equal(timedOut.audit.fallbackTiles,0,'successful smaller crops must retain native shapes');
+    assert.equal(timedOut.audit.completedTiles,timedOut.audit.totalTiles);
+    assert.ok(timedOut.nodes>0,'a timeout must not discard successfully reconstructed regions');
+    const terminalTimeout=await page.evaluate(async()=>{
+      const originalFetch=window.fetch, originalSetTimeout=window.setTimeout;
+      let calls=0;
+      window.setTimeout=(fn,delay,...args)=>originalSetTimeout(fn,delay===150000?20:delay,...args);
+      window.fetch=async(url,options)=>{
+        if(String(url).endsWith('/chat/completions')){
+          calls++;
+          return new Promise((resolve,reject)=>{
+            options.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true});
+          });
+        }
+        return originalFetch(url,options);
+      };
+      try{
+        const canvas=document.createElement('canvas');canvas.width=240;canvas.height=160;
+        const ctx=canvas.getContext('2d');ctx.fillStyle='#123456';ctx.fillRect(0,0,240,160);
+        window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
+        const ok=await window.__ffReconstruct();
+        return {ok,calls,audit:window.__ffApiAudit.reconstruction,
+          nodes:window.__ffExportState.scene?.nodes.length,
+          status:document.querySelector('#reconStatus').textContent};
+      }finally{window.fetch=originalFetch;window.setTimeout=originalSetTimeout;}
+    });
+    assert.equal(terminalTimeout.ok,true,JSON.stringify(terminalTimeout));
+    assert.equal(terminalTimeout.calls,1,'a small timed out crop must not repeat the same request');
+    assert.equal(terminalTimeout.audit.fallbackTiles,1);
+    assert.equal(terminalTimeout.audit.state,'needs-review');
+    assert.ok(terminalTimeout.nodes>0);
+    assert.match(terminalTimeout.status,/超时|timeout/i);
     const recovered=await page.evaluate(async()=>{
       const original=window.fetch;
       let calls=0;
