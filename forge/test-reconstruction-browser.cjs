@@ -47,10 +47,14 @@ const server = http.createServer((req,res)=>{
       select.add(new Option('doubao-vision-test','doubao-vision-test'));
       select.value='doubao-vision-test';
       const original=window.fetch;
-      let calls=0;
+      let calls=0,activeCalls=0,peakCalls=0;
       window.fetch=async(url,options)=>{
         if(String(url).endsWith('/chat/completions')){
           calls++;
+          activeCalls++;
+          peakCalls=Math.max(peakCalls,activeCalls);
+          await new Promise(resolve=>setTimeout(resolve,25));
+          activeCalls--;
           const body=JSON.parse(options.body);
           if(body.response_format?.type!=='json_object') throw new Error('Ark vision requests require JSON mode');
           const match=body.messages[1].content[0].text.match(/"width":(\d+),"height":(\d+)/);
@@ -75,7 +79,7 @@ const server = http.createServer((req,res)=>{
       window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
       const ok=await window.__ffReconstruct();
       const scene=window.__ffExportState.scene;
-      return {ok,calls,nodes:scene&&scene.nodes.length,svg:window.__ffExportState.svg,
+      return {ok,calls,peakCalls,nodes:scene&&scene.nodes.length,svg:window.__ffExportState.svg,
         qualityState:window.__ffExportState.recon?.qualityState,
         lines:scene?.nodes.filter(n=>n.type==='line').map(n=>({x:n.x,y:n.y,x2:n.x2,y2:n.y2})),
         fittedText:scene?.nodes.filter(n=>n.type==='text'&&n.text==='Oversized label').map(n=>n.fontSize),
@@ -86,6 +90,7 @@ const server = http.createServer((req,res)=>{
     assert.equal(result.ok,true,JSON.stringify(result));
     assert.equal(result.qualityState,'needs-review','a mismatched editable scene must not be labelled publication ready');
     assert.equal(result.calls,2,'1200px bitmap must use two vision requests');
+    assert.equal(result.peakCalls,2,'independent tiles must run concurrently');
     assert.ok(result.nodes>=16,'editable primitives must survive tile merge');
     assert.equal(result.lines.length,4,'valid line coordinates and displacements survive');
     assert.equal(result.lines.filter(n=>n.y===14 && n.x2-n.x===58).length,2,'x1/y1 aliases must preserve line geometry');

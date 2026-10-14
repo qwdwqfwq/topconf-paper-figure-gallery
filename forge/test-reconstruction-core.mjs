@@ -146,6 +146,16 @@ assert.equal(joinedLabel.nodes.find(n=>n.text==='Input & Encoding')?.w,162,
   'overlapping fragments with different OCR font estimates become one label');
 assert.ok(joinedLabel.nodes.some(n=>n.text==='Output'),'unrelated label stays separate');
 assert.equal(joinedLabel.counts.reconciledTextFragments,1);
+const duplicateLabels=mergeReconstructionTiles([{tile:labelTile,scene:{nodes:[
+  {id:'title-a',type:'text',x:30,y:20,w:290,h:38,text:'Working Memory Model',fontSize:32},
+  {id:'title-b',type:'text',x:32,y:22,w:280,h:36,text:'Working Memory Model',fontSize:31},
+  {id:'legend-a',type:'text',x:40,y:100,w:80,h:22,text:'Baseline',fontSize:16},
+  {id:'legend-b',type:'text',x:210,y:100,w:80,h:22,text:'Baseline',fontSize:16}
+]}}],500,180);
+assert.equal(duplicateLabels.counts.deduplicatedText,1,'overlapping title copies are removed');
+assert.equal(duplicateLabels.nodes.filter(n=>n.text==='Working Memory Model').length,1);
+assert.equal(duplicateLabels.nodes.filter(n=>n.text==='Baseline').length,2,
+  'repeated chart labels at separate positions stay editable');
 const arcScene={canvas:{width:400,height:300},nodes:[
   {id:'arc',type:'path',d:'M 120 140 A 50 50 0 0 1 220 140',stroke:'#111',fill:'none'},
   {id:'caption',type:'text',text:'Curve',textPath:{d:'M 120 140 A 50 50 0 0 1 220 140'},fontSize:16},

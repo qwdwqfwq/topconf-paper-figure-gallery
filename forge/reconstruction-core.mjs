@@ -298,6 +298,39 @@ function reconcileTextFragments(nodes){
   return joined;
 }
 
+// Neighboring crops can each return the same complete label. Keep the more
+// complete text box, but require substantial geometric overlap so repeated
+// labels in a chart or legend remain independent.
+function deduplicateText(nodes){
+  const removed=new Set();
+  const labels=nodes.map((node,index)=>({node,index})).filter(({node})=>
+    node.type==='text' && !node.textPath && String(node.text||'').trim() &&
+    [node.x,node.y,node.w,node.h].every(v=>Number.isFinite(Number(v))));
+  const normalized=node=>String(node.text).replace(/\s+/g,' ').trim().toLowerCase();
+  for(let i=0;i<labels.length;i++){
+    const a=labels[i];
+    if(removed.has(a.index)) continue;
+    for(let j=i+1;j<labels.length;j++){
+      const b=labels[j];
+      if(removed.has(b.index)) continue;
+      const at=normalized(a.node),bt=normalized(b.node);
+      if(at!==bt && !(at.length>=4&&bt.length>=4&&(at.includes(bt)||bt.includes(at)))) continue;
+      if(Math.abs(Number(a.node.rotation||0)-Number(b.node.rotation||0))>2) continue;
+      const ax=Number(a.node.x),ay=Number(a.node.y),aw=Number(a.node.w),ah=Number(a.node.h);
+      const bx=Number(b.node.x),by=Number(b.node.y),bw=Number(b.node.w),bh=Number(b.node.h);
+      const overlapW=Math.max(0,Math.min(ax+aw,bx+bw)-Math.max(ax,bx));
+      const overlapH=Math.max(0,Math.min(ay+ah,by+bh)-Math.max(ay,by));
+      if(overlapW<.7*Math.min(aw,bw) || overlapH<.6*Math.min(ah,bh)) continue;
+      if(Math.abs((ay+ah/2)-(by+bh/2))>Math.max(ah,bh)*.35) continue;
+      const keepA=at.length>bt.length || (at.length===bt.length && aw*ah>=bw*bh);
+      removed.add(keepA?b.index:a.index);
+      if(!keepA) break;
+    }
+  }
+  for(const index of [...removed].sort((a,b)=>b-a)) nodes.splice(index,1);
+  return removed.size;
+}
+
 // A model may hallucinate a line from a crop boundary to a distant object.
 // Relocating that crop turns it into the long rays seen in all four exports.
 // Reject those lines in the shared scene, before format-specific rendering.
@@ -424,10 +457,11 @@ export function mergeReconstructionTiles(results,width,height){
   nodes.unshift(...[...uniquePanels,...remainingFragments].sort((a,b)=>b.w*b.h-a.w*a.h));
   nodes.push(...stitched);
   const reconciledTextFragments=reconcileTextFragments(nodes);
+  const deduplicatedText=deduplicateText(nodes);
   return {schema:'figureforge.scene.v4',canvas:{width,height,w:width,h:height},nodes,
     counts:{total:nodes.length,text:nodes.filter(n=>n.type==='text').length,
       shapes:nodes.filter(n=>n.type!=='text'&&n.type!=='image').length,
       images:nodes.filter(n=>n.type==='image').length,
-      filteredArtifactLines,reconciledTextFragments,
+      filteredArtifactLines,reconciledTextFragments,deduplicatedText,
       stitchedTextFragments:[...skip.values()].reduce((sum,parts)=>sum+parts.size,0)}};
 }

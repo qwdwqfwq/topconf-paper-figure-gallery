@@ -13,13 +13,16 @@ export function calibrateEditableText(scene, sourceCanvas, options={}){
     }catch(_){}
     return [17,24,39];
   };
-  const labels=(scene.nodes||[]).filter(n=>n.type==='text'&&n.text&&
+  const candidates=(scene.nodes||[]).filter(n=>n.type==='text'&&n.text&&
     !n.textPath&&!Number(n.rotation)&&
-    Number(n.fontSize)>=13&&Number(n.fontSize)<=130&&n.text.length<=80)
-    // Give prominent, legible labels priority. Tiny OCR guesses should not
-    // consume the entire calibration budget in dense figures.
-    .sort((a,b)=>Number(b.fontSize)*Math.min(String(b.text).length,24)-
-      Number(a.fontSize)*Math.min(String(a.text).length,24)).slice(0,maxLabels);
+    Number(n.fontSize)>=10&&Number(n.fontSize)<=130&&n.text.length<=80);
+  const rank=(a,b)=>Number(b.fontSize)*Math.min(String(b.text).length,24)-
+    Number(a.fontSize)*Math.min(String(a.text).length,24);
+  // Reserve a quarter of the fixed calibration budget for small labels in
+  // charts and tables; otherwise prominent headings consume all slots.
+  const denseBudget=Math.min(Math.floor(maxLabels/4),candidates.filter(n=>Number(n.fontSize)<13).length);
+  const labels=[...candidates.filter(n=>Number(n.fontSize)>=13).sort(rank).slice(0,maxLabels-denseBudget),
+    ...candidates.filter(n=>Number(n.fontSize)<13).sort(rank).slice(0,denseBudget)];
   let adjusted=0;
   for(const node of labels){
     const x=Number(node.x),y=Number(node.y),size=Number(node.fontSize);

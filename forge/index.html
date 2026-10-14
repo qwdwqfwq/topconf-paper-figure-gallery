@@ -3957,14 +3957,14 @@ function materializeEditableScene(raw,W,H){
       // explicit label bounds so adjacent editable labels do not collide.
       const explicitW=sceneNumber(pick(n,['w','width'],null),0);
       const explicitH=sceneNumber(pick(n,['h','height'],null),0);
-      if(explicitH>0) fontSize=Math.min(fontSize,Math.max(6,explicitH*1.15));
+      if(explicitH>0) fontSize=Math.min(fontSize,Math.max(6,explicitH*1.08));
       const clippedAtTileEdge=x<=4 || x+explicitW>=W-4;
       if(explicitW>0 && !clippedAtTileEdge && !n.textPath && !n.rotation){
         const font=String(pick(n,['fontFamily','font','family'],'Arial'));
         const measure=document.createElement('canvas').getContext('2d');
         measure.font=`${n.bold?'bold ':''}${fontSize}px ${font}`;
         const measured=measure.measureText(label).width;
-        if(measured>explicitW*1.12) fontSize=Math.max(6,fontSize*explicitW*1.12/measured);
+        if(measured>explicitW*1.04) fontSize=Math.max(6,fontSize*explicitW*1.04/measured);
       }
       out.push(Object.assign(base,{
         type:'text',
@@ -4309,6 +4309,25 @@ async function runReconstruction(){
     };
     const results=[];
     const repairCandidates=[];
+    // Keep the provider busy without allowing a slow crop to stall every
+    // other crop. All Vision calls (including retries and object repairs)
+    // share this limit so subdivision cannot flood the API.
+    const visionQueue=[];
+    let activeVision=0;
+    const requestScene=(...args)=>new Promise((resolve,reject)=>{
+      visionQueue.push({args,resolve,reject});
+      const pump=()=>{
+        while(activeVision<3 && visionQueue.length){
+          const job=visionQueue.shift();
+          activeVision++;
+          requestEditableScene(...job.args).then(job.resolve,job.reject).finally(()=>{
+            activeVision--;
+            pump();
+          });
+        }
+      };
+      pump();
+    });
     // An API may repeatedly answer with a prose/summary object, even for a
     // small crop. Preserve an editable result by tracing that crop into native
     // filled rectangles. This is explicitly reported as a fidelity fallback.
@@ -4348,7 +4367,7 @@ async function runReconstruction(){
       const tileAudit={index:tile.index,depth};
       reconstructionAudit.tiles.push(tileAudit);
       try{
-        const partial=await requestEditableScene(crop.toDataURL('image/png'),tile.w,tile.h,tileAudit);
+        const partial=await requestScene(crop.toDataURL('image/png'),tile.w,tile.h,tileAudit);
         const result={tile,scene:partial};
         // Measure every tile before spending correction calls, so the largest
         // visible discrepancies get the limited budget first.
@@ -4373,9 +4392,7 @@ async function runReconstruction(){
             tileAudit.state='subdivided';
             tileAudit.subtiles=subtiles.length;
             reconstructionAudit.totalTiles+=subtiles.length-1;
-            const recovered=[];
-            for(const child of subtiles) recovered.push(...await reconstructTile(child,depth+1));
-            return recovered;
+            return (await Promise.all(subtiles.map(child=>reconstructTile(child,depth+1)))).flat();
           }
         }
         if(err.sceneFormatFailure || err.visionTimeout){
@@ -4392,13 +4409,8 @@ async function runReconstruction(){
         throw new Error('Tile '+tile.index+'/'+reconstructionAudit.totalTiles+': '+String(err&&err.message||err));
       }
     };
-    // Two requests at a time keep large diagrams responsive without flooding
-    // a provider with all tiles at once. Each crop has local pixel coordinates.
-    for(let start=0;start<tiles.length;start+=2){
-      const batch=tiles.slice(start,start+2);
-      const resolved=await Promise.all(batch.map(tile=>reconstructTile(tile,0)));
-      results.push(...resolved.flat());
-    }
+    // The shared limiter bounds provider load; no batch barrier is needed.
+    results.push(...(await Promise.all(tiles.map(tile=>reconstructTile(tile,0)))).flat());
     const repairBudget=Math.min(12,Math.max(4,results.length*2));
     reconstructionAudit.repairCandidates=repairCandidates.length;
     reconstructionAudit.repairBudget=repairBudget;
@@ -4406,22 +4418,42 @@ async function runReconstruction(){
     while(repairQueue.length && reconstructionAudit.repairCalls<repairBudget){
       repairQueue.sort((a,b)=>reconstructionQualityDeficit(b.qa)-
         reconstructionQualityDeficit(a.qa));
-      const item=repairQueue.shift();
-      if(reconstructionQualityDeficit(item.qa)<=.005 || item.rounds>=2) continue;
-      item.rounds++;
-      reconstructionAudit.repairCalls++;
-      const repairAudit={index:item.tileAudit.index,depth:item.tileAudit.depth,
-        repair:true,round:item.rounds};
-      reconstructionAudit.revisions.push(repairAudit);
-      try{
-        const candidate=await requestEditableScene(item.crop.toDataURL('image/png'),
-          item.crop.width,item.crop.height,repairAudit,
-          {score:item.qa.score,preview:item.qa.preview,
-            weakRegions:item.qa.weakRegions,scene:item.result.scene});
-        const tile=item.result.tile;
-        const revisedQa=await compareEditableRender(item.crop,candidate,{
-          x:tile.coreX-tile.x,y:tile.coreY-tile.y,
-          w:tile.coreRight-tile.coreX,h:tile.coreBottom-tile.coreY});
+      const batch=[];
+      while(batch.length<3 && repairQueue.length &&
+        reconstructionAudit.repairCalls<repairBudget){
+        const item=repairQueue.shift();
+        if(reconstructionQualityDeficit(item.qa)<=.005 || item.rounds>=2) continue;
+        item.rounds++;
+        reconstructionAudit.repairCalls++;
+        const repairAudit={index:item.tileAudit.index,depth:item.tileAudit.depth,
+          repair:true,round:item.rounds};
+        reconstructionAudit.revisions.push(repairAudit);
+        batch.push({item,repairAudit});
+      }
+      const outcomes=await Promise.all(batch.map(async ({item,repairAudit})=>{
+        try{
+          const candidate=await requestScene(item.crop.toDataURL('image/png'),
+            item.crop.width,item.crop.height,repairAudit,
+            {score:item.qa.score,preview:item.qa.preview,
+              weakRegions:item.qa.weakRegions,scene:item.result.scene});
+          const tile=item.result.tile;
+          const revisedQa=await compareEditableRender(item.crop,candidate,{
+            x:tile.coreX-tile.x,y:tile.coreY-tile.y,
+            w:tile.coreRight-tile.coreX,h:tile.coreBottom-tile.coreY});
+          return {item,candidate,revisedQa};
+        }catch(error){return {item,error};}
+      }));
+      let stopRepairs=false;
+      for(const {item,candidate,revisedQa,error} of outcomes){
+        if(error){
+          const message=String(error&&error.message||error);
+          item.tileAudit.repairError=message;
+          if(/\b403\b|quota|insufficient|billing/i.test(message)){
+            reconstructionAudit.repairStoppedReason=message;
+            stopRepairs=true;
+          }
+          continue;
+        }
         item.tileAudit.revisedScore=revisedQa.score;
         item.tileAudit.revisedDarkRecall=revisedQa.darkRecall;
         item.tileAudit.revisedLocalRecall=revisedQa.localRecall;
@@ -4432,14 +4464,8 @@ async function runReconstruction(){
           if(item.rounds<2 && reconstructionQualityDeficit(item.qa)>.005)
             repairQueue.push(item);
         }
-      }catch(repairError){
-        const message=String(repairError&&repairError.message||repairError);
-        item.tileAudit.repairError=message;
-        if(/\b403\b|quota|insufficient|billing/i.test(message)){
-          reconstructionAudit.repairStoppedReason=message;
-          break;
-        }
       }
+      if(stopRepairs) break;
     }
     // Dense crops can be valid JSON yet omit small labels and connectors. A
     // second pass on smaller crops is useful only when its rendered result
@@ -4461,11 +4487,7 @@ async function runReconstruction(){
       reconstructionAudit.totalTiles+=subtiles.length;
       reconstructionAudit.splitCalls+=subtiles.length;
       try{
-        const children=[];
-        for(let start=0;start<subtiles.length;start+=2){
-          const batch=await Promise.all(subtiles.slice(start,start+2).map(tile=>reconstructTile(tile,1)));
-          children.push(...batch.flat());
-        }
+        const children=(await Promise.all(subtiles.map(tile=>reconstructTile(tile,1)))).flat();
         const local=children.map(({tile,scene})=>({tile:{...tile,
           x:tile.x-parent.x,y:tile.y-parent.y,
           coreX:tile.coreX-parent.x,coreY:tile.coreY-parent.y,
@@ -4526,7 +4548,7 @@ async function runReconstruction(){
         crop.getContext('2d').drawImage(canvas,region.x,region.y,region.w,region.h,
           0,0,crop.width,crop.height);
         try{
-          const local=await requestEditableScene(crop.toDataURL('image/png'),crop.width,crop.height,
+          const local=await requestScene(crop.toDataURL('image/png'),crop.width,crop.height,
             {objectRepair:true,region,requireCompleteObjects:true});
           const candidate=replaceObjectRepairRegion(scene,region,local,scale);
           const candidatePptx=await buildNativePptx(candidate,zipStore);
@@ -5157,7 +5179,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     usedRefs=true;
   }
   let r;
-  try{ r = await postJSON(base,endpoint,body,key,undefined,300000); }
+  try{ r = await postJSON(base,endpoint,body,key,undefined,600000); }
   catch(e){
     if(e.name==='TimeoutError') throw new Error(tt('img.timeout'));
     const diag=await diagnoseConnection(base,key,model,'image');
@@ -5169,7 +5191,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
      so this retry remains a fresh multi-reference composition. */
   if(!r.ok && usedRefs){
     delete body.image; usedRefs=false;
-    try{ r = await postJSON(base,endpoint,body,key,undefined,300000); txt=await r.text(); }catch(e){}
+    try{ r = await postJSON(base,endpoint,body,key,undefined,600000); txt=await r.text(); }catch(e){}
   }
   if(!r.ok){
     if(r.status===404){
