@@ -619,6 +619,7 @@
 import * as T from './vendor/transformers.min.js';
 import {buildNativePptx, geometrySegments} from './editable-native.mjs';
 import {extractEditableNodes, planReconstructionTiles, subdivideReconstructionTile, mergeReconstructionTiles, reconstructionQualityDeficit, acceptReconstructionRepair} from './reconstruction-core.mjs?v=20261014';
+import {calibrateEditableText} from './text-calibration.mjs?v=20261014';
 
 // Keep the large local index/CLIP assets across reloads and page re-entry.
 // The worker is same-origin and never sees API keys or provider requests.
@@ -3846,7 +3847,7 @@ function materializeEditableScene(raw,W,H){
     const sourceType=type;
     if(!type && (n.text!=null || n.content!=null || n.label!=null)) type='text';
     const aliases={
-      rectangle:'rect',roundedrectangle:'rect',box:'rect',group:'rect',panel:'rect',container:'rect',
+      rectangle:'rect',roundedrectangle:'rect',roundrect:'rect',box:'rect',group:'rect',panel:'rect',container:'rect',
       circle:'ellipse',oval:'ellipse',polygon:'polyline',
       arrow:'line',connector:'line',segment:'line',
       label:'text',caption:'text',
@@ -3896,13 +3897,15 @@ function materializeEditableScene(raw,W,H){
     };
     if(type==='rect') out.push(Object.assign(base,{
       type:'rect',
-      radius:clamp(pick(n,['radius','cornerRadius','r'],0),0,Math.min(w,h)/2),
+      radius:clamp(pick(n,['radius','cornerRadius','r','rx','ry'],0),0,Math.min(w,h)/2),
       dash:!!(n.dash||n.dashed||n.strokeDasharray)
     }));
     else if(type==='ellipse') out.push(Object.assign(base,{type:'ellipse'}));
     else if(type==='line'){
-      const endX=pick(n,['x2','endX','toX','right'],pick(lineEnd,['x'],null));
-      const endY=pick(n,['y2','endY','toY','bottom'],pick(lineEnd,['y'],null));
+      const endX=pick(n,['x2','endX','toX','right'],pick(lineEnd,['x'],
+        n.w!=null||n.width!=null ? sceneNumber(xRaw,0)+sceneNumber(pick(n,['w','width'],0),0) : null));
+      const endY=pick(n,['y2','endY','toY','bottom'],pick(lineEnd,['y'],
+        n.h!=null||n.height!=null ? sceneNumber(yRaw,0)+sceneNumber(pick(n,['h','height'],0),0) : null));
       if(endX===null || endY===null) return;
       const x2=clamp(endX,0,W), y2=clamp(endY,0,H);
       if(Math.hypot(x2-x,y2-y)<0.5) return;
@@ -4404,7 +4407,26 @@ async function runReconstruction(){
         if(/\b403\b|quota|insufficient|billing/i.test(item.tileAudit.splitError)) break;
       }
     }
-    const scene=mergeReconstructionTiles(results,canvas.width,canvas.height);
+    let scene=mergeReconstructionTiles(results,canvas.width,canvas.height);
+    // Measure text against the actual bitmap before committing the refinement.
+    // Reject it when the rendered scene becomes less similar overall.
+    let measuredQuality=null;
+    try{
+      const baseline=await compareEditableRender(canvas,scene);
+      const calibrated={...scene,nodes:scene.nodes.map(node=>({...node}))};
+      const changed=calibrateEditableText(calibrated,canvas);
+      if(changed){
+        const refined=await compareEditableRender(canvas,calibrated);
+        if(refined.score>baseline.score+0.001 &&
+          refined.darkRecall>=baseline.darkRecall-0.005 &&
+          refined.localRecall>=baseline.localRecall-0.005){
+          scene=calibrated;measuredQuality=refined;
+          reconstructionAudit.calibratedText=changed;
+        }else measuredQuality=baseline;
+      }else measuredQuality=baseline;
+    }catch(calibrationError){
+      reconstructionAudit.calibrationError=String(calibrationError&&calibrationError.message||calibrationError);
+    }
     const svg = sceneToSvgString(scene), audit = auditReconScene(scene);
     if(audit.dominantBitmap){
       throw new Error('Vision model returned a dominant bitmap instead of editable objects');
@@ -4413,7 +4435,7 @@ async function runReconstruction(){
     const fidelitySvg=sceneToSvgString(fidelityScene);
     let quality=null;
     try{
-      const measured=await compareEditableRender(canvas,scene);
+      const measured=measuredQuality||await compareEditableRender(canvas,scene);
       quality={score:measured.score,sourceInkFraction:measured.inkFraction,
         darkRecall:measured.darkRecall,localRecall:measured.localRecall,
         darkF1:measured.darkF1,edgeF1:measured.edgeF1,
@@ -4422,9 +4444,9 @@ async function runReconstruction(){
     // A usable JSON scene is not evidence of a publication-ready redraw.
     // Keep the final export flagged until both fine strokes and the weakest
     // regions closely match the source image.
-    const qualityNeedsReview=!quality || quality.error || quality.score<.94 ||
-      quality.darkRecall<.94 || quality.localRecall<.9 ||
-      quality.edgeF1<.9 || quality.colorSimilarity<.95 ||
+    const qualityNeedsReview=!quality || quality.error || quality.score<.98 ||
+      quality.darkRecall<.98 || quality.localRecall<.97 ||
+      quality.edgeF1<.97 || quality.colorSimilarity<.98 ||
       reconstructionAudit.fallbackTiles>0;
     reconstructionAudit.state=qualityNeedsReview?'needs-review':'succeeded';
     reconstructionAudit.finishedAt=Date.now();

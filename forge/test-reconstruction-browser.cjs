@@ -55,9 +55,10 @@ const server = http.createServer((req,res)=>{
           if(body.response_format?.type!=='json_object') throw new Error('Ark vision requests require JSON mode');
           const match=body.messages[1].content[0].text.match(/"width":(\d+),"height":(\d+)/);
           const w=Number(match[1]),h=Number(match[2]);
-          const nodes=Array.from({length:8},(_,i)=>({type:'rect',x:20+i*45,y:30,w:35,h:35,fill:'#abcdef',stroke:'#123456'}));
+          const nodes=Array.from({length:8},(_,i)=>({type:'rect',x:20+i*45,y:30,w:35,h:35,rx:i===0?12:0,fill:'#abcdef',stroke:'#123456'}));
           nodes.push({type:'text',x:15,y:90,w:200,h:30,text:'Editable test'});
           nodes.push({type:'line',x1:12,y1:14,x2:70,y2:14,stroke:'#123456'});
+          nodes.push({type:'line',x:22,y:22,w:48,h:0,stroke:'#123456'}); // Some vision responses use a displacement instead of end coordinates.
           nodes.push({type:'line',x2:70,y2:14,stroke:'#123456'}); // Invalid origin must not become (0,0).
           nodes.push({type:'line',x:0,y:0,x2:500,y2:240,stroke:'#123456'}); // Crop-corner hallucination must not become a page-wide ray.
           nodes.push({type:'line',x:0,y:100,x2:500,y2:240,stroke:'#123456'}); // Edge hallucination is equally invalid.
@@ -86,13 +87,15 @@ const server = http.createServer((req,res)=>{
     assert.equal(result.qualityState,'needs-review','a mismatched editable scene must not be labelled publication ready');
     assert.equal(result.calls,2,'1200px bitmap must use two vision requests');
     assert.ok(result.nodes>=16,'editable primitives must survive tile merge');
-    assert.equal(result.lines.length,2,'only valid line coordinates survive');
-    assert.ok(result.lines.every(n=>n.x>=12 && n.y===14 && n.x2-n.x===58),'x1/y1 aliases must preserve line geometry');
+    assert.equal(result.lines.length,4,'valid line coordinates and displacements survive');
+    assert.equal(result.lines.filter(n=>n.y===14 && n.x2-n.x===58).length,2,'x1/y1 aliases must preserve line geometry');
+    assert.equal(result.lines.filter(n=>n.y===22 && n.y2===22 && n.x2-n.x===48).length,2,'width and height line displacements must preserve geometry');
     assert.match(result.status,/已过滤 8 条|filtered 8/i,'all crop-boundary rays must be reported');
     assert.equal(result.fittedText.length,2,'oversized labels must remain editable');
     assert.ok(result.fittedText.every(size=>size<=23),'text must fit its explicit bounding box');
     assert.equal(result.polylines,2,'point-only polylines must survive');
     assert.equal(result.textColor,'#111827','text without model color must remain visible');
+    assert.match(result.svg,/rx="12"/,'model rx must survive as an editable rounded corner');
     assert.match(result.svg,/<svg/);
     for(const format of ['svg','pptx','vsdx','drawio']){
       await page.locator(`#exportActions [data-export="${format}"]`).click();
