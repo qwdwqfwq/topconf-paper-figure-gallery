@@ -12,6 +12,10 @@ assert.equal(acceptReconstructionRepair(
   {score:.73,darkRecall:.8,localRecall:.55,edgeF1:.7,colorSimilarity:.9},
   {score:.76,darkRecall:.8,localRecall:.45,edgeF1:.7,colorSimilarity:.9}),false,
   'higher aggregate score must not hide lost weak-region details');
+assert.equal(acceptReconstructionRepair(
+  {score:.73,darkRecall:.8,localRecall:.55,edgeF1:.7,colorSimilarity:.9},
+  {score:.76,darkRecall:.8,localRecall:.545,edgeF1:.7,colorSimilarity:.9}),false,
+  'a small but visible loss of weak-region detail must reject an otherwise improved repair');
 
 assert.deepEqual(extractEditableNodes({scene:{nodes:[]}}),[],'blank crops must be valid');
 assert.deepEqual(extractEditableNodes({result:{shapes:[{type:'rect'}]}}),[{type:'rect'}]);

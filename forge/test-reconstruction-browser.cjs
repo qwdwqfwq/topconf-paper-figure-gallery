@@ -121,9 +121,9 @@ const server = http.createServer((req,res)=>{
           const match=prompt.match(/"width":(\d+),"height":(\d+)/);
           const w=Number(match[1]),h=Number(match[2]);
           const images=body.messages[1].content.filter(part=>part.type==='image_url').length;
-          if(images===2) revisionSeen=prompt.includes('Prior editable scene JSON') &&
-            prompt.includes('"fill":"#2020e0"') && prompt.includes('weak pixel regions');
-          const fill=images===2?'#e02020':'#2020e0';
+          if(images>=4) revisionSeen=prompt.includes('Prior editable scene JSON') &&
+            prompt.includes('"fill":"#2020e0"') && prompt.includes('paired close-ups');
+          const fill=images>=4?'#e02020':'#2020e0';
           const content=JSON.stringify({canvas:{width:w,height:h},nodes:[{type:'rect',x:20,y:20,w:180,h:110,fill,stroke:'none'}]});
           return new Response(JSON.stringify({choices:[{message:{content}}]}),{status:200,headers:{'Content-Type':'application/json'}});
         }
