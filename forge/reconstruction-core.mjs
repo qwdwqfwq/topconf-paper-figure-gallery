@@ -1,5 +1,5 @@
 // Pure geometry helpers shared by the browser reconstruction flow and tests.
-import {geometrySegments} from './editable-native.mjs';
+import {geometrySegments,transformEditablePath} from './editable-native.mjs';
 // Use the same targets for deciding whether to repair and for final review.
 // The former low thresholds stopped corrections while obvious errors remained.
 const QUALITY_TARGETS={score:.98,darkRecall:.98,localRecall:.97,
@@ -24,6 +24,82 @@ export function acceptReconstructionRepair(before,after){
       Number(after[key])+maximumLoss[key]<Number(before[key])) return false;
   }
   return reconstructionQualityDeficit(after)<reconstructionQualityDeficit(before)-.005;
+}
+export function editableNodeBounds(n){
+  if(!n||typeof n!=='object')return null;
+  let coordinates=[];
+  if(['path','polyline','line'].includes(n.type))
+    coordinates=geometrySegments(n).flatMap(segment=>segment.points);
+  else {
+    const x=Number(n.x),y=Number(n.y),w=Number(n.w??n.width??0),h=Number(n.h??n.height??0);
+    if([x,y,w,h].every(Number.isFinite)){
+      const pad=n.type==='text'?Math.max(2,Number(n.fontSize||16)*.25):0;
+      coordinates=[{x:x-pad,y:y-pad},{x:x+w+pad,y:y+h+pad}];
+    }
+  }
+  if(!coordinates.length)return null;
+  const xs=coordinates.map(p=>p.x),ys=coordinates.map(p=>p.y);
+  const bounds={x:Math.min(...xs),y:Math.min(...ys),
+    right:Math.max(...xs),bottom:Math.max(...ys)};
+  return Object.values(bounds).every(Number.isFinite)?bounds:null;
+}
+export function planObjectRepairRegion(weak,scene,width,height){
+  if(!weak)return null;
+  const seed={x:Math.max(0,weak.x),y:Math.max(0,weak.y),
+    right:Math.min(width,weak.x+weak.w),bottom:Math.min(height,weak.y+weak.h)};
+  let box={...seed};
+  const nodes=(scene.nodes||[]).map(n=>({n,b:editableNodeBounds(n)})).filter(v=>v.b);
+  const intersects=(a,b)=>a.x<b.right&&a.right>b.x&&a.y<b.bottom&&a.bottom>b.y;
+  // Grow through complete small objects so the model never receives half an
+  // icon or half a compact chart. Large panels remain as background context.
+  for(let pass=0;pass<3;pass++){
+    for(const {b} of nodes){
+      if(!intersects(box,b)||b.right-b.x>width*.38||b.bottom-b.y>height*.38)continue;
+      const proposed={x:Math.min(box.x,b.x),y:Math.min(box.y,b.y),
+        right:Math.max(box.right,b.right),bottom:Math.max(box.bottom,b.bottom)};
+      if(proposed.right-proposed.x<=Math.min(width,900)&&
+        proposed.bottom-proposed.y<=Math.min(height,900))box=proposed;
+    }
+  }
+  const margin=Math.max(16,Math.min(45,Math.max(seed.right-seed.x,seed.bottom-seed.y)*.12));
+  const x=Math.max(0,Math.floor(box.x-margin)),y=Math.max(0,Math.floor(box.y-margin));
+  const right=Math.min(width,Math.ceil(box.right+margin));
+  const bottom=Math.min(height,Math.ceil(box.bottom+margin));
+  return {x,y,w:right-x,h:bottom-y};
+}
+export function replaceObjectRepairRegion(scene,region,localScene,scale){
+  const x1=region.x+region.w,y1=region.y+region.h;
+  const inside=b=>b&&b.x>=region.x+1&&b.y>=region.y+1&&b.right<=x1-1&&b.bottom<=y1-1;
+  const small=b=>b&&(b.right-b.x)<region.w*.85&&(b.bottom-b.y)<region.h*.85;
+  const retained=(scene.nodes||[]).filter(n=>{
+    const b=editableNodeBounds(n);
+    return !inside(b)||!small(b);
+  });
+  const translated=(localScene.nodes||[]).map((source,i)=>{
+    const n={...source,id:`object_repair_${i}_${source.id||''}`};
+    const shift=(key,offset)=>{if(Number.isFinite(Number(n[key])))n[key]=Number(n[key])/scale+offset;};
+    if(n.type==='path')n.d=transformEditablePath(n.d,1/scale,1/scale,region.x,region.y);
+    else if(n.type==='polyline'){
+      const nums=String(n.points||'').match(/[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?/gi)||[];
+      n.points=nums.map((v,j)=>Number(v)/scale+(j%2?region.y:region.x)).join(' ');
+    }else if(n.type==='line'){
+      shift('x',region.x);shift('y',region.y);shift('x2',region.x);shift('y2',region.y);
+    }else{shift('x',region.x);shift('y',region.y);shift('w',0);shift('h',0);}
+    if(n.type==='text'){
+      if(Number.isFinite(Number(n.fontSize)))n.fontSize=Number(n.fontSize)/scale;
+      if(n.textPath?.d)n.textPath={...n.textPath,
+        d:transformEditablePath(n.textPath.d,1/scale,1/scale,region.x,region.y)};
+    }
+    return n;
+  }).filter(n=>{
+    const b=editableNodeBounds(n);
+    if(!inside(b))return false;
+    // Keep a complete icon or chart even when it nearly fills the repair crop.
+    // Reject only a dominant panel/background invented by the local model.
+    const area=(b.right-b.x)*(b.bottom-b.y);
+    return !(['rect','image'].includes(n.type)&&area>region.w*region.h*.8);
+  });
+  return {...scene,nodes:[...retained,...translated]};
 }
 export function extractEditableNodes(raw){
   const nodeKeys=['nodes','elements','objects','items','shapes','components','primitives'];
@@ -125,7 +201,7 @@ function boundaryTextStitches(results){
   const fragments=[];
   results.forEach(({tile,scene},tileIndex)=>{
     (scene.nodes||[]).forEach((node,nodeIndex)=>{
-      if(node.type!=='text'||typeof node.text!=='string'||!node.text.trim()) return;
+      if(node.type!=='text'||node.textPath||Number(node.rotation)||typeof node.text!=='string'||!node.text.trim()) return;
       const x=Number(node.x), y=Number(node.y);
       const font=Number(node.fontSize||node.size);
       const explicitW=Number(node.w??node.width);
@@ -275,14 +351,11 @@ export function mergeReconstructionTiles(results,width,height){
       if(n.type==='line') {n.x2=Number(n.x2||0)+tile.x; n.y2=Number(n.y2||0)+tile.y;}
       if(n.type==='polyline') n.points=movedPoints(n.points,tile.x,tile.y);
       if(n.type==='path'){
-        // SVG transforms are not valid inside a path's d attribute. Flatten
-        // sampled curves to absolute polylines before shifting the tile.
-        for(let k=0;k<segments.length;k++){
-          const segment=segments[k];
-          nodes.push({...n,id:`${n.id}_part${k+1}`,type:'polyline',d:undefined,
-            points:segment.points.map(p=>`${p.x+tile.x},${p.y+tile.y}`).join(' '),closed:segment.closed});
-        }
-        continue;
+        n.d=transformEditablePath(n.d,1,1,tile.x,tile.y);
+      }
+      if(n.type==='text'&&n.textPath){
+        const path=typeof n.textPath==='string'?{d:n.textPath}:n.textPath;
+        n.textPath={...path,d:transformEditablePath(path.d,1,1,tile.x,tile.y)};
       }
       nodes.push(n);
     }

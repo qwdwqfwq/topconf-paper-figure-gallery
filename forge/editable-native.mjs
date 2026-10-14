@@ -22,8 +22,90 @@ const xmlFill = n => {
 };
 const point = (x,y) => ({x:num(x),y:num(y)});
 
-// Convert SVG path data into editable line segments. Curves are sampled as line
-// vertices, retaining their visible contour in PowerPoint, Visio and draw.io.
+// Normalize SVG commands into lines and cubic Beziers. Arc conversion follows
+// the SVG endpoint parameterization and keeps curves editable in DrawingML.
+export function parseEditablePath(d) {
+  const tokens=String(d||'').match(/[a-zA-Z]|[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?/gi)||[];
+  const size={M:2,L:2,H:1,V:1,C:6,S:4,Q:4,T:2,A:7};
+  const paths=[];let i=0,cmd='',cur=point(0,0),start=cur,run=null,previous=null,previousKind='';
+  const begin=p=>{if(run&&run.commands.length)paths.push(run);run={start:p,commands:[],closed:false};start=p;cur=p;};
+  const add=(type,end,c1,c2)=>{if(!run)begin(cur);run.commands.push({type,end,...(c1?{c1,c2}:{})});cur=end;};
+  const cubic=(c1,c2,end)=>add('cubic',end,c1,c2);
+  const arc=(rx0,ry0,angle,large,sweep,end)=>{
+    let rx=Math.abs(rx0),ry=Math.abs(ry0);
+    if(!rx||!ry||Math.hypot(end.x-cur.x,end.y-cur.y)<1e-9){add('line',end);return;}
+    const phi=angle*Math.PI/180,cos=Math.cos(phi),sin=Math.sin(phi);
+    const dx=(cur.x-end.x)/2,dy=(cur.y-end.y)/2;
+    const xp=cos*dx+sin*dy,yp=-sin*dx+cos*dy;
+    const lambda=xp*xp/(rx*rx)+yp*yp/(ry*ry);
+    if(lambda>1){const scale=Math.sqrt(lambda);rx*=scale;ry*=scale;}
+    const sign=!!large===!!sweep?-1:1;
+    const numerator=Math.max(0,rx*rx*ry*ry-rx*rx*yp*yp-ry*ry*xp*xp);
+    const denominator=rx*rx*yp*yp+ry*ry*xp*xp;
+    const factor=sign*Math.sqrt(numerator/Math.max(denominator,1e-12));
+    const cxp=factor*rx*yp/ry,cyp=-factor*ry*xp/rx;
+    const cx=cos*cxp-sin*cyp+(cur.x+end.x)/2;
+    const cy=sin*cxp+cos*cyp+(cur.y+end.y)/2;
+    const unit=(x,y)=>point((cos*(x-cx)+sin*(y-cy))/rx,(-sin*(x-cx)+cos*(y-cy))/ry);
+    const u=unit(cur.x,cur.y),v=unit(end.x,end.y);
+    let theta=Math.atan2(u.y,u.x),delta=Math.atan2(u.x*v.y-u.y*v.x,u.x*v.x+u.y*v.y);
+    if(!sweep&&delta>0)delta-=2*Math.PI;
+    if(sweep&&delta<0)delta+=2*Math.PI;
+    const count=Math.max(1,Math.ceil(Math.abs(delta)/(Math.PI/2))),step=delta/count;
+    const map=(x,y)=>point(cx+rx*cos*x-ry*sin*y,cy+rx*sin*x+ry*cos*y);
+    for(let k=0;k<count;k++){
+      const a=theta+k*step,b=a+step,t=4/3*Math.tan((b-a)/4);
+      cubic(map(Math.cos(a)-t*Math.sin(a),Math.sin(a)+t*Math.cos(a)),
+        map(Math.cos(b)+t*Math.sin(b),Math.sin(b)-t*Math.cos(b)),
+        k===count-1?end:map(Math.cos(b),Math.sin(b)));
+    }
+  };
+  while(i<tokens.length){
+    if(/^[a-zA-Z]$/.test(tokens[i])){
+      cmd=tokens[i++];
+      if(cmd.toUpperCase()==='Z'){
+        if(run){run.closed=true;paths.push(run);run=null;}cur=start;previous=null;previousKind='';cmd='';continue;
+      }
+    }
+    const upper=cmd.toUpperCase(),count=size[upper];
+    if(!count||i+count>tokens.length||tokens.slice(i,i+count).some(t=>/^[a-zA-Z]$/.test(t)))break;
+    const v=tokens.slice(i,i+count).map(Number);i+=count;
+    const rel=cmd!==upper,old=cur;
+    const xy=(x,y)=>point(rel?old.x+x:x,rel?old.y+y:y);
+    if(upper==='M'){begin(xy(v[0],v[1]));cmd=rel?'l':'L';previous=null;previousKind='';continue;}
+    if(upper==='L')add('line',xy(v[0],v[1]));
+    else if(upper==='H')add('line',point(rel?old.x+v[0]:v[0],old.y));
+    else if(upper==='V')add('line',point(old.x,rel?old.y+v[0]:v[0]));
+    else if(upper==='C'){const c1=xy(v[0],v[1]),c2=xy(v[2],v[3]);cubic(c1,c2,xy(v[4],v[5]));previous=c2;}
+    else if(upper==='S'){
+      const c1=['C','S'].includes(previousKind)&&previous?point(2*old.x-previous.x,2*old.y-previous.y):old;
+      const c2=xy(v[0],v[1]);cubic(c1,c2,xy(v[2],v[3]));previous=c2;
+    }else if(upper==='Q'){
+      const q=xy(v[0],v[1]),end=xy(v[2],v[3]);
+      cubic(point(old.x+2*(q.x-old.x)/3,old.y+2*(q.y-old.y)/3),
+        point(end.x+2*(q.x-end.x)/3,end.y+2*(q.y-end.y)/3),end);previous=q;
+    }else if(upper==='T'){
+      const q=['Q','T'].includes(previousKind)&&previous?point(2*old.x-previous.x,2*old.y-previous.y):old;
+      const end=xy(v[0],v[1]);cubic(point(old.x+2*(q.x-old.x)/3,old.y+2*(q.y-old.y)/3),
+        point(end.x+2*(q.x-end.x)/3,end.y+2*(q.y-end.y)/3),end);previous=q;
+    }else if(upper==='A'){arc(v[0],v[1],v[2],v[3],v[4],xy(v[5],v[6]));previous=null;}
+    if(!['C','S','Q','T'].includes(upper))previous=null;
+    previousKind=upper;
+  }
+  if(run&&run.commands.length)paths.push(run);
+  return paths;
+}
+
+export function transformEditablePath(d,sx=1,sy=1,dx=0,dy=0){
+  const fmt=p=>`${+(p.x*sx+dx).toFixed(4)} ${+(p.y*sy+dy).toFixed(4)}`;
+  return parseEditablePath(d).map(path=>`M ${fmt(path.start)} `+path.commands.map(c=>
+    c.type==='cubic'?`C ${fmt(c.c1)} ${fmt(c.c2)} ${fmt(c.end)}`:`L ${fmt(c.end)}`).join(' ')+(path.closed?' Z':'')).join(' ');
+}
+
+const cubicPoint=(a,b,c,d,t)=>{
+  const u=1-t;return point(u*u*u*a.x+3*u*u*t*b.x+3*u*t*t*c.x+t*t*t*d.x,
+    u*u*u*a.y+3*u*u*t*b.y+3*u*t*t*c.y+t*t*t*d.y);
+};
 export function geometrySegments(n) {
   if (n.type === 'polyline' || n.points) {
     const values = String(n.points || '').match(/[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?/gi) || [];
@@ -33,43 +115,51 @@ export function geometrySegments(n) {
   }
   if (n.type === 'line') return [{points:[point(n.x,n.y),point(n.x2,n.y2)],closed:false}];
   if (n.type !== 'path') return [];
-  const tokens = String(n.d || '').match(/[a-zA-Z]|[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?/gi) || [];
-  const sizes={M:2,L:2,H:1,V:1,C:6,S:4,Q:4,T:2,A:7};
-  let i=0, cmd='', current=point(0,0), start=point(0,0), previous=null, lastCurve='';
-  const paths=[]; let run=[];
-  const add=(p)=>{current=p;run.push(p);};
-  const finish=(closed=false)=>{if(run.length>1) paths.push({points:run,closed});run=[];};
-  while(i<tokens.length){
-    if(/^[a-zA-Z]$/.test(tokens[i])) { cmd=tokens[i++]; if(cmd.toUpperCase()==='Z'){finish(true);current=start;lastCurve='';continue;} }
-    const upper=cmd.toUpperCase(), count=sizes[upper];
-    if(!count || i+count>tokens.length || /^[a-zA-Z]$/.test(tokens[i])) break;
-    const v=tokens.slice(i,i+count).map(Number);i+=count;
-    const rel=cmd!==upper, old=current;
-    const xy=(x,y)=>point(rel?old.x+x:x,rel?old.y+y:y);
-    if(upper==='M'){finish();start=xy(v[0],v[1]);add(start);cmd=rel?'l':'L';lastCurve='';continue;}
-    if(!run.length) run=[old];
-    if(upper==='L') add(xy(v[0],v[1]));
-    else if(upper==='H') add(point(rel?old.x+v[0]:v[0],old.y));
-    else if(upper==='V') add(point(old.x,rel?old.y+v[0]:v[0]));
-    else if(upper==='C' || upper==='S' || upper==='Q' || upper==='T'){
-      let a,b,end;
-      if(upper==='C'){a=xy(v[0],v[1]);b=xy(v[2],v[3]);end=xy(v[4],v[5]);}
-      if(upper==='S'){a=(lastCurve==='C'||lastCurve==='S')&&previous?point(2*old.x-previous.x,2*old.y-previous.y):old;b=xy(v[0],v[1]);end=xy(v[2],v[3]);}
-      if(upper==='Q'){a=xy(v[0],v[1]);end=xy(v[2],v[3]);}
-      if(upper==='T'){a=(lastCurve==='Q'||lastCurve==='T')&&previous?point(2*old.x-previous.x,2*old.y-previous.y):old;end=xy(v[0],v[1]);}
-      const steps=12;
-      for(let k=1;k<=steps;k++){
-        const t=k/steps, u=1-t;
-        if(b) add(point(u*u*u*old.x+3*u*u*t*a.x+3*u*t*t*b.x+t*t*t*end.x,u*u*u*old.y+3*u*u*t*a.y+3*u*t*t*b.y+t*t*t*end.y));
-        else add(point(u*u*old.x+2*u*t*a.x+t*t*end.x,u*u*old.y+2*u*t*a.y+t*t*end.y));
-      }
-      previous=b||a;
-    } else if(upper==='A') add(xy(v[5],v[6]));
-    if(!['C','S','Q','T'].includes(upper)) previous=null;
-    lastCurve=upper;
+  return parseEditablePath(n.d).map(path=>{
+    const points=[path.start];let current=path.start;
+    for(const command of path.commands){
+      if(command.type==='cubic')for(let j=1;j<=16;j++)points.push(cubicPoint(current,command.c1,command.c2,command.end,j/16));
+      else points.push(command.end);
+      current=command.end;
+    }
+    return {points,closed:path.closed};
+  }).filter(p=>p.points.length>1);
+}
+
+// PowerPoint cannot edit SVG textPath directly. Place each glyph in its own
+// native text shape, tangent to the measured curve, so labels remain editable.
+export function expandEditableTextPaths(scene) {
+  const nodes=[];
+  for(const n of scene.nodes||[]){
+    if(n.type!=='text'||!n.textPath){nodes.push(n);continue;}
+    const spec=typeof n.textPath==='string'?{d:n.textPath}:n.textPath;
+    const samples=geometrySegments({type:'path',d:spec?.d||''}).flatMap(p=>p.points);
+    if(samples.length<2){nodes.push({...n,textPath:undefined});continue;}
+    const lengths=[0];
+    for(let i=1;i<samples.length;i++)lengths.push(lengths[i-1]+Math.hypot(samples[i].x-samples[i-1].x,samples[i].y-samples[i-1].y));
+    const total=lengths.at(-1),font=Math.max(1,num(n.fontSize||16));
+    const chars=[...String(n.text||'')];
+    const advances=chars.map(c=>font*(c===' '?0.32:/[ilI.,:;]/.test(c)?0.28:/[MW@]/.test(c)?0.82:0.56));
+    const textWidth=advances.reduce((a,b)=>a+b,0);
+    const offset=Number(spec.startOffset);
+    let cursor=Number.isFinite(offset)?(Math.abs(offset)<=1?offset*total:offset):
+      (n.anchor==='middle'?(total-textWidth)/2:n.anchor==='end'?total-textWidth:0);
+    const at=distance=>{
+      const d=Math.max(0,Math.min(total,distance));let i=1;
+      while(i<lengths.length-1&&lengths[i]<d)i++;
+      const a=samples[i-1],b=samples[i],span=Math.max(1e-6,lengths[i]-lengths[i-1]);
+      const t=(d-lengths[i-1])/span;
+      return {x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,angle:Math.atan2(b.y-a.y,b.x-a.x)*180/Math.PI};
+    };
+    chars.forEach((char,i)=>{
+      const advance=advances[i],p=at(cursor+advance/2);cursor+=advance;
+      if(char===' ')return;
+      nodes.push({...n,id:`${n.id||'text'}_char${i}`,text:char,textPath:undefined,
+        x:p.x-advance/2,y:p.y-font*0.55,w:advance,h:font*1.2,
+        anchor:'middle',verticalAlign:'middle',rotation:p.angle});
+    });
   }
-  finish();
-  return paths;
+  return {...scene,nodes};
 }
 
 const dataUri = uri => {
@@ -96,11 +186,23 @@ function shapeXml(n,id,unit,media){
   if(['path','polyline','line'].includes(n.type)){
     const paths=geometrySegments(n);
     if(!paths.length) return '';
-    const coords=paths.flatMap(p=>p.points);
+    const editablePaths=n.type==='path'?parseEditablePath(n.d):null;
+    // Control points bound every cubic, including extrema between sampled
+    // positions. Using sampled bounds can put OOXML control points outside
+    // the custom geometry viewport and clip circular arrows.
+    const coords=editablePaths?editablePaths.flatMap(p=>[p.start,...p.commands.flatMap(c=>
+      c.type==='cubic'?[c.c1,c.c2,c.end]:[c.end])]):paths.flatMap(p=>p.points);
     const minX=Math.min(...coords.map(p=>p.x)),maxX=Math.max(...coords.map(p=>p.x));
     const minY=Math.min(...coords.map(p=>p.y)),maxY=Math.max(...coords.map(p=>p.y));
     x=minX;y=minY;w=Math.max(maxX-minX,0.001);h=Math.max(maxY-minY,0.001);
-    const pathXml=paths.map(p=>{
+    const pathXml=(editablePaths||paths).map(p=>{
+      if(editablePaths){
+        const pt=q=>`<a:pt x="${Math.round((q.x-minX)*unit)}" y="${Math.round((q.y-minY)*unit)}"/>`;
+        const commands=p.commands.map(command=>command.type==='cubic'?
+          `<a:cubicBezTo>${pt(command.c1)}${pt(command.c2)}${pt(command.end)}</a:cubicBezTo>`:
+          `<a:lnTo>${pt(command.end)}</a:lnTo>`).join('');
+        return `<a:path w="${Math.max(1,Math.round(w*unit))}" h="${Math.max(1,Math.round(h*unit))}"${p.closed?'':' fill="none"'}><a:moveTo>${pt(p.start)}</a:moveTo>${commands}${p.closed?'<a:close/>':''}</a:path>`;
+      }
       const pts=p.points.map(q=>({x:Math.round((q.x-minX)*unit),y:Math.round((q.y-minY)*unit)}));
       const first=pts[0];
       return `<a:path w="${Math.max(1,Math.round(w*unit))}" h="${Math.max(1,Math.round(h*unit))}"${p.closed?'':' fill="none"'}><a:moveTo><a:pt x="${first.x}" y="${first.y}"/></a:moveTo>${pts.slice(1).map(q=>`<a:lnTo><a:pt x="${q.x}" y="${q.y}"/></a:lnTo>`).join('')}${p.closed?'<a:close/>':''}</a:path>`;
@@ -119,7 +221,8 @@ function shapeXml(n,id,unit,media){
     const face=esc(String(n.fontFamily||'Arial').split(',')[0].replace(/["']/g,''));
     const paragraphs=String(n.text||'').split(/\r?\n/).map(line=>`<a:p><a:pPr algn="${n.anchor==='middle'?'ctr':n.anchor==='end'?'r':'l'}"/><a:r><a:rPr lang="en-US" sz="${ptSize}" b="${n.bold?1:0}" i="${n.italic?1:0}"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:latin typeface="${face}"/></a:rPr><a:t>${esc(line)}</a:t></a:r><a:endParaRPr lang="en-US"/></a:p>`).join('');
     const tx=`<p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${n.verticalAlign==='middle'?'ctr':'t'}"/><a:lstStyle/>${paragraphs}</p:txBody>`;
-    return `<p:sp>${nv}<p:spPr><a:xfrm><a:off x="${Math.round(x*unit)}" y="${Math.round(y*unit)}"/><a:ext cx="${Math.max(1,Math.round(w*unit))}" cy="${Math.max(1,Math.round(h*unit))}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>${tx}</p:sp>`;
+    const rotation=Number.isFinite(Number(n.rotation))?` rot="${Math.round(num(n.rotation)*60000)}"`:'';
+    return `<p:sp>${nv}<p:spPr><a:xfrm${rotation}><a:off x="${Math.round(x*unit)}" y="${Math.round(y*unit)}"/><a:ext cx="${Math.max(1,Math.round(w*unit))}" cy="${Math.max(1,Math.round(h*unit))}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>${tx}</p:sp>`;
   }
   return `<p:sp>${nv}<p:spPr><a:xfrm><a:off x="${Math.round(x*unit)}" y="${Math.round(y*unit)}"/><a:ext cx="${Math.max(1,Math.round(w*unit))}" cy="${Math.max(1,Math.round(h*unit))}"/></a:xfrm>${geometry}${xmlFill(n)}${xmlLine(n,unit)}</p:spPr></p:sp>`;
 }
@@ -136,7 +239,7 @@ export async function buildNativePptx(scene,zipStore){
   if(width<=0||height<=0) throw new Error('Invalid canvas dimensions');
   const slideW=10*EMU,slideH=Math.round(slideW*height/width),unit=slideW/width;
   const media=[];
-  const nodes=(scene.nodes||[]).filter(n=>n&&n.export!==false);
+  const nodes=expandEditableTextPaths(scene).nodes.filter(n=>n&&n.export!==false);
   const shapes=nodes.map((n,i)=>shapeXml(n,i+2,unit,media)).join('');
   const slide=`<?xml version="1.0" encoding="UTF-8" standalone="yes"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/><a:chOff x="0" y="0"/><a:chExt cx="0" cy="0"/></a:xfrm></p:grpSpPr>${shapes}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
   const raw=await template(), decoder=new TextDecoder(), encoder=new TextEncoder();
@@ -156,4 +259,92 @@ export async function buildNativePptx(scene,zipStore){
   media.forEach(m=>set(`ppt/media/${m.filename}`,m.bytes));
   const zip=zipStore(files);
   return new Blob([await zip.arrayBuffer()],{type:'application/vnd.openxmlformats-officedocument.presentationml.presentation'});
+}
+
+// Read the bytes we actually export for QA. This small STORE ZIP/OOXML reader
+// is deliberately independent of the scene passed to buildNativePptx.
+export async function readNativePptxScene(blob,width,height){
+  const bytes=new Uint8Array(await blob.arrayBuffer()),view=new DataView(bytes.buffer);
+  const files=new Map(),decoder=new TextDecoder();let at=0;
+  while(at+30<=bytes.length&&view.getUint32(at,true)===0x04034b50){
+    const method=view.getUint16(at+8,true),size=view.getUint32(at+18,true);
+    const nameLength=view.getUint16(at+26,true),extra=view.getUint16(at+28,true);
+    const name=decoder.decode(bytes.subarray(at+30,at+30+nameLength));
+    const start=at+30+nameLength+extra;
+    if(method!==0)throw new Error('PPTX QA requires STORE ZIP entries');
+    files.set(name,bytes.subarray(start,start+size));at=start+size;
+  }
+  const xml=name=>{
+    const data=files.get(name);if(!data)throw new Error(`Missing PPTX part: ${name}`);
+    const doc=new DOMParser().parseFromString(decoder.decode(data),'application/xml');
+    if(doc.getElementsByTagName('parsererror').length)throw new Error(`Invalid PPTX XML: ${name}`);
+    return doc;
+  };
+  const child=(node,name)=>[...(node?.children||[])].find(e=>e.localName===name);
+  const children=(node,name)=>[...(node?.children||[])].filter(e=>e.localName===name);
+  const descendants=(node,name)=>[...(node?.getElementsByTagName('*')||[])].filter(e=>e.localName===name);
+  const presentation=xml('ppt/presentation.xml'),sz=descendants(presentation,'sldSz')[0];
+  const slideW=Number(sz?.getAttribute('cx')),unit=slideW/width;
+  const slide=xml('ppt/slides/slide1.xml'),tree=descendants(slide,'spTree')[0];
+  const rels=xml('ppt/slides/_rels/slide1.xml.rels');
+  const media=new Map(descendants(rels,'Relationship').map(e=>[e.getAttribute('Id'),
+    e.getAttribute('Target')?.replace('../media/','ppt/media/')]));
+  const fill=parent=>{
+    const solid=child(parent,'solidFill');
+    return child(solid,'srgbClr')?.getAttribute('val') ? '#'+child(solid,'srgbClr').getAttribute('val') : 'none';
+  };
+  const coord=(xfrm)=>{
+    const off=child(xfrm,'off'),ext=child(xfrm,'ext');
+    return {x:Number(off?.getAttribute('x')||0)/unit,y:Number(off?.getAttribute('y')||0)/unit,
+      w:Number(ext?.getAttribute('cx')||0)/unit,h:Number(ext?.getAttribute('cy')||0)/unit};
+  };
+  const nodes=[];
+  for(const shape of tree?.children||[]){
+    if(shape.localName!=='sp'&&shape.localName!=='pic')continue;
+    const props=child(shape,'spPr'),xfrm=child(props,'xfrm');if(!xfrm)continue;
+    const box=coord(xfrm),line=child(props,'ln');
+    const common={...box,fill:fill(props),stroke:fill(line),
+      strokeWidth:line?Number(line.getAttribute('w')||0)/unit:0,
+      arrow:!!child(line,'tailEnd')};
+    if(shape.localName==='pic'){
+      const blip=descendants(shape,'blip')[0];
+      const rid=blip?.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships','embed');
+      const name=media.get(rid),data=files.get(name);
+      if(!data)continue;
+      let binary='';for(let i=0;i<data.length;i+=8192)binary+=String.fromCharCode(...data.subarray(i,i+8192));
+      nodes.push({type:'image',...box,href:`data:image/${name.endsWith('.jpeg')?'jpeg':'png'};base64,${btoa(binary)}`});continue;
+    }
+    const body=child(shape,'txBody');
+    if(body){
+      const paragraphs=descendants(body,'p'),sample=descendants(body,'rPr')[0];
+      const paragraph=paragraphs[0],alignment=child(paragraph,'pPr')?.getAttribute('algn');
+      nodes.push({type:'text',...box,text:paragraphs.map(p=>descendants(p,'r').map(r=>child(r,'t')?.textContent||'').join('')).join('\n'),
+        fontSize:Number(sample?.getAttribute('sz')||1200)/100/72*EMU/unit,
+        fontFamily:child(sample,'latin')?.getAttribute('typeface')||'Arial',
+        fill:fill(sample),bold:sample?.getAttribute('b')==='1',italic:sample?.getAttribute('i')==='1',
+        anchor:alignment==='ctr'?'middle':alignment==='r'?'end':'start',
+        verticalAlign:child(body,'bodyPr')?.getAttribute('anchor')==='ctr'?'middle':'top',
+        rotation:Number(xfrm.getAttribute('rot')||0)/60000});continue;
+    }
+    const custom=child(props,'custGeom');
+    if(custom){
+      for(const path of descendants(custom,'path')){
+        let d='';
+        for(const command of path.children){
+          const pts=descendants(command,'pt').map(p=>({x:box.x+Number(p.getAttribute('x'))/unit,
+            y:box.y+Number(p.getAttribute('y'))/unit}));
+          const pair=p=>`${+p.x.toFixed(4)} ${+p.y.toFixed(4)}`;
+          if(command.localName==='moveTo'&&pts[0])d+=`M ${pair(pts[0])} `;
+          else if(command.localName==='lnTo'&&pts[0])d+=`L ${pair(pts[0])} `;
+          else if(command.localName==='cubicBezTo'&&pts.length===3)d+=`C ${pts.map(pair).join(' ')} `;
+          else if(command.localName==='close')d+='Z ';
+        }
+        if(d)nodes.push({type:'path',d,...common,fill:path.getAttribute('fill')==='none'?'none':common.fill});
+      }
+    }else{
+      const preset=child(props,'prstGeom')?.getAttribute('prst');
+      nodes.push({type:preset==='ellipse'?'ellipse':'rect',...common,radius:preset==='roundRect'?Math.min(box.w,box.h)*.1:0});
+    }
+  }
+  return {canvas:{width,height},nodes};
 }

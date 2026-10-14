@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {extractEditableNodes,planReconstructionTiles,subdivideReconstructionTile,mergeReconstructionTiles,reconstructionQualityDeficit,acceptReconstructionRepair} from './reconstruction-core.mjs';
+import {extractEditableNodes,planReconstructionTiles,subdivideReconstructionTile,mergeReconstructionTiles,reconstructionQualityDeficit,acceptReconstructionRepair,planObjectRepairRegion,replaceObjectRepairRegion} from './reconstruction-core.mjs';
 
 assert.equal(reconstructionQualityDeficit({score:.98,darkRecall:.98,localRecall:.97,edgeF1:.97,colorSimilarity:.98}),0);
 assert.ok(reconstructionQualityDeficit({score:.9,darkRecall:.9,localRecall:.9,edgeF1:.9,colorSimilarity:.9})>0,
@@ -62,9 +62,9 @@ assert.equal(cube.closed,true,'a cube face must remain a closed polygon');
 assert.equal(cube.points,'730,250 790,250 790,310 730,310');
 const line=merged.nodes.find(n=>n.id==='tile2_right-line');
 assert.deepEqual([line.x,line.x2],[tiles[1].x+40,tiles[1].x+120]);
-const path=merged.nodes.find(n=>n.id==='tile2_right-path_part1');
-assert.equal(path.type,'polyline');
-assert.ok(path.points.startsWith(`${tiles[1].x+40},500`));
+const path=merged.nodes.find(n=>n.id==='tile2_right-path');
+assert.equal(path.type,'path');
+assert.match(path.d,new RegExp(`M ${tiles[1].x+40} 500 C `));
 assert.equal(merged.counts.total,merged.nodes.length);
 
 // A large filled panel may have its centre outside this tile's owning core.
@@ -135,4 +135,16 @@ const titleMerge=mergeReconstructionTiles(titleTiles.slice(0,4).map((tile,i)=>({
 assert.equal(titleMerge.nodes.length,1,'seam title fragments must become one editable text shape');
 assert.equal(titleMerge.nodes[0].text,'Diffusion Policy for One-Shot Robot Manipulation');
 assert.equal(titleMerge.counts.stitchedTextFragments,4);
+const arcScene={canvas:{width:400,height:300},nodes:[
+  {id:'arc',type:'path',d:'M 120 140 A 50 50 0 0 1 220 140',stroke:'#111',fill:'none'},
+  {id:'caption',type:'text',text:'Curve',textPath:{d:'M 120 140 A 50 50 0 0 1 220 140'},fontSize:16},
+]};
+const region=planObjectRepairRegion({x:155,y:85,w:30,h:30},arcScene,400,300);
+assert.ok(region.x<=120&&region.x+region.w>=220,'repair crop must contain the entire curved object');
+const repaired=replaceObjectRepairRegion(arcScene,region,{nodes:[
+  {id:'new-arc',type:'path',d:'M 10 70 A 50 50 0 0 1 110 70',stroke:'#222',fill:'none'},
+]},1);
+assert.ok(repaired.nodes.some(n=>n.id==='object_repair_0_new-arc'));
+assert.match(repaired.nodes.find(n=>n.id==='object_repair_0_new-arc').d,/C /,
+  'localized repair must retain editable cubic geometry');
 console.log('reconstruction tile geometry and overlap: OK');
