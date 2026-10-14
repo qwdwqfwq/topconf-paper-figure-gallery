@@ -1,14 +1,16 @@
 import assert from 'node:assert/strict';
 import {extractEditableNodes,planReconstructionTiles,subdivideReconstructionTile,mergeReconstructionTiles,reconstructionQualityDeficit,acceptReconstructionRepair} from './reconstruction-core.mjs';
 
-assert.equal(reconstructionQualityDeficit({score:.82,darkRecall:.8,localRecall:.7,colorSimilarity:.9}),0);
+assert.equal(reconstructionQualityDeficit({score:.98,darkRecall:.98,localRecall:.97,edgeF1:.97,colorSimilarity:.98}),0);
+assert.ok(reconstructionQualityDeficit({score:.9,darkRecall:.9,localRecall:.9,edgeF1:.9,colorSimilarity:.9})>0,
+  'a merely usable redraw still needs publication-quality refinement');
 assert.equal(acceptReconstructionRepair(
-  {score:.73,darkRecall:.8,localRecall:.55,colorSimilarity:.9},
-  {score:.73,darkRecall:.8,localRecall:.68,colorSimilarity:.9}),true,
+  {score:.73,darkRecall:.8,localRecall:.55,edgeF1:.7,colorSimilarity:.9},
+  {score:.73,darkRecall:.8,localRecall:.68,edgeF1:.7,colorSimilarity:.9}),true,
   'a repair that restores missing weak-region details must be accepted even if overall score stays flat');
 assert.equal(acceptReconstructionRepair(
-  {score:.73,darkRecall:.8,localRecall:.55,colorSimilarity:.9},
-  {score:.76,darkRecall:.8,localRecall:.45,colorSimilarity:.9}),false,
+  {score:.73,darkRecall:.8,localRecall:.55,edgeF1:.7,colorSimilarity:.9},
+  {score:.76,darkRecall:.8,localRecall:.45,edgeF1:.7,colorSimilarity:.9}),false,
   'higher aggregate score must not hide lost weak-region details');
 
 assert.deepEqual(extractEditableNodes({scene:{nodes:[]}}),[],'blank crops must be valid');

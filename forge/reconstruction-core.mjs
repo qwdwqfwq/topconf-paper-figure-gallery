@@ -1,6 +1,9 @@
 // Pure geometry helpers shared by the browser reconstruction flow and tests.
 import {geometrySegments} from './editable-native.mjs';
-const QUALITY_TARGETS={score:.82,darkRecall:.8,localRecall:.7,colorSimilarity:.9};
+// Use the same targets for deciding whether to repair and for final review.
+// The former low thresholds stopped corrections while obvious errors remained.
+const QUALITY_TARGETS={score:.98,darkRecall:.98,localRecall:.97,
+  edgeF1:.97,colorSimilarity:.98};
 export function reconstructionQualityDeficit(qa){
   if(!qa) return Infinity;
   let deficit=0;

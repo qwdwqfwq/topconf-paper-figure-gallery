@@ -121,7 +121,8 @@ const server = http.createServer((req,res)=>{
           const match=prompt.match(/"width":(\d+),"height":(\d+)/);
           const w=Number(match[1]),h=Number(match[2]);
           const images=body.messages[1].content.filter(part=>part.type==='image_url').length;
-          if(images===2) revisionSeen=true;
+          if(images===2) revisionSeen=prompt.includes('Prior editable scene JSON') &&
+            prompt.includes('"fill":"#2020e0"') && prompt.includes('weak pixel regions');
           const fill=images===2?'#e02020':'#2020e0';
           const content=JSON.stringify({canvas:{width:w,height:h},nodes:[{type:'rect',x:20,y:20,w:180,h:110,fill,stroke:'none'}]});
           return new Response(JSON.stringify({choices:[{message:{content}}]}),{status:200,headers:{'Content-Type':'application/json'}});
@@ -138,9 +139,32 @@ const server = http.createServer((req,res)=>{
     });
     assert.equal(repaired.ok,true,JSON.stringify(repaired));
     assert.equal(repaired.calls,2,'one vision pass and one visual revision: '+JSON.stringify(repaired.audit));
-    assert.equal(repaired.revisionSeen,true,'revision must receive both source and rendered preview');
+    assert.equal(repaired.revisionSeen,true,'revision must receive source, render, prior editable objects, and weak regions');
     assert.equal(repaired.fill,'#e02020','accepted repair must improve the editable scene');
     assert.equal(repaired.audit.tiles[0].repairAccepted,true);
+    const twice=await page.evaluate(async()=>{
+      const original=window.fetch;
+      let calls=0,priorSeen=false;
+      window.fetch=async(url,options)=>{
+        if(String(url).endsWith('/chat/completions')){
+          calls++;
+          const prompt=JSON.parse(options.body).messages[1].content[0].text;
+          if(calls===3) priorSeen=prompt.includes('"fill":"#e08020"');
+          const fill=['#2020e0','#e08020','#e02020'][Math.min(calls-1,2)];
+          const content=JSON.stringify({canvas:{width:240,height:160},nodes:[
+            {type:'rect',x:20,y:20,w:180,h:110,fill,stroke:'none'}]});
+          return new Response(JSON.stringify({choices:[{message:{content}}]}),
+            {status:200,headers:{'Content-Type':'application/json'}});
+        }
+        return original(url,options);
+      };
+      const ok=await window.__ffReconstruct();
+      return {ok,calls,priorSeen,fill:window.__ffExportState.scene?.nodes[0]?.fill};
+    });
+    assert.equal(twice.ok,true,JSON.stringify(twice));
+    assert.equal(twice.calls,3,'a still inaccurate first repair should receive a second correction');
+    assert.equal(twice.priorSeen,true,'the second repair must inherit the first corrected scene');
+    assert.equal(twice.fill,'#e02020');
     const split=await page.evaluate(async()=>{
       const original=window.fetch;
       let calls=0;

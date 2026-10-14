@@ -3780,12 +3780,19 @@ async function compareEditableRender(sourceCanvas,scene,region){
     cellSource[cell]++;
     if(near(renderDark,p,1)) cellMatched[cell]++;
   }
-  const cellRecalls=[];
+  const cellRecalls=[],weakRegions=[];
   for(let cell=0;cell<cellSource.length;cell++){
-    if(cellSource[cell]>=Math.max(12,Math.round(pixels/(columns*rows)*.002)))
-      cellRecalls.push(cellMatched[cell]/cellSource[cell]);
+    if(cellSource[cell]>=Math.max(12,Math.round(pixels/(columns*rows)*.002))){
+      const recall=cellMatched[cell]/cellSource[cell];
+      cellRecalls.push(recall);
+      weakRegions.push({x:Math.round((x0+(cell%columns)*w/columns)/scale),
+        y:Math.round((y0+Math.floor(cell/columns)*h/rows)/scale),
+        w:Math.round(w/columns/scale),h:Math.round(h/rows/scale),
+        recall:Math.round(recall*1000)/1000});
+    }
   }
   cellRecalls.sort((a,b)=>a-b);
+  weakRegions.sort((a,b)=>a.recall-b.recall);
   const localRecall=cellRecalls.length
     ? cellRecalls[Math.min(cellRecalls.length-1,Math.floor(cellRecalls.length*.2))]
     : darkRecall;
@@ -3794,7 +3801,7 @@ async function compareEditableRender(sourceCanvas,scene,region){
   const score=Math.max(0,Math.min(1,rawScore,.3+.7*localRecall));
   return {score,inkF1,edgeF1,darkF1,darkRecall,localRecall,colorSimilarity,
     inkFraction:sourceInkPixels/pixels,darkFraction:sourceDarkPixels/pixels,
-    preview:out.toDataURL('image/png')};
+    weakRegions:weakRegions.slice(0,5),preview:out.toDataURL('image/png')};
 }
 
 // Keep the model's shapes and text as individually editable objects, then put
@@ -4056,6 +4063,16 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   const audit=tileAudit||{};
   Object.assign(audit,{state:'pending',startedAt:Date.now(),model,provider:cfgv.proto,endpoint:baseURL(),attempt:0});
   const prompt=editableScenePrompt(W,H,$('#paper')?$('#paper').value:'');
+  // Feed the existing object graph back to the model. Photo data URLs are
+  // replaced by crop coordinates; the source image is attached separately.
+  const priorScene=revision&&revision.scene?JSON.stringify({
+    canvas:{width:W,height:H},
+    nodes:(revision.scene.nodes||[]).map(node=>{
+      const copy={...node};
+      if(copy.href) copy.href='SOURCE_IMAGE_CROP';
+      return copy;
+    })
+  }):'';
   const parts=dataURIToParts(imageDataUri);
   const isFatal=(err)=>/\b400\b|\b401\b|\b403\b|\b404\b|invalid\s+api\s*key|permission|quota|insufficient|billing/i.test(String(err&&err.message||err));
   let lastError=null;
@@ -4063,7 +4080,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
     audit.attempt=attempt;
     try{
       const attemptPrompt=revision
-        ? 'The first attached image is the ORIGINAL reference. The second is your previous editable reconstruction rendered to pixels. Compare them carefully and repair missing, misplaced, wrong-colored or spurious objects. Return the COMPLETE corrected scene, not only a patch. Previous comparison score: '+revision.score.toFixed(3)+'.\n'+prompt
+        ? 'The first attached image is the ORIGINAL reference. The second is the render of the editable scene below. Keep correct objects and their coordinates; fix missing, misplaced, wrong-colored or spurious objects. Inspect these especially weak pixel regions (crop coordinates): '+JSON.stringify(revision.weakRegions||[])+'. Return the COMPLETE corrected scene, not only a patch. Previous comparison score: '+revision.score.toFixed(3)+'. Prior editable scene JSON follows:\n'+priorScene+'\n'+prompt
         : attempt===1 ? prompt : editableSceneRetryPrompt(W,H);
       let txt='';
       let responseDiagnostics='';
@@ -4309,9 +4326,8 @@ async function runReconstruction(){
           tileAudit.darkRecall=qa.darkRecall;
           tileAudit.localRecall=qa.localRecall;
           tileAudit.colorSimilarity=qa.colorSimilarity;
-          if(qa.inkFraction>.001 && (qa.score<.82 || qa.darkRecall<.8 ||
-            qa.localRecall<.7 || qa.colorSimilarity<.9))
-            repairCandidates.push({result,tileAudit,qa,crop});
+          if(qa.inkFraction>.001 && reconstructionQualityDeficit(qa)>.005)
+            repairCandidates.push({result,tileAudit,qa,crop,rounds:0});
         }catch(qaError){tileAudit.qaError=String(qaError&&qaError.message||qaError);}
         reconstructionAudit.completedTiles++;
         say('recon.tile',{i:reconstructionAudit.completedTiles,n:reconstructionAudit.totalTiles});
@@ -4348,19 +4364,25 @@ async function runReconstruction(){
       const resolved=await Promise.all(batch.map(tile=>reconstructTile(tile,0)));
       results.push(...resolved.flat());
     }
-    repairCandidates.sort((a,b)=>reconstructionQualityDeficit(b.qa)-
-      reconstructionQualityDeficit(a.qa));
-    const repairBudget=Math.min(8,Math.max(4,Math.ceil(results.length/4)));
+    const repairBudget=Math.min(12,Math.max(4,results.length*2));
     reconstructionAudit.repairCandidates=repairCandidates.length;
     reconstructionAudit.repairBudget=repairBudget;
-    for(const item of repairCandidates.slice(0,repairBudget)){
+    const repairQueue=repairCandidates.slice();
+    while(repairQueue.length && reconstructionAudit.repairCalls<repairBudget){
+      repairQueue.sort((a,b)=>reconstructionQualityDeficit(b.qa)-
+        reconstructionQualityDeficit(a.qa));
+      const item=repairQueue.shift();
+      if(reconstructionQualityDeficit(item.qa)<=.005 || item.rounds>=2) continue;
+      item.rounds++;
       reconstructionAudit.repairCalls++;
-      const repairAudit={index:item.tileAudit.index,depth:item.tileAudit.depth,repair:true};
+      const repairAudit={index:item.tileAudit.index,depth:item.tileAudit.depth,
+        repair:true,round:item.rounds};
       reconstructionAudit.revisions.push(repairAudit);
       try{
         const candidate=await requestEditableScene(item.crop.toDataURL('image/png'),
           item.crop.width,item.crop.height,repairAudit,
-          {score:item.qa.score,preview:item.qa.preview});
+          {score:item.qa.score,preview:item.qa.preview,
+            weakRegions:item.qa.weakRegions,scene:item.result.scene});
         const tile=item.result.tile;
         const revisedQa=await compareEditableRender(item.crop,candidate,{
           x:tile.coreX-tile.x,y:tile.coreY-tile.y,
@@ -4372,6 +4394,8 @@ async function runReconstruction(){
           item.result.scene=candidate;
           item.tileAudit.repairAccepted=true;
           item.qa=revisedQa;
+          if(item.rounds<2 && reconstructionQualityDeficit(item.qa)>.005)
+            repairQueue.push(item);
         }
       }catch(repairError){
         const message=String(repairError&&repairError.message||repairError);
