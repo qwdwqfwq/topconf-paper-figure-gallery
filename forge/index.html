@@ -4057,6 +4057,33 @@ function editableResponseText(d){
   return walk(d,0) || parseResponseText(d) || '';
 }
 
+async function editableRevisionImages(sourceDataUri, revision, W, H){
+  if(!revision) return [sourceDataUri];
+  const images=[sourceDataUri,revision.preview];
+  const weak=(revision.weakRegions||[]).slice(0,2);
+  if(!weak.length) return images;
+  const [source,render]=await Promise.all([loadImage(sourceDataUri),loadImage(revision.preview)]);
+  for(const region of weak){
+    const pad=Math.max(8,Math.round(Math.min(region.w,region.h)*.12));
+    const x=Math.max(0,Math.floor(region.x-pad)),y=Math.max(0,Math.floor(region.y-pad));
+    const right=Math.min(W,Math.ceil(region.x+region.w+pad));
+    const bottom=Math.min(H,Math.ceil(region.y+region.h+pad));
+    const w=right-x,h=bottom-y;
+    if(w<2||h<2) continue;
+    for(const image of [source,render]){
+      const crop=document.createElement('canvas');
+      const zoom=Math.min(3,Math.max(1,640/Math.max(w,h)));
+      crop.width=Math.round(w*zoom);crop.height=Math.round(h*zoom);
+      const context=crop.getContext('2d');
+      context.imageSmoothingEnabled=true;
+      context.imageSmoothingQuality='high';
+      context.drawImage(image,x,y,w,h,0,0,crop.width,crop.height);
+      images.push(crop.toDataURL('image/png'));
+    }
+  }
+  return images;
+}
+
 async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   const cfgv=cfg(), relay=$('#baseOverride').value.trim(), model=editableReconstructionModel();
   if(!model) throw new Error(tt('analyze.needmodel'));
@@ -4073,14 +4100,14 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
       return copy;
     })
   }):'';
-  const parts=dataURIToParts(imageDataUri);
+  const referenceImages=await editableRevisionImages(imageDataUri,revision,W,H);
   const isFatal=(err)=>/\b400\b|\b401\b|\b403\b|\b404\b|invalid\s+api\s*key|permission|quota|insufficient|billing/i.test(String(err&&err.message||err));
   let lastError=null;
   for(let attempt=1;attempt<=2;attempt++){
     audit.attempt=attempt;
     try{
       const attemptPrompt=revision
-        ? 'The first attached image is the ORIGINAL reference. The second is the render of the editable scene below. Keep correct objects and their coordinates; fix missing, misplaced, wrong-colored or spurious objects. Inspect these especially weak pixel regions (crop coordinates): '+JSON.stringify(revision.weakRegions||[])+'. Return the COMPLETE corrected scene, not only a patch. Previous comparison score: '+revision.score.toFixed(3)+'. Prior editable scene JSON follows:\n'+priorScene+'\n'+prompt
+        ? 'Image 1 is the ORIGINAL tile and image 2 is its editable render. Following images are paired close-ups of the weakest regions: ORIGINAL then RENDER, in the order of these tile-local crop coordinates: '+JSON.stringify((revision.weakRegions||[]).slice(0,2))+'. Compare each pair carefully. Keep correct objects and their coordinates; fix missing, misplaced, wrong-colored or spurious objects, especially small text and lines visible in the close-ups. Return the COMPLETE corrected scene, not only a patch. Previous comparison score: '+revision.score.toFixed(3)+'. Prior editable scene JSON follows:\n'+priorScene+'\n'+prompt
         : attempt===1 ? prompt : editableSceneRetryPrompt(W,H);
       let txt='';
       let responseDiagnostics='';
@@ -4091,8 +4118,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
           system:RECON_SYS,
           messages:[{role:'user',content:[
             {type:'text',text:attemptPrompt},
-            {type:'image',source:{type:'base64',media_type:parts.media,data:parts.data}},
-            ...(revision?[{type:'image',source:{type:'base64',media_type:'image/png',data:dataURIToParts(revision.preview).data}}]:[])
+            ...referenceImages.map(uri=>{const part=dataURIToParts(uri);return {type:'image',source:{type:'base64',media_type:part.media,data:part.data}};})
           ]}]
         };
         const r=await fetchTextWithTimeout(baseURL()+'/v1/messages',{
@@ -4121,8 +4147,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
             {role:'system',content:RECON_SYS},
             {role:'user',content:[
               {type:'text',text:attemptPrompt},
-              {type:'image_url',image_url:{url:imageDataUri}},
-              ...(revision?[{type:'image_url',image_url:{url:revision.preview}}]:[])
+              ...referenceImages.map(url=>({type:'image_url',image_url:{url}}))
             ]}
           ]
         };
