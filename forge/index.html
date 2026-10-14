@@ -5108,7 +5108,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   let endpoint='/images/generations';
   let usedRefs=false;
   body = {model, prompt:imgPrompt};
-  if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; }
+  if(p==='ark'){ body.size='2K'; body.response_format='b64_json'; body.watermark=false; }
   else if(p==='sf'){ body.image_size='1024x1024'; body.batch_size=1; }
   else if(p==='glm'){ body.size='1024x1024'; }
   else if(p==='oai'){ body.size='1536x1024'; }
