@@ -4415,12 +4415,12 @@ async function runReconstruction(){
     reconstructionAudit.repairCandidates=repairCandidates.length;
     reconstructionAudit.repairBudget=repairBudget;
     const repairQueue=repairCandidates.slice();
-    while(repairQueue.length && reconstructionAudit.repairCalls<repairBudget){
-      repairQueue.sort((a,b)=>reconstructionQualityDeficit(b.qa)-
-        reconstructionQualityDeficit(a.qa));
-      const batch=[];
-      while(batch.length<3 && repairQueue.length &&
+    let stopRepairs=false;
+    const repairWorker=async()=>{
+      while(!stopRepairs && repairQueue.length &&
         reconstructionAudit.repairCalls<repairBudget){
+        repairQueue.sort((a,b)=>reconstructionQualityDeficit(b.qa)-
+          reconstructionQualityDeficit(a.qa));
         const item=repairQueue.shift();
         if(reconstructionQualityDeficit(item.qa)<=.005 || item.rounds>=2) continue;
         item.rounds++;
@@ -4428,9 +4428,6 @@ async function runReconstruction(){
         const repairAudit={index:item.tileAudit.index,depth:item.tileAudit.depth,
           repair:true,round:item.rounds};
         reconstructionAudit.revisions.push(repairAudit);
-        batch.push({item,repairAudit});
-      }
-      const outcomes=await Promise.all(batch.map(async ({item,repairAudit})=>{
         try{
           const candidate=await requestScene(item.crop.toDataURL('image/png'),
             item.crop.width,item.crop.height,repairAudit,
@@ -4440,33 +4437,27 @@ async function runReconstruction(){
           const revisedQa=await compareEditableRender(item.crop,candidate,{
             x:tile.coreX-tile.x,y:tile.coreY-tile.y,
             w:tile.coreRight-tile.coreX,h:tile.coreBottom-tile.coreY});
-          return {item,candidate,revisedQa};
-        }catch(error){return {item,error};}
-      }));
-      let stopRepairs=false;
-      for(const {item,candidate,revisedQa,error} of outcomes){
-        if(error){
+          item.tileAudit.revisedScore=revisedQa.score;
+          item.tileAudit.revisedDarkRecall=revisedQa.darkRecall;
+          item.tileAudit.revisedLocalRecall=revisedQa.localRecall;
+          if(acceptReconstructionRepair(item.qa,revisedQa)){
+            item.result.scene=candidate;
+            item.tileAudit.repairAccepted=true;
+            item.qa=revisedQa;
+            if(item.rounds<2 && reconstructionQualityDeficit(item.qa)>.005)
+              repairQueue.push(item);
+          }
+        }catch(error){
           const message=String(error&&error.message||error);
           item.tileAudit.repairError=message;
           if(/\b403\b|quota|insufficient|billing/i.test(message)){
             reconstructionAudit.repairStoppedReason=message;
             stopRepairs=true;
           }
-          continue;
-        }
-        item.tileAudit.revisedScore=revisedQa.score;
-        item.tileAudit.revisedDarkRecall=revisedQa.darkRecall;
-        item.tileAudit.revisedLocalRecall=revisedQa.localRecall;
-        if(acceptReconstructionRepair(item.qa,revisedQa)){
-          item.result.scene=candidate;
-          item.tileAudit.repairAccepted=true;
-          item.qa=revisedQa;
-          if(item.rounds<2 && reconstructionQualityDeficit(item.qa)>.005)
-            repairQueue.push(item);
         }
       }
-      if(stopRepairs) break;
-    }
+    };
+    await Promise.all(Array.from({length:3},()=>repairWorker()));
     // Dense crops can be valid JSON yet omit small labels and connectors. A
     // second pass on smaller crops is useful only when its rendered result
     // improves the same source region; keep the original otherwise.
@@ -4480,10 +4471,10 @@ async function runReconstruction(){
     }).sort((a,b)=>reconstructionQualityDeficit(b.qa)-reconstructionQualityDeficit(a.qa));
     reconstructionAudit.splitCandidates=splitCandidates.length;
     reconstructionAudit.splitCalls=0;
-    for(const item of splitCandidates.slice(0,2)){
+    const splitOutcomes=await Promise.all(splitCandidates.slice(0,2).map(async item=>{
       const parent=item.result.tile;
       const subtiles=subdivideReconstructionTile(parent,Math.max(250,Math.ceil(Math.max(parent.w,parent.h)/2)),18);
-      if(subtiles.length<2) continue;
+      if(subtiles.length<2) return {item};
       reconstructionAudit.totalTiles+=subtiles.length;
       reconstructionAudit.splitCalls+=subtiles.length;
       try{
@@ -4496,15 +4487,22 @@ async function runReconstruction(){
         const candidateQa=await compareEditableRender(item.crop,candidate,{
           x:parent.coreX-parent.x,y:parent.coreY-parent.y,
           w:parent.coreRight-parent.coreX,h:parent.coreBottom-parent.coreY});
+        return {item,children,candidateQa};
+      }catch(splitError){return {item,splitError};}
+    }));
+    for(const {item,children,candidateQa,splitError} of splitOutcomes){
+      if(splitError){
+        item.tileAudit.splitError=String(splitError&&splitError.message||splitError);
+        if(/\b403\b|quota|insufficient|billing/i.test(item.tileAudit.splitError)) break;
+        continue;
+      }
+      if(candidateQa){
         item.tileAudit.splitScore=candidateQa.score;
         item.tileAudit.splitLocalRecall=candidateQa.localRecall;
         if(acceptReconstructionRepair(item.qa,candidateQa)){
           results.splice(results.indexOf(item.result),1,...children);
           item.tileAudit.splitAccepted=true;
         }
-      }catch(splitError){
-        item.tileAudit.splitError=String(splitError&&splitError.message||splitError);
-        if(/\b403\b|quota|insufficient|billing/i.test(item.tileAudit.splitError)) break;
       }
     }
     let scene=mergeReconstructionTiles(results,canvas.width,canvas.height);
@@ -4534,6 +4532,7 @@ async function runReconstruction(){
       let pptxQa=await compareEditableRender(canvas,pptxScene);
       reconstructionAudit.pptxQuality={score:pptxQa.score,localRecall:pptxQa.localRecall};
       const used=[];
+      const objectRepairRequests=[];
       for(const weak of (pptxQa.weakRegions||[]).slice(0,4)){
         if(used.length>=2)break;
         if(weak.recall>=.97)continue;
@@ -4547,9 +4546,15 @@ async function runReconstruction(){
         crop.width=Math.round(region.w*scale);crop.height=Math.round(region.h*scale);
         crop.getContext('2d').drawImage(canvas,region.x,region.y,region.w,region.h,
           0,0,crop.width,crop.height);
+        const requested=requestScene(crop.toDataURL('image/png'),crop.width,crop.height,
+          {objectRepair:true,region,requireCompleteObjects:true})
+          .then(local=>({local}),error=>({error}));
+        objectRepairRequests.push({region,scale,requested});
+      }
+      for(const {region,scale,requested} of objectRepairRequests){
         try{
-          const local=await requestScene(crop.toDataURL('image/png'),crop.width,crop.height,
-            {objectRepair:true,region,requireCompleteObjects:true});
+          const {local,error}=await requested;
+          if(error)throw error;
           const candidate=replaceObjectRepairRegion(scene,region,local,scale);
           const candidatePptx=await buildNativePptx(candidate,zipStore);
           const rendered=await readNativePptxScene(candidatePptx,canvas.width,canvas.height);
