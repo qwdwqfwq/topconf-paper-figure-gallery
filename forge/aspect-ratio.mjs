@@ -12,6 +12,16 @@ export function imageRequestDimensions(provider,model,ratio,resolution='2K',nati
   if(!FIGURE_RATIOS[ratio]) throw new Error(`Unsupported figure ratio: ${ratio}`);
   if(!['1K','2K','4K'].includes(resolution)) throw new Error(`Unsupported resolution: ${resolution}`);
   if(nativeGemini) return {field:'gemini',aspectRatio:ratio,imageSize:resolution};
+  // Infistar's Seedream 5 channel rejects the generic 2K rectangle sizes.
+  // These native sizes were checked against the returned bitmap pixels.
+  if(provider==='infistar' && /^doubao-seedream-5-0-/i.test(model) && resolution==='2K'){
+    const sizes={'16:9':'2848x1600','3:2':'2496x1664','4:3':'2304x1728','1:1':'2048x2048'};
+    return {field:'size',value:sizes[ratio]};
+  }
+  if(provider==='infistar' && /^doubao-seedream-4-0-/i.test(model) && resolution==='1K'){
+    const sizes={'16:9':'1280x720','3:2':'1248x832','4:3':'1152x864','1:1':'1024x1024'};
+    return {field:'size',value:sizes[ratio]};
+  }
   if(provider==='ark' && /seedream/i.test(model) && resolution==='2K'){
     const sizes={'16:9':'2848x1600','3:2':'2496x1664','4:3':'2304x1728','1:1':'2048x2048'};
     return {field:'size',value:sizes[ratio]};
@@ -29,6 +39,12 @@ export function imageRequestDimensions(provider,model,ratio,resolution='2K',nati
       '2K':{'16:9':'2048x1152','3:2':'2304x1536','4:3':'2048x1536','1:1':'2048x2048'},
       '4K':{'16:9':'3840x2160','3:2':'3456x2304','4:3':'3200x2400','1:1':'2816x2816'}
     };
+    if(/^gpt-image-2\.5-/i.test(model)){
+      // The Infistar 2.5 channels returned 503 for smaller 1K rectangles;
+      // both replacement sizes were confirmed by live Sunburst and Flare responses.
+      sizes['1K']['4:3']='1280x960';
+      sizes['1K']['1:1']='1152x1152';
+    }
     return {field:'size',value:sizes[resolution][ratio]};
   }
   // Older GPT Image endpoints publish a limited set of exact output sizes.
