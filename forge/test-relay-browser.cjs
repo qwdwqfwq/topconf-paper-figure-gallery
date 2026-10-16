@@ -21,7 +21,7 @@ const server = http.createServer((req,res)=>{
       const html=data.toString('utf8').replace(/\r\n/g,'\n')
         .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
         .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});",
-          "MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});");
+          "window.__testGenImage=genOaiImage; runReconstruction=async()=>false; MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});");
       data=Buffer.from(html);
     }
     res.writeHead(200,{'Content-Type':mime[path.extname(filename)]||'application/octet-stream'});
@@ -67,6 +67,30 @@ const server = http.createServer((req,res)=>{
     assert.ok(requested.length>0 && requested.every(r=>r.url==='https://infistar.cc/v1/models' && r.headers.authorization==='Bearer test-key'));
     await page.locator('#relayPreset').selectOption('https://infistar.cc/v1');
     await page.unroute('https://infistar.cc/v1/**');
+    // Exercise the app's image branch and bitmap handoff to Step 4.
+    // Reference payloads are covered by test-image-api.mjs; reconstruction is stubbed.
+    const pixel='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
+    let imageRequests=[];
+    await page.route('https://infistar.cc/**',route=>{
+      const req=route.request();
+      imageRequests.push({url:req.url(),body:req.postDataJSON(),headers:req.headers()});
+      return route.fulfill({json:{candidates:[{content:{parts:[{text:'Generated image'},{inlineData:{mimeType:'image/png',data:pixel}}]},finishReason:'STOP'}]}});
+    });
+    await page.evaluate(()=>window.__testGenImage('https://infistar.cc/v1','gemini-3.1-flash-image','test-key','Draw a research diagram','infistar',[],''));
+    assert.equal(imageRequests.length,1);
+    assert.equal(imageRequests[0].url,'https://infistar.cc/v1beta/models/gemini-3.1-flash-image:generateContent');
+    assert.equal(imageRequests[0].headers.authorization,'Bearer test-key');
+    assert.deepEqual(imageRequests[0].body.generationConfig.responseModalities,['TEXT','IMAGE']);
+    assert.ok(imageRequests[0].body.contents[0].parts[0].text.includes('Draw a research diagram'));
+    assert.equal(await page.locator('#out img').getAttribute('src'),'data:image/png;base64,'+pixel);
+    await page.unroute('https://infistar.cc/**');
+    if(process.env.INFISTAR_IMAGE_TEST_KEY){
+      await page.evaluate(async key=>window.__testGenImage('https://infistar.cc/v1','gemini-3.1-flash-image',key,'Draw two boxes labelled Input and Output, connected by an arrow.','infistar',[],''),process.env.INFISTAR_IMAGE_TEST_KEY);
+      const result=await page.locator('#out img').evaluate(async img=>{await img.decode();return {width:img.naturalWidth,height:img.naturalHeight,srcLength:img.src.length}});
+      assert.ok(result.width>1 && result.height>1);
+      console.log('LIVE Gemini image generation and browser decode passed:',JSON.stringify(result));
+      await page.locator('#out img').screenshot({path:path.join(root,'work/infistar-gemini-live.png')});
+    }
     if(process.env.INFISTAR_TEST_KEY){
       await page.locator('#key').fill(process.env.INFISTAR_TEST_KEY);
       await page.locator('#refreshModels').click();
@@ -81,6 +105,6 @@ const server = http.createServer((req,res)=>{
       console.log('LIVE browser CORS, model discovery and chat passed:',JSON.stringify(result));
     }
     assert.deepEqual(errors,[]);
-    console.log('PASS Infistar presets, persistence, credential isolation, model filtering and Claude relay routing');
+    console.log('PASS Infistar presets, persistence, credential isolation, model filtering, Claude relay routing and Gemini image generation');
   }finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

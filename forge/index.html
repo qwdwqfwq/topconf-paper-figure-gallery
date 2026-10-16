@@ -628,6 +628,7 @@
 <script src="./i18n_forge.js?v=20261009"></script>
 <script type="module">
 import * as T from './vendor/transformers.min.js';
+import {usesInfistarGemini, geminiImageRequest, geminiImageResult} from './image-api.mjs?v=20261016';
 import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=20261015';
 import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=20261016b';
 import {registerMissingObjects, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion} from './reconstruction-core.mjs?v=20261016b';
@@ -5090,16 +5091,21 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     + `Paper content: ${content.slice(0,2000)}`;
   let body;
   let endpoint='/images/generations';
+  const nativeGemini=usesInfistarGemini(base,model);
   let usedRefs=false;
   body = {model, prompt:imgPrompt};
   if(p==='ark' && !relayBase()){ body.size='2K'; body.response_format='b64_json'; body.watermark=false; }
   else if(p==='sf'){ body.image_size='1024x1024'; body.batch_size=1; }
   else if(p==='glm'){ body.size='1024x1024'; }
   else if(p==='oai'){ body.size='1536x1024'; }
-  if(useIds.length && p!=='glm'){
+  if(useIds.length && (nativeGemini || p!=='glm')){
     const uris = await refDataURIs(useIds);
-    body.image = (p==='sf') ? uris[0] : uris;
+    body.image = (p==='sf' && !nativeGemini) ? uris[0] : uris;
     usedRefs=true;
+  }
+  if(nativeGemini){
+    const request=geminiImageRequest(base,model,imgPrompt,body.image||[]);
+    base=request.base; endpoint=request.endpoint; body=request.body;
   }
   let r;
   try{ r = await postJSON(base,endpoint,body,key,undefined,600000); }
@@ -5112,7 +5118,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   /* A normal generation request can retry without references when a provider
      rejects image input. The prompt still carries the shared visual grammar,
      so this retry remains a fresh multi-reference composition. */
-  if(!r.ok && usedRefs){
+  if(!r.ok && usedRefs && !nativeGemini){
     delete body.image; usedRefs=false;
     try{ r = await postJSON(base,endpoint,body,key,undefined,600000); txt=await r.text(); }catch(e){}
   }
@@ -5130,11 +5136,12 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     throw new Error(friendlyHttp(r.status,txt));
   }
   const d = JSON.parse(txt);
-  const item = d.data?.[0] || d.images?.[0];
+  const item = nativeGemini ? geminiImageResult(d) : (d.data?.[0] || d.images?.[0]);
   if(!item) throw new Error(tt('img.abnormal',{t:txt.slice(0,200)}));
   const st = ensureExportState();
-  const imgSrc = item.url || ('data:image/png;base64,'+item.b64_json);
-  const exportImgSrc = item.b64_json ? `data:image/png;base64,${item.b64_json}` : imgSrc;
+  const imageMime=item.mimeType||'image/png';
+  const imgSrc = item.url || (`data:${imageMime};base64,`+item.b64_json);
+  const exportImgSrc = item.b64_json ? `data:${imageMime};base64,${item.b64_json}` : imgSrc;
       markStep3Output(exportImgSrc);
   $('#out').style.display='block';
   $('#out').innerHTML = `<img data-step3-output="true" src="${esc(imgSrc)}" alt="draft">
