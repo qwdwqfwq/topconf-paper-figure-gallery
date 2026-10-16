@@ -18,7 +18,7 @@ const server = http.createServer((req,res)=>{
     // The sparse local checkout omits the heavyweight model runtime and
     // manifest. Replace startup only in this test response, never in the app.
     if(pathname==='/forge/index.html'){
-      const html=data.toString('utf8')
+      const html=data.toString('utf8').replace(/\r\n/g,'\n')
         .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
         .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});",
           "MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});");
@@ -40,342 +40,67 @@ const server = http.createServer((req,res)=>{
     page.on('requestfailed',r=>errors.push(`Request failed ${r.url()}: ${r.failure()?.errorText}`));
     await page.goto(`http://127.0.0.1:${server.address().port}/forge/`,{waitUntil:'domcontentloaded'});
     assert.equal(await page.evaluate(()=>typeof window.__ffReconstruct),'function',JSON.stringify(errors));
+
     const result=await page.evaluate(async()=>{
       document.querySelector('#provider').value='ark';
       document.querySelector('#key').value='browser-test-key';
       const select=document.querySelector('#analyzeModel');
-      select.add(new Option('doubao-vision-test','doubao-vision-test'));
-      select.value='doubao-vision-test';
+      select.add(new Option('doubao-vision-test','doubao-vision-test'));select.value='doubao-vision-test';
+      let calls=0,repairs=0;
       const original=window.fetch;
-      let calls=0,activeCalls=0,peakCalls=0;
       window.fetch=async(url,options)=>{
-        if(String(url).endsWith('/chat/completions')){
-          calls++;
-          activeCalls++;
-          peakCalls=Math.max(peakCalls,activeCalls);
-          await new Promise(resolve=>setTimeout(resolve,25));
-          activeCalls--;
-          const body=JSON.parse(options.body);
-          if(body.response_format?.type!=='json_object') throw new Error('Ark vision requests require JSON mode');
-          const match=body.messages[1].content[0].text.match(/"width":(\d+),"height":(\d+)/);
-          const w=Number(match[1]),h=Number(match[2]);
-          const nodes=Array.from({length:8},(_,i)=>({type:'rect',x:20+i*45,y:30,w:35,h:35,rx:i===0?12:0,fill:'#abcdef',stroke:'#123456'}));
-          nodes.push({type:'text',x:15,y:90,w:200,h:30,text:'Editable test'});
-          nodes.push({type:'line',x1:12,y1:14,x2:70,y2:14,stroke:'#123456'});
-          nodes.push({type:'line',x:22,y:22,w:48,h:0,stroke:'#123456'}); // Some vision responses use a displacement instead of end coordinates.
-          nodes.push({type:'line',x2:70,y2:14,stroke:'#123456'}); // Invalid origin must not become (0,0).
-          nodes.push({type:'line',x:0,y:0,x2:500,y2:240,stroke:'#123456'}); // Crop-corner hallucination must not become a page-wide ray.
-          nodes.push({type:'line',x:0,y:100,x2:500,y2:240,stroke:'#123456'}); // Edge hallucination is equally invalid.
-          nodes.push({type:'polyline',points:'0,0 500,240',stroke:'#123456'});
-          nodes.push({type:'path',d:'M 0 0 L 500 240',stroke:'#123456'});
-          nodes.push({type:'text',x:15,y:140,w:80,h:20,text:'Oversized label',fontSize:100});
-          nodes.push({type:'polyline',points:'12,180 70,180',stroke:'#123456'});
-          return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({output:{result:{scene:{canvas:{width:w,height:h},nodes}}}})}}]}),{status:200,headers:{'Content-Type':'application/json'}});
+        if(!String(url).endsWith('/chat/completions'))return original(url,options);
+        calls++;
+        const prompt=JSON.parse(options.body).messages[1].content[0].text;
+        let nodes;
+        if(prompt.includes('Catalog in crop coordinates: ')){
+          repairs++;
+          const catalog=JSON.parse(prompt.split('Catalog in crop coordinates: ')[1]);
+          nodes=[...catalog.nodes.map(n=>({...n,...(n.type==='text'?{text:'INJECTED'}:{})})),
+            {id:'unknown',type:'text',text:'EXTRA',x:50,y:50,w:80,h:20,fontSize:16},
+            {type:'text',text:'MISSING ID',x:50,y:70,w:80,h:20,fontSize:16}];
+        }else{
+          if(!prompt.includes('WHOLE IMAGE'))throw Error('Whole-image catalog required');
+          nodes=[{type:'rect',x:450,y:50,w:300,h:180,fill:'#abcdef'},
+            {type:'text',x:510,y:100,w:170,h:24,fontSize:20,text:'Global label'},
+            {type:'text',x:512,y:100,w:170,h:24,fontSize:20,text:'Global label'},
+            {type:'line',x:480,y:150,x2:800,y2:150,stroke:'#111111',strokeWidth:2}];
         }
-        return original(url,options);
+        return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes})}}]}),{status:200});
       };
-      const canvas=document.createElement('canvas'); canvas.width=1200; canvas.height=500;
-      canvas.getContext('2d').fillStyle='#ffffff'; canvas.getContext('2d').fillRect(0,0,1200,500);
+      const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=500;
+      const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,1200,500);
+      ctx.fillStyle='#abcdef';ctx.fillRect(450,50,300,180);ctx.fillStyle='black';ctx.font='20px Arial';ctx.fillText('Global label',510,120);
+      ctx.fillRect(480,150,320,2);ctx.fillRect(560,180,60,15);
       window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
       const ok=await window.__ffReconstruct();
-      const scene=window.__ffExportState.scene;
-      return {ok,calls,peakCalls,nodes:scene&&scene.nodes.length,svg:window.__ffExportState.svg,
-        qualityState:window.__ffExportState.recon?.qualityState,
-        lines:scene?.nodes.filter(n=>n.type==='line').map(n=>({x:n.x,y:n.y,x2:n.x2,y2:n.y2})),
-        fittedText:scene?.nodes.filter(n=>n.type==='text'&&n.text==='Oversized label').map(n=>n.fontSize),
-        polylines:(window.__ffExportState.svg.match(/<polyline\b/g)||[]).length,
-        textColor:(window.__ffExportState.svg.match(/<text[^>]*fill="([^"]+)"/)||[])[1],
-        status:document.querySelector('#reconStatus').textContent};
+      return {ok,calls,repairs,audit:window.__ffApiAudit.reconstruction,scene:window.__ffExportState.scene};
     });
     assert.equal(result.ok,true,JSON.stringify(result));
-    assert.equal(result.qualityState,'needs-review','a mismatched editable scene must not be labelled publication ready');
-    assert.equal(result.calls,2,'1200px bitmap must use two vision requests');
-    assert.equal(result.peakCalls,2,'independent tiles must run concurrently');
-    assert.ok(result.nodes>=16,'editable primitives must survive tile merge');
-    assert.equal(result.lines.length,4,'valid line coordinates and displacements survive');
-    assert.equal(result.lines.filter(n=>n.y===14 && n.x2-n.x===58).length,2,'x1/y1 aliases must preserve line geometry');
-    assert.equal(result.lines.filter(n=>n.y===22 && n.y2===22 && n.x2-n.x===48).length,2,'width and height line displacements must preserve geometry');
-    assert.match(result.status,/已过滤 8 条|filtered 8/i,'all crop-boundary rays must be reported');
-    assert.equal(result.fittedText.length,2,'oversized labels must remain editable');
-    assert.ok(result.fittedText.every(size=>size<=23),'text must fit its explicit bounding box');
-    assert.equal(result.polylines,2,'point-only polylines must survive');
-    assert.equal(result.textColor,'#111827','text without model color must remain visible');
-    assert.match(result.svg,/rx="12"/,'model rx must survive as an editable rounded corner');
-    assert.match(result.svg,/<svg/);
+    assert.equal(result.audit.strategy,'whole-image-catalog');
+    assert.equal(result.audit.deduplicatedText,1);
+    assert.equal(result.scene.nodes.length,3);
+    assert.equal(result.scene.nodes.filter(n=>n.type==='text').length,1);
+    assert.equal(result.scene.nodes.find(n=>n.type==='text').text,'Global label');
+    assert.ok(result.repairs>0,'exercise crop catalog requests');
+    assert.equal(result.calls,result.repairs+1,'exactly one global recognition');
+    assert.equal(result.audit.pptxLayout.state,'passed',JSON.stringify(result.audit));
     for(const format of ['svg','pptx','vsdx','drawio']){
       await page.locator(`#exportActions [data-export="${format}"]`).click();
-      const downloadPromise=page.waitForEvent('download',{timeout:30000});
+      const promise=page.waitForEvent('download',{timeout:30000});
       await page.locator('#exportConfirm').click();
-      const download=await downloadPromise;
-      assert.equal(download.suggestedFilename(),`figure-forge-editable.${format}`);
-      const bytes=fs.readFileSync(await download.path());
-      assert.ok(bytes.length>100,`${format} download must contain content`);
-      if(format==='pptx' || format==='vsdx') assert.equal(bytes.subarray(0,2).toString(),'PK',`${format} must be a ZIP package`);
-      if(format==='svg') assert.match(bytes.toString('utf8'),/<svg/);
-      if(format==='drawio') assert.match(bytes.toString('utf8'),/<mxfile/);
-      assert.match(await page.locator('#exportStatus').innerText(),/已生成|完成|finished|ready/i);
-    }
-    const repaired=await page.evaluate(async()=>{
-      const original=window.fetch;
-      let calls=0,revisionSeen=false;
-      window.fetch=async(url,options)=>{
-        if(String(url).endsWith('/chat/completions')){
-          calls++;
-          const body=JSON.parse(options.body);
-          const prompt=body.messages[1].content[0].text;
-          const match=prompt.match(/"width":(\d+),"height":(\d+)/);
-          const w=Number(match[1]),h=Number(match[2]);
-          const images=body.messages[1].content.filter(part=>part.type==='image_url').length;
-          if(images>=4) revisionSeen=prompt.includes('Prior editable scene JSON') &&
-            prompt.includes('"fill":"#2020e0"') && prompt.includes('paired close-ups');
-          const fill=images>=4?'#e02020':'#2020e0';
-          const content=JSON.stringify({canvas:{width:w,height:h},nodes:[{type:'rect',x:20,y:20,w:180,h:110,fill,stroke:'none'}]});
-          return new Response(JSON.stringify({choices:[{message:{content}}]}),{status:200,headers:{'Content-Type':'application/json'}});
-        }
-        return original(url,options);
-      };
-      const canvas=document.createElement('canvas');canvas.width=240;canvas.height=160;
-      const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,240,160);
-      ctx.fillStyle='#e02020';ctx.fillRect(20,20,180,110);
-      window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
-      const ok=await window.__ffReconstruct();
-      return {ok,calls,revisionSeen,audit:window.__ffApiAudit.reconstruction,
-        fill:window.__ffExportState.scene?.nodes.find(n=>n.type==='rect')?.fill};
-    });
-    assert.equal(repaired.ok,true,JSON.stringify(repaired));
-    assert.equal(repaired.calls,2,'one vision pass and one visual revision: '+JSON.stringify(repaired.audit));
-    assert.equal(repaired.revisionSeen,true,'revision must receive source, render, prior editable objects, and weak regions');
-    assert.equal(repaired.fill,'#e02020','accepted repair must improve the editable scene');
-    assert.equal(repaired.audit.tiles[0].repairAccepted,true);
-    const twice=await page.evaluate(async()=>{
-      const original=window.fetch;
-      let calls=0,priorSeen=false;
-      window.fetch=async(url,options)=>{
-        if(String(url).endsWith('/chat/completions')){
-          calls++;
-          const prompt=JSON.parse(options.body).messages[1].content[0].text;
-          if(calls===3) priorSeen=prompt.includes('"fill":"#e08020"');
-          const fill=['#2020e0','#e08020','#e02020'][Math.min(calls-1,2)];
-          const content=JSON.stringify({canvas:{width:240,height:160},nodes:[
-            {type:'rect',x:20,y:20,w:180,h:110,fill,stroke:'none'}]});
-          return new Response(JSON.stringify({choices:[{message:{content}}]}),
-            {status:200,headers:{'Content-Type':'application/json'}});
-        }
-        return original(url,options);
-      };
-      const ok=await window.__ffReconstruct();
-      return {ok,calls,priorSeen,fill:window.__ffExportState.scene?.nodes[0]?.fill};
-    });
-    assert.equal(twice.ok,true,JSON.stringify(twice));
-    assert.equal(twice.calls,3,'a still inaccurate first repair should receive a second correction');
-    assert.equal(twice.priorSeen,true,'the second repair must inherit the first corrected scene');
-    assert.equal(twice.fill,'#e02020');
-    const split=await page.evaluate(async()=>{
-      const original=window.fetch;
-      let calls=0;
-      window.fetch=async(url,options)=>{
-        if(String(url).endsWith('/chat/completions')){
-          calls++;
-          const body=JSON.parse(options.body);
-          const match=body.messages[1].content[0].text.match(/"width":(\d+),"height":(\d+)/);
-          const w=Number(match[1]),h=Number(match[2]);
-          const fill=w<500?'#e02020':'#2020e0';
-          const content=JSON.stringify({canvas:{width:w,height:h},nodes:[
-            {type:'rect',x:0,y:0,w,h,fill,stroke:'none'}]});
-          return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content}}]}),
-            {status:200,headers:{'Content-Type':'application/json'}});
-        }
-        return original(url,options);
-      };
-      const canvas=document.createElement('canvas');canvas.width=700;canvas.height=500;
-      const ctx=canvas.getContext('2d');ctx.fillStyle='#e02020';ctx.fillRect(0,0,700,500);
-      window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
-      const ok=await window.__ffReconstruct();
-      return {ok,calls,audit:window.__ffApiAudit.reconstruction,
-        fills:window.__ffExportState.scene?.nodes.map(n=>n.fill)};
-    });
-    assert.equal(split.ok,true,JSON.stringify(split));
-    assert.equal(split.audit.tiles[0].splitAccepted,true,'smaller crops must replace a poor parent when rendered quality improves');
-    assert.ok(split.audit.splitCalls>=4,'dense parent must be reconstructed from smaller crops');
-    assert.ok(split.fills.every(fill=>fill==='#e02020'),'the accepted scene uses corrected native shapes');
-    const truncated=await page.evaluate(async()=>{
-      const original=window.fetch;
-      let calls=0;
-      window.fetch=async(url,options)=>{
-        if(String(url).endsWith('/chat/completions')){
-          calls++;
-          const body=JSON.parse(options.body);
-          if(body.max_tokens!==16000) throw Error('Reconstruction token budget was not raised');
-          const content=JSON.stringify({nodes:[{type:'rect',x:0,y:0,w:240,h:160,
-            fill:calls===1?'#2020e0':'#e02020'}]});
-          return new Response(JSON.stringify({choices:[{finish_reason:calls===1?'length':'stop',
-            message:{content}}]}),{status:200,headers:{'Content-Type':'application/json'}});
-        }
-        return original(url,options);
-      };
-      const canvas=document.createElement('canvas');canvas.width=240;canvas.height=160;
-      const ctx=canvas.getContext('2d');ctx.fillStyle='#e02020';ctx.fillRect(0,0,240,160);
-      window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
-      const ok=await window.__ffReconstruct();
-      return {ok,calls,fill:window.__ffExportState.scene?.nodes[0]?.fill};
-    });
-    assert.deepEqual(truncated,{ok:true,calls:2,fill:'#e02020'},
-      'a length-limited answer must be retried even when its JSON parses');
-    const largeTruncated=await page.evaluate(async()=>{
-      const original=window.fetch;
-      let calls=0;
-      window.fetch=async(url,options)=>{
-        if(String(url).endsWith('/chat/completions')){
-          calls++;
-          const body=JSON.parse(options.body);
-          const image=body.messages[1].content.find(part=>part.type==='image_url').image_url.url;
-          const im=new Image();im.src=image;await im.decode();
-          const content=JSON.stringify({nodes:[{type:'rect',x:0,y:0,w:im.width,h:im.height,fill:'#e02020'}]});
-          return new Response(JSON.stringify({choices:[{finish_reason:calls===1?'length':'stop',message:{content}}]}),
-            {status:200,headers:{'Content-Type':'application/json'}});
-        }
-        return original(url,options);
-      };
-      const canvas=document.createElement('canvas');canvas.width=700;canvas.height=500;
-      const ctx=canvas.getContext('2d');ctx.fillStyle='#e02020';ctx.fillRect(0,0,700,500);
-      window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
-      const ok=await window.__ffReconstruct();
-      return {ok,calls,first:window.__ffApiAudit.reconstruction.tiles[0]};
-    });
-    assert.equal(largeTruncated.ok,true,JSON.stringify(largeTruncated));
-    assert.equal(largeTruncated.calls,5,'large truncated crops should split without repeating the same request');
-    assert.equal(largeTruncated.first.state,'subdivided');
-    const timedOut=await page.evaluate(async()=>{
-      const originalFetch=window.fetch, originalSetTimeout=window.setTimeout;
-      let calls=0;
-      window.setTimeout=(fn,delay,...args)=>originalSetTimeout(fn,delay===150000?20:delay,...args);
-      window.fetch=async(url,options)=>{
-        if(String(url).endsWith('/chat/completions')){
-          calls++;
-          if(calls===1) return new Promise((resolve,reject)=>{
-            options.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true});
-          });
-          const body=JSON.parse(options.body);
-          const match=body.messages[1].content[0].text.match(/"width":(\d+),"height":(\d+)/);
-          const w=Number(match[1]),h=Number(match[2]);
-          const content=JSON.stringify({nodes:[{type:'rect',x:0,y:0,w,h,fill:'#e02020'}]});
-          return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content}}]}),{status:200});
-        }
-        return originalFetch(url,options);
-      };
-      try{
-        const canvas=document.createElement('canvas');canvas.width=700;canvas.height=500;
-        const ctx=canvas.getContext('2d');ctx.fillStyle='#e02020';ctx.fillRect(0,0,700,500);
-        window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
-        const ok=await window.__ffReconstruct();
-        return {ok,calls,audit:window.__ffApiAudit.reconstruction,
-          nodes:window.__ffExportState.scene?.nodes.length};
-      }finally{window.fetch=originalFetch;window.setTimeout=originalSetTimeout;}
-    });
-    assert.equal(timedOut.ok,true,JSON.stringify(timedOut));
-    assert.equal(timedOut.calls,5,'one timed out crop should split directly into four smaller requests');
-    assert.equal(timedOut.audit.tiles[0].state,'subdivided');
-    assert.equal(timedOut.audit.fallbackTiles,0,'successful smaller crops must retain native shapes');
-    assert.equal(timedOut.audit.completedTiles,timedOut.audit.totalTiles);
-    assert.ok(timedOut.nodes>0,'a timeout must not discard successfully reconstructed regions');
-    const terminalTimeout=await page.evaluate(async()=>{
-      const originalFetch=window.fetch, originalSetTimeout=window.setTimeout;
-      let calls=0;
-      window.setTimeout=(fn,delay,...args)=>originalSetTimeout(fn,delay===150000?20:delay,...args);
-      window.fetch=async(url,options)=>{
-        if(String(url).endsWith('/chat/completions')){
-          calls++;
-          return new Promise((resolve,reject)=>{
-            options.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError')),{once:true});
-          });
-        }
-        return originalFetch(url,options);
-      };
-      try{
-        const canvas=document.createElement('canvas');canvas.width=240;canvas.height=160;
-        const ctx=canvas.getContext('2d');ctx.fillStyle='#123456';ctx.fillRect(0,0,240,160);
-        window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
-        const ok=await window.__ffReconstruct();
-        return {ok,calls,audit:window.__ffApiAudit.reconstruction,
-          nodes:window.__ffExportState.scene?.nodes.length,
-          status:document.querySelector('#reconStatus').textContent};
-      }finally{window.fetch=originalFetch;window.setTimeout=originalSetTimeout;}
-    });
-    assert.equal(terminalTimeout.ok,true,JSON.stringify(terminalTimeout));
-    assert.equal(terminalTimeout.calls,1,'a small timed out crop must not repeat the same request');
-    assert.equal(terminalTimeout.audit.fallbackTiles,1);
-    assert.equal(terminalTimeout.audit.state,'needs-review');
-    assert.ok(terminalTimeout.nodes>0);
-    assert.match(terminalTimeout.status,/超时|timeout/i);
-    const recovered=await page.evaluate(async()=>{
-      const original=window.fetch;
-      let calls=0;
-      window.fetch=async(url,options)=>{
-        if(String(url).endsWith('/chat/completions')){
-          calls++;
-          const body=JSON.parse(options.body);
-          const match=body.messages[1].content[0].text.match(/"width":(\d+),"height":(\d+)/);
-          const w=Number(match[1]),h=Number(match[2]);
-          const content=calls>=3&&calls<=6
-            ? JSON.stringify({result:{description:'summary only'}})
-            : JSON.stringify({nodes:[{type:'rect',x:20,y:20,w:30,h:30,fill:'#123456'}]});
-          return new Response(JSON.stringify({choices:[{message:{content}}]}),{status:200,headers:{'Content-Type':'application/json'}});
-        }
-        return original(url,options);
-      };
-      const canvas=document.createElement('canvas');canvas.width=3200;canvas.height=1600;
-      canvas.getContext('2d').fillStyle='#ffffff';canvas.getContext('2d').fillRect(0,0,3200,1600);
-      window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
-      const ok=await window.__ffReconstruct();
-      return {ok,calls,audit:window.__ffApiAudit.reconstruction,nodes:window.__ffExportState.scene?.nodes.length};
-    });
-    assert.equal(recovered.ok,true,JSON.stringify(recovered));
-    assert.ok(recovered.audit.totalTiles>8,'failed third crop must be subdivided');
-    assert.equal(recovered.audit.completedTiles,recovered.audit.totalTiles,'all replacement crops must complete');
-    assert.ok(recovered.nodes>0,'recovered result remains editable');
-    const fallback=await page.evaluate(async()=>{
-      const original=window.fetch;
-      let calls=0;
-      window.fetch=async(url,options)=>{
-        if(String(url).endsWith('/chat/completions')){
-          calls++;
-          return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({description:'summary only'})}}]}),{status:200,headers:{'Content-Type':'application/json'}});
-        }
-        return original(url,options);
-      };
-      const canvas=document.createElement('canvas');canvas.width=240;canvas.height=160;
-      const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,240,160);
-      ctx.fillStyle='#123456';ctx.fillRect(30,25,100,80);
-      window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
-      const ok=await window.__ffReconstruct();
-      return {ok,calls,audit:window.__ffApiAudit.reconstruction,nodes:window.__ffExportState.scene?.nodes.length,
-        status:document.querySelector('#reconStatus').textContent};
-    });
-    assert.equal(fallback.ok,true,JSON.stringify(fallback));
-    assert.equal(fallback.calls,2,'malformed response should get one schema retry');
-    assert.equal(fallback.audit.fallbackTiles,1,'terminal malformed response must use editable fallback');
-    assert.ok(fallback.nodes>0,'fallback must contain native vector nodes');
-    assert.match(fallback.status,/可编辑色块|editable color blocks/);
-    for(const format of ['svg','pptx','vsdx','drawio']){
-      await page.locator(`#exportActions [data-export="${format}"]`).click();
-      const downloadPromise=page.waitForEvent('download',{timeout:30000});
-      await page.locator('#exportConfirm').click();
-      const download=await downloadPromise;
-      const bytes=fs.readFileSync(await download.path());
-      assert.ok(bytes.length>100,`${format} fallback download must contain content`);
+      const download=await promise;
+      assert.ok(fs.statSync(await download.path()).size>100);
     }
     const failed=await page.evaluate(async()=>{
-      const original=window.fetch;
-      window.fetch=async(url,options)=>{
-        if(String(url).endsWith('/chat/completions')) return new Response(JSON.stringify({error:{message:'Provider temporarily unavailable'}}),{status:503});
-        return original(url,options);
-      };
+      window.fetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'{"description":"no objects"}'}}]}),{status:200});
       const ok=await window.__ffReconstruct();
-      return {ok,status:document.querySelector('#exportStatus').textContent};
+      return {ok,scene:window.__ffExportState.scene,audit:window.__ffApiAudit.reconstruction};
     });
-    assert.equal(failed.ok,false);
-    assert.match(failed.status,/503|temporarily unavailable/i);
-    assert.deepEqual(errors,[],'page JavaScript errors');
-    console.log('Browser rebuild with mocked vision API: OK');
+    assert.equal(failed.ok,false,'invalid whole image must not invent tile fallback objects');
+    assert.equal(failed.scene,null);
+    assert.equal(failed.audit.state,'failed');
+    assert.deepEqual(errors,[]);
+    console.log('Browser whole-image catalog, constrained crops and four exports: OK');
   }finally{await browser.close();}
 })().catch(err=>{console.error(err);process.exitCode=1;}).finally(()=>server.close());

@@ -28,6 +28,7 @@ export function acceptReconstructionRepair(before,after){
 export function editableNodeBounds(n){
   if(!n||typeof n!=='object')return null;
   let coordinates=[];
+  if(n.type==='text'&&n.textPath?.d)return editableNodeBounds({type:'path',d:n.textPath.d});
   if(['path','polyline','line'].includes(n.type))
     coordinates=geometrySegments(n).flatMap(segment=>segment.points);
   else {
@@ -67,39 +68,91 @@ export function planObjectRepairRegion(weak,scene,width,height){
   const bottom=Math.min(height,Math.ceil(box.bottom+margin));
   return {x,y,w:right-x,h:bottom-y};
 }
+// IDs are assigned once from the full image, never from a detail crop.
+export function createWholeImageCatalog(scene){
+  const nodes=(scene.nodes||[]).map(n=>({...n}));
+  const deduplicatedText=deduplicateText(nodes);
+  nodes.forEach((n,i)=>{n.id=`whole_${i+1}`;});
+  return {...scene,nodes,counts:{...scene.counts,total:nodes.length,
+    text:nodes.filter(n=>n.type==='text').length,deduplicatedText}};
+}
+function transformCatalogNode(source,s,dx,dy){
+  const n={...source};
+  if(n.type==='path')n.d=transformEditablePath(n.d,s,s,dx,dy);
+  else if(n.type==='polyline')n.points=(String(n.points||'').match(/[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?/gi)||[]).map((v,i)=>Number(v)*s+(i%2?dy:dx)).join(' ');
+  else{
+    for(const k of ['x','x2'])if(Number.isFinite(Number(n[k])))n[k]=Number(n[k])*s+dx;
+    for(const k of ['y','y2'])if(Number.isFinite(Number(n[k])))n[k]=Number(n[k])*s+dy;
+    for(const k of ['w','h'])if(Number.isFinite(Number(n[k])))n[k]=Number(n[k])*s;
+  }
+  for(const k of ['fontSize','strokeWidth','radius'])if(Number.isFinite(Number(n[k])))n[k]=Number(n[k])*s;
+  if(n.textPath?.d)n.textPath={...n.textPath,d:transformEditablePath(n.textPath.d,s,s,dx,dy)};
+  return n;
+}
+export function objectRepairCatalog(scene,region,scale){
+  return {canvas:{width:Math.round(region.w*scale),height:Math.round(region.h*scale)},
+    nodes:(scene.nodes||[]).filter(n=>{
+      const b=editableNodeBounds(n);
+      return b&&b.x>=region.x+1&&b.y>=region.y+1&&
+        b.right<=region.x+region.w-1&&b.bottom<=region.y+region.h-1&&
+        b.right-b.x<region.w*.85&&b.bottom-b.y<region.h*.85;
+    }).map(n=>{
+      const entry=transformCatalogNode(n,scale,-region.x*scale,-region.y*scale);
+      // The crop bitmap supplies image pixels; do not duplicate data URLs in the prompt.
+      if(entry.type==='image'){delete entry.href;delete entry.crop;}
+      return entry;
+    })};
+}
+// Conservative bounding-box warnings; visual review still checks actual glyphs.
+export function auditExportLayout(source,exported){
+  const texts=(exported.nodes||[]).filter(n=>n.type==='text');
+  const issues=[];
+  for(let i=0;i<texts.length;i++)for(let j=i+1;j<texts.length;j++){
+    const a=texts[i],b=texts[j];
+    if(a.rotation||b.rotation||a.textPath||b.textPath)continue;
+    const w=Math.max(0,Math.min(a.x+a.w,b.x+b.w)-Math.max(a.x,b.x));
+    const h=Math.max(0,Math.min(a.y+a.h,b.y+b.h)-Math.max(a.y,b.y));
+    if(w*h>Math.min(a.w*a.h,b.w*b.h)*.35)
+      issues.push({kind:a.text===b.text?'duplicate-text':'text-overlap',text:a.text,other:b.text});
+  }
+  const remaining=new Set(texts);
+  for(const n of (source.nodes||[]).filter(n=>n.type==='text'&&!n.textPath)){
+    const matches=[...remaining].filter(v=>v.text===n.text).sort((a,b)=>
+      Math.hypot(a.x-n.x,a.y-n.y)-Math.hypot(b.x-n.x,b.y-n.y));
+    const match=matches[0];
+    if(!match){issues.push({kind:'missing-text',id:n.id,text:n.text});continue;}
+    remaining.delete(match);
+    if(Math.abs(match.fontSize/n.fontSize-1)>.1)
+      issues.push({kind:'font-size',id:n.id,expected:n.fontSize,actual:match.fontSize});
+  }
+  return {state:issues.length?'needs-review':'passed',issues,textCount:texts.length};
+}
 export function replaceObjectRepairRegion(scene,region,localScene,scale){
+  if(!Number.isFinite(scale)||scale<=0)return scene;
   const x1=region.x+region.w,y1=region.y+region.h;
   const inside=b=>b&&b.x>=region.x+1&&b.y>=region.y+1&&b.right<=x1-1&&b.bottom<=y1-1;
   const small=b=>b&&(b.right-b.x)<region.w*.85&&(b.bottom-b.y)<region.h*.85;
-  const retained=(scene.nodes||[]).filter(n=>{
-    const b=editableNodeBounds(n);
-    return !inside(b)||!small(b);
-  });
-  const translated=(localScene.nodes||[]).map((source,i)=>{
-    const n={...source,id:`object_repair_${i}_${source.id||''}`};
-    const shift=(key,offset)=>{if(Number.isFinite(Number(n[key])))n[key]=Number(n[key])/scale+offset;};
-    if(n.type==='path')n.d=transformEditablePath(n.d,1/scale,1/scale,region.x,region.y);
-    else if(n.type==='polyline'){
-      const nums=String(n.points||'').match(/[-+]?(?:\d*\.\d+|\d+\.?\d*)(?:e[-+]?\d+)?/gi)||[];
-      n.points=nums.map((v,j)=>Number(v)/scale+(j%2?region.y:region.x)).join(' ');
-    }else if(n.type==='line'){
-      shift('x',region.x);shift('y',region.y);shift('x2',region.x);shift('y2',region.y);
-    }else{shift('x',region.x);shift('y',region.y);shift('w',0);shift('h',0);}
+  const originals=new Map((scene.nodes||[]).filter(n=>n.id&&inside(editableNodeBounds(n))&&small(editableNodeBounds(n))).map(n=>[String(n.id),n]));
+  const updates=new Map();
+  for(const source of localScene.nodes||[]){
+    const original=originals.get(String(source.id));
+    if(!original||original.type!==source.type||updates.has(String(source.id)))continue;
+    const n=transformCatalogNode(source,1/scale,region.x,region.y);
+    // Text content belongs exclusively to the full-image catalog.
     if(n.type==='text'){
-      if(Number.isFinite(Number(n.fontSize)))n.fontSize=Number(n.fontSize)/scale;
-      if(n.textPath?.d)n.textPath={...n.textPath,
-        d:transformEditablePath(n.textPath.d,1/scale,1/scale,region.x,region.y)};
+      n.text=original.text;
+      if(!Number.isFinite(n.fontSize)||Math.abs(n.fontSize/original.fontSize-1)>.2)continue;
     }
-    return n;
-  }).filter(n=>{
+    // A local view may refine an object, but cannot change its identity.
     const b=editableNodeBounds(n);
-    if(!inside(b))return false;
+    if(!inside(b))continue;
     // Keep a complete icon or chart even when it nearly fills the repair crop.
     // Reject only a dominant panel/background invented by the local model.
     const area=(b.right-b.x)*(b.bottom-b.y);
-    return !(['rect','image'].includes(n.type)&&area>region.w*region.h*.8);
-  });
-  return {...scene,nodes:[...retained,...translated]};
+    if(['rect','image'].includes(n.type)&&area>region.w*region.h*.8)continue;
+    updates.set(String(n.id),{...original,...n});
+  }
+  return {...scene,nodes:(scene.nodes||[]).map(n=>updates.get(String(n.id))||n)};
 }
 export function extractEditableNodes(raw){
   const nodeKeys=['nodes','elements','objects','items','shapes','components','primitives'];

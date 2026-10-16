@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {extractEditableNodes,planReconstructionTiles,subdivideReconstructionTile,mergeReconstructionTiles,reconstructionQualityDeficit,acceptReconstructionRepair,planObjectRepairRegion,replaceObjectRepairRegion} from './reconstruction-core.mjs';
+import {createWholeImageCatalog,objectRepairCatalog,auditExportLayout,extractEditableNodes,planReconstructionTiles,subdivideReconstructionTile,mergeReconstructionTiles,reconstructionQualityDeficit,acceptReconstructionRepair,planObjectRepairRegion,replaceObjectRepairRegion} from './reconstruction-core.mjs';
 
 assert.equal(reconstructionQualityDeficit({score:.98,darkRecall:.98,localRecall:.97,edgeF1:.97,colorSimilarity:.98}),0);
 assert.ok(reconstructionQualityDeficit({score:.9,darkRecall:.9,localRecall:.9,edgeF1:.9,colorSimilarity:.9})>0,
@@ -165,7 +165,42 @@ assert.ok(region.x<=120&&region.x+region.w>=220,'repair crop must contain the en
 const repaired=replaceObjectRepairRegion(arcScene,region,{nodes:[
   {id:'new-arc',type:'path',d:'M 10 70 A 50 50 0 0 1 110 70',stroke:'#222',fill:'none'},
 ]},1);
-assert.ok(repaired.nodes.some(n=>n.id==='object_repair_0_new-arc'));
-assert.match(repaired.nodes.find(n=>n.id==='object_repair_0_new-arc').d,/C /,
-  'localized repair must retain editable cubic geometry');
-console.log('reconstruction tile geometry and overlap: OK');
+assert.deepEqual(repaired,arcScene,'unknown IDs cannot create or replace objects');
+const catalog=createWholeImageCatalog({canvas:{width:1200,height:500},nodes:[
+  {id:'duplicate',type:'text',text:'Global label',x:510,y:100,w:170,h:24,fontSize:20},
+  {id:'duplicate',type:'text',text:'Global label',x:512,y:100,w:170,h:24,fontSize:20},
+  {type:'text',text:'Global label',x:50,y:300,w:170,h:24,fontSize:20},
+  {type:'line',x:480,y:150,x2:800,y2:150,strokeWidth:2}
+]});
+assert.equal(catalog.nodes.length,3);
+assert.equal(new Set(catalog.nodes.map(n=>n.id)).size,3);
+assert.equal(catalog.counts.deduplicatedText,1);
+const area={x:450,y:50,w:400,h:200};
+const local=objectRepairCatalog(catalog,area,2);
+assert.equal(local.nodes.length,2);
+assert.equal(local.nodes[0].fontSize,40);
+assert.equal(local.nodes[1].strokeWidth,4);
+const imageSource={id:'photo',type:'image',x:500,y:100,w:50,h:40,href:'data:image/png;base64,AAAA',crop:{x:500,y:100,w:50,h:40}};
+const imageCatalog=objectRepairCatalog({nodes:[imageSource]},area,2);
+assert.equal(imageCatalog.nodes[0].id,'photo');
+assert.equal(imageCatalog.nodes[0].href,undefined);
+assert.equal(imageCatalog.nodes[0].crop,undefined);
+assert.ok(imageSource.href,'prompt sanitization must not mutate the source image');
+local.nodes[0].text='Unauthorized transcription';
+local.nodes[1].y+=2;local.nodes[1].y2+=2;
+local.nodes.push({id:'invented',type:'text',text:'Global label',x:100,y:100,w:50,h:20,fontSize:20});
+const patched=replaceObjectRepairRegion(catalog,area,local,2);
+assert.equal(patched.nodes.length,3);
+assert.equal(patched.nodes[0].text,'Global label');
+assert.equal(patched.nodes[2].y,151);
+assert.equal(patched.nodes[2].strokeWidth,2);
+assert.deepEqual(replaceObjectRepairRegion(patched,area,local,2),patched,'repeat crop is idempotent');
+assert.equal(objectRepairCatalog(catalog,{x:550,y:50,w:100,h:200},2).nodes.length,0,'partial cross-boundary objects are context only');
+local.nodes[0].fontSize=100;
+assert.equal(replaceObjectRepairRegion(catalog,area,local,2).nodes[0].fontSize,20,'large font drift rejected');
+assert.equal(auditExportLayout(catalog,catalog).state,'passed');
+const bad={...catalog,nodes:[...catalog.nodes,{...catalog.nodes[0]}]};
+assert.ok(auditExportLayout(catalog,bad).issues.some(i=>i.kind==='duplicate-text'));
+const wrongFont={...catalog,nodes:catalog.nodes.map(n=>n.type==='text'?{...n,fontSize:30}:n)};
+assert.ok(auditExportLayout(catalog,wrongFont).issues.some(i=>i.kind==='font-size'));
+console.log('reconstruction catalog, crop identity, geometry and layout: OK');

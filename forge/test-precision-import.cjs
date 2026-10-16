@@ -15,7 +15,7 @@ const server = http.createServer((req,res)=>{
   if(!filename.startsWith(root+path.sep)){res.writeHead(403);return res.end();}
   fs.readFile(filename,(err,data)=>{
     if(err){res.writeHead(404);return res.end();}
-    if(pathname==='/forge/index.html') data=Buffer.from(data.toString('utf8')
+    if(pathname==='/forge/index.html') data=Buffer.from(data.toString('utf8').replace(/\r\n/g,'\n')
       .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
       .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});",
         "MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});"));
@@ -45,6 +45,38 @@ const server = http.createServer((req,res)=>{
     assert.equal(result.images,scene.objects.filter(o=>o.kind==='image').length);
     assert.match(result.svg,/<text/);
     assert.match(result.svg,/<image/);
+    // Replay the existing sample as the global response; crop responses may
+    // refine only that catalog. This tests orchestration, not model accuracy.
+    if(process.env.CATALOG_REPLAY){
+      const replay=await page.evaluate(async(bitmap)=>{
+        const originalNodes=window.__ffExportState.scene.nodes;
+        document.querySelector('#provider').value='ark';
+        document.querySelector('#key').value='fixture-only';
+        const select=document.querySelector('#analyzeModel');
+        select.add(new Option('doubao-vision-test','doubao-vision-test'));select.value='doubao-vision-test';
+        const originalFetch=window.fetch;let globalCalls=0,detailCalls=0;
+        window.fetch=async(url,options)=>{
+          if(!String(url).endsWith('/chat/completions'))return originalFetch(url,options);
+          const prompt=JSON.parse(options.body).messages[1].content[0].text;
+          const detail=prompt.includes('Catalog in crop coordinates: ');
+          const nodes=detail?JSON.parse(prompt.split('Catalog in crop coordinates: ')[1]).nodes:originalNodes;
+          if(detail)detailCalls++;else globalCalls++;
+          return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes})}}]}),{status:200});
+        };
+        window.__ffLastGeneratedImage=bitmap;
+        const ok=await window.__ffReconstruct();
+        return {ok,globalCalls,detailCalls,audit:window.__ffApiAudit.reconstruction,
+          scene:window.__ffExportState.scene,svg:window.__ffExportState.svg};
+      },bitmap);
+      assert.equal(replay.ok,true);assert.equal(replay.globalCalls,1);
+      assert.equal(new Set(replay.scene.nodes.map(n=>n.id)).size,replay.scene.nodes.length);
+      assert.ok(replay.audit.pptxLayout,'PPTX layout audit must run');
+      const output=path.join(root,'work','catalog-sample-report.json');
+      fs.mkdirSync(path.dirname(output),{recursive:true});
+      fs.writeFileSync(output,JSON.stringify(replay,null,2));
+      result.svg=replay.svg;
+      console.log('Catalog sample:',replay.scene.nodes.length,'objects;',JSON.stringify(replay.audit.pptxLayout));
+    }
     for(const format of ['pptx','vsdx']){
       await page.locator(`#exportActions [data-export="${format}"]`).click();
       const downloadPromise=page.waitForEvent('download',{timeout:60000});
