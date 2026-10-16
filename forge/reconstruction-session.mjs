@@ -3,7 +3,7 @@
 const memory=new Map();
 const TTL=7*24*3600*1000;
 export async function reconstructionCacheKey(source,configuration){
-  const bytes=new TextEncoder().encode(JSON.stringify(['full-scene-v2',source,configuration]));
+  const bytes=new TextEncoder().encode(JSON.stringify(['full-scene-v3-fidelity',source,configuration]));
   return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');
 }
 async function database(){

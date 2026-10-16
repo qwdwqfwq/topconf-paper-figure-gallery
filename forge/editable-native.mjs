@@ -210,7 +210,9 @@ function shapeXml(n,id,unit,media){
     geometry=`<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="l" t="t" r="r" b="b"/><a:pathLst>${pathXml}</a:pathLst></a:custGeom>`;
   }else{
     const preset=n.type==='ellipse'?'ellipse':(n.radius>0?'roundRect':'rect');
-    geometry=`<a:prstGeom prst="${preset}"><a:avLst/></a:prstGeom>`;
+    const adjustment=preset==='roundRect'
+      ? `<a:gd name="adj" fmla="val ${Math.round(Math.min(.5,n.radius/Math.min(w,h))*100000)}"/>` : '';
+    geometry=`<a:prstGeom prst="${preset}"><a:avLst>${adjustment}</a:avLst></a:prstGeom>`;
   }
   if(n.type==='text'){
     const font=num(n.fontSize||16), lineCount=String(n.text||'').split(/\r?\n/).length;
@@ -345,7 +347,9 @@ export async function readNativePptxScene(blob,width,height){
       }
     }else{
       const preset=child(props,'prstGeom')?.getAttribute('prst');
-      nodes.push({type:preset==='ellipse'?'ellipse':'rect',...common,radius:preset==='roundRect'?Math.min(box.w,box.h)*.1:0});
+      const adjustment=descendants(child(props,'prstGeom'),'gd').find(n=>n.getAttribute('name')==='adj');
+      const radiusFraction=Number(adjustment?.getAttribute('fmla')?.match(/^val\s+(\d+)$/)?.[1]??16667)/100000;
+      nodes.push({type:preset==='ellipse'?'ellipse':'rect',...common,radius:preset==='roundRect'?Math.min(box.w,box.h)*radiusFraction:0});
     }
   }
   return {canvas:{width,height},nodes};

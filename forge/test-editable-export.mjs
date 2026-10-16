@@ -68,6 +68,7 @@ for (const face of scene.nodes.slice(1, 4)) {
 globalThis.fetch = async () => ({ok:true,json:async()=>JSON.parse(await readFile(resolve(root,'pptx-template.json'),'utf8'))});
 const pptx = await buildNativePptx(scene, zipStore);
 const pptxBytes=Buffer.from(await pptx.arrayBuffer());
+assert.match(pptxBytes.toString('utf8'), /<a:gd name="adj" fmla="val 2362"\/>/, 'PPTX must encode the measured 15px corner radius');
 assert.match(pptxBytes.toString('utf8'),/<a:cubicBezTo>/,
   'cubic and SVG arc paths must export as editable PowerPoint curves');
 assert.match(pptxBytes.toString('utf8'),/rot="2040000"/,

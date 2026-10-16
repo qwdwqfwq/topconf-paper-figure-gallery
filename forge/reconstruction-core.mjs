@@ -179,9 +179,26 @@ export function replaceObjectRepairRegion(scene,region,localScene,scale){
   const small=b=>b&&(b.right-b.x)<region.w*.85&&(b.bottom-b.y)<region.h*.85;
   const originals=new Map((scene.nodes||[]).filter(n=>n.id&&inside(editableNodeBounds(n))&&small(editableNodeBounds(n))).map(n=>[String(n.id),n]));
   const updates=new Map();
+  const components=new Map(),invalid=new Set();
+  const geometryTypes=new Set(['rect','ellipse','line','polyline','path']);
   for(const source of localScene.nodes||[]){
-    const original=originals.get(String(source.id));
-    if(!original||original.type!==source.type||updates.has(String(source.id)))continue;
+    const key=String(source.replaces||source.id);
+    const original=originals.get(key);
+    if(!original)continue;
+    if(source.replaces){
+      // Decompose only an existing geometric object, never text or photographs.
+      const n=transformCatalogNode(source,1/scale,region.x,region.y);
+      const b=editableNodeBounds(n),ob=editableNodeBounds(original);
+      const tolerance=Math.max(4,original.strokeWidth||0);
+      if(!geometryTypes.has(original.type)||!geometryTypes.has(n.type)||!inside(b)||
+        b.x<ob.x-tolerance||b.y<ob.y-tolerance||b.right>ob.right+tolerance||b.bottom>ob.bottom+tolerance){invalid.add(key);continue;}
+      const children=components.get(key)||[];
+      delete n.replaces;
+      children.push({...n,id:key+'::detail-'+children.length});
+      components.set(key,children);
+      continue;
+    }
+    if((original.type!==source.type&&!(geometryTypes.has(original.type)&&geometryTypes.has(source.type)))||updates.has(key))continue;
     const n=transformCatalogNode(source,1/scale,region.x,region.y);
     // Text content belongs exclusively to the full-image catalog.
     if(n.type==='text'){
@@ -195,9 +212,10 @@ export function replaceObjectRepairRegion(scene,region,localScene,scale){
     // Reject only a dominant panel/background invented by the local model.
     const area=(b.right-b.x)*(b.bottom-b.y);
     if(['rect','image'].includes(n.type)&&area>region.w*region.h*.8)continue;
-    updates.set(String(n.id),{...original,...n});
+    updates.set(key,original.type===n.type?{...original,...n}:n);
   }
-  return {...scene,nodes:(scene.nodes||[]).map(n=>updates.get(String(n.id))||n)};
+  return {...scene,nodes:(scene.nodes||[]).flatMap(n=>
+    !invalid.has(String(n.id))&&components.has(String(n.id))?components.get(String(n.id)):[updates.get(String(n.id))||n])};
 }
 export function extractEditableNodes(raw){
   const nodeKeys=['nodes','elements','objects','items','shapes','components','primitives'];

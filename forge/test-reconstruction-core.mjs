@@ -222,3 +222,30 @@ assert.equal(nested.nodes.length,2,'nested detail is not a duplicate panel');
 const jobs=planCatalogRepairs(registered,1200,500);
 const owners=jobs.flatMap(j=>j.ids);
 assert.equal(new Set(owners).size,owners.length,'each object belongs to one crop only');
+
+// Fidelity repairs may change geometry and split flattened color blocks.
+const fidelity={nodes:[
+ {id:'back',type:'rect',x:0,y:0,w:400,h:300},
+ {id:'matrix',type:'rect',x:40,y:40,w:80,h:80,fill:'#aaaaaa'},
+ {id:'arrow',type:'line',x:150,y:80,x2:250,y2:80,strokeWidth:2},
+ {id:'label',type:'text',x:40,y:140,w:100,h:20,text:'Keep',fontSize:18}
+]};
+const repairArea={x:20,y:20,w:280,h:180};
+const details={nodes:[
+ {replaces:'matrix',type:'rect',x:40,y:40,w:80,h:160,fill:'#ffcc00'},
+ {replaces:'matrix',type:'rect',x:120,y:40,w:80,h:160,fill:'#0088aa'},
+ {id:'arrow',type:'path',d:'M 260 112 L 420 112 L 420 100 L 460 120 L 420 140 L 420 128 L 260 128 Z',fill:'#cccccc',stroke:'#222222',strokeWidth:4}
+]};
+const fixed=replaceObjectRepairRegion(fidelity,repairArea,details,2);
+assert.deepEqual(fixed.nodes.map(n=>n.id),['back','matrix::detail-0','matrix::detail-1','arrow','label']);
+assert.deepEqual(fixed.nodes.slice(1,3).map(n=>n.fill),['#ffcc00','#0088aa']);
+assert.equal(fixed.nodes[1].x,40);
+assert.equal(fixed.nodes[1].w,40);
+assert.equal(fixed.nodes[3].type,'path');
+assert.equal(fixed.nodes[3].fill,'#cccccc');
+assert.match(fixed.nodes[3].d,/Z/i);
+assert.equal(fixed.nodes[3].x2,undefined,'old line geometry must not leak into replacement');
+const invalidDetails={nodes:[...details.nodes.slice(0,2),{replaces:'matrix',type:'rect',x:500,y:40,w:20,h:20}]};
+assert.deepEqual(replaceObjectRepairRegion(fidelity,repairArea,invalidDetails,2),fidelity,'one escaped child rejects entire decomposition');
+assert.deepEqual(replaceObjectRepairRegion(fidelity,repairArea,{nodes:[{replaces:'label',type:'rect',x:40,y:240,w:100,h:40}]},2),fidelity,'text cannot be replaced by geometric fragments');
+console.log('filled arrow correction and multicolor decomposition: OK');

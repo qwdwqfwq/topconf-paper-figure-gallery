@@ -21,7 +21,7 @@ const server = http.createServer((req,res)=>{
       const html=data.toString('utf8').replace(/\r\n/g,'\n')
         .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
         .replace('window.__ffReconstruct = () => runReconstruction();',
-          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestGenerateBitmap = genOaiImage;')
+          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestGenerateBitmap = genOaiImage; window.__ffTestZip = zipStore;')
         .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});",
           "MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});");
       data=Buffer.from(html);
@@ -42,6 +42,23 @@ const server = http.createServer((req,res)=>{
     page.on('requestfailed',r=>errors.push(`Request failed ${r.url()}: ${r.failure()?.errorText}`));
     await page.goto(`http://127.0.0.1:${server.address().port}/forge/`,{waitUntil:'domcontentloaded'});
     assert.equal(await page.evaluate(()=>typeof window.__ffReconstruct),'function',JSON.stringify(errors));
+
+    const fidelityRoundtrip=await page.evaluate(async()=>{
+      const {buildNativePptx,readNativePptxScene}=await import('./editable-native.mjs');
+      const scene={canvas:{width:600,height:400},nodes:[
+        {id:'panel',type:'rect',x:10,y:10,w:560,h:360,radius:12,fill:'#ffffff',stroke:'#123456',strokeWidth:2},
+        {id:'arrow',type:'path',d:'M 50 60 L 150 60 L 150 45 L 180 70 L 150 95 L 150 80 L 50 80 Z',fill:'#cccccc',stroke:'#222222',strokeWidth:2},
+        {id:'cell1',type:'rect',x:50,y:150,w:40,h:40,fill:'#ffcc00',stroke:'#222222'},
+        {id:'cell2',type:'rect',x:90,y:150,w:40,h:40,fill:'#0088aa',stroke:'#222222'}
+      ]};
+      const blob=await buildNativePptx(scene,window.__ffTestZip);
+      return await readNativePptxScene(blob,600,400);
+    });
+    assert.ok(Math.abs(fidelityRoundtrip.nodes[0].radius-12)<.01,'PPTX roundtrip preserves measured corners');
+    assert.equal(fidelityRoundtrip.nodes[1].type,'path');
+    assert.equal(fidelityRoundtrip.nodes[1].fill.toLowerCase(),'#cccccc');
+    assert.match(fidelityRoundtrip.nodes[1].d,/Z/i);
+    assert.deepEqual(fidelityRoundtrip.nodes.slice(2).map(n=>n.fill.toLowerCase()),['#ffcc00','#0088aa']);
 
     // Step 3 must offer a real bitmap download while Step 4's vision request
     // is still pending. Exercise the image generation path without a live API.
