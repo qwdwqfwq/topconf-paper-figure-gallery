@@ -93,14 +93,16 @@ const server = http.createServer((req,res)=>{
     for(const resolution of ['1K','2K','4K']) for(const ratio of ['16:9','3:2','4:3','1:1']){
       await page.locator('#imageResolution').selectOption(resolution);
       await page.locator('#figureRatio').selectOption(ratio);
-      assert.equal(await page.locator('#imageRatioWarn').isVisible(),false,`Infistar model should request ${ratio} ${resolution}`);
+      assert.equal(await page.locator('#imageRatioWarn').isVisible(),true,`Infistar audit should show ${ratio} ${resolution}`);
+      assert.match(await page.locator('#imageRatioWarn').innerText(),/HTTP 422/);
     }
     // Regression: Infistar GPT 2.5 must accept the selected 16:9, 2K size,
     // and the verified Step 3 bitmap download must be ready immediately.
     await page.locator('#model').selectOption('gpt-image-2.5-sunburst');
     await page.locator('#figureRatio').selectOption('16:9');
     await page.locator('#imageResolution').selectOption('2K');
-    assert.equal(await page.locator('#imageRatioWarn').isVisible(),false);
+    assert.equal(await page.locator('#imageRatioWarn').isVisible(),true);
+    assert.match(await page.locator('#imageRatioWarn').innerText(),/已验证/);
     const widePixel=await page.evaluate(()=>{const canvas=document.createElement('canvas');canvas.width=2048;canvas.height=1152;return canvas.toDataURL('image/png').split(',')[1];});
     let gptRequest;
     await page.route('https://infistar.cc/v1/images/generations',route=>{

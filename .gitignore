@@ -18,6 +18,7 @@ data/selected_prev.json
 # Python
 __pycache__/
 *.pyc
+forge/infistar_matrix_results.json
 
 # OS / editor
 .DS_Store

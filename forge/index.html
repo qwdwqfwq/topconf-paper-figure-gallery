@@ -60,6 +60,8 @@
     padding:7px 10px;margin-top:8px;font-weight:600;font-size:11.5px}
   .bnote.warn-inline{color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:9px;
     padding:7px 10px;margin-top:8px;font-size:11.5px}
+  .bnote.audit-ok{color:#166534;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:9px;
+    padding:7px 10px;margin-top:8px;font-size:11.5px}
   .pdf-upload-btn{display:inline-flex;align-items:center;gap:11px;padding:11px 19px 11px 12px;max-width:100%;
     border:1px solid #c4b5fd;border-radius:22px;background:linear-gradient(145deg,#8b5cf6,#4f46e5);color:#fff;
     box-shadow:0 6px 0 #3730a3,0 10px 22px #6366f133,inset 0 2px 0 #ffffff66;
@@ -624,7 +626,7 @@
 </div>
 
 <script src="./i18n.js"></script>
-<script src="./i18n_forge.js?v=20261016-ui2"></script>
+<script src="./i18n_forge.js?v=20261016-audit"></script>
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult} from './image-api.mjs?v=20261016';
@@ -634,6 +636,7 @@ import {registerMissingObjects, regionForObjects, planCatalogRepairs, createWhol
 import {calibrateEditableText} from './text-calibration.mjs?v=20261015';
 import {layoutEditableText} from './editable-text-layout.mjs?v=20261016';
 import {figureCanvas,imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261016c';
+import {infistarAuditStatus} from './infistar-audit.mjs?v=20261016';
 import {importDesktopScene} from './desktop-scene.mjs?v=20261014';
 
 // Keep the large local index/CLIP assets across reloads and page re-entry.
@@ -1629,7 +1632,7 @@ document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
 function syncImageRatioSupport(){
   const warn=$('#imageRatioWarn');
   if(!warn) return;
-  warn.hidden=true;warn.textContent='';
+  warn.hidden=true;warn.textContent='';warn.classList.remove('audit-ok');
   if(mode!=='image') return;
   const p=$('#provider').value,model=p==='custom'?$('#customModel').value.trim():$('#model').value;
   if(!model) return;
@@ -1637,6 +1640,14 @@ function syncImageRatioSupport(){
     imageRequestDimensions(p,model,$('#figureRatio').value,$('#imageResolution').value,usesInfistarGemini(baseURL(),model));
   }catch(error){
     warn.textContent=tt('img.unsupported',{model,ratio:$('#figureRatio').value,resolution:$('#imageResolution').value});
+    warn.hidden=false;
+    return;
+  }
+  if(p==='infistar'){
+    const status=infistarAuditStatus(model,$('#figureRatio').value,$('#imageResolution').value);
+    const key={verified:'img.auditVerified',rejected:'img.auditRejected',unavailable:'img.auditUnavailable',limited:'img.auditLimited',wrongSize:'img.auditWrongSize',inconclusive:'img.auditInconclusive',untested:'img.auditUntested'}[status];
+    warn.textContent=tt(key,{model,ratio:$('#figureRatio').value,resolution:$('#imageResolution').value});
+    warn.classList.toggle('audit-ok',status==='verified');
     warn.hidden=false;
   }
 }
@@ -2102,6 +2113,10 @@ function friendlyHttp(status, txt){
     return tt('err.404')+apiContext();
   }
   if(status===429) return tt('err.429')+apiContext();
+  if($('#provider').value==='infistar' && status===422)
+    return tt('err.infistar422',{t:body||txt.slice(0,200)})+apiContext();
+  if($('#provider').value==='infistar' && status===503 && /No available channel|model_not_found/i.test(body||txt))
+    return tt('err.infistar503')+apiContext();
   if(status===403){
     // SiliconFlow answers 403 {"code":30003,"message":"Model disabled."} when a model
     // needs real-name verification or is switched off for the account; other providers
