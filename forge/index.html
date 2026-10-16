@@ -532,6 +532,8 @@
       <h4><span class="bi" aria-hidden="true">🎨</span><span data-i18n="box.model"></span><small data-i18n="settings.badge"></small></h4>
       <div class="srow" style="margin-top:0"><div class="tabs" id="modeTabs"><button data-mode="svg" class="on" data-i18n="mode.svg"></button><button data-mode="image" data-i18n="mode.image"></button></div></div>
       <div class="bfield" id="modelRow" style="margin-top:11px"><span class="blab" id="modelLabel" data-i18n="modelLabel"></span><select id="model"></select></div>
+      <div class="bfield" id="imageDimensionsRow" hidden style="margin-top:9px"><span class="blab" data-i18n="img.ratio"></span><select id="figureRatio"><option value="16:9" selected>16:9</option><option value="3:2">3:2</option><option value="4:3">4:3</option><option value="1:1">1:1</option></select><span class="blab" data-i18n="img.resolution"></span><select id="imageResolution"><option value="1K">1K</option><option value="2K" selected>2K</option><option value="4K">4K</option></select></div>
+      <p class="bnote warn-inline" id="imageRatioWarn" hidden></p>
       <p class="bnote warn-inline" id="modelWarn" hidden></p>
       <p class="bnote" id="pdfModelHint" data-i18n="hint.model"></p>
       <label class="bfield" style="margin-top:9px">重建请求超时（分钟） / Reconstruction timeout (minutes)<input id="reconTimeoutMinutes" type="number" min="1" max="60" step="1" value="15"></label>
@@ -625,7 +627,7 @@
 </div>
 
 <script src="./i18n.js"></script>
-<script src="./i18n_forge.js?v=20261009"></script>
+<script src="./i18n_forge.js?v=20261016"></script>
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult} from './image-api.mjs?v=20261016';
@@ -633,6 +635,8 @@ import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTe
 import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=20261016b';
 import {registerMissingObjects, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion} from './reconstruction-core.mjs?v=20261016b';
 import {calibrateEditableText} from './text-calibration.mjs?v=20261015';
+import {layoutEditableText} from './editable-text-layout.mjs?v=20261016';
+import {figureCanvas,imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261016';
 import {importDesktopScene} from './desktop-scene.mjs?v=20261014';
 
 // Keep the large local index/CLIP assets across reloads and page re-entry.
@@ -1494,6 +1498,7 @@ async function populateModels(){
   if(saved && [...s.options].some(o=>o.value===saved)) s.value=saved;
   liveModels.model = res.ok ? online : null;
   checkModelEnabled('#model','#modelWarn',liveModels.model);
+  syncImageRatioSupport();
   if(mode==='image' && passMode==='two') populateAnalyzeModels();
 }
 async function populateParserModels(){
@@ -1594,6 +1599,8 @@ $('#refreshModels').onclick = ()=>Promise.all([populateModels(),populateParserMo
 document.querySelectorAll('#modeTabs button').forEach(b=>b.onclick=async ()=>{
   document.querySelectorAll('#modeTabs button').forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); mode=b.dataset.mode;
+  $('#imageDimensionsRow').hidden=mode!=='image';
+  syncImageRatioSupport();
   $('#modelLabel').textContent = mode==='svg' ? tt('modelLabel.svg') : tt('modelLabel.image');
   await populateModels();
   syncPassUI();
@@ -1611,7 +1618,24 @@ document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
   // sending the model more original figures is useful — the images carry detail that a
   // written summary cannot, so a higher count is not a problem to warn about.
 });
-$('#model').onchange = e=>localStorage.setItem('ff_model_'+$('#provider').value, e.target.value);
+function syncImageRatioSupport(){
+  const warn=$('#imageRatioWarn');
+  if(!warn) return;
+  warn.hidden=true;warn.textContent='';
+  if(mode!=='image') return;
+  const p=$('#provider').value,model=p==='custom'?$('#customModel').value.trim():$('#model').value;
+  if(!model) return;
+  try{
+    imageRequestDimensions(p,model,$('#figureRatio').value,$('#imageResolution').value,usesInfistarGemini(baseURL(),model));
+  }catch(error){
+    warn.textContent=tt('img.unsupported',{model,ratio:$('#figureRatio').value,resolution:$('#imageResolution').value});
+    warn.hidden=false;
+  }
+}
+$('#model').onchange = e=>{localStorage.setItem('ff_model_'+$('#provider').value, e.target.value);syncImageRatioSupport();};
+$('#figureRatio').onchange=syncImageRatioSupport;
+$('#imageResolution').onchange=syncImageRatioSupport;
+$('#customModel').addEventListener('input',syncImageRatioSupport);
 
 /* ---------------- pass 1: analyze references ---------------- */
 const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference figures of the SAME target visual type. Infer the shared visual grammar across all supplied figures: recurring panel divisions, density, element counts, borders, arrows, palette, typography and hierarchy. Do not treat any single figure as a layout master and do not copy a particular figure. Return STRICT JSON only.';
@@ -1789,6 +1813,7 @@ async function analyzeReferences(){
   j.primaryId=reps[0] || validIds[0] || null;
   // Two style guides, because the two output paths consume them differently.
   const contract = designContractText(j);
+  const imageContract = designContractText(j, $('#figureRatio').value);
   const prose = (j.refinedPrompt||'').trim();
   const styleRows = imageStyleText(j);
   const measured = styleRows.length
@@ -1804,7 +1829,7 @@ async function analyzeReferences(){
     // to coordinates. Leaving them out is what made earlier drafts ignore the chosen
     // reference figures: the palette, line weights and panel count were measured and
     // then thrown away before they reached the image model.
-    refinedPromptImage:[measured, contract, prose].filter(s=>s && s.trim()).join('\n\n'),
+    refinedPromptImage:[measured, imageContract, prose.replace(/1600\s*[×x]\s*900|16\s*:\s*9/gi, match => match.includes(':') ? $('#figureRatio').value : `${figureCanvas($('#figureRatio').value).width}×${figureCanvas($('#figureRatio').value).height}`)].filter(s=>s && s.trim()).join('\n\n'),
   };
   renderAnalyze(ordered);
   return analysis;
@@ -1932,11 +1957,13 @@ function imageStyleText(j){
   return rows;
 }
 
-function designContractText(j){
+function designContractText(j, ratio='16:9'){
   if(!j) return '';
+  const canvas=figureCanvas(ratio), scaleY=canvas.height/900;
+  const scaledY=value=>Number.isFinite(Number(value)) ? Math.round(Number(value)*scaleY) : value;
   const rows = [];
   rows.push('- layout authority: no single reference is a master. Synthesize the recurring panel divisions, density, element count, palette, border shapes, arrow language and hierarchy across all selected figures into a fresh composition.');
-  if(j.layout) rows.push(`- canvas & panel division: ${j.layout}`);
+  if(j.layout) rows.push(`- canvas & panel division (adapt to ${canvas.width}x${canvas.height}, ${ratio}): ${String(j.layout).replace(/1600\s*[×x]\s*900|16\s*:\s*9/gi, match => match.includes(':') ? ratio : `${canvas.width}x${canvas.height}`)}`);
   if(j.topology && typeof j.topology==='object'){
     const top=[];
     if(j.topology.anchor) top.push('anchor: '+j.topology.anchor);
@@ -1953,17 +1980,17 @@ function designContractText(j){
     const panels = j.panels.slice(0,8).map(p=>{
       const bits = [p.name, p.role].filter(Boolean).join(' / ');
       const geo = (p.x!=null && p.y!=null && p.w!=null && p.h!=null)
-        ? ` x=${p.x} y=${p.y} w=${p.w} h=${p.h}` : '';
+        ? ` x=${p.x} y=${scaledY(p.y)} w=${p.w} h=${scaledY(p.h)}` : '';
       return `${bits}${geo}`;
     });
-    rows.push(`- panel geometry (canvas 1600x900, origin top-left): ${panels.join(' | ')}`);
+    rows.push(`- panel geometry (canvas ${canvas.width}x${canvas.height}, origin top-left): ${panels.join(' | ')}`);
   }
   if(Array.isArray(j.layoutBlueprint) && j.layoutBlueprint.length){
     const blueprint=j.layoutBlueprint.slice(0,14).map((z,i)=>{
       if(!z || typeof z!=='object') return '';
       const vals=[z.x,z.y,z.w,z.h];
       const geo=vals.every(v=>Number.isFinite(Number(v)))
-        ? ` @ x=${Math.round(Number(z.x))} y=${Math.round(Number(z.y))} w=${Math.round(Number(z.w))} h=${Math.round(Number(z.h))}` : '';
+        ? ` @ x=${Math.round(Number(z.x))} y=${scaledY(z.y)} w=${Math.round(Number(z.w))} h=${scaledY(z.h)}` : '';
       const kinds=Array.isArray(z.moduleKinds) ? z.moduleKinds.join(', ') : (z.moduleKinds||'');
       return `${i+1}. ${z.id||z.name||('zone-'+(i+1))} role=${z.role||'unspecified'}${geo} modules=${z.moduleCount??'?'} occupancy=${z.occupancy??'?'}%${kinds?' kinds='+kinds:''}${z.nesting?' nesting='+z.nesting:''}${z.flow?' flow='+z.flow:''}`;
     }).filter(Boolean);
@@ -1981,7 +2008,7 @@ function designContractText(j){
   const ty = j.typography;
   if(ty && typeof ty === 'object'){
     const t = ['title','panelHeader','label','note'].filter(k=>ty[k]!=null).map(k=>`${k} ${ty[k]}px`);
-    if(t.length) rows.push(`- type scale (px, on a 1600x900 canvas): ${t.join(', ')}`);
+    if(t.length) rows.push(`- type scale (px, on a ${canvas.width}x${canvas.height} canvas): ${t.join(', ')}`);
   }
   const st = j.strokes;
   if(st && typeof st === 'object'){
@@ -2171,6 +2198,10 @@ $('#genBtn').onclick = async ()=>{
     model = $('#model').value;
     if(!model){ showErr(tt('gen.nomodel')); return; }
     if(mode==='image' && kindOf(model)!=='image'){ showErr(tt('gen.needimage')); return; }
+  }
+  if(mode==='image'){
+    try{ imageRequestDimensions(p,model,$('#figureRatio').value,$('#imageResolution').value,usesInfistarGemini(base,model)); }
+    catch(error){ showErr(error.message); return; }
   }
   const btn=$('#genBtn'); btn.disabled=true;
   let refIds=[...refs], layoutGuide='';
@@ -3306,7 +3337,8 @@ function sceneToVsdxFiles(scene, font){
         sum + (/[^\x00-\xff]/.test(ch) ? 1 : /[ilI.,:;!| ']/.test(ch) ? 0.3 : /[MW@#%]/.test(ch) ? 0.85 : 0.57), 0)));
       const pxPerPt = PX_PER_IN/72;
       const measuredW = Number.isFinite(Number(n.w)) ? Math.max(0,Number(n.w))*1.04 : 0;
-      const boxW = Math.max(measuredW, (glyphUnits+1.2)*sizePt*pxPerPt, 20);
+      const boxW = lines.length>1 && measuredW>0 ? Math.max(measuredW,20) :
+        Math.max(measuredW, (glyphUnits+1.2)*sizePt*pxPerPt, 20);
       const boxH = Math.max(fontPx*1.4, lines.length*sizePt*pxPerPt*1.35);
       const anchorX = n.anchor==='middle' ? n.x+Number(n.w||0)/2 :
         n.anchor==='end' ? n.x+Number(n.w||0)-boxW/2 : n.x+boxW/2;
@@ -3946,12 +3978,14 @@ function materializeEditableScene(raw,W,H){
     if((xRaw===null || yRaw===null) && type!=='polyline' && type!=='path') return;
     const right=pick(n,['right'],null);
     const bottom=pick(n,['bottom'],null);
+    const rawText=type==='text'?String(pick(n,['text','content','label','value'],'')):'';
+    const textLineCount=rawText.split(/\r?\n/).length;
     const estimatedTextWidth=type==='text' ? Math.max(1,
       sceneNumber(pick(n,['fontSize','font_size','size'],18),18)*0.57*
-      String(pick(n,['text','content','label','value'],'')).length) : 1;
+      Math.max(...rawText.split(/\r?\n/).map(line=>line.length))) : 1;
     const wRaw=centredEllipse ? 2*sceneNumber(radiusX,0) : pick(n,['w','width'],right!=null?sceneNumber(right,0)-sceneNumber(xRaw,0):estimatedTextWidth);
     const hRaw=centredEllipse ? 2*sceneNumber(radiusY,0) : pick(n,['h','height'],bottom!=null?sceneNumber(bottom,0)-sceneNumber(yRaw,0):
-      (type==='text'?sceneNumber(pick(n,['fontSize','font_size','size'],18),18)*1.2:1));
+      (type==='text'?sceneNumber(pick(n,['fontSize','font_size','size'],18),18)*(.9+Math.max(0,textLineCount-1)*1.14):1));
     // Text can legitimately start outside a tile and continue in the next.
     // Clamping it to zero changed both its anchor and seam-stitching geometry.
     const x=type==='text'?clamp(xRaw??0,-W,W):clamp(xRaw??0,0,W);
@@ -3995,20 +4029,20 @@ function materializeEditableScene(raw,W,H){
       if(parseEditablePath(d).length) out.push(Object.assign(base,{type:'path',d}));
     }
     else if(type==='text' && String(pick(n,['text','content','label','value'],'')).trim()){
-      const label=String(pick(n,['text','content','label','value'],'')).replace(/[\r\n]+/g,' ').trim().slice(0,300);
+      let label=String(pick(n,['text','content','label','value'],'')).trim().slice(0,300);
       let fontSize=clamp(pick(n,['fontSize','font_size','size'],18),6,120);
-      // The model may report a size from a magnified crop. Respect its
-      // explicit label bounds so adjacent editable labels do not collide.
       const explicitW=sceneNumber(pick(n,['w','width'],null),0);
       const explicitH=sceneNumber(pick(n,['h','height'],null),0);
-      if(explicitH>0) fontSize=Math.min(fontSize,Math.max(6,explicitH*1.08));
       const clippedAtTileEdge=x<=4 || x+explicitW>=W-4;
-      if(explicitW>0 && !clippedAtTileEdge && !n.textPath && !n.rotation){
+      if(explicitW>0 && explicitH>0 && !clippedAtTileEdge && !n.textPath && !n.rotation){
         const font=String(pick(n,['fontFamily','font','family'],'Arial'));
         const measure=document.createElement('canvas').getContext('2d');
-        measure.font=`${n.bold?'bold ':''}${fontSize}px ${font}`;
-        const measured=measure.measureText(label).width;
-        if(measured>explicitW*1.04) fontSize=Math.max(6,fontSize*explicitW*1.04/measured);
+        const laidOut=layoutEditableText(label,{fontSize,width:explicitW,height:explicitH,
+          measure:(line,size)=>{
+            measure.font=`${n.bold?'bold ':''}${n.italic?'italic ':''}${size}px ${font}`;
+            return measure.measureText(line).width;
+          }});
+        label=laidOut.text;fontSize=laidOut.fontSize;
       }
       out.push(Object.assign(base,{
         type:'text',
@@ -4016,7 +4050,7 @@ function materializeEditableScene(raw,W,H){
         fill:cleanColor(pick(n,['fill','fillColor','color','textColor'],'#111827'),'#111827'),
         fontSize,
         fontFamily:pick(n,['fontFamily','font','family'],'Arial, Helvetica, sans-serif'),
-        bold:!!(n.bold||n.fontWeight==='bold'||Number(n.fontWeight)>=600),
+        bold:n.bold===true || n.bold===1 || n.bold==='true' || n.fontWeight==='bold' || Number(n.fontWeight)>=600,
         italic:!!(n.italic||n.fontStyle==='italic'),
         anchor:n.anchor==='middle'||n.anchor==='end'?n.anchor:'start',
         baseline:n.baseline||'auto',
@@ -4425,9 +4459,18 @@ async function runReconstruction(){
       let pptxScene=await readNativePptxScene(await buildNativePptx(scene,zipStore),canvas.width,canvas.height);
       let pptxQa=await compareEditableRender(canvas,pptxScene);
       reconstructionAudit.pptxQuality={score:pptxQa.score,localRecall:pptxQa.localRecall};
-      const jobs=planCatalogRepairs(scene,canvas.width,canvas.height);
-      const plannedIds=new Set(jobs.flatMap(job=>job.ids));
-      reconstructionAudit.unrefinedIds=scene.nodes.filter(n=>!plannedIds.has(n.id)&&!completedIds.has(n.id)).map(n=>n.id);
+      const qualityPasses=(qa)=>qa.score>=.98 && qa.darkRecall>=.98 && qa.localRecall>=.97 && qa.edgeF1>=.97 && qa.colorSimilarity>=.98;
+      const initialLayout=auditExportLayout(scene,pptxScene);
+      let jobs=omissionChecked && qualityPasses(pptxQa) && initialLayout.state==='passed' ? [] : planCatalogRepairs(scene,canvas.width,canvas.height);
+      if(jobs.length && omissionChecked && initialLayout.state==='passed'){
+        const measuredJobs=await Promise.all(jobs.map(async job=>{
+          try{return {job,passed:qualityPasses(await compareEditableRender(canvas,pptxScene,job.region))};}
+          catch{return {job,passed:false};}
+        }));
+        jobs=measuredJobs.filter(entry=>!entry.passed).map(entry=>entry.job);
+        reconstructionAudit.skippedPassingRegions=measuredJobs.length-jobs.length;
+      }
+      reconstructionAudit.unrefinedIds=[];
       const refine=async(job,depth=0)=>{
         const {region}=job,ids=job.ids.filter(id=>!completedIds.has(id));
         if(!ids.length)return [];
@@ -4478,6 +4521,7 @@ async function runReconstruction(){
         }catch(error){reconstructionAudit.objectRepairError=String(error?.message||error);}
         }
       }
+      reconstructionAudit.unrefinedIds=[...new Set(jobs.flatMap(job=>job.ids))].filter(id=>!completedIds.has(id));
       measuredQuality=pptxQa;
       reconstructionAudit.pptxLayout=auditExportLayout(scene,pptxScene);
       reconstructionAudit.pptxQuality={score:pptxQa.score,localRecall:pptxQa.localRecall};
@@ -4515,25 +4559,7 @@ async function runReconstruction(){
         fidelityTiles:fidelityScene.counts.fidelityTiles,audit,quality,
         qualityState:reconstructionAudit.state},reconFailed:false,reconError:''});
     renderEditableExportCard(); applyExportFont(st.font || 'original');
-    if(reconstructionAudit.fallbackTiles){
-      const timedOutTiles=reconstructionAudit.tiles.filter(tile=>tile.fallbackCause==='timeout').length;
-      status.textContent=GAL_I18N.lang==='zh'
-        ? '已生成 '+scene.nodes.length+' 个可编辑对象；'+reconstructionAudit.fallbackTiles+' 个区域使用可编辑色块保底（其中 '+timedOutTiles+' 个区域因视觉 API 超时）。请检查这些区域的文字和细节。'
-        : 'Generated '+scene.nodes.length+' editable objects; '+reconstructionAudit.fallbackTiles+' regions used editable color blocks ('+timedOutTiles+' after a vision API timeout). Check text and fine details in those regions.';
-    }else say(audit.defects.length ? 'recon.audit' : 'recon.done',{n:scene.nodes.length,d:audit.defects.length});
-    if(reconstructionAudit.objectRepairError||reconstructionAudit.omissionError)status.textContent+=GAL_I18N.lang==='zh'?' 部分检查或精修失败，已保留并缓存结果；再次重建可继续。':' Some checks or refinements failed; results are cached. Rebuild to resume.';
-    const layoutIssues=reconstructionAudit.pptxLayout?.issues||[];
-    if(layoutIssues.length)status.textContent+=GAL_I18N.lang==='zh'
-      ? ' PPTX 排版检查发现 '+layoutIssues.length+' 项文字重叠、缺失或字号偏差，请复核。'
-      : ' PPTX layout check found '+layoutIssues.length+' text overlap, missing-text or font-size warnings; review required.';
-    if(scene.counts.filteredArtifactLines){
-      status.textContent += GAL_I18N.lang==='zh'
-        ? '；已过滤 '+scene.counts.filteredArtifactLines+' 条从裁片边界发出的异常连线。'
-        : '; filtered '+scene.counts.filteredArtifactLines+' invalid lines from crop boundaries.';
-    }
-    status.textContent += GAL_I18N.lang==='zh'
-      ? ' 已进行 '+reconstructionAudit.repairCalls+' 次渲染对照修正；默认导出原生可编辑图形。'+(quality&&quality.darkRecall!==undefined?' 深色笔画召回 '+Math.round(quality.darkRecall*100)+'%，局部较弱区域 '+Math.round(quality.localRecall*100)+'%；'+(qualityNeedsReview?'质量未达标，请检查缺字和细节。':'请人工复核。'):' 渲染对照不可用，请人工检查。')+' 可切换原图裁片校正层。'
-      : '; '+reconstructionAudit.repairCalls+' render-comparison repairs. Native editable objects are the default.'+(quality&&quality.darkRecall!==undefined?' Dark-stroke recall '+Math.round(quality.darkRecall*100)+'%, weak-region recall '+Math.round(quality.localRecall*100)+'%; '+(qualityNeedsReview?'quality check failed; inspect missing text and details.':'review manually.'):' Render comparison unavailable; review manually.')+' Optional source-image tiles improve appearance.';
+    say(reconstructionAudit.state==='succeeded'?'recon.done':'recon.review',{n:scene.nodes.length});
     return true;
   }catch(err){
     console.warn('reconstruction failed', err);
@@ -4661,11 +4687,8 @@ function renderEditableExportCard(){
   } else if(locked){
     setExportStatus(status, tt(hasBitmap ? 'export.reconRequired' : 'export.waiting'));
   } else {
-    const needsReview=state.source==='bitmap' && state.recon?.qualityState==='needs-review';
-    setExportStatus(status, needsReview
-      ? (GAL_I18N.lang==='zh'
-        ? '可导出，但可编辑复刻质量未达标；请检查缺字、位置和细节。'
-        : 'Export available, but editable reconstruction needs review for missing text, placement, and details.')
+    setExportStatus(status, state.source === 'bitmap' && state.recon
+      ? tt(state.recon.qualityState==='succeeded'?'export.qualitySucceeded':'export.reconSucceeded')
       : ((state.source === 'bitmap' && !state.recon) ? tt('export.needRecon') : tt('export.ready')));
   }
   document.querySelectorAll('#exportActions [data-export]').forEach(btn=>btn.disabled = locked);
@@ -5014,11 +5037,15 @@ function renderSVG(svg, usedVision, useIds, truncated, auditRes){
 
 async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const useIds = refIds||[...refs];
+  const ratio=$('#figureRatio').value, resolution=$('#imageResolution').value;
+  const nativeGemini=usesInfistarGemini(base,model);
+  const dimensions=imageRequestDimensions(p,model,ratio,resolution,nativeGemini);
   const tg = TARGETS[$('#target').value] || TARGETS.overview;
   const guide = layoutGuide
     ? `COMMON VISUAL GRAMMAR extracted across all selected references (highest priority; synthesize recurring panel topology, relative geometry, density, palette, spacing, arrows and hierarchy):\n${layoutGuide}\n\n`
     : '';
-  const imgPrompt = `${guide}`
+  const logicalCanvas=figureCanvas(ratio);
+  const imgPrompt = `Required canvas aspect ratio ${ratio}; compose on a ${logicalCanvas.width}×${logicalCanvas.height} logical layout grid. Requested output resolution ${resolution} is independent of the canvas ratio. Preserve this canvas shape and render crisp legible details.\n\n${guide}`
     + `${tg.img}. Derive a fresh composition from the recurring visual grammar shared by all supplied references; no single reference is a master and no reference is privileged by upload order. `
     + `Mirror the common panel divisions, relative proportions, nesting, reading direction, spacing rhythm, palette, stroke language, arrow language and visual density, while inventing new paper-specific contents. `
     + `When the references support it, use 3-5 dense panels with thick outer containers and finer module borders, mixed solid/dashed frames, and a meaningful visual element in every slot. `
@@ -5091,20 +5118,17 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     + `Paper content: ${content.slice(0,2000)}`;
   let body;
   let endpoint='/images/generations';
-  const nativeGemini=usesInfistarGemini(base,model);
   let usedRefs=false;
   body = {model, prompt:imgPrompt};
-  if(p==='ark' && !relayBase()){ body.size='2K'; body.response_format='b64_json'; body.watermark=false; }
-  else if(p==='sf'){ body.image_size='1024x1024'; body.batch_size=1; }
-  else if(p==='glm'){ body.size='1024x1024'; }
-  else if(p==='oai'){ body.size='1536x1024'; }
+  if(!nativeGemini) body[dimensions.field]=dimensions.value;
+  if(p==='ark' && !relayBase()){ body.response_format='b64_json'; body.watermark=false; }
   if(useIds.length && (nativeGemini || p!=='glm')){
     const uris = await refDataURIs(useIds);
     body.image = (p==='sf' && !nativeGemini) ? uris[0] : uris;
     usedRefs=true;
   }
   if(nativeGemini){
-    const request=geminiImageRequest(base,model,imgPrompt,body.image||[]);
+    const request=geminiImageRequest(base,model,imgPrompt,body.image||[],dimensions);
     base=request.base; endpoint=request.endpoint; body=request.body;
   }
   let r;
@@ -5142,18 +5166,21 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const imageMime=item.mimeType||'image/png';
   const imgSrc = item.url || (`data:${imageMime};base64,`+item.b64_json);
   const exportImgSrc = item.b64_json ? `data:${imageMime};base64,${item.b64_json}` : imgSrc;
-      markStep3Output(exportImgSrc);
+  const actualImage=await loadImage(exportImgSrc);
+  const actualWidth=actualImage.naturalWidth||actualImage.width, actualHeight=actualImage.naturalHeight||actualImage.height;
+  if(!verifyImageRatio(actualWidth,actualHeight,ratio)) throw new Error(tt('img.ratioMismatch',{ratio,width:actualWidth,height:actualHeight}));
+  if(!verifyImageResolution(actualWidth,actualHeight,resolution)) throw new Error(tt('img.resolutionMismatch',{resolution,width:actualWidth,height:actualHeight}));
   $('#out').style.display='block';
   $('#out').innerHTML = `<img data-step3-output="true" src="${esc(imgSrc)}" alt="draft">
     <div class="dl"><button class="btn-primary" id="dlImg">${tt('img.download')}</button>
-    <span class="hint">${usedRefs?tt('img.hintRef',{n:useIds.length}):tt('img.hint')}</span></div>`;
+    <span class="hint">${usedRefs?tt('img.hintRef',{n:useIds.length}):tt('img.hint')} · ${ratio} · ${actualWidth}×${actualHeight}px</span></div>`;
   markStep3Output(exportImgSrc); st.recon = null; st.reconPending = true;
   /* Keep Step 4 visibly pending while the vision API reconstructs the scene.
      Do not expose a raster-wrapped SVG as if it were editable. */
   showEditableExportStep({ svg:'', source:'bitmap', bitmap:exportImgSrc, reconPending:true });
-  /* Step 4 is a real vision-model reconstruction. Keep the generation flow
-     pending until the API returns, just as the client does, instead of showing
-     an instant fake editable result. */
+  /* The Step 3 image is ready immediately; the real vision rebuild continues
+     in Step 4 without making the user wait to inspect or download that image. */
+  void (async()=>{
   let reconOk = false;
   try{ reconOk = await runReconstruction(); }
   catch(e){ st.reconError=safeExportError(e); console.warn('automatic editable reconstruction failed', e); }
@@ -5171,6 +5198,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   } else {
     renderEditableExportCard();
   }
+  })();
   $('#dlImg').onclick = async ()=>{
     try{
       const rr = await fetch(imgSrc); const blob = await rr.blob();

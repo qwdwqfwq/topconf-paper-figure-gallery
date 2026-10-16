@@ -4,7 +4,7 @@ export function usesInfistarGemini(base, model){
   catch { return false; }
 }
 
-export function geminiImageRequest(base, model, prompt, references=[]){
+export function geminiImageRequest(base, model, prompt, references=[], options={}){
   const parts=[{text:prompt}];
   for(const uri of references){
     const match=/^data:(image\/[\w.+-]+);base64,([\s\S]+)$/.exec(uri);
@@ -13,7 +13,9 @@ export function geminiImageRequest(base, model, prompt, references=[]){
   }
   return {base:base.replace(/\/+$/,'').replace(/\/v1(?:beta)?$/,''),
     endpoint:'/v1beta/models/'+encodeURIComponent(model)+':generateContent',
-    body:{contents:[{role:'user',parts}],generationConfig:{responseModalities:['TEXT','IMAGE']}}};
+    body:{contents:[{role:'user',parts}],generationConfig:{
+      responseModalities:['TEXT','IMAGE'],imageConfig:{aspectRatio:options.aspectRatio||'16:9',imageSize:options.imageSize||'2K'}
+    }}};
 }
 
 export function geminiImageResult(data){

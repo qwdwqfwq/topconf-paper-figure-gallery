@@ -14,6 +14,7 @@ export function calibrateEditableText(scene, sourceCanvas, options={}){
     return [17,24,39];
   };
   const candidates=(scene.nodes||[]).filter(n=>n.type==='text'&&n.text&&
+    !/[\r\n]/.test(n.text)&&
     !n.textPath&&!Number(n.rotation)&&
     Number(n.fontSize)>=10&&Number(n.fontSize)<=130&&n.text.length<=80);
   const rank=(a,b)=>Number(b.fontSize)*Math.min(String(b.text).length,24)-

@@ -213,13 +213,15 @@ function shapeXml(n,id,unit,media){
     geometry=`<a:prstGeom prst="${preset}"><a:avLst/></a:prstGeom>`;
   }
   if(n.type==='text'){
-    const font=num(n.fontSize||16), boxW=Math.max(num(n.w),font*0.7),boxH=Math.max(num(n.h),font*1.3);
+    const font=num(n.fontSize||16), lineCount=String(n.text||'').split(/\r?\n/).length;
+    const boxW=Math.max(num(n.w),font*0.7);
+    const boxH=Math.max(num(n.h),font*(.9+Math.max(0,lineCount-1)*1.14));
     w=boxW;h=boxH;
     // Scene text coordinates are the top-left of its measured bounding box.
     const ptSize=Math.max(100,Math.round(font*unit/EMU*72*100));
     const color=rgb(n.fill)||'000000';
     const face=esc(String(n.fontFamily||'Arial').split(',')[0].replace(/["']/g,''));
-    const paragraphs=String(n.text||'').split(/\r?\n/).map(line=>`<a:p><a:pPr algn="${n.anchor==='middle'?'ctr':n.anchor==='end'?'r':'l'}"/><a:r><a:rPr lang="en-US" sz="${ptSize}" b="${n.bold?1:0}" i="${n.italic?1:0}"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:latin typeface="${face}"/></a:rPr><a:t>${esc(line)}</a:t></a:r><a:endParaRPr lang="en-US"/></a:p>`).join('');
+    const paragraphs=String(n.text||'').split(/\r?\n/).map(line=>`<a:p><a:pPr algn="${n.anchor==='middle'?'ctr':n.anchor==='end'?'r':'l'}"><a:spcBef><a:spcPts val="0"/></a:spcBef><a:spcAft><a:spcPts val="0"/></a:spcAft></a:pPr><a:r><a:rPr lang="en-US" sz="${ptSize}" b="${n.bold?1:0}" i="${n.italic?1:0}"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:latin typeface="${face}"/></a:rPr><a:t>${esc(line)}</a:t></a:r><a:endParaRPr lang="en-US"/></a:p>`).join('');
     const tx=`<p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${n.verticalAlign==='middle'?'ctr':'t'}"/><a:lstStyle/>${paragraphs}</p:txBody>`;
     const rotation=Number.isFinite(Number(n.rotation))?` rot="${Math.round(num(n.rotation)*60000)}"`:'';
     return `<p:sp>${nv}<p:spPr><a:xfrm${rotation}><a:off x="${Math.round(x*unit)}" y="${Math.round(y*unit)}"/><a:ext cx="${Math.max(1,Math.round(w*unit))}" cy="${Math.max(1,Math.round(h*unit))}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>${tx}</p:sp>`;
