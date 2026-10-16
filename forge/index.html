@@ -332,7 +332,7 @@
     .export-progress-fill{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#6366f1,#4f46e5);transition:width .16s ease}
     @media(max-width:760px){.export-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* Keep model and canvas controls visually consistent. */
-#figureRatio,#imageResolution,#analyzeModel,#reconTimeoutMinutes{border:1px solid #d9d5ed;border-radius:10px;padding:10px 14px;background:#fff;color:#1f2937;min-height:42px;box-shadow:0 1px 2px #312e8108}
+#parseReasoningEffort,#visualReasoningEffort,#figureRatio,#imageResolution,#analyzeModel,#reconTimeoutMinutes{border:1px solid #d9d5ed;border-radius:10px;padding:10px 14px;background:#fff;color:#1f2937;min-height:42px;box-shadow:0 1px 2px #312e8108}
 #figureRatio,#imageResolution{min-width:110px}
 #analyzeModel{flex:1;max-width:none;min-width:0}
 #figureRatio:focus-visible,#imageResolution:focus-visible,#analyzeModel:focus-visible,#reconTimeoutMinutes:focus-visible{outline:3px solid #c4b5fd;outline-offset:2px;border-color:#7c3aed}
@@ -414,6 +414,8 @@
             <span class="blab" data-i18n="parsemodel"></span>
             <select id="parseModel"></select>
           </div>
+          <div class="bfield"><span class="blab">解析推理强度</span><select id="parseReasoningEffort" aria-label="解析推理强度"><option value="">服务商默认</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">极高</option></select></div>
+          <p class="bnote">默认不指定强度；其他档位需模型及服务商支持，可能增加耗时与费用。</p>
           <p class="bnote warn-inline" id="parseModelWarn" hidden></p>
           <div class="bfield" id="parseCustomModelRow" hidden>
             <span class="blab" data-i18n="parseid"></span>
@@ -544,6 +546,8 @@
       <p class="bnote" id="pdfModelHint" data-i18n="hint.model"></p>
       <label class="bfield" style="margin-top:9px">重建请求超时（分钟） / Reconstruction timeout (minutes)<input id="reconTimeoutMinutes" type="number" min="1" max="60" step="1" value="15"></label>
       <div class="bfield" id="analyzeModelRow" hidden style="margin-top:9px"><span class="blab" data-i18n="analyzemodel"></span><select id="analyzeModel"></select></div>
+      <div class="bfield" style="margin-top:9px"><span class="blab">视觉推理强度</span><select id="visualReasoningEffort" aria-label="视觉推理强度"><option value="">服务商默认</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">极高</option></select></div>
+      <p class="bnote">用于参考图归纳及步骤四重建、修正。需模型及服务商支持；默认不指定强度。</p>
     </section>
 
     <div id="genErr" class="errlist" hidden></div>
@@ -1225,6 +1229,33 @@ function anthropicHeaders(key){
 }
 /* mode: 'doc' native document part · 'text' locally extracted text ·
    'img' locally rendered page images (vision models) */
+// Apply at each request boundary; image generation and connection probes stay independent.
+function reasoningEffort(scope){
+  return $(scope==='parse'?'#parseReasoningEffort':'#visualReasoningEffort').value;
+}
+function withReasoning(body,scope){
+  const effort=reasoningEffort(scope);
+  if(!effort) return body;
+  if(!['medium','high','xhigh'].includes(effort)) throw new Error('HTTP 400: 无效的推理强度');
+  if(body.system) throw new Error('HTTP 400: 当前 Anthropic 接口不支持 reasoning_effort，请选择服务商默认。');
+  const result={...body};
+  if(body.input) result.reasoning={...body.reasoning,effort};
+  else result.reasoning_effort=effort;
+  delete result.temperature;
+  delete result.top_p;
+  delete result.thinking;
+  if(!body.input && /^(gpt-|o[134](?:-|$))/i.test(body.model) && body.max_tokens){
+    result.max_completion_tokens=body.max_tokens;
+    delete result.max_tokens;
+  }
+  return result;
+}
+for(const [id,key] of [['parseReasoningEffort','ff_parse_reasoning_effort'],['visualReasoningEffort','ff_visual_reasoning_effort']]){
+  const select=$('#'+id), saved=localStorage.getItem(key)||'';
+  select.value=['medium','high','xhigh'].includes(saved)?saved:'';
+  select.onchange=()=>localStorage.setItem(key,select.value);
+}
+
 async function callPdfParser(mode, payload){
   const c=cfg(), base=baseURL(), key=cleanKey($('#key').value), model=parserModel();
   if(!base||!key||!model) throw new Error(tt('ps.nocfg'));
@@ -1235,14 +1266,14 @@ async function callPdfParser(mode, payload){
     const text = instruction+'\n\n'+tt('ps.texthdr',{f:pdfContext.fileName,p:ex.pages})+'\n'+ex.text.slice(0, MAX_PDF_CHARS);
     if(c.proto==='anthropic'){
       body={model,max_tokens:5000,system:'只输出严格 JSON。',messages:[{role:'user',content:[{type:'text',text}]}]};
-      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(body)},180000);
+      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},180000);
     }else if(/openai\.com/i.test(base)){
       body={model,input:[{role:'user',content:[{type:'input_text',text}]}],max_output_tokens:5000};
-      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(body)},180000);
+      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},180000);
     }else{
       body={model,temperature:0.1,max_tokens:5000,messages:[{role:'system',content:'只输出严格 JSON。'},{role:'user',content:text}]};
       if($('#provider').value==='ark' && !relayBase()) body.thinking={type:'disabled'};
-      r=await postJSON(base,'/chat/completions',body,key);
+      r=await postJSON(base,'/chat/completions',withReasoning(body,'parse'),key);
     }
   }else if(mode==='img'){
     const ex=payload;
@@ -1251,18 +1282,18 @@ async function callPdfParser(mode, payload){
       const blocks=ex.imgs.map(u=>({type:'image',source:{type:'base64',media_type:'image/jpeg',data:dataURIToParts(u).data}}));
       blocks.push({type:'text',text:note});
       body={model,max_tokens:5000,system:'只输出严格 JSON。',messages:[{role:'user',content:blocks}]};
-      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(body)},180000);
+      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},180000);
     }else if(/openai\.com/i.test(base)){
       const content=ex.imgs.map(u=>({type:'input_image',image_url:u}));
       content.push({type:'input_text',text:note});
       body={model,input:[{role:'user',content}],max_output_tokens:5000};
-      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(body)},180000);
+      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},180000);
     }else{
       const content=ex.imgs.map(u=>({type:'image_url',image_url:{url:u}}));
       content.push({type:'text',text:note});
       body={model,temperature:0.1,max_tokens:5000,messages:[{role:'system',content:'只输出严格 JSON。'},{role:'user',content}]};
       if($('#provider').value==='ark' && !relayBase()) body.thinking={type:'disabled'};
-      r=await postJSON(base,'/chat/completions',body,key);
+      r=await postJSON(base,'/chat/completions',withReasoning(body,'parse'),key);
     }
   }else{
     // Native document part — shape depends on what the endpoint accepts.
@@ -1272,13 +1303,13 @@ async function callPdfParser(mode, payload){
       const blocks=[{type:'document',source:{type:'base64',media_type:part.media||'application/pdf',data:part.data}},
                     {type:'text',text:instruction}];
       body={model,max_tokens:5000,system:'只输出严格 JSON。',messages:[{role:'user',content:blocks}]};
-      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(body)},180000);
+      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},180000);
     }else if(dm==='openai_responses'){
       body={model,input:[{role:'user',content:[{type:'input_file',filename:pdfContext.fileName,file_data:pdfContext.dataUri},{type:'input_text',text:instruction}]}],max_output_tokens:5000};
-      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(body)},180000);
+      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},180000);
     }else{
       body={model,temperature:0.1,max_tokens:5000,messages:[{role:'system',content:'只输出严格 JSON。'},{role:'user',content:[{type:'file',file:{filename:pdfContext.fileName,file_data:pdfContext.dataUri}},{type:'text',text:instruction}]}]};
-      r=await postJSON(base,'/chat/completions',body,key);
+      r=await postJSON(base,'/chat/completions',withReasoning(body,'parse'),key);
     }
   }
   const raw=await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,raw));
@@ -1788,7 +1819,7 @@ async function analyzeReferences(){
     const blocks=uris.map(u=>{const p=dataURIToParts(u);return {type:'image',source:{type:'base64',media_type:p.media,data:p.data}};});
     blocks.push({type:'text',text:buildAnalyzePrompt(ordered.length, ordered)});
     const body={model:$('#analyzeModel').value||$('#model').value,max_tokens:16000,system:ANALYZE_SYS,messages:[{role:'user',content:blocks}]};
-    const r=await fetch(baseURL()+'/v1/messages',{method:'POST',headers:anthropicHeaders(cleanKey($('#key').value)),body:JSON.stringify(body)});
+    const r=await fetch(baseURL()+'/v1/messages',{method:'POST',headers:anthropicHeaders(cleanKey($('#key').value)),body:JSON.stringify(withReasoning(body,'visual'))});
     txt=await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
     const d=JSON.parse(txt); txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
   }else{
@@ -1799,7 +1830,7 @@ async function analyzeReferences(){
     const body={model:am,temperature:0.2,max_tokens:16000,messages:[{role:'system',content:ANALYZE_SYS},{role:'user',content:parts}]};
     if($('#provider').value==='ark' && !relayBase()) body.thinking={type:'disabled'};
     let r;
-    try{ r=await postJSON(baseURL(),'/chat/completions',body,cleanKey($('#key').value)); }
+    try{ r=await postJSON(baseURL(),'/chat/completions',withReasoning(body,'visual'),cleanKey($('#key').value)); }
     catch(e){
       if(e.name==='TimeoutError') throw new Error(tt('analyze.timeout'));
       const diag=await diagnoseConnection(baseURL(),cleanKey($('#key').value),am);
@@ -4224,7 +4255,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         const r=await fetchTextWithTimeout(baseURL()+'/v1/messages',{
           method:'POST',
           headers:anthropicHeaders(cleanKey($('#key').value)),
-          body:JSON.stringify(body)
+          body:JSON.stringify(withReasoning(body,'visual'))
         },timeoutMs);
         txt=r.text;
         if(!r.ok) throw new Error('HTTP '+r.status+': '+friendlyHttp(r.status,txt));
@@ -4260,7 +4291,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         const r=await fetchTextWithTimeout(baseURL()+'/chat/completions',{
           method:'POST',
           headers:{'Content-Type':'application/json',Authorization:'Bearer '+cleanKey($('#key').value)},
-          body:JSON.stringify(body)
+          body:JSON.stringify(withReasoning(body,'visual'))
         },timeoutMs);
         txt=r.text;
         if(!r.ok) throw new Error('HTTP '+r.status+': '+friendlyHttp(r.status,txt));
@@ -4416,7 +4447,7 @@ async function runReconstruction(){
     // share this limit so subdivision cannot flood the API.
     const enqueue=visionQueue(3);
     const requestScene=(...args)=>enqueue(()=>requestEditableScene(...args));
-    const cacheKey=await reconstructionCacheKey(src,{model:editableReconstructionModel(),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
+    const cacheKey=await reconstructionCacheKey(src,{model:editableReconstructionModel(),reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
     const cached=await readReconstructionCache(cacheKey);
     const wholeAudit={wholeImage:true};
     reconstructionAudit.tiles.push(wholeAudit);
@@ -4630,7 +4661,7 @@ async function requestRegionLabels(regions, canvas){
     const body = { model:model, max_tokens:1200, system:ANALYZE_SYS,
                    messages:[{ role:'user', content:[{ type:'text', text:prompt }] }] };
     const r = await fetch(baseURL() + '/v1/messages',
-      { method:'POST', headers:anthropicHeaders(cleanKey($('#key').value)), body:JSON.stringify(body) });
+      { method:'POST', headers:anthropicHeaders(cleanKey($('#key').value)), body:JSON.stringify(withReasoning(body,'visual')) });
     txt = await r.text();
     if(!r.ok) throw new Error(friendlyHttp(r.status, txt));
     const d = JSON.parse(txt);
@@ -4640,7 +4671,7 @@ async function requestRegionLabels(regions, canvas){
                    messages:[{ role:'system', content:ANALYZE_SYS },
                              { role:'user', content:prompt }] };
     if($('#provider').value === 'ark' && !relayBase()) body.thinking = { type:'disabled' };
-    const r = await postJSON(baseURL(), '/chat/completions', body, cleanKey($('#key').value));
+    const r = await postJSON(baseURL(), '/chat/completions', withReasoning(body,'visual'), cleanKey($('#key').value));
     txt = await r.text();
     if(!r.ok) throw new Error(friendlyHttp(r.status, txt));
     const d = JSON.parse(txt);
