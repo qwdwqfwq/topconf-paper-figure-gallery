@@ -20,6 +20,8 @@ const server = http.createServer((req,res)=>{
     if(pathname==='/forge/index.html'){
       const html=data.toString('utf8').replace(/\r\n/g,'\n')
         .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
+        .replace('window.__ffReconstruct = () => runReconstruction();',
+          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestGenerateBitmap = genOaiImage;')
         .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});",
           "MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});");
       data=Buffer.from(html);
@@ -40,6 +42,47 @@ const server = http.createServer((req,res)=>{
     page.on('requestfailed',r=>errors.push(`Request failed ${r.url()}: ${r.failure()?.errorText}`));
     await page.goto(`http://127.0.0.1:${server.address().port}/forge/`,{waitUntil:'domcontentloaded'});
     assert.equal(await page.evaluate(()=>typeof window.__ffReconstruct),'function',JSON.stringify(errors));
+
+    // Step 3 must offer a real bitmap download while Step 4's vision request
+    // is still pending. Exercise the image generation path without a live API.
+    const pending=await page.evaluate(async()=>{
+      document.querySelector('#figureRatio').value='1:1';
+      document.querySelector('#imageResolution').value='1K';
+      document.querySelector('#provider').value='ark';
+      document.querySelector('#key').value='browser-test-key';
+      const select=document.querySelector('#analyzeModel');
+      select.add(new Option('doubao-vision-test','doubao-vision-test'));
+      select.value='doubao-vision-test';
+      const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=1024;
+      const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,1024,1024);
+      ctx.fillStyle='#123456';ctx.fillRect(80,80,400,200);
+      const b64=canvas.toDataURL('image/png').split(',')[1];
+      const original=window.fetch;
+      window.fetch=async(url,options)=>{
+        if(String(url).endsWith('/images/generations'))
+          return new Response(JSON.stringify({data:[{b64_json:b64}]}),{status:200});
+        if(String(url).endsWith('/chat/completions')){
+          await new Promise(resolve=>setTimeout(resolve,3000));
+          return new Response(JSON.stringify({choices:[{message:{content:'{}'}}]}),{status:200});
+        }
+        return original(url,options);
+      };
+      await window.__ffTestGenerateBitmap('https://browser-test.invalid','gpt-image-2','key','paper','oai',[],'');
+      return {pending:window.__ffExportState.reconPending,
+        downloadEnabled:!document.querySelector('#dlImg').disabled,
+        imageVisible:!!document.querySelector('#out img[data-step3-output]'),
+        exportMode:document.querySelector('#exportMode')};
+    });
+    assert.equal(pending.pending,true,JSON.stringify(pending));
+    assert.equal(pending.downloadEnabled,true);
+    assert.equal(pending.imageVisible,true);
+    assert.equal(pending.exportMode,null);
+    const bitmapDownload=page.waitForEvent('download',{timeout:10000});
+    await page.locator('#dlImg').click();
+    const bitmap=await bitmapDownload;
+    assert.equal(bitmap.suggestedFilename(),'figure-forge-draft.png');
+    assert.ok(fs.statSync(await bitmap.path()).size>100);
+    await page.reload({waitUntil:'domcontentloaded'});
 
     const result=await page.evaluate(async()=>{
       document.querySelector('#provider').value='ark';

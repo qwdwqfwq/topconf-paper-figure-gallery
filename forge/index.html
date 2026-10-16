@@ -563,13 +563,6 @@
           <span class="recon-status" id="reconStatus"></span>
         </div>
       </div>
-      <div class="export-font-row" id="exportModeRow" hidden>
-        <label for="exportMode">导出方式</label>
-        <select id="exportMode">
-          <option value="vector">原生可编辑图形（自动渲染对照）</option>
-          <option value="fidelity">位图校正层（裁片内不可逐元素编辑）</option>
-        </select>
-      </div>
       <div class="export-font-row">
         <label for="exportFont" data-i18n="export.font"></label>
         <select id="exportFont">
@@ -2887,12 +2880,6 @@ function downloadBlob(filename,blob){
 
 function applyExportFont(font){
   const st=window.__ffExportState; if(!st.baseSvg) return;
-  // A replacement font changes glyph geometry. The pixel correction made for
-  // the original font would cover the replacement, so use native mode instead.
-  if(font!=='original' && st.source==='bitmap' && st.exportMode==='fidelity' && st.vectorSvg){
-    st.exportMode='vector'; st.baseSvg=st.vectorSvg;
-    const mode=$('#exportMode'); if(mode) mode.value='vector';
-  }
   let svg=st.baseSvg;
   if(font!=='original'){
     const doc=new DOMParser().parseFromString(svg,'image/svg+xml');
@@ -2902,25 +2889,13 @@ function applyExportFont(font){
   st.font=font; st.svg=svg;
   try{
     st.scene=(font==='original' && st.source==='bitmap')
-      ? (st.exportMode==='fidelity' ? st.fidelityScene : st.vectorScene) || parseSvgScene(svg)
+      ? st.vectorScene || parseSvgScene(svg)
       : parseSvgScene(svg);
   }catch(e){ st.scene=null; }
   renderEditableExportCard();
   if(window.__ffExportPreviewUrl) URL.revokeObjectURL(window.__ffExportPreviewUrl);
   window.__ffExportPreviewUrl=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
   const frame=$('#out iframe'); if(frame) frame.srcdoc=svg;
-}
-function setExportMode(mode){
-  const st=ensureExportState();
-  if(st.source!=='bitmap' || !st.vectorSvg) return;
-  st.exportMode=(mode==='vector' || !st.fidelitySvg) ? 'vector' : 'fidelity';
-  if(st.exportMode==='fidelity'){
-    st.font='original';
-    const font=$('#exportFont'); if(font) font.value='original';
-  }
-  st.baseSvg=st.exportMode==='fidelity' ? st.fidelitySvg : st.vectorSvg;
-  const selected=$('#exportMode'); if(selected) selected.value=st.exportMode;
-  applyExportFont(st.font||'original');
 }
 
 /* ---------- PPTX ----------
@@ -4400,8 +4375,8 @@ async function runReconstruction(){
     return false;
   }
   if(!src){ st.reconFailed = true; st.reconError = 'No bitmap source'; renderEditableExportCard(); say('recon.nobitmap'); return false; }
-  Object.assign(st,{svg:'',baseSvg:'',scene:null,vectorScene:null,fidelityScene:null,
-    vectorSvg:'',fidelitySvg:'',exportMode:'vector',recon:null,reconFailed:false,reconError:''});
+  Object.assign(st,{svg:'',baseSvg:'',scene:null,vectorScene:null,
+    vectorSvg:'',recon:null,reconFailed:false,reconError:''});
   renderEditableExportCard();
   try{
     say('recon.reading');
@@ -4545,8 +4520,6 @@ async function runReconstruction(){
     if(audit.dominantBitmap){
       throw new Error('Vision model returned a dominant bitmap instead of editable objects');
     }
-    const fidelityScene=buildFidelityScene(scene,canvas);
-    const fidelitySvg=sceneToSvgString(fidelityScene);
     let quality=null;
     try{
       const measured=measuredQuality||await compareEditableRender(canvas,scene);
@@ -4569,9 +4542,9 @@ async function runReconstruction(){
     reconstructionAudit.nodeCount=scene.nodes.length;
     reconstructionAudit.quality=quality;
     Object.assign(st,{scene,svg,baseSvg:svg,
-      vectorScene:scene,vectorSvg:svg,fidelityScene,fidelitySvg,exportMode:'vector',
+      vectorScene:scene,vectorSvg:svg,
       source:'bitmap',recon:{mode:'vector',nodes:scene.nodes.length,
-        fidelityTiles:fidelityScene.counts.fidelityTiles,audit,quality,
+        audit,quality,
         qualityState:reconstructionAudit.state},reconFailed:false,reconError:''});
     renderEditableExportCard(); applyExportFont(st.font || 'original');
     say(reconstructionAudit.state==='succeeded'?'recon.done':'recon.review',{n:scene.nodes.length});
@@ -4581,8 +4554,8 @@ async function runReconstruction(){
     const reconstructionAudit=window.__ffApiAudit&&window.__ffApiAudit.reconstruction;
     if(reconstructionAudit){ reconstructionAudit.state='failed'; reconstructionAudit.finishedAt=Date.now(); reconstructionAudit.error=String(err&&err.message||err); }
     const msg = safeExportError(err);
-    Object.assign(st,{svg:'',baseSvg:'',scene:null,vectorScene:null,fidelityScene:null,
-      vectorSvg:'',fidelitySvg:'',recon:null,reconFailed:true,
+    Object.assign(st,{svg:'',baseSvg:'',scene:null,vectorScene:null,
+      vectorSvg:'',recon:null,reconFailed:true,
       reconError:msg || 'Reconstruction failed'});
     say('recon.failedDetail', { msg: msg });
     renderEditableExportCard();
@@ -4685,8 +4658,6 @@ function renderEditableExportCard(){
   // usable and avoid presenting the whole card as if Step 3 never ran.
   card.classList.toggle('export-locked', locked && !hasBitmap);
   const font=$('#exportFont'); if(font) font.value=state.font||'original';
-  const modeRow=$('#exportModeRow'); if(modeRow) modeRow.hidden=!(state.source==='bitmap' && !!state.fidelityScene);
-  const mode=$('#exportMode'); if(mode) mode.value=state.exportMode||'vector';
   // Only a bitmap draft needs the rebuild panel: that is the case where the export
   // would otherwise carry a picture instead of editable text.
   const box=$('#exportRecon'); if(box) box.hidden = !hasBitmap;
@@ -4744,13 +4715,17 @@ function showEditableExportStep(svgOrSource){
       reconFailed: src.reconFailed === undefined ? (svg ? false : !!current.reconFailed) : !!src.reconFailed,
       reconError: src.reconError || (svg ? '' : current.reconError || ''),
       scene: svg ? parseSvgScene(svg) : null,
-      vectorScene:null, vectorSvg:'', fidelityScene:null, fidelitySvg:'', exportMode:'vector',
+      vectorScene:null, vectorSvg:'',
       target: 'svg', font:'original',
     });
     renderEditableExportCard();
   }
   catch(e){ console.warn('editable export scene parse failed', e); return; }
-  const card=$('#card4'); if(card) card.scrollIntoView({behavior:'smooth',block:'start'});
+  // Keep the finished Step 3 draft and its download control in view while
+  // editable reconstruction runs in Step 4.
+  if(src.source!=='bitmap'){
+    const card=$('#card4'); if(card) card.scrollIntoView({behavior:'smooth',block:'start'});
+  }
 }
 
 /* A finished file is offered as a link as well as auto-downloaded: the browser can drop
@@ -4915,7 +4890,7 @@ async function importPrecisionScene(source, bitmap){
   markStep3Output(bitmapUrl);
   const st=ensureExportState();
   Object.assign(st,{source:'bitmap',svg,baseSvg:svg,vectorSvg:svg,vectorScene:scene,scene,
-    fidelityScene:null,fidelitySvg:'',exportMode:'vector',target:'pptx',font:'original',
+    target:'pptx',font:'original',
     reconPending:false,reconFailed:false,reconError:'',
     recon:{qualityState:'needs-review',origin:'desktop-measured-scene'}});
   renderEditableExportCard();
@@ -5007,7 +4982,6 @@ function initEditableExport(){
     }
   });
   $('#exportFont')?.addEventListener('change',e=>applyExportFont(e.target.value));
-  $('#exportMode')?.addEventListener('change',e=>setExportMode(e.target.value));
 }
 initEditableExport();
 
@@ -5187,8 +5161,19 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   if(!verifyImageResolution(actualWidth,actualHeight,resolution,dimensions.field==='size'?dimensions.value:null)) throw new Error(tt('img.resolutionMismatch',{resolution,width:actualWidth,height:actualHeight}));
   $('#out').style.display='block';
   $('#out').innerHTML = `<img data-step3-output="true" src="${esc(imgSrc)}" alt="draft">
-    <div class="dl"><button class="btn-primary" id="dlImg">${tt('img.download')}</button>
+    <div class="dl"><button type="button" class="btn-primary" id="dlImg">${tt('img.download')}</button>
     <span class="hint">${usedRefs?tt('img.hintRef',{n:useIds.length}):tt('img.hint')} · ${ratio} · ${actualWidth}×${actualHeight}px</span></div>`;
+  // Bind the bitmap download as soon as Step 3 has its verified image. Step 4
+  // can take minutes and must never gate or replace this button.
+  $('#dlImg').onclick = async ()=>{
+    try{
+      const response=await fetch(exportImgSrc);
+      if(!response.ok) throw new Error('Image download failed');
+      const blob=await response.blob();
+      const ext=blob.type.includes('webp')?'webp':/jpe?g/.test(blob.type)?'jpg':'png';
+      downloadBlob('figure-forge-draft.'+ext,blob);
+    }catch(e){ window.open(exportImgSrc,'_blank'); }
+  };
   markStep3Output(exportImgSrc); st.recon = null; st.reconPending = true;
   /* Keep Step 4 visibly pending while the vision API reconstructs the scene.
      Do not expose a raster-wrapped SVG as if it were editable. */
@@ -5214,15 +5199,6 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     renderEditableExportCard();
   }
   })();
-  $('#dlImg').onclick = async ()=>{
-    try{
-      const rr = await fetch(imgSrc); const blob = await rr.blob();
-      const u = URL.createObjectURL(blob);
-      const a=document.createElement('a');
-      const ext = blob.type.includes('webp')?'webp':blob.type.includes('jpeg')||blob.type.includes('jpg')?'jpg':'png';
-      a.href=u; a.download='figure-forge-draft.'+ext; a.click();
-    }catch(e){ window.open(imgSrc,'_blank'); }
-  };
 }
 
 $('#searchBtn').onclick = async ()=>{
