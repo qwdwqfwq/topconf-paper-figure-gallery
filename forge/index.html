@@ -618,7 +618,7 @@
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=20261015';
-import {extractEditableNodes, planReconstructionTiles, subdivideReconstructionTile, mergeReconstructionTiles, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion} from './reconstruction-core.mjs?v=20261015b';
+import {createWholeImageCatalog, objectRepairCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion} from './reconstruction-core.mjs?v=20261016a';
 import {calibrateEditableText} from './text-calibration.mjs?v=20261015';
 import {importDesktopScene} from './desktop-scene.mjs?v=20261014';
 
@@ -3841,7 +3841,7 @@ async function ensureBitmapDataUrl(src){
 }
 
 function editableScenePrompt(W,H,paper){
-  return 'Reconstruct this scientific figure as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. Every node MUST have a string "type" field, for example {"type":"rect","x":1,"y":2,"w":3,"h":4}; never nest it as {"rect":{...}}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Transcribe each visible text line exactly, preserving capitalization, punctuation, mathematical symbols and line breaks. Use ONE text node for each complete continuous label or line; never split a word or label into several text nodes at a crop edge, duplicate its overlapping characters, or combine unrelated nearby labels. Estimate fontSize from visible glyph height, not the surrounding box. Give the line a tight x,y,w,h bounding box that does not overlap other labels. If tiny text is unreadable, omit it rather than inventing characters. Text must be OCR transcription, not a description. Inspect dense modules for short connectors, dashed returns, repeated tiny boxes and axis ticks before returning JSON. Keep adjacent boxes, graph nodes and arrows as separate objects. For curved arrows and rings use path d with SVG M/L/C/Q/A/Z commands; preserve true arcs and curves rather than polygonal approximations. For rotated text set rotation in degrees. For text following a ring or arc use a text node with textPath:{d:"M ... A ...",startOffset:0.5}; keep the text transcribed as editable characters. Treat each small icon, chart, and dense module as a whole object: reconstruct its complete outline and interior details, never stop at a crop boundary. For 3D-looking bars, cubes, prisms, or beveled objects, draw the front, top, and side faces as separate closed polygons with their own fill colors and edges; never flatten them to a rectangle. Preserve geometry and layer order. Do not return a single full-canvas bitmap as a substitute. For every line or arrow, both endpoints must coincide with visible endpoints in this crop. Never use (0,0), a crop corner, or a crop edge as a placeholder endpoint. Omit an uncertain line instead of inventing its geometry. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,closed,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor,rotation,textPath}, and image {x,y,w,h,href}. Use image only for photographic/illustrative content that cannot be decomposed, and include a crop object when possible. Keep z-order from background to foreground. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
+  return 'Reconstruct this scientific figure as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. This is the WHOLE IMAGE object catalog. Give every object a unique string id; retain each cross-region arrow, icon and text label exactly once as a complete object. Every node MUST have a string "type" field, for example {"type":"rect","x":1,"y":2,"w":3,"h":4}; never nest it as {"rect":{...}}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Transcribe each visible text line exactly, preserving capitalization, punctuation, mathematical symbols and line breaks. Use ONE text node for each complete continuous label or line; never split a word or label into several text nodes at a crop edge, duplicate its overlapping characters, or combine unrelated nearby labels. Estimate fontSize from visible glyph height, not the surrounding box. Give the line a tight x,y,w,h bounding box that does not overlap other labels. If tiny text is unreadable, omit it rather than inventing characters. Text must be OCR transcription, not a description. Inspect dense modules for short connectors, dashed returns, repeated tiny boxes and axis ticks before returning JSON. Keep adjacent boxes, graph nodes and arrows as separate objects. For curved arrows and rings use path d with SVG M/L/C/Q/A/Z commands; preserve true arcs and curves rather than polygonal approximations. For rotated text set rotation in degrees. For text following a ring or arc use a text node with textPath:{d:"M ... A ...",startOffset:0.5}; keep the text transcribed as editable characters. Treat each small icon, chart, and dense module as a whole object: reconstruct its complete outline and interior details, never stop at a crop boundary. For 3D-looking bars, cubes, prisms, or beveled objects, draw the front, top, and side faces as separate closed polygons with their own fill colors and edges; never flatten them to a rectangle. Preserve geometry and layer order. Do not return a single full-canvas bitmap as a substitute. For every line or arrow, both endpoints must coincide with visible endpoints in this crop. Never use (0,0), a crop corner, or a crop edge as a placeholder endpoint. Omit an uncertain line instead of inventing its geometry. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,closed,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor,rotation,textPath}, and image {x,y,w,h,href}. Use image only for photographic/illustrative content that cannot be decomposed, and include a crop object when possible. Keep z-order from background to foreground. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
 }
 function editableSceneRetryPrompt(W,H){
   return 'The previous answer could not be used. Inspect the attached image crop and return ONLY a JSON object with this exact outer shape: {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[{"type":"rect","x":0,"y":0,"w":10,"h":10,"fill":"#ffffff"}]}. Replace the example node with the actual visible, separately editable rectangles, lines, arrows, text, polygons and photographic regions. Coordinates are pixels within this crop. Every node needs a type. For text use {"type":"text","x":0,"y":0,"w":100,"h":20,"text":"actual words","fontSize":14,"fill":"#000000"}. For a completely blank white crop, nodes may be empty. No descriptions, analysis, Markdown, or other keys are needed.';
@@ -4115,7 +4115,9 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   for(let attempt=1;attempt<=2;attempt++){
     audit.attempt=attempt;
     try{
-      const attemptPrompt=revision
+      const attemptPrompt=audit.objectRepair
+        ? 'Refine ONLY the supplied catalog IDs from this high-resolution crop. Return STRICT JSON {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. All geometry and font sizes use crop pixels. Return complete updated nodes with their original id and type. Never add objects, split objects, duplicate labels, change text content, or redraw contextual objects absent from the catalog. Omit unchanged nodes. Empty nodes is valid. Catalog in crop coordinates: '+JSON.stringify(audit.catalog)
+        : revision
         ? 'Image 1 is the ORIGINAL tile and image 2 is its editable render. Following images are paired close-ups of the weakest regions: ORIGINAL then RENDER, in the order of these tile-local crop coordinates: '+JSON.stringify((revision.weakRegions||[]).slice(0,2))+'. Compare each pair carefully. Keep correct objects and their coordinates; fix missing, misplaced, wrong-colored or spurious objects, especially small text and lines visible in the close-ups. Return the COMPLETE corrected scene, not only a patch. Previous comparison score: '+revision.score.toFixed(3)+'. Prior editable scene JSON follows:\n'+priorScene+'\n'+prompt
         : attempt===1 ? prompt : editableSceneRetryPrompt(W,H);
       let txt='';
@@ -4187,7 +4189,13 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         }
       }
       let scene;
-      try{ scene=parseEditableSceneResponse(txt,W,H); }
+      try{
+        if(audit.objectRepair){
+          const allowed=new Map(audit.catalog.nodes.map(n=>[n.id,n.type]));
+          const nodes=extractEditableNodes(extractJSON(txt)).filter(n=>typeof n.id==='string'&&allowed.get(n.id)===n.type);
+          scene=nodes.length?materializeEditableScene({nodes},W,H):{canvas:{width:W,height:H},nodes:[]};
+        }else scene=parseEditableSceneResponse(txt,W,H);
+      }
       catch(err){
         if(err.sceneFormatFailure) err.message+=' ('+responseDiagnostics+')';
         throw err;
@@ -4302,13 +4310,12 @@ async function runReconstruction(){
     canvas.width = im.naturalWidth || im.width;
     canvas.height = im.naturalHeight || im.height;
     canvas.getContext('2d').drawImage(im, 0, 0);
-    const tiles=planReconstructionTiles(canvas.width,canvas.height);
+    const tiles=[{index:1,x:0,y:0,w:canvas.width,h:canvas.height}];
     const reconstructionAudit=(window.__ffApiAudit||(window.__ffApiAudit={})).reconstruction={
       state:'pending',startedAt:Date.now(),totalTiles:tiles.length,completedTiles:0,
       fallbackTiles:0,repairCalls:0,revisions:[],tiles:[]
     };
-    const results=[];
-    const repairCandidates=[];
+
     // Keep the provider busy without allowing a slow crop to stall every
     // other crop. All Vision calls (including retries and object repairs)
     // share this limit so subdivision cannot flood the API.
@@ -4328,184 +4335,13 @@ async function runReconstruction(){
       };
       pump();
     });
-    // An API may repeatedly answer with a prose/summary object, even for a
-    // small crop. Preserve an editable result by tracing that crop into native
-    // filled rectangles. This is explicitly reported as a fidelity fallback.
-    const traceFailedTile=function(tile,crop){
-      const left=tile.coreX-tile.x, top=tile.coreY-tile.y;
-      const width=tile.coreRight-tile.coreX, height=tile.coreBottom-tile.coreY;
-      const step=Math.max(2,Math.ceil(Math.sqrt(width*height/3200)));
-      const cols=Math.ceil(width/step), rows=Math.ceil(height/step);
-      const sampled=document.createElement('canvas');
-      sampled.width=cols; sampled.height=rows;
-      const ctx=sampled.getContext('2d',{willReadFrequently:true});
-      ctx.drawImage(crop,left,top,width,height,0,0,cols,rows);
-      const pixels=ctx.getImageData(0,0,cols,rows).data;
-      const nodes=[];
-      const colorAt=function(col,row){
-        const i=(row*cols+col)*4;
-        const channel=k=>Math.min(255,Math.round(pixels[i+k]/8)*8);
-        return '#'+[channel(0),channel(1),channel(2)].map(n=>n.toString(16).padStart(2,'0')).join('');
-      };
-      for(let row=0;row<rows;row++){
-        let col=0;
-        while(col<cols){
-          const first=col, fill=colorAt(col,row);
-          while(col+1<cols&&colorAt(col+1,row)===fill) col++;
-          const x=left+first*step, y=top+row*step;
-          nodes.push({type:'rect',x,y,w:Math.min(width,(col+1)*step)-first*step,
-            h:Math.min(step,height-row*step),fill,stroke:'none',strokeWidth:0});
-          col++;
-        }
-      }
-      return {canvas:{width:tile.w,height:tile.h},nodes};
-    };
-    const reconstructTile=async function(tile,depth){
-      const crop=document.createElement('canvas');
-      crop.width=tile.w; crop.height=tile.h;
-      crop.getContext('2d').drawImage(canvas,tile.x,tile.y,tile.w,tile.h,0,0,tile.w,tile.h);
-      const tileAudit={index:tile.index,depth};
-      reconstructionAudit.tiles.push(tileAudit);
-      try{
-        const partial=await requestScene(crop.toDataURL('image/png'),tile.w,tile.h,tileAudit);
-        const result={tile,scene:partial};
-        // Measure every tile before spending correction calls, so the largest
-        // visible discrepancies get the limited budget first.
-        try{
-          const qa=await compareEditableRender(crop,partial,{
-            x:tile.coreX-tile.x,y:tile.coreY-tile.y,
-            w:tile.coreRight-tile.coreX,h:tile.coreBottom-tile.coreY});
-          tileAudit.initialScore=qa.score;
-          tileAudit.darkRecall=qa.darkRecall;
-          tileAudit.localRecall=qa.localRecall;
-          tileAudit.colorSimilarity=qa.colorSimilarity;
-          if(qa.inkFraction>.001 && reconstructionQualityDeficit(qa)>.005)
-            repairCandidates.push({result,tileAudit,qa,crop,rounds:0});
-        }catch(qaError){tileAudit.qaError=String(qaError&&qaError.message||qaError);}
-        reconstructionAudit.completedTiles++;
-        say('recon.tile',{i:reconstructionAudit.completedTiles,n:reconstructionAudit.totalTiles});
-        return [result];
-      }catch(err){
-        if((err.sceneFormatFailure || err.visionTimeout) && depth<2 && Math.max(tile.w,tile.h)>350){
-          const subtiles=subdivideReconstructionTile(tile,Math.max(220,Math.ceil(Math.max(tile.w,tile.h)/2)),14);
-          if(subtiles.length>1){
-            tileAudit.state='subdivided';
-            tileAudit.subtiles=subtiles.length;
-            reconstructionAudit.totalTiles+=subtiles.length-1;
-            return (await Promise.all(subtiles.map(child=>reconstructTile(child,depth+1)))).flat();
-          }
-        }
-        if(err.sceneFormatFailure || err.visionTimeout){
-          const partial=traceFailedTile(tile,crop);
-          tileAudit.state='pixel-vector-fallback';
-          tileAudit.fallbackReason=String(err&&err.message||err);
-          tileAudit.fallbackCause=err.visionTimeout?'timeout':'scene-format';
-          tileAudit.nodeCount=partial.nodes.length;
-          reconstructionAudit.fallbackTiles++;
-          reconstructionAudit.completedTiles++;
-          say('recon.tile',{i:reconstructionAudit.completedTiles,n:reconstructionAudit.totalTiles});
-          return [{tile,scene:partial}];
-        }
-        throw new Error('Tile '+tile.index+'/'+reconstructionAudit.totalTiles+': '+String(err&&err.message||err));
-      }
-    };
-    // The shared limiter bounds provider load; no batch barrier is needed.
-    results.push(...(await Promise.all(tiles.map(tile=>reconstructTile(tile,0)))).flat());
-    const repairBudget=Math.min(12,Math.max(4,results.length*2));
-    reconstructionAudit.repairCandidates=repairCandidates.length;
-    reconstructionAudit.repairBudget=repairBudget;
-    const repairQueue=repairCandidates.slice();
-    let stopRepairs=false;
-    const repairWorker=async()=>{
-      while(!stopRepairs && repairQueue.length &&
-        reconstructionAudit.repairCalls<repairBudget){
-        repairQueue.sort((a,b)=>reconstructionQualityDeficit(b.qa)-
-          reconstructionQualityDeficit(a.qa));
-        const item=repairQueue.shift();
-        if(reconstructionQualityDeficit(item.qa)<=.005 || item.rounds>=2) continue;
-        item.rounds++;
-        reconstructionAudit.repairCalls++;
-        const repairAudit={index:item.tileAudit.index,depth:item.tileAudit.depth,
-          repair:true,round:item.rounds};
-        reconstructionAudit.revisions.push(repairAudit);
-        try{
-          const candidate=await requestScene(item.crop.toDataURL('image/png'),
-            item.crop.width,item.crop.height,repairAudit,
-            {score:item.qa.score,preview:item.qa.preview,
-              weakRegions:item.qa.weakRegions,scene:item.result.scene});
-          const tile=item.result.tile;
-          const revisedQa=await compareEditableRender(item.crop,candidate,{
-            x:tile.coreX-tile.x,y:tile.coreY-tile.y,
-            w:tile.coreRight-tile.coreX,h:tile.coreBottom-tile.coreY});
-          item.tileAudit.revisedScore=revisedQa.score;
-          item.tileAudit.revisedDarkRecall=revisedQa.darkRecall;
-          item.tileAudit.revisedLocalRecall=revisedQa.localRecall;
-          if(acceptReconstructionRepair(item.qa,revisedQa)){
-            item.result.scene=candidate;
-            item.tileAudit.repairAccepted=true;
-            item.qa=revisedQa;
-            if(item.rounds<2 && reconstructionQualityDeficit(item.qa)>.005)
-              repairQueue.push(item);
-          }
-        }catch(error){
-          const message=String(error&&error.message||error);
-          item.tileAudit.repairError=message;
-          if(/\b403\b|quota|insufficient|billing/i.test(message)){
-            reconstructionAudit.repairStoppedReason=message;
-            stopRepairs=true;
-          }
-        }
-      }
-    };
-    await Promise.all(Array.from({length:3},()=>repairWorker()));
-    // Dense crops can be valid JSON yet omit small labels and connectors. A
-    // second pass on smaller crops is useful only when its rendered result
-    // improves the same source region; keep the original otherwise.
-    const splitCandidates=repairCandidates.filter(item=>{
-      const nodes=item.result.scene.nodes||[];
-      const editableCount=nodes.filter(node=>node.type!=='image').length;
-      return results.includes(item.result) && item.qa.darkFraction>.001 &&
-        Math.max(item.result.tile.w,item.result.tile.h)>500 &&
-        (item.qa.score<.75 || item.qa.colorSimilarity<.75 || (editableCount>=6 &&
-          (item.qa.score<.86 || item.qa.localRecall<.86 || item.qa.edgeF1<.86)));
-    }).sort((a,b)=>reconstructionQualityDeficit(b.qa)-reconstructionQualityDeficit(a.qa));
-    reconstructionAudit.splitCandidates=splitCandidates.length;
-    reconstructionAudit.splitCalls=0;
-    const splitOutcomes=await Promise.all(splitCandidates.slice(0,2).map(async item=>{
-      const parent=item.result.tile;
-      const subtiles=subdivideReconstructionTile(parent,Math.max(250,Math.ceil(Math.max(parent.w,parent.h)/2)),18);
-      if(subtiles.length<2) return {item};
-      reconstructionAudit.totalTiles+=subtiles.length;
-      reconstructionAudit.splitCalls+=subtiles.length;
-      try{
-        const children=(await Promise.all(subtiles.map(tile=>reconstructTile(tile,1)))).flat();
-        const local=children.map(({tile,scene})=>({tile:{...tile,
-          x:tile.x-parent.x,y:tile.y-parent.y,
-          coreX:tile.coreX-parent.x,coreY:tile.coreY-parent.y,
-          coreRight:tile.coreRight-parent.x,coreBottom:tile.coreBottom-parent.y},scene}));
-        const candidate=mergeReconstructionTiles(local,parent.w,parent.h);
-        const candidateQa=await compareEditableRender(item.crop,candidate,{
-          x:parent.coreX-parent.x,y:parent.coreY-parent.y,
-          w:parent.coreRight-parent.coreX,h:parent.coreBottom-parent.coreY});
-        return {item,children,candidateQa};
-      }catch(splitError){return {item,splitError};}
-    }));
-    for(const {item,children,candidateQa,splitError} of splitOutcomes){
-      if(splitError){
-        item.tileAudit.splitError=String(splitError&&splitError.message||splitError);
-        if(/\b403\b|quota|insufficient|billing/i.test(item.tileAudit.splitError)) break;
-        continue;
-      }
-      if(candidateQa){
-        item.tileAudit.splitScore=candidateQa.score;
-        item.tileAudit.splitLocalRecall=candidateQa.localRecall;
-        if(acceptReconstructionRepair(item.qa,candidateQa)){
-          results.splice(results.indexOf(item.result),1,...children);
-          item.tileAudit.splitAccepted=true;
-        }
-      }
-    }
-    let scene=mergeReconstructionTiles(results,canvas.width,canvas.height);
+    const wholeAudit={wholeImage:true};
+    reconstructionAudit.tiles.push(wholeAudit);
+    let scene=createWholeImageCatalog(await requestScene(src,canvas.width,canvas.height,wholeAudit));
+    reconstructionAudit.completedTiles=1;
+    reconstructionAudit.strategy='whole-image-catalog';
+    reconstructionAudit.catalog=scene.nodes.map(n=>({id:n.id,type:n.type,...(n.type==='text'?{text:n.text}:{})}));
+    reconstructionAudit.deduplicatedText=scene.counts.deduplicatedText;
     // Measure text against the actual bitmap before committing the refinement.
     // Reject it when the rendered scene becomes less similar overall.
     let measuredQuality=null;
@@ -4539,15 +4375,19 @@ async function runReconstruction(){
         const region=planObjectRepairRegion(weak,scene,canvas.width,canvas.height);
         if(!region||region.w<18||region.h<18||used.some(r=>
           Math.max(0,Math.min(r.x+r.w,region.x+region.w)-Math.max(r.x,region.x))*
-          Math.max(0,Math.min(r.y+r.h,region.y+region.h))>region.w*region.h*.55))continue;
+          Math.max(0,Math.min(r.y+r.h,region.y+region.h)-Math.max(r.y,region.y))>region.w*region.h*.55))continue;
         used.push(region);
         const scale=Math.min(3,Math.max(1.35,1000/Math.max(region.w,region.h)));
         const crop=document.createElement('canvas');
         crop.width=Math.round(region.w*scale);crop.height=Math.round(region.h*scale);
         crop.getContext('2d').drawImage(canvas,region.x,region.y,region.w,region.h,
           0,0,crop.width,crop.height);
+        const catalog=objectRepairCatalog(scene,region,scale);
+        if(!catalog.nodes.length)continue;
+        const repairAudit={objectRepair:true,region,catalog,requireCompleteObjects:true};
+        reconstructionAudit.revisions.push(repairAudit);
         const requested=requestScene(crop.toDataURL('image/png'),crop.width,crop.height,
-          {objectRepair:true,region,requireCompleteObjects:true})
+          repairAudit)
           .then(local=>({local}),error=>({error}));
         objectRepairRequests.push({region,scale,requested});
       }
@@ -4561,7 +4401,7 @@ async function runReconstruction(){
           const before=await compareEditableRender(canvas,pptxScene,region);
           const after=await compareEditableRender(canvas,rendered,region);
           reconstructionAudit.repairCalls++;
-          if(acceptReconstructionRepair(before,after)){
+          if(auditExportLayout(candidate,rendered).issues.length<=auditExportLayout(scene,pptxScene).issues.length && acceptReconstructionRepair(before,after)){
             scene=candidate;pptxScene=rendered;pptxQa=await compareEditableRender(canvas,rendered);
             reconstructionAudit.objectRepairs=(reconstructionAudit.objectRepairs||0)+1;
             measuredQuality=pptxQa;
@@ -4569,6 +4409,8 @@ async function runReconstruction(){
         }catch(error){reconstructionAudit.objectRepairError=String(error?.message||error);}
       }
       measuredQuality=pptxQa;
+      reconstructionAudit.pptxLayout=auditExportLayout(scene,pptxScene);
+      reconstructionAudit.pptxQuality={score:pptxQa.score,localRecall:pptxQa.localRecall};
     }catch(error){reconstructionAudit.pptxQaError=String(error?.message||error);}
     const svg = sceneToSvgString(scene), audit = auditReconScene(scene);
     if(audit.dominantBitmap){
@@ -4590,7 +4432,8 @@ async function runReconstruction(){
     const qualityNeedsReview=!quality || quality.error || quality.score<.98 ||
       quality.darkRecall<.98 || quality.localRecall<.97 ||
       quality.edgeF1<.97 || quality.colorSimilarity<.98 ||
-      reconstructionAudit.fallbackTiles>0;
+      reconstructionAudit.fallbackTiles>0 || reconstructionAudit.pptxQaError ||
+      reconstructionAudit.pptxLayout?.state!=='passed';
     reconstructionAudit.state=qualityNeedsReview?'needs-review':'succeeded';
     reconstructionAudit.finishedAt=Date.now();
     reconstructionAudit.nodeCount=scene.nodes.length;
@@ -4607,6 +4450,10 @@ async function runReconstruction(){
         ? '已生成 '+scene.nodes.length+' 个可编辑对象；'+reconstructionAudit.fallbackTiles+' 个区域使用可编辑色块保底（其中 '+timedOutTiles+' 个区域因视觉 API 超时）。请检查这些区域的文字和细节。'
         : 'Generated '+scene.nodes.length+' editable objects; '+reconstructionAudit.fallbackTiles+' regions used editable color blocks ('+timedOutTiles+' after a vision API timeout). Check text and fine details in those regions.';
     }else say(audit.defects.length ? 'recon.audit' : 'recon.done',{n:scene.nodes.length,d:audit.defects.length});
+    const layoutIssues=reconstructionAudit.pptxLayout?.issues||[];
+    if(layoutIssues.length)status.textContent+=GAL_I18N.lang==='zh'
+      ? ' PPTX 排版检查发现 '+layoutIssues.length+' 项文字重叠、缺失或字号偏差，请复核。'
+      : ' PPTX layout check found '+layoutIssues.length+' text overlap, missing-text or font-size warnings; review required.';
     if(scene.counts.filteredArtifactLines){
       status.textContent += GAL_I18N.lang==='zh'
         ? '；已过滤 '+scene.counts.filteredArtifactLines+' 条从裁片边界发出的异常连线。'
