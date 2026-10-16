@@ -569,6 +569,13 @@
           <span class="recon-status" id="reconStatus"></span>
         </div>
       </div>
+      <div class="export-font-row" id="exportModeRow" hidden>
+        <label for="exportMode">导出方式</label>
+        <select id="exportMode">
+          <option value="vector">原生可编辑图形（自动渲染对照）</option>
+          <option value="fidelity">位图校正层（裁片内不可逐元素编辑）</option>
+        </select>
+      </div>
       <div class="export-font-row">
         <label for="exportFont" data-i18n="export.font"></label>
         <select id="exportFont">
@@ -581,13 +588,6 @@
           <option value="Calibri">Calibri</option>
           <option value="Helvetica">Helvetica</option>
         </select>
-      </div>
-      <div class="export-font-row">
-        <label><input type="checkbox" id="exportDraft"><span data-i18n="export.draftConsent"></span></label>
-      </div>
-      <div id="exportComparison" hidden style="grid-template-columns:1fr 1fr;gap:12px">
-        <figure><figcaption data-i18n="export.sourcePreview"></figcaption><img id="exportSourcePreview" style="width:100%"></figure>
-        <figure><figcaption data-i18n="export.rebuildPreview"></figcaption><img id="exportRebuildPreview" style="width:100%"></figure>
       </div>
       <div class="export-actions" id="exportActions">
         <button type="button" data-export="svg" disabled><strong>SVG</strong><small data-i18n="export.svg"></small></button>
@@ -641,12 +641,10 @@
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult} from './image-api.mjs?v=20261016';
-import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=20261017-repair';
-import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=20261017-editable-layout';
-import {bitmapDigest, auditSourceText, canExportReconstruction} from './source-fidelity.mjs';
-import {applyGlobalLayoutRepair, registerMissingObjects, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion} from './reconstruction-core.mjs?v=20261017-editable-layout';
-import {calibrateEditableText} from './text-calibration.mjs?v=20261015';
-import {layoutEditableText} from './editable-text-layout.mjs?v=20261016';
+import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=rollback-0d12f63-20261017';
+import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=rollback-0d12f63-20261017';
+import {registerMissingObjects, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion} from './reconstruction-core.mjs?v=rollback-0d12f63-20261017';
+import {calibrateEditableText} from './text-calibration.mjs?v=rollback-0d12f63-20261017';
 import {figureCanvas,imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261016d';
 import {infistarAuditStatus} from './infistar-audit.mjs?v=20261016b';
 import {importDesktopScene} from './desktop-scene.mjs?v=20261014';
@@ -2942,6 +2940,12 @@ function downloadBlob(filename,blob){
 
 function applyExportFont(font){
   const st=window.__ffExportState; if(!st.baseSvg) return;
+  // A replacement font changes glyph geometry. The pixel correction made for
+  // the original font would cover the replacement, so use native mode instead.
+  if(font!=='original' && st.source==='bitmap' && st.exportMode==='fidelity' && st.vectorSvg){
+    st.exportMode='vector'; st.baseSvg=st.vectorSvg;
+    const mode=$('#exportMode'); if(mode) mode.value='vector';
+  }
   let svg=st.baseSvg;
   if(font!=='original'){
     const doc=new DOMParser().parseFromString(svg,'image/svg+xml');
@@ -2951,15 +2955,25 @@ function applyExportFont(font){
   st.font=font; st.svg=svg;
   try{
     st.scene=(font==='original' && st.source==='bitmap')
-      ? st.modeScene || st.vectorScene || parseSvgScene(svg)
-      : st.source==='bitmap' && st.modeScene ? {...st.modeScene,nodes:st.modeScene.nodes.map(n=>n.type==='text'?{...n,fontFamily:font}:n)} : parseSvgScene(svg);
+      ? (st.exportMode==='fidelity' ? st.fidelityScene : st.vectorScene) || parseSvgScene(svg)
+      : parseSvgScene(svg);
   }catch(e){ st.scene=null; }
   renderEditableExportCard();
   if(window.__ffExportPreviewUrl) URL.revokeObjectURL(window.__ffExportPreviewUrl);
   window.__ffExportPreviewUrl=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
-  const preview=$('#exportRebuildPreview'); if(preview) preview.src=window.__ffExportPreviewUrl;
-  const source=$('#exportSourcePreview'); if(source && st.sourceBinding) source.src=st.sourceBinding.dataUrl;
-  const comparison=$('#exportComparison'); if(comparison){comparison.hidden=st.source!=='bitmap';comparison.style.display=comparison.hidden?'none':'grid';}
+  const frame=$('#out iframe'); if(frame) frame.srcdoc=svg;
+}
+function setExportMode(mode){
+  const st=ensureExportState();
+  if(st.source!=='bitmap' || !st.vectorSvg) return;
+  st.exportMode=(mode==='vector' || !st.fidelitySvg) ? 'vector' : 'fidelity';
+  if(st.exportMode==='fidelity'){
+    st.font='original';
+    const font=$('#exportFont'); if(font) font.value='original';
+  }
+  st.baseSvg=st.exportMode==='fidelity' ? st.fidelitySvg : st.vectorSvg;
+  const selected=$('#exportMode'); if(selected) selected.value=st.exportMode;
+  applyExportFont(st.font||'original');
 }
 
 /* ---------- PPTX ----------
@@ -3391,8 +3405,7 @@ function sceneToVsdxFiles(scene, font){
         sum + (/[^\x00-\xff]/.test(ch) ? 1 : /[ilI.,:;!| ']/.test(ch) ? 0.3 : /[MW@#%]/.test(ch) ? 0.85 : 0.57), 0)));
       const pxPerPt = PX_PER_IN/72;
       const measuredW = Number.isFinite(Number(n.w)) ? Math.max(0,Number(n.w))*1.04 : 0;
-      const boxW = lines.length>1 && measuredW>0 ? Math.max(measuredW,20) :
-        Math.max(measuredW, (glyphUnits+1.2)*sizePt*pxPerPt, 20);
+      const boxW = Math.max(measuredW, (glyphUnits+1.2)*sizePt*pxPerPt, 20);
       const boxH = Math.max(fontPx*1.4, lines.length*sizePt*pxPerPt*1.35);
       const anchorX = n.anchor==='middle' ? n.x+Number(n.w||0)/2 :
         n.anchor==='end' ? n.x+Number(n.w||0)-boxW/2 : n.x+boxW/2;
@@ -3832,7 +3845,7 @@ function sceneToSvgString(scene){
 // Render the actual editable SVG before accepting it. This measures visible
 // error against the bitmap, not merely whether the JSON has valid geometry.
 async function compareEditableRender(sourceCanvas,scene,region){
-  const scale=Math.min(1,720/Math.max(region?.w||sourceCanvas.width,region?.h||sourceCanvas.height));
+  const scale=Math.min(1,720/Math.max(sourceCanvas.width,sourceCanvas.height));
   const renderW=Math.max(1,Math.round(sourceCanvas.width*scale));
   const renderH=Math.max(1,Math.round(sourceCanvas.height*scale));
   const ref=document.createElement('canvas'),out=document.createElement('canvas');
@@ -3938,6 +3951,30 @@ async function compareEditableRender(sourceCanvas,scene,region){
     weakRegions:weakRegions.slice(0,5),preview:out.toDataURL('image/png')};
 }
 
+// Keep the model's shapes and text as individually editable objects, then put
+// independently selectable source-image tiles above them for exact appearance.
+// A tile is an image object: its internal pixels cannot be edited as shapes.
+// The pure-vector mode remains available for users who need every mark native.
+function buildFidelityScene(scene, sourceCanvas){
+  const W=sourceCanvas.width, H=sourceCanvas.height, tileSize=320;
+  const nodes=(scene.nodes||[]).slice(), patches=[];
+  for(let y=0;y<H;y+=tileSize){
+    for(let x=0;x<W;x+=tileSize){
+      // Keep patches on disjoint pixel boundaries. Visio may still introduce
+      // a faint resampling seam; overlapping patches worsens color accuracy.
+      const w=Math.min(tileSize,W-x), h=Math.min(tileSize,H-y);
+      const crop=document.createElement('canvas');
+      crop.width=w; crop.height=h;
+      crop.getContext('2d').drawImage(sourceCanvas,x,y,w,h,0,0,w,h);
+      patches.push({id:'source-tile-'+patches.length,type:'image',x,y,w,h,
+        href:crop.toDataURL('image/png'),role:'fidelity-source-tile'});
+    }
+  }
+  nodes.push(...patches);
+  return {schema:'figureforge.scene.v3',canvas:{width:W,height:H,w:W,h:H},nodes,
+    counts:Object.assign({},scene.counts||{},{fidelityTiles:patches.length})};
+}
+
 async function ensureBitmapDataUrl(src){
   if(!src) return null;
   if(/^data:image\//i.test(String(src))) return String(src);
@@ -3947,7 +3984,7 @@ async function ensureBitmapDataUrl(src){
 }
 
 function editableScenePrompt(W,H,paper){
-  return 'Reconstruct this scientific figure as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. This is the WHOLE IMAGE object catalog. Give every object a unique string id; retain each cross-region arrow, icon and text label exactly once as a complete object. Every node MUST have a string "type" field, for example {"type":"rect","x":1,"y":2,"w":3,"h":4}; never nest it as {"rect":{...}}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Transcribe each visible text line exactly, preserving capitalization, punctuation, mathematical symbols and line breaks. Use ONE text node for each complete continuous label or line; never split a word or label into several text nodes at a crop edge, duplicate its overlapping characters, or combine unrelated nearby labels. Estimate fontSize from visible glyph height, not the surrounding box. Give the line a tight x,y,w,h bounding box that does not overlap other labels. If tiny text is unreadable, omit it rather than inventing characters. Text must be OCR transcription, not a description. Inspect dense modules for short connectors, dashed returns, repeated tiny boxes and axis ticks before returning JSON. Keep adjacent boxes, graph nodes and arrows as separate objects. For curved arrows and rings use path d with SVG M/L/C/Q/A/Z commands; preserve true arcs and curves rather than polygonal approximations. For rotated text set rotation in degrees. For text following a ring or arc use a text node with textPath:{d:"M ... A ...",startOffset:0.5}; keep the text transcribed as editable characters. Treat each small icon, chart, and dense module as a whole object: reconstruct its complete outline and interior details, never stop at a crop boundary. For 3D-looking bars, cubes, prisms, or beveled objects, draw the front, top, and side faces as separate closed polygons with their own fill colors and edges; never flatten them to a rectangle. Preserve geometry and layer order. Trace wide filled or hollow outlined arrows as CLOSED paths or polygons with separate fill and stroke; preserve shaft width, arrowhead width and elbow bends, never replace them with a thin centerline connector. Reconstruct EVERY matrix cell and colored strip segment separately with its own sampled fill; never replace a multicolor grid with one averaged color. Measure corner radius in pixels; do not use a generic rounded rectangle. Preserve serif versus sans-serif font families, weight and line breaks. Do not return a single full-canvas bitmap as a substitute. For every line or arrow, both endpoints must coincide with visible endpoints in this crop. Never use (0,0), a crop corner, or a crop edge as a placeholder endpoint. Omit an uncertain line instead of inventing its geometry. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,closed,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor,rotation,textPath}, and image {x,y,w,h,href}. Use image only for photographic/illustrative content that cannot be decomposed, and include a crop object when possible. Keep z-order from background to foreground. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
+  return 'Reconstruct this scientific figure as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. This is the WHOLE IMAGE object catalog. Give every object a unique string id; retain each cross-region arrow, icon and text label exactly once as a complete object. Every node MUST have a string "type" field, for example {"type":"rect","x":1,"y":2,"w":3,"h":4}; never nest it as {"rect":{...}}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Transcribe each visible text line exactly, preserving capitalization, punctuation, mathematical symbols and line breaks. Use ONE text node for each complete continuous label or line; never split a word or label into several text nodes at a crop edge, duplicate its overlapping characters, or combine unrelated nearby labels. Estimate fontSize from visible glyph height, not the surrounding box. Give the line a tight x,y,w,h bounding box that does not overlap other labels. If tiny text is unreadable, omit it rather than inventing characters. Text must be OCR transcription, not a description. Inspect dense modules for short connectors, dashed returns, repeated tiny boxes and axis ticks before returning JSON. Keep adjacent boxes, graph nodes and arrows as separate objects. For curved arrows and rings use path d with SVG M/L/C/Q/A/Z commands; preserve true arcs and curves rather than polygonal approximations. For rotated text set rotation in degrees. For text following a ring or arc use a text node with textPath:{d:"M ... A ...",startOffset:0.5}; keep the text transcribed as editable characters. Treat each small icon, chart, and dense module as a whole object: reconstruct its complete outline and interior details, never stop at a crop boundary. For 3D-looking bars, cubes, prisms, or beveled objects, draw the front, top, and side faces as separate closed polygons with their own fill colors and edges; never flatten them to a rectangle. Preserve geometry and layer order. Do not return a single full-canvas bitmap as a substitute. For every line or arrow, both endpoints must coincide with visible endpoints in this crop. Never use (0,0), a crop corner, or a crop edge as a placeholder endpoint. Omit an uncertain line instead of inventing its geometry. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,closed,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor,rotation,textPath}, and image {x,y,w,h,href}. Use image only for photographic/illustrative content that cannot be decomposed, and include a crop object when possible. Keep z-order from background to foreground. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
 }
 function editableSceneRetryPrompt(W,H){
   return 'The previous answer could not be used. Inspect the attached image crop and return ONLY a JSON object with this exact outer shape: {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[{"type":"rect","x":0,"y":0,"w":10,"h":10,"fill":"#ffffff"}]}. Replace the example node with the actual visible, separately editable rectangles, lines, arrows, text, polygons and photographic regions. Coordinates are pixels within this crop. Every node needs a type. For text use {"type":"text","x":0,"y":0,"w":100,"h":20,"text":"actual words","fontSize":14,"fill":"#000000"}. For a completely blank white crop, nodes may be empty. No descriptions, analysis, Markdown, or other keys are needed.';
@@ -3986,7 +4023,6 @@ function materializeEditableScene(raw,W,H){
       bitmap:'image',photo:'image',raster:'image'
     };
     type=aliases[type]||type;
-    if(sourceType==='arrow'&&(n.d||n.points)) type=n.d?'path':'polyline';
     const lineStart=n.start||n.from||{};
     const lineEnd=n.end||n.to||{};
     let xRaw=type==='line' ? pick(n,['x','x1','startX','fromX'],pick(lineStart,['x'],null)) : pick(n,['x','left','cx'],null);
@@ -4009,14 +4045,12 @@ function materializeEditableScene(raw,W,H){
     if((xRaw===null || yRaw===null) && type!=='polyline' && type!=='path') return;
     const right=pick(n,['right'],null);
     const bottom=pick(n,['bottom'],null);
-    const rawText=type==='text'?String(pick(n,['text','content','label','value'],'')):'';
-    const textLineCount=rawText.split(/\r?\n/).length;
     const estimatedTextWidth=type==='text' ? Math.max(1,
       sceneNumber(pick(n,['fontSize','font_size','size'],18),18)*0.57*
-      Math.max(...rawText.split(/\r?\n/).map(line=>line.length))) : 1;
+      String(pick(n,['text','content','label','value'],'')).length) : 1;
     const wRaw=centredEllipse ? 2*sceneNumber(radiusX,0) : pick(n,['w','width'],right!=null?sceneNumber(right,0)-sceneNumber(xRaw,0):estimatedTextWidth);
     const hRaw=centredEllipse ? 2*sceneNumber(radiusY,0) : pick(n,['h','height'],bottom!=null?sceneNumber(bottom,0)-sceneNumber(yRaw,0):
-      (type==='text'?sceneNumber(pick(n,['fontSize','font_size','size'],18),18)*(.9+Math.max(0,textLineCount-1)*1.14):1));
+      (type==='text'?sceneNumber(pick(n,['fontSize','font_size','size'],18),18)*1.2:1));
     // Text can legitimately start outside a tile and continue in the next.
     // Clamping it to zero changed both its anchor and seam-stitching geometry.
     const x=type==='text'?clamp(xRaw??0,-W,W):clamp(xRaw??0,0,W);
@@ -4025,11 +4059,10 @@ function materializeEditableScene(raw,W,H){
     const h=type==='text'?clamp(hRaw,1,2*H):clamp(hRaw,1,Math.max(1,H-y));
     const base={
       id:String(n.id||('v'+i)),
-      ...(n.replaces?{replaces:String(n.replaces)}:{}),
       x,y,w,h,
       fill:cleanColor(pick(n,['fill','fillColor','background'],''),'none'),
       stroke:cleanColor(pick(n,['stroke','strokeColor','borderColor'],''),type==='line'?'#334155':'none'),
-      strokeWidth:clamp(pick(n,['strokeWidth','lineWidth','borderWidth'],1),0,Math.max(W,H))
+      strokeWidth:clamp(pick(n,['strokeWidth','lineWidth','borderWidth'],1),0,12)
     };
     if(type==='rect') out.push(Object.assign(base,{
       type:'rect',
@@ -4061,20 +4094,20 @@ function materializeEditableScene(raw,W,H){
       if(parseEditablePath(d).length) out.push(Object.assign(base,{type:'path',d}));
     }
     else if(type==='text' && String(pick(n,['text','content','label','value'],'')).trim()){
-      let label=String(pick(n,['text','content','label','value'],'')).trim().slice(0,300);
+      const label=String(pick(n,['text','content','label','value'],'')).replace(/[\r\n]+/g,' ').trim().slice(0,300);
       let fontSize=clamp(pick(n,['fontSize','font_size','size'],18),6,120);
+      // The model may report a size from a magnified crop. Respect its
+      // explicit label bounds so adjacent editable labels do not collide.
       const explicitW=sceneNumber(pick(n,['w','width'],null),0);
       const explicitH=sceneNumber(pick(n,['h','height'],null),0);
+      if(explicitH>0) fontSize=Math.min(fontSize,Math.max(6,explicitH*1.08));
       const clippedAtTileEdge=x<=4 || x+explicitW>=W-4;
-      if(explicitW>0 && explicitH>0 && !clippedAtTileEdge && !n.textPath && !n.rotation){
+      if(explicitW>0 && !clippedAtTileEdge && !n.textPath && !n.rotation){
         const font=String(pick(n,['fontFamily','font','family'],'Arial'));
         const measure=document.createElement('canvas').getContext('2d');
-        const laidOut=layoutEditableText(label,{fontSize,width:explicitW,height:explicitH,
-          measure:(line,size)=>{
-            measure.font=`${n.bold?'bold ':''}${n.italic?'italic ':''}${size}px ${font}`;
-            return measure.measureText(line).width;
-          }});
-        label=laidOut.text;fontSize=laidOut.fontSize;
+        measure.font=`${n.bold?'bold ':''}${fontSize}px ${font}`;
+        const measured=measure.measureText(label).width;
+        if(measured>explicitW*1.04) fontSize=Math.max(6,fontSize*explicitW*1.04/measured);
       }
       out.push(Object.assign(base,{
         type:'text',
@@ -4082,7 +4115,7 @@ function materializeEditableScene(raw,W,H){
         fill:cleanColor(pick(n,['fill','fillColor','color','textColor'],'#111827'),'#111827'),
         fontSize,
         fontFamily:pick(n,['fontFamily','font','family'],'Arial, Helvetica, sans-serif'),
-        bold:n.bold===true || n.bold===1 || n.bold==='true' || n.fontWeight==='bold' || Number(n.fontWeight)>=600,
+        bold:!!(n.bold||n.fontWeight==='bold'||Number(n.fontWeight)>=600),
         italic:!!(n.italic||n.fontStyle==='italic'),
         anchor:n.anchor==='middle'||n.anchor==='end'?n.anchor:'start',
         baseline:n.baseline||'auto',
@@ -4176,29 +4209,63 @@ function editableResponseText(d){
   return walk(d,0) || parseResponseText(d) || '';
 }
 
-async function requestEditableScene(imageDataUri,W,H,tileAudit){
+async function editableRevisionImages(sourceDataUri, revision, W, H){
+  if(!revision) return [sourceDataUri];
+  const images=[sourceDataUri,revision.preview];
+  const weak=(revision.weakRegions||[]).slice(0,2);
+  if(!weak.length) return images;
+  const [source,render]=await Promise.all([loadImage(sourceDataUri),loadImage(revision.preview)]);
+  for(const region of weak){
+    const pad=Math.max(8,Math.round(Math.min(region.w,region.h)*.12));
+    const x=Math.max(0,Math.floor(region.x-pad)),y=Math.max(0,Math.floor(region.y-pad));
+    const right=Math.min(W,Math.ceil(region.x+region.w+pad));
+    const bottom=Math.min(H,Math.ceil(region.y+region.h+pad));
+    const w=right-x,h=bottom-y;
+    if(w<2||h<2) continue;
+    for(const image of [source,render]){
+      const crop=document.createElement('canvas');
+      const zoom=Math.min(3,Math.max(1,640/Math.max(w,h)));
+      crop.width=Math.round(w*zoom);crop.height=Math.round(h*zoom);
+      const context=crop.getContext('2d');
+      context.imageSmoothingEnabled=true;
+      context.imageSmoothingQuality='high';
+      context.drawImage(image,x,y,w,h,0,0,crop.width,crop.height);
+      images.push(crop.toDataURL('image/png'));
+    }
+  }
+  return images;
+}
+
+async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   const cfgv=cfg(), relay=relayBase(), model=editableReconstructionModel();
   if(!model) throw new Error(tt('analyze.needmodel'));
   const audit=tileAudit||{};
   Object.assign(audit,{state:'pending',startedAt:Date.now(),model,provider:cfgv.proto,endpoint:baseURL(),attempt:0});
-  const prompt=editableScenePrompt(W,H,'');
-  const referenceImages=audit.layoutRepair?[imageDataUri,audit.preview]:[imageDataUri];
-  const systemPrompt=audit.textOnly ? 'Transcribe visible text from the supplied bitmap exactly. Return only the requested JSON; never reconstruct geometry or infer wording.' : RECON_SYS;
+  const prompt=editableScenePrompt(W,H,$('#paper')?$('#paper').value:'');
+  // Feed the existing object graph back to the model. Photo data URLs are
+  // replaced by crop coordinates; the source image is attached separately.
+  const priorScene=revision&&revision.scene?JSON.stringify({
+    canvas:{width:W,height:H},
+    nodes:(revision.scene.nodes||[]).map(node=>{
+      const copy={...node};
+      if(copy.href) copy.href='SOURCE_IMAGE_CROP';
+      return copy;
+    })
+  }):'';
+  const referenceImages=await editableRevisionImages(imageDataUri,revision,W,H);
   const isFatal=(err)=>/\b400\b|\b401\b|\b403\b|\b404\b|invalid\s+api\s*key|permission|quota|insufficient|billing/i.test(String(err&&err.message||err));
-  const timeoutMs=Math.max(1,Math.min(70,Number($('#reconTimeoutMinutes').value)||25))*60000;
+  const timeoutMs=Math.max(1,Math.min(60,Number($('#reconTimeoutMinutes').value)||15))*60000;
   audit.timeoutMs=timeoutMs;
   let lastError=null;
   for(let attempt=1;attempt<=3;attempt++){
     audit.attempt=attempt;
     try{
-      const attemptPrompt=audit.textOnly
-        ? 'Independent bitmap transcription audit. Read ONLY visible text in the attached original image. Do not infer from a paper, improve wording, translate, or invent labels. Return strict JSON {"nodes":[{"type":"text","text":"exact visible text"}]}, one entry per visible text block, including chart labels. Return empty nodes when there is no text.'
-        : audit.layoutRepair
-        ? 'WHOLE IMAGE layout correction. Image 1 is the original, image 2 is the current editable render. Correct misplaced modules and their labels using GLOBAL pixel coordinates, including moves across crop boundaries. Return strict JSON {"groups":[{"nodes":[{"id":"existing-id","x":0,"y":0}]}]}. Each group contains related objects that must change together. Return ONLY changed geometry fields (x,y,w,h,x2,y2,d,points,fontSize,radius) and existing IDs. Never change text, styles, types or photos, add/delete objects, or return a full scene. Empty groups is valid. Catalog: '+JSON.stringify(audit.catalog)
-        : audit.omissionCheck
+      const attemptPrompt=audit.omissionCheck
         ? 'WHOLE IMAGE completeness audit. Compare the entire original image with the registered objects below. Return STRICT JSON {"nodes":[]} if nothing is missing; otherwise nodes must contain ONLY genuinely missing editable objects using the same scene schema. Never duplicate existing text, arrows, borders or icons. Do not return replacements or changes to existing objects. Examine small labels, chart marks and internal icon details. Global coordinates in pixels. Existing catalog: '+JSON.stringify(audit.catalog)+'\n'+prompt
         : audit.objectRepair
-        ? 'Refine ONLY the supplied catalog IDs from this high-resolution crop. Return STRICT JSON {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. All geometry and font sizes use crop pixels. Return complete updated nodes with their original id. Correct misclassified geometry types: outlined wide arrows must be closed paths with the original fill, outline and shaft width. For a catalog object that incorrectly combines colored cells or other details, replace it with separate primitives, each carrying replaces:"ORIGINAL_CATALOG_ID" and a unique id. Return ALL parts of that replacement, in background-to-foreground order, inside the original object bounds. Preserve each cell color and measured corner radius. Never split or replace text or photos, duplicate labels, change text content, or redraw contextual objects absent from the catalog. Omit unchanged nodes. Empty nodes is valid. Catalog in crop coordinates: '+JSON.stringify(audit.catalog)
+        ? 'Refine ONLY the supplied catalog IDs from this high-resolution crop. Return STRICT JSON {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. All geometry and font sizes use crop pixels. Return complete updated nodes with their original id and type. Never add objects, split objects, duplicate labels, change text content, or redraw contextual objects absent from the catalog. Omit unchanged nodes. Empty nodes is valid. Catalog in crop coordinates: '+JSON.stringify(audit.catalog)
+        : revision
+        ? 'Image 1 is the ORIGINAL tile and image 2 is its editable render. Following images are paired close-ups of the weakest regions: ORIGINAL then RENDER, in the order of these tile-local crop coordinates: '+JSON.stringify((revision.weakRegions||[]).slice(0,2))+'. Compare each pair carefully. Keep correct objects and their coordinates; fix missing, misplaced, wrong-colored or spurious objects, especially small text and lines visible in the close-ups. Return the COMPLETE corrected scene, not only a patch. Previous comparison score: '+revision.score.toFixed(3)+'. Prior editable scene JSON follows:\n'+priorScene+'\n'+prompt
         : prompt;
       let txt='';
       let responseDiagnostics='';
@@ -4206,7 +4273,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit){
         const body={
           model,
           max_tokens:16000,
-          system:systemPrompt,
+          system:RECON_SYS,
           messages:[{role:'user',content:[
             {type:'text',text:attemptPrompt},
             ...referenceImages.map(uri=>{const part=dataURIToParts(uri);return {type:'image',source:{type:'base64',media_type:part.media,data:part.data}};})
@@ -4235,7 +4302,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit){
           temperature:0.1,
           max_tokens:16000,
           messages:[
-            {role:'system',content:systemPrompt},
+            {role:'system',content:RECON_SYS},
             {role:'user',content:[
               {type:'text',text:attemptPrompt},
               ...referenceImages.map(url=>({type:'image_url',image_url:{url}}))
@@ -4270,20 +4337,9 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit){
       }
       let scene;
       try{
-        if(audit.layoutRepair){
-          const groups=extractJSON(txt)?.groups;
-          if(!Array.isArray(groups)||groups.some(g=>!Array.isArray(g.nodes)))throw new Error('Invalid layout patch groups');
-          scene={groups,nodes:[]};
-        }else if(audit.textOnly){
-          const nodes=extractJSON(txt)?.nodes;
-          if(!Array.isArray(nodes) || nodes.some(n=>n.type!=='text'||typeof n.text!=='string'))throw new Error('Invalid transcript nodes');
-          scene={canvas:{width:W,height:H},nodes};
-        }else if(audit.objectRepair){
+        if(audit.objectRepair){
           const allowed=new Map(audit.catalog.nodes.map(n=>[n.id,n.type]));
-          // Geometry replacements are validated against bounds/types by
-          // replaceObjectRepairRegion. Do not discard them at the API boundary.
-          const nodes=extractEditableNodes(extractJSON(txt)).filter(n=>
-            (typeof n.id==='string'&&allowed.has(n.id))||(typeof n.replaces==='string'&&allowed.has(n.replaces)));
+          const nodes=extractEditableNodes(extractJSON(txt)).filter(n=>typeof n.id==='string'&&allowed.get(n.id)===n.type);
           scene=nodes.length?materializeEditableScene({nodes},W,H):{canvas:{width:W,height:H},nodes:[]};
         }else if(audit.omissionCheck){
           const nodes=extractEditableNodes(extractJSON(txt));
@@ -4345,18 +4401,9 @@ function rememberStep3Bitmap(src){
   window.__ffLastGeneratedImage=src;
   try{ sessionStorage.setItem('__ffStep3Bitmap',src); }catch(_){ }
 }
-function invalidateReconstruction(st){
-  Object.assign(st,{runToken:null,svg:'',baseSvg:'',scene:null,modeScene:null,
-    vectorScene:null,sourceBinding:null,recon:null,
-    reconPending:false,reconFailed:false,reconError:'',allowDraft:false});
-  const draft=$('#exportDraft'); if(draft)draft.checked=false;
-  const comparison=$('#exportComparison');
-  if(comparison){comparison.hidden=true;comparison.style.display='none';}
-}
 function markStep3Output(src){
   if(!isStep3BitmapSource(src)) return '';
   const st=ensureExportState();
-  if(st.bitmap!==src) invalidateReconstruction(st);
   rememberStep3Bitmap(src);
   st.source='bitmap';
   st.bitmap=src;
@@ -4380,7 +4427,6 @@ function syncStep3Bitmap(){
   const st=ensureExportState();
   const src=currentStep3Bitmap();
   if(src){
-    if(st.bitmap!==src) invalidateReconstruction(st);
     rememberStep3Bitmap(src);
     st.source='bitmap';
     st.bitmap=src;
@@ -4393,14 +4439,10 @@ async function runReconstruction(){
   const st = ensureExportState();
   const status = $('#reconStatus');
   const say = function(k, vars){ if(status) status.textContent = tt(k, vars); };
-  const source=syncStep3Bitmap(), token={};st.runToken=token;
-  const current=()=>st.runToken===token && currentStep3Bitmap()===source;
-  const assertCurrent=()=>{if(!current())throw new Error('Stale reconstruction source');};
   let src = '';
   try{
-    src = await ensureBitmapDataUrl(source);assertCurrent();
+    src = await ensureBitmapDataUrl(syncStep3Bitmap());
   }catch(err){
-    if(!current())return null;
     st.reconFailed = true;
     st.reconError = safeExportError(err);
     renderEditableExportCard();
@@ -4408,12 +4450,12 @@ async function runReconstruction(){
     return false;
   }
   if(!src){ st.reconFailed = true; st.reconError = 'No bitmap source'; renderEditableExportCard(); say('recon.nobitmap'); return false; }
-  Object.assign(st,{svg:'',baseSvg:'',scene:null,vectorScene:null,modeScene:null,sourceBinding:null,
-    vectorSvg:'',recon:null,reconFailed:false,reconError:''});
+  Object.assign(st,{svg:'',baseSvg:'',scene:null,vectorScene:null,fidelityScene:null,
+    vectorSvg:'',fidelitySvg:'',exportMode:'vector',recon:null,reconFailed:false,reconError:''});
   renderEditableExportCard();
   try{
     say('recon.reading');
-    const im = await loadImage(src);assertCurrent();
+    const im = await loadImage(src);
     const canvas = document.createElement('canvas');
     canvas.width = im.naturalWidth || im.width;
     canvas.height = im.naturalHeight || im.height;
@@ -4428,10 +4470,8 @@ async function runReconstruction(){
     // other crop. All Vision calls (including retries and object repairs)
     // share this limit so subdivision cannot flood the API.
     const enqueue=visionQueue(3);
-    const requestScene=(...args)=>enqueue(async()=>{assertCurrent();const result=await requestEditableScene(...args);assertCurrent();return result;});
-    const sourceBinding={source,dataUrl:src,sha256:await bitmapDigest(src),width:canvas.width,height:canvas.height};assertCurrent();
-    reconstructionAudit.source={sha256:sourceBinding.sha256,width:canvas.width,height:canvas.height};
-    const cacheKey=await reconstructionCacheKey(src,{sourceHash:sourceBinding.sha256,width:canvas.width,height:canvas.height,model:editableReconstructionModel(),reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
+    const requestScene=(...args)=>enqueue(()=>requestEditableScene(...args));
+    const cacheKey=await reconstructionCacheKey(src,{model:editableReconstructionModel(),reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
     const cached=await readReconstructionCache(cacheKey);
     const wholeAudit={wholeImage:true};
     reconstructionAudit.tiles.push(wholeAudit);
@@ -4439,9 +4479,8 @@ async function runReconstruction(){
     if(cached)Object.assign(wholeAudit,{state:'cached',attempts:0});
     reconstructionAudit.cacheHit=!!cached;
     let omissionChecked=!!cached?.omissionChecked;
-    let transcript=cached?.transcript;
     const completedIds=new Set(cached?.completedIds||[]);
-    const saveProgress=()=>writeReconstructionCache(cacheKey,{scene,transcript,omissionChecked,completedIds:[...completedIds]});
+    const saveProgress=()=>writeReconstructionCache(cacheKey,{scene,omissionChecked,completedIds:[...completedIds]});
     await saveProgress();
     // Missing objects are proposed once against the full image and registered
     // centrally before any crop is allowed to update them.
@@ -4456,10 +4495,6 @@ async function runReconstruction(){
         await saveProgress();
       }catch(error){reconstructionAudit.omissionError=String(error?.message||error);}
     }
-    try{
-      if(!transcript){transcript=await requestScene(src,canvas.width,canvas.height,{textOnly:true});await saveProgress();}
-      reconstructionAudit.transcription=auditSourceText(scene,transcript);
-    }catch(error){reconstructionAudit.transcription={state:'needs-review',error:String(error.message||error)};}
     reconstructionAudit.completedTiles=1;
     reconstructionAudit.strategy='whole-image-catalog';
     reconstructionAudit.catalog=scene.nodes.map(n=>({id:n.id,type:n.type,...(n.type==='text'?{text:n.text}:{})}));
@@ -4489,46 +4524,9 @@ async function runReconstruction(){
       let pptxScene=await readNativePptxScene(await buildNativePptx(scene,zipStore),canvas.width,canvas.height);
       let pptxQa=await compareEditableRender(canvas,pptxScene);
       reconstructionAudit.pptxQuality={score:pptxQa.score,localRecall:pptxQa.localRecall};
-      const qualityPasses=(qa)=>qa.score>=.98 && qa.darkRecall>=.98 && qa.localRecall>=.97 && qa.edgeF1>=.97 && qa.colorSimilarity>=.98;
-      // Global geometry proposals are merged by stable ID, one related group at a time.
-      // Verify the serialized candidate globally and in every spatial region.
-      if(!qualityPasses(pptxQa)){
-        const layoutAudit={layoutRepair:true,preview:pptxQa.preview,
-          catalog:{canvas:scene.canvas,nodes:scene.nodes.map(n=>{const copy={...n};delete copy.href;return copy;})},accepted:0,rejected:0};
-        reconstructionAudit.globalLayout=layoutAudit;
-        try{
-          const proposal=await requestScene(src,canvas.width,canvas.height,layoutAudit);
-          for(const group of proposal.groups){
-            const candidate=applyGlobalLayoutRepair(scene,group.nodes,canvas.width,canvas.height);
-            if(!candidate){layoutAudit.rejected++;continue;}
-            const rendered=await readNativePptxScene(await buildNativePptx(candidate,zipStore),canvas.width,canvas.height);
-            const after=await compareEditableRender(canvas,rendered);
-            let safe=acceptReconstructionRepair(pptxQa,after) &&
-              auditExportLayout(candidate,rendered).issues.length<=auditExportLayout(scene,pptxScene).issues.length;
-            for(let row=0;safe&&row<3;row++)for(let col=0;safe&&col<4;col++){
-              const region={x:col*canvas.width/4,y:row*canvas.height/3,w:canvas.width/4,h:canvas.height/3};
-              const beforeRegion=await compareEditableRender(canvas,pptxScene,region);
-              const afterRegion=await compareEditableRender(canvas,rendered,region);
-              safe=['score','darkRecall','localRecall','edgeF1','colorSimilarity'].every(key=>
-                Number.isFinite(afterRegion[key])&&afterRegion[key]>=beforeRegion[key]-.002);
-            }
-            if(safe){scene=candidate;pptxScene=rendered;pptxQa=after;completedIds.clear();layoutAudit.accepted++;await saveProgress();}
-            else layoutAudit.rejected++;
-          }
-        }catch(error){layoutAudit.error=String(error?.message||error);}
-        delete layoutAudit.preview;
-      }
-      const initialLayout=auditExportLayout(scene,pptxScene);
-      let jobs=omissionChecked && qualityPasses(pptxQa) && initialLayout.state==='passed' ? [] : planCatalogRepairs(scene,canvas.width,canvas.height);
-      if(jobs.length && omissionChecked && initialLayout.state==='passed'){
-        const measuredJobs=await Promise.all(jobs.map(async job=>{
-          try{return {job,passed:qualityPasses(await compareEditableRender(canvas,pptxScene,job.region))};}
-          catch{return {job,passed:false};}
-        }));
-        jobs=measuredJobs.filter(entry=>!entry.passed).map(entry=>entry.job);
-        reconstructionAudit.skippedPassingRegions=measuredJobs.length-jobs.length;
-      }
-      reconstructionAudit.unrefinedIds=[];
+      const jobs=planCatalogRepairs(scene,canvas.width,canvas.height);
+      const plannedIds=new Set(jobs.flatMap(job=>job.ids));
+      reconstructionAudit.unrefinedIds=scene.nodes.filter(n=>!plannedIds.has(n.id)&&!completedIds.has(n.id)).map(n=>n.id);
       const refine=async(job,depth=0)=>{
         const {region}=job,ids=job.ids.filter(id=>!completedIds.has(id));
         if(!ids.length)return [];
@@ -4563,7 +4561,7 @@ async function runReconstruction(){
       for(const requested of objectRepairRequests){
         for(const {region,scale,local,ids} of await requested){
         try{
-          const candidate=replaceObjectRepairRegion(scene,region,local,scale,ids);
+          const candidate=replaceObjectRepairRegion(scene,region,local,scale);
           const candidatePptx=await buildNativePptx(candidate,zipStore);
           const rendered=await readNativePptxScene(candidatePptx,canvas.width,canvas.height);
           const before=await compareEditableRender(canvas,pptxScene,region);
@@ -4574,14 +4572,11 @@ async function runReconstruction(){
             reconstructionAudit.objectRepairs=(reconstructionAudit.objectRepairs||0)+1;
             measuredQuality=pptxQa;
           }
-          // Rejected or still-inaccurate repairs must remain retryable.
-          if(qualityPasses(await compareEditableRender(canvas,pptxScene,region)))
-            ids.forEach(id=>completedIds.add(id));
+          ids.forEach(id=>completedIds.add(id));
           await saveProgress();
         }catch(error){reconstructionAudit.objectRepairError=String(error?.message||error);}
         }
       }
-      reconstructionAudit.unrefinedIds=[...new Set(jobs.flatMap(job=>job.ids))].filter(id=>!completedIds.has(id));
       measuredQuality=pptxQa;
       reconstructionAudit.pptxLayout=auditExportLayout(scene,pptxScene);
       reconstructionAudit.pptxQuality={score:pptxQa.score,localRecall:pptxQa.localRecall};
@@ -4590,6 +4585,8 @@ async function runReconstruction(){
     if(audit.dominantBitmap){
       throw new Error('Vision model returned a dominant bitmap instead of editable objects');
     }
+    const fidelityScene=buildFidelityScene(scene,canvas);
+    const fidelitySvg=sceneToSvgString(fidelityScene);
     let quality=null;
     try{
       const measured=measuredQuality||await compareEditableRender(canvas,scene);
@@ -4601,33 +4598,49 @@ async function runReconstruction(){
     // A usable JSON scene is not evidence of a publication-ready redraw.
     // Keep the final export flagged until both fine strokes and the weakest
     // regions closely match the source image.
-    const qualityNeedsReview=reconstructionQualityDeficit(quality)>0 || !quality || quality.error || quality.score<.98 ||
+    const qualityNeedsReview=!quality || quality.error || quality.score<.98 ||
       quality.darkRecall<.98 || quality.localRecall<.97 ||
       quality.edgeF1<.97 || quality.colorSimilarity<.98 ||
-      reconstructionAudit.transcription?.state!=='passed' || reconstructionAudit.fallbackTiles>0 || reconstructionAudit.pptxQaError ||
+      reconstructionAudit.fallbackTiles>0 || reconstructionAudit.pptxQaError ||
       reconstructionAudit.objectRepairError || reconstructionAudit.omissionError || reconstructionAudit.unrefinedIds?.length ||
       reconstructionAudit.pptxLayout?.state!=='passed';
     reconstructionAudit.state=qualityNeedsReview?'needs-review':'succeeded';
     reconstructionAudit.finishedAt=Date.now();
     reconstructionAudit.nodeCount=scene.nodes.length;
     reconstructionAudit.quality=quality;
-    assertCurrent();
-    Object.assign(st,{sourceBinding,modeScene:scene,scene,svg,baseSvg:svg,
-      vectorScene:scene,vectorSvg:svg,
+    Object.assign(st,{scene,svg,baseSvg:svg,
+      vectorScene:scene,vectorSvg:svg,fidelityScene,fidelitySvg,exportMode:'vector',
       source:'bitmap',recon:{mode:'vector',nodes:scene.nodes.length,
-        audit,quality,
+        fidelityTiles:fidelityScene.counts.fidelityTiles,audit,quality,
         qualityState:reconstructionAudit.state},reconFailed:false,reconError:''});
-    renderEditableExportCard(); applyExportFont(st.font||'original');
-    say(reconstructionAudit.state==='succeeded'?'recon.done':'recon.review',{n:scene.nodes.length});
+    renderEditableExportCard(); applyExportFont(st.font || 'original');
+    if(reconstructionAudit.fallbackTiles){
+      const timedOutTiles=reconstructionAudit.tiles.filter(tile=>tile.fallbackCause==='timeout').length;
+      status.textContent=GAL_I18N.lang==='zh'
+        ? '已生成 '+scene.nodes.length+' 个可编辑对象；'+reconstructionAudit.fallbackTiles+' 个区域使用可编辑色块保底（其中 '+timedOutTiles+' 个区域因视觉 API 超时）。请检查这些区域的文字和细节。'
+        : 'Generated '+scene.nodes.length+' editable objects; '+reconstructionAudit.fallbackTiles+' regions used editable color blocks ('+timedOutTiles+' after a vision API timeout). Check text and fine details in those regions.';
+    }else say(audit.defects.length ? 'recon.audit' : 'recon.done',{n:scene.nodes.length,d:audit.defects.length});
+    if(reconstructionAudit.objectRepairError||reconstructionAudit.omissionError)status.textContent+=GAL_I18N.lang==='zh'?' 部分检查或精修失败，已保留并缓存结果；再次重建可继续。':' Some checks or refinements failed; results are cached. Rebuild to resume.';
+    const layoutIssues=reconstructionAudit.pptxLayout?.issues||[];
+    if(layoutIssues.length)status.textContent+=GAL_I18N.lang==='zh'
+      ? ' PPTX 排版检查发现 '+layoutIssues.length+' 项文字重叠、缺失或字号偏差，请复核。'
+      : ' PPTX layout check found '+layoutIssues.length+' text overlap, missing-text or font-size warnings; review required.';
+    if(scene.counts.filteredArtifactLines){
+      status.textContent += GAL_I18N.lang==='zh'
+        ? '；已过滤 '+scene.counts.filteredArtifactLines+' 条从裁片边界发出的异常连线。'
+        : '; filtered '+scene.counts.filteredArtifactLines+' invalid lines from crop boundaries.';
+    }
+    status.textContent += GAL_I18N.lang==='zh'
+      ? ' 重建成功，可导出原生可编辑图形。'
+      : ' Reconstruction complete. Native editable export is ready.';
     return true;
   }catch(err){
-    if(!current())return null;
     console.warn('reconstruction failed', err);
     const reconstructionAudit=window.__ffApiAudit&&window.__ffApiAudit.reconstruction;
     if(reconstructionAudit){ reconstructionAudit.state='failed'; reconstructionAudit.finishedAt=Date.now(); reconstructionAudit.error=String(err&&err.message||err); }
     const msg = safeExportError(err);
-    Object.assign(st,{svg:'',baseSvg:'',scene:null,vectorScene:null,modeScene:null,sourceBinding:null,
-      vectorSvg:'',recon:null,reconFailed:true,
+    Object.assign(st,{svg:'',baseSvg:'',scene:null,vectorScene:null,fidelityScene:null,
+      vectorSvg:'',fidelitySvg:'',recon:null,reconFailed:true,
       reconError:msg || 'Reconstruction failed'});
     say('recon.failedDetail', { msg: msg });
     renderEditableExportCard();
@@ -4652,7 +4665,7 @@ async function requestRegionLabels(regions, canvas){
   if(cfgv.proto === 'anthropic' && !relay){
     const body = { model:model, max_tokens:1200, system:ANALYZE_SYS,
                    messages:[{ role:'user', content:[{ type:'text', text:prompt }] }] };
-    const r = await fetchWithTimeout(baseURL() + '/v1/messages',
+    const r = await fetch(baseURL() + '/v1/messages',
       { method:'POST', headers:anthropicHeaders(cleanKey($('#key').value)), body:JSON.stringify(withReasoning(body,'visual')) });
     txt = await r.text();
     if(!r.ok) throw new Error(friendlyHttp(r.status, txt));
@@ -4725,11 +4738,13 @@ function renderEditableExportCard(){
   if(!card) return;
   const bitmapSource=syncStep3Bitmap();
   const hasBitmap=!!bitmapSource;
-  const locked = !canExportReconstruction(state);
+  const locked = !state.svg || state.reconPending;
   // A failed rebuild still has a valid Step 3 bitmap. Keep the rebuild control
   // usable and avoid presenting the whole card as if Step 3 never ran.
   card.classList.toggle('export-locked', locked && !hasBitmap);
   const font=$('#exportFont'); if(font) font.value=state.font||'original';
+  const modeRow=$('#exportModeRow'); if(modeRow) modeRow.hidden=!(state.source==='bitmap' && !!state.fidelityScene);
+  const mode=$('#exportMode'); if(mode) mode.value=state.exportMode||'vector';
   // Only a bitmap draft needs the rebuild panel: that is the case where the export
   // would otherwise carry a picture instead of editable text.
   const box=$('#exportRecon'); if(box) box.hidden = !hasBitmap;
@@ -4742,13 +4757,14 @@ function renderEditableExportCard(){
         : tt(bitmapSource || state.hasStep3Output ? 'export.reconFailed' : 'export.reconNoBitmap'));
     const detail=$('#reconStatus');
     if(detail && state.reconError) detail.textContent=tt('recon.failedDetail',{msg:state.reconError});
-  } else if(state.svg && state.source==='bitmap'){
-    setExportStatus(status, !canExportReconstruction({...state,allowDraft:false}) ? tt('export.reviewRequired') : tt('export.qualitySucceeded'));
   } else if(locked){
     setExportStatus(status, tt(hasBitmap ? 'export.reconRequired' : 'export.waiting'));
   } else {
-    setExportStatus(status, state.source === 'bitmap' && state.recon
-      ? tt(state.recon.qualityState==='succeeded'?'export.qualitySucceeded':'recon.review')
+    const needsReview=state.source==='bitmap' && state.recon?.qualityState==='needs-review';
+    setExportStatus(status, needsReview
+      ? (GAL_I18N.lang==='zh'
+        ? '重建成功，可导出可编辑图形。'
+        : 'Reconstruction complete. Editable export is ready.')
       : ((state.source === 'bitmap' && !state.recon) ? tt('export.needRecon') : tt('export.ready')));
   }
   document.querySelectorAll('#exportActions [data-export]').forEach(btn=>btn.disabled = locked);
@@ -4764,7 +4780,7 @@ function syncExportSelection(){
     btn.setAttribute('aria-pressed',String(selected));
   });
   const confirm=$('#exportConfirm');
-  if(confirm) confirm.disabled=!canExportReconstruction(state) || !state.target;
+  if(confirm) confirm.disabled=!state.svg || state.reconPending || !state.target;
 }
 /* Accepts either a bare SVG string (the SVG path) or
    { svg, source, bitmap } (the bitmap path). Both call sites exist, and a mismatch here
@@ -4789,17 +4805,13 @@ function showEditableExportStep(svgOrSource){
       reconFailed: src.reconFailed === undefined ? (svg ? false : !!current.reconFailed) : !!src.reconFailed,
       reconError: src.reconError || (svg ? '' : current.reconError || ''),
       scene: svg ? parseSvgScene(svg) : null,
-      vectorScene:null, vectorSvg:'',
+      vectorScene:null, vectorSvg:'', fidelityScene:null, fidelitySvg:'', exportMode:'vector',
       target: 'svg', font:'original',
     });
     renderEditableExportCard();
   }
   catch(e){ console.warn('editable export scene parse failed', e); return; }
-  // Keep the finished Step 3 draft and its download control in view while
-  // editable reconstruction runs in Step 4.
-  if(src.source!=='bitmap'){
-    const card=$('#card4'); if(card) card.scrollIntoView({behavior:'smooth',block:'start'});
-  }
+  const card=$('#card4'); if(card) card.scrollIntoView({behavior:'smooth',block:'start'});
 }
 
 /* A finished file is offered as a link as well as auto-downloaded: the browser can drop
@@ -4964,7 +4976,7 @@ async function importPrecisionScene(source, bitmap){
   markStep3Output(bitmapUrl);
   const st=ensureExportState();
   Object.assign(st,{source:'bitmap',svg,baseSvg:svg,vectorSvg:svg,vectorScene:scene,scene,
-    target:'pptx',font:'original',
+    fidelityScene:null,fidelitySvg:'',exportMode:'vector',target:'pptx',font:'original',
     reconPending:false,reconFailed:false,reconError:'',
     recon:{qualityState:'needs-review',origin:'desktop-measured-scene'}});
   renderEditableExportCard();
@@ -4993,7 +5005,7 @@ function initEditableExport(){
   $('#exportConfirm')?.addEventListener('click', async ()=>{
     const st=window.__ffExportState;
     const bitmapSource=syncStep3Bitmap();
-    if(!canExportReconstruction(st) || !st.target){
+    if(!st.svg || st.reconPending || !st.target){
       const s2=$('#exportStatus');
       if(s2) s2.textContent = st.reconFailed
         ? (st.reconError ? tt('recon.failedDetail',{msg:st.reconError}) : tt(bitmapSource ? 'export.reconFailed' : 'export.reconNoBitmap'))
@@ -5026,8 +5038,7 @@ function initEditableExport(){
       { at:0.88, label:'· ' + tt('export.stage.pack') },
     ];
     try{
-      const exportBinding=st.sourceBinding;
-      let dlName = (st.source==='bitmap' ? st.allowDraft || st.font!=='original'?'figure-forge-editable-draft':'figure-forge-editable' : 'figure-forge-editable') + '.' + (target==='drawio' ? 'drawio' : target);
+      let dlName = 'figure-forge-editable.' + (target==='drawio' ? 'drawio' : target);
       let dlData = null, dlMime = '';
       if(target==='svg'){
         dlData = st.svg; dlMime = 'image/svg+xml;charset=utf-8';
@@ -5037,7 +5048,6 @@ function initEditableExport(){
         downloadText(dlName, dlData, dlMime);
       } else if(target==='pptx'){
         dlData = await buildNativePptx(scene, zipStore); dlMime = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
-        if(st.source==='bitmap' && (exportBinding!==st.sourceBinding || currentStep3Bitmap()!==exportBinding.source || !canExportReconstruction(st)))throw new Error('Source changed during export; rebuild required');
         downloadBlob(dlName, dlData);
       } else if(target==='vsdx'){
         dlData = zipStore(sceneToVsdxFiles(scene, fontChoice)); dlMime = 'application/vnd.ms-visio.drawing';
@@ -5054,12 +5064,11 @@ function initEditableExport(){
       setExportStatus(status, tt('export.failedDetail',{format:target==='drawio'?'draw.io':target.toUpperCase(),msg:safeExportError(err)}));
     }finally{
       setBusy(btn, false);
-      syncExportSelection();
       if(status) status.classList.remove('export-busy');
     }
   });
-  $('#exportDraft')?.addEventListener('change',e=>{ensureExportState().allowDraft=e.target.checked;renderEditableExportCard();});
   $('#exportFont')?.addEventListener('change',e=>applyExportFont(e.target.value));
+  $('#exportMode')?.addEventListener('change',e=>setExportMode(e.target.value));
 }
 initEditableExport();
 
@@ -5082,7 +5091,6 @@ $('#reconBtn')?.addEventListener('click', async function(){
     ok = await runReconstruction();
     return ok;
   }finally{
-    if(ok===null)return;
     st.reconPending = false;
     if(!ok) st.reconFailed = true;
     renderEditableExportCard();

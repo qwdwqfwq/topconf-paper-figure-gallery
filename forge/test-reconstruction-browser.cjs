@@ -53,56 +53,6 @@ const server = http.createServer((req,res)=>{
     await page.reload({waitUntil:'domcontentloaded'});
     assert.equal(await page.inputValue('#reconTimeoutMinutes'),'25','migration runs only once');
 
-    const fidelityRoundtrip=await page.evaluate(async()=>{
-      const {buildNativePptx,readNativePptxScene}=await import('./editable-native.mjs');
-      const scene={canvas:{width:600,height:400},nodes:[
-        {id:'panel',type:'rect',x:10,y:10,w:560,h:360,radius:12,fill:'#ffffff',stroke:'#123456',strokeWidth:2},
-        {id:'arrow',type:'path',d:'M 50 60 L 150 60 L 150 45 L 180 70 L 150 95 L 150 80 L 50 80 Z',fill:'#cccccc',stroke:'#222222',strokeWidth:2},
-        {id:'cell1',type:'rect',x:50,y:150,w:40,h:40,fill:'#ffcc00',stroke:'#222222'},
-        {id:'cell2',type:'rect',x:90,y:150,w:40,h:40,fill:'#0088aa',stroke:'#222222'}
-      ]};
-      const blob=await buildNativePptx(scene,window.__ffTestZip);
-      return await readNativePptxScene(blob,600,400);
-    });
-    assert.ok(Math.abs(fidelityRoundtrip.nodes[0].radius-12)<.01,'PPTX roundtrip preserves measured corners');
-    assert.equal(fidelityRoundtrip.nodes[1].type,'path');
-    assert.equal(fidelityRoundtrip.nodes[1].fill.toLowerCase(),'#cccccc');
-    assert.match(fidelityRoundtrip.nodes[1].d,/Z/i);
-    assert.deepEqual(fidelityRoundtrip.nodes.slice(2).map(n=>n.fill.toLowerCase()),['#ffcc00','#0088aa']);
-
-    // Exercise the API parser as well as the merge: the old parser silently
-    // dropped type changes and every child of a multicolor decomposition.
-    const parsedRepair=await page.evaluate(async()=>{
-      const {replaceObjectRepairRegion}=await import('./reconstruction-core.mjs');
-      document.querySelector('#provider').value='ark';
-      document.querySelector('#key').value='browser-test-key';
-      const model=document.querySelector('#analyzeModel');
-      model.add(new Option('doubao-vision-test','doubao-vision-test'));model.value='doubao-vision-test';
-      const scene={canvas:{width:400,height:300},nodes:[
-        {id:'matrix',type:'rect',x:40,y:40,w:80,h:80,fill:'#aaaaaa'},
-        {id:'arrow',type:'line',x:150,y:80,x2:250,y2:80,stroke:'#222222',strokeWidth:2}
-      ]};
-      const nodes=[
-        {replaces:'matrix',type:'rect',x:40,y:40,w:80,h:160,fill:'#ffcc00'},
-        {id:'new-cell',replaces:'matrix',type:'rect',x:120,y:40,w:80,h:160,fill:'#0088aa'},
-        {id:'arrow',type:'path',d:'M 260 110 L 420 110 L 420 100 L 460 120 L 420 140 L 420 130 L 260 130 Z',fill:'#cccccc',stroke:'#222222',strokeWidth:2},
-        {id:'unrelated',type:'rect',x:0,y:0,w:560,h:360,fill:'#ff0000'}
-      ];
-      const original=window.fetch;
-      window.fetch=async(url,options)=>String(url).endsWith('/chat/completions')?
-        new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes})}}]}),{status:200}):original(url,options);
-      try{
-        const canvas=document.createElement('canvas');canvas.width=560;canvas.height=360;
-        const parsed=await window.__ffTestRequestScene(canvas.toDataURL(),560,360,{objectRepair:true,catalog:scene});
-        return {parsed:parsed.nodes,merged:replaceObjectRepairRegion(scene,{x:20,y:20,w:280,h:180},parsed,2).nodes};
-      }finally{window.fetch=original;}
-    });
-    assert.equal(parsedRepair.parsed.length,3,'API boundary retains valid replacement geometry only');
-    assert.equal(parsedRepair.merged.length,3);
-    assert.deepEqual(parsedRepair.merged.slice(0,2).map(n=>n.fill.toLowerCase()),['#ffcc00','#0088aa']);
-    assert.equal(parsedRepair.merged[2].type,'path');
-    assert.equal(parsedRepair.merged[2].fill.toLowerCase(),'#cccccc');
-
     // Step 3 must offer a real bitmap download while Step 4's vision request
     // is still pending. Exercise the image generation path without a live API.
     const pending=await page.evaluate(async()=>{
@@ -131,12 +81,12 @@ const server = http.createServer((req,res)=>{
       return {pending:window.__ffExportState.reconPending,
         downloadEnabled:!document.querySelector('#dlImg').disabled,
         imageVisible:!!document.querySelector('#out img[data-step3-output]'),
-        exportMode:document.querySelector('#exportMode')};
+        exportMode:!!document.querySelector('#exportMode')};
     });
     assert.equal(pending.pending,true,JSON.stringify(pending));
     assert.equal(pending.downloadEnabled,true);
     assert.equal(pending.imageVisible,true);
-    assert.equal(pending.exportMode,null);
+    assert.equal(pending.exportMode,true);
     const bitmapDownload=page.waitForEvent('download',{timeout:10000});
     await page.locator('#dlImg').click();
     const bitmap=await bitmapDownload;
@@ -167,10 +117,6 @@ const server = http.createServer((req,res)=>{
           nodes=[...catalog.nodes.map(n=>({...n,...(n.type==='text'?{text:'INJECTED'}:{})})),
             {id:'unknown',type:'text',text:'EXTRA',x:50,y:50,w:80,h:20,fontSize:16},
             {type:'text',text:'MISSING ID',x:50,y:70,w:80,h:20,fontSize:16}];
-        }else if(prompt.includes('WHOLE IMAGE layout correction')){
-          return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({groups:[{nodes:[{id:'unknown',x:0}]}]})}}]}));
-        }else if(prompt.includes('Independent bitmap transcription')){
-          nodes=[{type:'text',text:'Global label'}];
         }else{
           if(!prompt.includes('WHOLE IMAGE'))throw Error('Whole-image catalog required');
           nodes=[{type:'rect',x:450,y:50,w:300,h:180,fill:'#abcdef'},
@@ -196,29 +142,18 @@ const server = http.createServer((req,res)=>{
     assert.equal(result.scene.nodes.filter(n=>n.type==='text').length,1);
     assert.equal(result.scene.nodes.find(n=>n.type==='text').text,'Global label');
     assert.ok(result.repairs>0,'exercise crop catalog requests');
-    assert.equal(result.calls,result.repairs+5,'one timeout, global retry, completeness audit, transcript and layout correction');
-    assert.equal(result.audit.globalLayout.rejected,1,'unknown objects cannot replace the scene');
+    assert.equal(result.calls,result.repairs+3,'one timeout, global retry and completeness audit');
     assert.equal(result.configuredTimeout,1500000);
     assert.equal(result.audit.tiles[0].attempts,2);
     assert.equal(result.peak,3,'three actual concurrent detail requests');
     assert.equal(result.audit.pptxLayout.state,'passed',JSON.stringify(result.audit));
-    assert.equal(result.audit.transcription.state,'passed');
-    assert.match(result.audit.source.sha256,/^[a-f0-9]{64}$/);
-    assert.equal(result.audit.source.width,1200);
-    assert.equal(await page.locator('#exportConfirm').isDisabled(),true);
-    await page.locator('#exportDraft').check();
     for(const format of ['svg','pptx','vsdx','drawio']){
       await page.locator(`#exportActions [data-export="${format}"]`).click();
       const promise=page.waitForEvent('download',{timeout:30000});
       await page.locator('#exportConfirm').click();
       const download=await promise;
       assert.ok(fs.statSync(await download.path()).size>100);
-      assert.match(download.suggestedFilename(),/editable-draft/);
     }
-    await page.locator('#exportDraft').uncheck();
-    assert.equal(await page.locator('#exportMode').count(),0);
-    assert.equal(await page.locator('#exportConfirm').isDisabled(),true);
-    assert.equal(await page.locator('#exportComparison').isVisible(),true);
     await page.reload({waitUntil:'domcontentloaded'});
     const cached=await page.evaluate(async(src)=>{
       document.querySelector('#provider').value='ark';document.querySelector('#key').value='test';
@@ -227,7 +162,7 @@ const server = http.createServer((req,res)=>{
       let calls=0;const original=window.fetch;window.fetch=async(url,options)=>{if(!String(url).endsWith('/chat/completions'))return original(url,options);calls++;throw Error('offline');};
       return {ok:await window.__ffReconstruct(),calls,audit:window.__ffApiAudit.reconstruction};
     },await page.evaluate(()=>localStorage.getItem('test-bitmap')));
-    assert.equal(cached.ok,true);assert.ok(cached.calls>0,'unfinished repairs remain retryable');assert.equal(cached.audit.cacheHit,true);
+    assert.equal(cached.ok,true);assert.equal(cached.calls,0);assert.equal(cached.audit.cacheHit,true);
     const failed=await page.evaluate(async()=>{
       const select=document.querySelector('#analyzeModel');select.add(new Option('different','different'));select.value='different';
       window.fetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'{"description":"no objects"}'}}]}),{status:200});
@@ -263,92 +198,20 @@ const server = http.createServer((req,res)=>{
             if(!phase&&catalog.nodes.some(n=>n.text==='Label 0'))return new Response('unavailable',{status:503});
             output=catalog.nodes;
           }finally{active--;}
-        }else if(prompt.includes('WHOLE IMAGE layout correction'))return new Response(JSON.stringify({choices:[{message:{content:'{"groups":[]}'}}]}));
-        else if(prompt.includes('Independent bitmap transcription'))output=[...nodes,missing].map(n=>({type:'text',text:n.text}));
-        else global++;
+        }else global++;
         return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes:output})}}]}));
       };
       const ok=await window.__ffReconstruct(),audit=structuredClone(window.__ffApiAudit.reconstruction),texts=window.__ffExportState.scene.nodes.filter(n=>n.type==='text').map(n=>n.text);
-      const status={recon:document.querySelector('#reconStatus').textContent,export:document.querySelector('#exportStatus').textContent};
       phase=1;const firstCalls=detailCalls;
       const resumed=await window.__ffReconstruct();
-      return {ok,audit,texts,status,peak,global,resumed,resumeCalls:detailCalls-firstCalls,resumeAudit:window.__ffApiAudit.reconstruction};
+      return {ok,audit,texts,peak,global,resumed,resumeCalls:detailCalls-firstCalls,resumeAudit:window.__ffApiAudit.reconstruction};
     });
     assert.equal(split.ok,true);assert.equal(split.peak,3);assert.equal(split.global,1);
     assert.equal(split.audit.registeredMissing,1);assert.equal(split.texts.length,13);assert.equal(new Set(split.texts).size,13);
     assert.ok(split.audit.revisions.some(r=>r.state==='subdivided'));
     assert.ok(split.audit.failedDetailIds.length>0);assert.equal(split.audit.state,'needs-review');
-    assert.match(split.status.recon,/please inspect|请检查/);
-    assert.match(split.status.export,/Needs review|需复核/);
-
     assert.equal(split.resumed,true);assert.equal(split.resumeAudit.cacheHit,true);assert.ok(split.resumeCalls>0);
     assert.equal(split.resumeAudit.failedDetailIds,undefined);
-    await page.reload();
-    await page.waitForFunction(()=>window.__ffExportState);
-    const overview=await page.evaluate(async()=>{
-      document.querySelector('#provider').value='ark';
-      document.querySelector('#key').value='browser-test-key';
-      const select=document.querySelector('#analyzeModel');
-      select.add(new Option('overview-test','overview-test'));select.value='overview-test';
-      const nodes=[{type:'rect',x:40,y:40,w:100,h:80,fill:'#224488',stroke:'none'},
-        {type:'rect',x:800,y:300,w:100,h:80,fill:'#cc8822',stroke:'none'}];
-      const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=500;
-      const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,1200,500);
-      nodes.forEach(n=>{ctx.fillStyle=n.fill;ctx.fillRect(n.x,n.y,n.w,n.h);});
-      window.__ffLastGeneratedImage=canvas.toDataURL();
-      const original=window.fetch;
-      window.fetch=async(url,options)=>{
-        if(!String(url).endsWith('/chat/completions'))return original(url,options);
-        const prompt=JSON.parse(options.body).messages[1].content[0].text;
-        let output;
-        if(prompt.includes('completeness audit')||prompt.includes('Independent bitmap transcription'))output=[];
-        else if(prompt.includes('WHOLE IMAGE layout correction')){
-          const catalog=JSON.parse(prompt.split('Catalog: ')[1]);
-          return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({groups:[
-            {nodes:[{id:catalog.nodes[0].id,x:600}]},
-            {nodes:[{id:catalog.nodes[1].id,x:800,y:300}]}
-          ]})}}]}));
-        }
-        else if(prompt.includes('Catalog in crop coordinates: '))output=JSON.parse(prompt.split('Catalog in crop coordinates: ')[1]).nodes;
-        else output=[nodes[0],{...nodes[1],x:500,y:100}];
-        return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes:output})}}]}));
-      };
-      const ok=await window.__ffReconstruct();
-      return {ok,audit:window.__ffApiAudit.reconstruction,scene:window.__ffExportState.scene};
-    });
-    assert.equal(overview.ok,true);
-    assert.equal(overview.audit.globalLayout.accepted,1,JSON.stringify(overview.audit.globalLayout));
-    assert.equal(overview.audit.globalLayout.rejected,1);
-    assert.equal(overview.scene.nodes[0].x,40);
-    assert.equal(overview.scene.nodes[1].x,800);
-    assert.equal(overview.scene.nodes[1].y,300);
-    const invalidated=await page.evaluate(()=>{
-      const canvas=document.createElement('canvas');canvas.width=100;canvas.height=80;
-      window.__ffLastGeneratedImage=canvas.toDataURL();
-      window.__ffRefreshExportCard();
-      return {svg:window.__ffExportState.svg,binding:window.__ffExportState.sourceBinding,
-        comparisonHidden:document.querySelector('#exportComparison').hidden};
-    });
-    assert.equal(invalidated.svg,'');assert.equal(invalidated.binding,null);
-    assert.equal(invalidated.comparisonHidden,true);
-    assert.equal(await page.locator('#exportConfirm').isDisabled(),true);
-    const stale=await page.evaluate(async()=>{
-      const select=document.querySelector('#analyzeModel');select.add(new Option('stale','stale-test'));select.value='stale-test';
-      let release,started;const ready=new Promise(r=>started=r);
-      const original=window.fetch;
-      window.fetch=async(url,options)=>{
-        if(!String(url).endsWith('/chat/completions'))return original(url,options);
-        started();await new Promise(r=>release=r);
-        return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes:[{type:'rect',x:0,y:0,w:30,h:30,fill:'#000000'}]})}}]}));
-      };
-      const task=window.__ffReconstruct();await ready;
-      const canvas=document.createElement('canvas');canvas.width=101;canvas.height=81;
-      window.__ffLastGeneratedImage=canvas.toDataURL();window.__ffRefreshExportCard();
-      release();const ok=await task;
-      return {ok,svg:window.__ffExportState.svg,binding:window.__ffExportState.sourceBinding};
-    });
-    assert.equal(stale.ok,null,'late response is discarded');
-    assert.equal(stale.svg,'');assert.equal(stale.binding,null);
     assert.deepEqual(errors,[]);
     console.log('Browser whole-image catalog, constrained crops and four exports: OK');
   }finally{await browser.close();}
