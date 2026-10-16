@@ -19,6 +19,8 @@ for(const model of ['gpt-image-2.5-sunburst','gpt-image-2.5-flare','gpt-image-2'
   for(const resolution of ['1K','2K','4K']){
     for(const ratio of ['16:9','3:2','4:3','1:1']){
       const request=imageRequestDimensions('oai',model,ratio,resolution);
+      assert.deepEqual(imageRequestDimensions('infistar',model,ratio,resolution),request,
+        `Infistar must offer ${model} ${resolution} ${ratio} through the image endpoint`);
       assert.equal(request.field,'size');
       const [width,height]=request.value.split('x').map(Number);
       assert.equal(verifyImageRatio(width,height,ratio),true,`${model} ${resolution} ${ratio}`);
@@ -27,6 +29,19 @@ for(const model of ['gpt-image-2.5-sunburst','gpt-image-2.5-flare','gpt-image-2'
       assert.equal(width%16,0); assert.equal(height%16,0);
       assert.ok(Math.max(width,height)<=3840);
       assert.ok(width*height>=655360 && width*height<=8294400);
+    }
+  }
+}
+// Other image IDs arrive from the account-specific /models list, so test the
+// request grid for representative families. The response is checked at runtime.
+for(const model of ['qwen-image-plus','doubao-seedream-5-0-lite','flux.1-kontext-pro','gpt-image-1.5']){
+  for(const resolution of ['1K','2K','4K']){
+    for(const ratio of ['16:9','3:2','4:3','1:1']){
+      const request=imageRequestDimensions('infistar',model,ratio,resolution);
+      assert.equal(request.field,'size');
+      const [width,height]=request.value.split('x').map(Number);
+      assert.equal(verifyImageRatio(width,height,ratio),true,`${model} ${resolution} ${ratio}`);
+      assert.equal(verifyImageResolution(width,height,resolution,request.value),true);
     }
   }
 }

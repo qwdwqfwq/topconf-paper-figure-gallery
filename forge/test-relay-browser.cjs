@@ -63,7 +63,7 @@ const server = http.createServer((req,res)=>{
     let requested=[];
     await page.route('https://infistar.cc/v1/**',route=>{
       requested.push({url:route.request().url(),headers:route.request().headers()});
-      return route.fulfill({json:{data:[{id:'gpt-4o-mini'},{id:'text-embedding-v4'},{id:'wan3.0-video'},{id:'gpt-image-2'}]}});
+      return route.fulfill({json:{data:[{id:'gpt-4o-mini'},{id:'text-embedding-v4'},{id:'wan3.0-video'},{id:'gpt-image-2'},{id:'gpt-image-2.5-sunburst'},{id:'qwen-image-plus'}]}});
     });
     await page.locator('#key').fill('test-key');
     await page.locator('#refreshModels').click();
@@ -89,6 +89,29 @@ const server = http.createServer((req,res)=>{
     assert.ok(imageRequests[0].body.contents[0].parts[0].text.includes('Draw a research diagram'));
     assert.equal(await page.locator('#out img').getAttribute('src'),'data:image/png;base64,'+pixel);
     await page.unroute('https://infistar.cc/**');
+    await page.locator('#model').selectOption('qwen-image-plus');
+    for(const resolution of ['1K','2K','4K']) for(const ratio of ['16:9','3:2','4:3','1:1']){
+      await page.locator('#imageResolution').selectOption(resolution);
+      await page.locator('#figureRatio').selectOption(ratio);
+      assert.equal(await page.locator('#imageRatioWarn').isVisible(),false,`Infistar model should request ${ratio} ${resolution}`);
+    }
+    // Regression: Infistar GPT 2.5 must accept the selected 16:9, 2K size,
+    // and the verified Step 3 bitmap download must be ready immediately.
+    await page.locator('#model').selectOption('gpt-image-2.5-sunburst');
+    await page.locator('#figureRatio').selectOption('16:9');
+    await page.locator('#imageResolution').selectOption('2K');
+    assert.equal(await page.locator('#imageRatioWarn').isVisible(),false);
+    const widePixel=await page.evaluate(()=>{const canvas=document.createElement('canvas');canvas.width=2048;canvas.height=1152;return canvas.toDataURL('image/png').split(',')[1];});
+    let gptRequest;
+    await page.route('https://infistar.cc/v1/images/generations',route=>{
+      gptRequest=route.request().postDataJSON();
+      return route.fulfill({json:{data:[{b64_json:widePixel}]}});
+    });
+    await page.evaluate(()=>window.__testGenImage('https://infistar.cc/v1','gpt-image-2.5-sunburst','test-key','Draw a research diagram','infistar',[],''));
+    assert.equal(gptRequest.size,'2048x1152');
+    assert.equal(await page.locator('#dlImg').isEnabled(),true);
+    assert.equal(await page.locator('#out img').getAttribute('src'),'data:image/png;base64,'+widePixel);
+    await page.unroute('https://infistar.cc/v1/images/generations');
     if(process.env.INFISTAR_IMAGE_TEST_KEY){
       await page.evaluate(async key=>window.__testGenImage('https://infistar.cc/v1','gemini-3.1-flash-image',key,'Draw two boxes labelled Input and Output, connected by an arrow.','infistar',[],''),process.env.INFISTAR_IMAGE_TEST_KEY);
       const result=await page.locator('#out img').evaluate(async img=>{await img.decode();return {width:img.naturalWidth,height:img.naturalHeight,srcLength:img.src.length}});

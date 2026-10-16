@@ -23,7 +23,7 @@ export function imageRequestDimensions(provider,model,ratio,resolution='2K',nati
   // GPT Image 2/2.5 accept custom sizes: edges divisible by 16, <=3840px,
   // and 655360-8294400 total pixels. Keep the requested ratio exact.
   // https://developers.openai.com/api/docs/guides/image-generation#size-and-quality-options
-  if(provider==='oai' && /^gpt-image-2(?:\.5-(?:sunburst|flare))?$/i.test(model)){
+  if(['oai','infistar'].includes(provider) && /^gpt-image-2(?:\.5-(?:sunburst|flare))?$/i.test(model)){
     const sizes={
       '1K':{'16:9':'1280x720','3:2':'1152x768','4:3':'1024x768','1:1':'1024x1024'},
       '2K':{'16:9':'2048x1152','3:2':'2304x1536','4:3':'2048x1536','1:1':'2048x2048'},
@@ -35,6 +35,17 @@ export function imageRequestDimensions(provider,model,ratio,resolution='2K',nati
   if(provider==='oai' && /^gpt-image/i.test(model)){
     if(resolution==='1K' && ratio==='3:2') return {field:'size',value:'1536x1024'};
     if(resolution==='1K' && ratio==='1:1') return {field:'size',value:'1024x1024'};
+  }
+  // Infistar lists image models dynamically for each key. Its image endpoint
+  // accepts a size parameter, but supported values vary by model. Submit the
+  // requested dimensions and verify the returned bitmap before offering it.
+  if(provider==='infistar'){
+    const sizes={
+      '1K':{'16:9':'1280x720','3:2':'1152x768','4:3':'1024x768','1:1':'1024x1024'},
+      '2K':{'16:9':'2048x1152','3:2':'2304x1536','4:3':'2048x1536','1:1':'2048x2048'},
+      '4K':{'16:9':'3840x2160','3:2':'3456x2304','4:3':'3200x2400','1:1':'2816x2816'}
+    };
+    return {field:'size',value:sizes[resolution][ratio]};
   }
   if(provider==='sf' && ratio==='1:1' && resolution==='1K') return {field:'image_size',value:'1024x1024'};
   if(provider==='glm' && ratio==='1:1' && resolution==='1K') return {field:'size',value:'1024x1024'};
