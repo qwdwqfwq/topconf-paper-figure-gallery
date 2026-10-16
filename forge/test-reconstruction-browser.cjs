@@ -43,6 +43,16 @@ const server = http.createServer((req,res)=>{
     await page.goto(`http://127.0.0.1:${server.address().port}/forge/`,{waitUntil:'domcontentloaded'});
     assert.equal(await page.evaluate(()=>typeof window.__ffReconstruct),'function',JSON.stringify(errors));
 
+    assert.equal(await page.inputValue('#reconTimeoutMinutes'),'25');
+    await page.evaluate(()=>{
+      localStorage.setItem('ff_recon_timeout_minutes','15');
+      localStorage.removeItem('ff_recon_timeout_extension_v1');
+    });
+    await page.reload({waitUntil:'domcontentloaded'});
+    assert.equal(await page.inputValue('#reconTimeoutMinutes'),'25','saved timeout gains ten minutes');
+    await page.reload({waitUntil:'domcontentloaded'});
+    assert.equal(await page.inputValue('#reconTimeoutMinutes'),'25','migration runs only once');
+
     const fidelityRoundtrip=await page.evaluate(async()=>{
       const {buildNativePptx,readNativePptxScene}=await import('./editable-native.mjs');
       const scene={canvas:{width:600,height:400},nodes:[
@@ -188,7 +198,7 @@ const server = http.createServer((req,res)=>{
     assert.ok(result.repairs>0,'exercise crop catalog requests');
     assert.equal(result.calls,result.repairs+5,'one timeout, global retry, completeness audit, transcript and layout correction');
     assert.equal(result.audit.globalLayout.rejected,1,'unknown objects cannot replace the scene');
-    assert.equal(result.configuredTimeout,900000);
+    assert.equal(result.configuredTimeout,1500000);
     assert.equal(result.audit.tiles[0].attempts,2);
     assert.equal(result.peak,3,'three actual concurrent detail requests');
     assert.equal(result.audit.pptxLayout.state,'passed',JSON.stringify(result.audit));

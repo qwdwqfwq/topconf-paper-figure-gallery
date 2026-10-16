@@ -544,7 +544,7 @@
       <p class="bnote warn-inline" id="imageRatioWarn" hidden></p>
       <p class="bnote warn-inline" id="modelWarn" hidden></p>
       <p class="bnote" id="pdfModelHint" data-i18n="hint.model"></p>
-      <label class="bfield" style="margin-top:9px">重建请求超时（分钟） / Reconstruction timeout (minutes)<input id="reconTimeoutMinutes" type="number" min="1" max="60" step="1" value="15"></label>
+      <label class="bfield" style="margin-top:9px">重建请求超时（分钟） / Reconstruction timeout (minutes)<input id="reconTimeoutMinutes" type="number" min="1" max="70" step="1" value="25"></label>
       <div class="bfield" id="analyzeModelRow" hidden style="margin-top:9px"><span class="blab" data-i18n="analyzemodel"></span><select id="analyzeModel"></select></div>
       <div class="bfield" style="margin-top:9px"><span class="blab">视觉推理强度</span><select id="visualReasoningEffort" aria-label="视觉推理强度"><option value="">服务商默认</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">极高</option></select></div>
       <p class="bnote">用于参考图归纳及步骤四重建、修正。需模型及服务商支持；默认不指定强度。</p>
@@ -637,7 +637,7 @@
 </div>
 
 <script src="./i18n.js"></script>
-<script src="./i18n_forge.js?v=20261017-editable-layout"></script>
+<script src="./i18n_forge.js?v=20261017-generation-timeouts"></script>
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult} from './image-api.mjs?v=20261016';
@@ -1274,10 +1274,10 @@ async function callPdfParser(mode, payload){
     const text = instruction+'\n\n'+tt('ps.texthdr',{f:pdfContext.fileName,p:ex.pages})+'\n'+ex.text.slice(0, MAX_PDF_CHARS);
     if(c.proto==='anthropic'){
       body={model,max_tokens:5000,system:'只输出严格 JSON。',messages:[{role:'user',content:[{type:'text',text}]}]};
-      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},180000);
+      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},780000);
     }else if(/openai\.com/i.test(base)){
       body={model,input:[{role:'user',content:[{type:'input_text',text}]}],max_output_tokens:5000};
-      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},180000);
+      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},780000);
     }else{
       body={model,temperature:0.1,max_tokens:5000,messages:[{role:'system',content:'只输出严格 JSON。'},{role:'user',content:text}]};
       if($('#provider').value==='ark' && !relayBase()) body.thinking={type:'disabled'};
@@ -1290,12 +1290,12 @@ async function callPdfParser(mode, payload){
       const blocks=ex.imgs.map(u=>({type:'image',source:{type:'base64',media_type:'image/jpeg',data:dataURIToParts(u).data}}));
       blocks.push({type:'text',text:note});
       body={model,max_tokens:5000,system:'只输出严格 JSON。',messages:[{role:'user',content:blocks}]};
-      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},180000);
+      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},780000);
     }else if(/openai\.com/i.test(base)){
       const content=ex.imgs.map(u=>({type:'input_image',image_url:u}));
       content.push({type:'input_text',text:note});
       body={model,input:[{role:'user',content}],max_output_tokens:5000};
-      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},180000);
+      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},780000);
     }else{
       const content=ex.imgs.map(u=>({type:'image_url',image_url:{url:u}}));
       content.push({type:'text',text:note});
@@ -1311,10 +1311,10 @@ async function callPdfParser(mode, payload){
       const blocks=[{type:'document',source:{type:'base64',media_type:part.media||'application/pdf',data:part.data}},
                     {type:'text',text:instruction}];
       body={model,max_tokens:5000,system:'只输出严格 JSON。',messages:[{role:'user',content:blocks}]};
-      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},180000);
+      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},780000);
     }else if(dm==='openai_responses'){
       body={model,input:[{role:'user',content:[{type:'input_file',filename:pdfContext.fileName,file_data:pdfContext.dataUri},{type:'input_text',text:instruction}]}],max_output_tokens:5000};
-      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},180000);
+      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},780000);
     }else{
       body={model,temperature:0.1,max_tokens:5000,messages:[{role:'system',content:'只输出严格 JSON。'},{role:'user',content:[{type:'file',file:{filename:pdfContext.fileName,file_data:pdfContext.dataUri}},{type:'text',text:instruction}]}]};
       r=await postJSON(base,'/chat/completions',withReasoning(body,'parse'),key);
@@ -1576,8 +1576,16 @@ async function populateAnalyzeModels(){
   if(saved && [...s.options].some(o=>o.value===saved)) s.value=saved;
 }
 const reconTimeoutInput=$('#reconTimeoutMinutes');
-reconTimeoutInput.value=localStorage.getItem('ff_recon_timeout_minutes')||'15';
-reconTimeoutInput.onchange=()=>{reconTimeoutInput.value=String(Math.max(1,Math.min(60,Number(reconTimeoutInput.value)||15)));localStorage.setItem('ff_recon_timeout_minutes',reconTimeoutInput.value);};
+// Migrate an existing timeout once; subsequent user adjustments remain unchanged.
+if(localStorage.getItem('ff_recon_timeout_extension_v1')!=='done'){
+  const savedTimeout=Number(localStorage.getItem('ff_recon_timeout_minutes'));
+  if(Number.isFinite(savedTimeout)&&savedTimeout>0){
+    localStorage.setItem('ff_recon_timeout_minutes',String(Math.min(70,Math.max(1,savedTimeout)+10)));
+  }
+  localStorage.setItem('ff_recon_timeout_extension_v1','done');
+}
+reconTimeoutInput.value=localStorage.getItem('ff_recon_timeout_minutes')||'25';
+reconTimeoutInput.onchange=()=>{reconTimeoutInput.value=String(Math.max(1,Math.min(70,Number(reconTimeoutInput.value)||25)));localStorage.setItem('ff_recon_timeout_minutes',reconTimeoutInput.value);};
 $('#analyzeModel').onchange = e=>localStorage.setItem('ff_amodel_'+$('#provider').value, e.target.value);
 function initProviders(){
   // Register independently of the periodically refreshed upstream manifest.
@@ -1827,7 +1835,7 @@ async function analyzeReferences(){
     const blocks=uris.map(u=>{const p=dataURIToParts(u);return {type:'image',source:{type:'base64',media_type:p.media,data:p.data}};});
     blocks.push({type:'text',text:buildAnalyzePrompt(ordered.length, ordered)});
     const body={model:$('#analyzeModel').value||$('#model').value,max_tokens:16000,system:ANALYZE_SYS,messages:[{role:'user',content:blocks}]};
-    const r=await fetch(baseURL()+'/v1/messages',{method:'POST',headers:anthropicHeaders(cleanKey($('#key').value)),body:JSON.stringify(withReasoning(body,'visual'))});
+    const r=await fetchWithTimeout(baseURL()+'/v1/messages',{method:'POST',headers:anthropicHeaders(cleanKey($('#key').value)),body:JSON.stringify(withReasoning(body,'visual'))});
     txt=await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
     const d=JSON.parse(txt); txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
   }else{
@@ -2167,12 +2175,12 @@ function friendlyHttp(status, txt){
   if(status===400) return tt('err.400',{t:txt.slice(0,200)})+apiContext();
   return tt('err.http',{s:status,t:txt.slice(0,200)})+apiContext();
 }
-function postJSON(base, path, body, key, extraHeaders, timeoutMs=300000){
+function postJSON(base, path, body, key, extraHeaders, timeoutMs=900000){
   return fetchWithTimeout(base+path,{method:'POST',
     headers:{'Content-Type':'application/json',Authorization:'Bearer '+key,...extraHeaders},
     body:JSON.stringify(body)},timeoutMs);
 }
-function fetchWithTimeout(url, options={}, timeoutMs=300000){
+function fetchWithTimeout(url, options={}, timeoutMs=900000){
   const ac=new AbortController();
   const to=setTimeout(()=>ac.abort(new DOMException('timeout','TimeoutError')),timeoutMs);
   return fetch(url,{...options,signal:ac.signal}).finally(()=>clearTimeout(to));
@@ -2185,7 +2193,7 @@ function safeExportError(err){
 }
 // Keep the timer active while the response body streams. A fulfilled fetch()
 // only means headers arrived; the previous timer was cleared before r.text().
-async function fetchTextWithTimeout(url, options={}, timeoutMs=180000){
+async function fetchTextWithTimeout(url, options={}, timeoutMs=780000){
   const ac=new AbortController();
   const to=setTimeout(()=>ac.abort(),timeoutMs);
   try{
@@ -2347,15 +2355,15 @@ async function genAnthropicSVG(base,model,key,content,refIds,layoutGuide){
   let body = {model,max_tokens:8192,temperature:0.3,system:SVG_SYS,messages:[{role:'user',content:blocks}]};
   let r;
   try{
-    r = await fetch(base.replace(/\/+$/,'')+'/v1/messages',{method:'POST',
+    r = await fetchWithTimeout(base.replace(/\/+$/,'')+'/v1/messages',{method:'POST',
       headers:anthropicHeaders(key),
       body:JSON.stringify(body)});
-  }catch(e){ throw new Error(tt('svg.claudeConn')); }
+  }catch(e){ throw new Error(tt(e.name==='TimeoutError'?'svg.timeout':'svg.claudeConn')); }
   let txt = await r.text();
   if(!r.ok && usedVision){
     body.messages=[{role:'user',content:prompt}]; usedVision=false;
     try{
-      r = await fetch(base.replace(/\/+$/,'')+'/v1/messages',{method:'POST',
+      r = await fetchWithTimeout(base.replace(/\/+$/,'')+'/v1/messages',{method:'POST',
         headers:anthropicHeaders(key),
         body:JSON.stringify(body)});
       txt=await r.text();
@@ -2519,7 +2527,7 @@ Return the complete corrected SVG only, no explanation, no code fences. Start wi
   if(req.anthropic){
     const body = {model, max_tokens:8192, temperature:0.1, system:SVG_SYS,
       messages:[{role:'user',content:[{type:'text',text:svgText},{type:'text',text:instruction}]}]};
-    const r = await fetch(base.replace(/\/+$/,'')+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(body)});
+    const r = await fetchWithTimeout(base.replace(/\/+$/,'')+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(body)});
     const txt = await r.text();
     if(!r.ok) throw new Error(friendlyHttp(r.status, txt));
     const d = JSON.parse(txt);
@@ -4177,7 +4185,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit){
   const referenceImages=audit.layoutRepair?[imageDataUri,audit.preview]:[imageDataUri];
   const systemPrompt=audit.textOnly ? 'Transcribe visible text from the supplied bitmap exactly. Return only the requested JSON; never reconstruct geometry or infer wording.' : RECON_SYS;
   const isFatal=(err)=>/\b400\b|\b401\b|\b403\b|\b404\b|invalid\s+api\s*key|permission|quota|insufficient|billing/i.test(String(err&&err.message||err));
-  const timeoutMs=Math.max(1,Math.min(60,Number($('#reconTimeoutMinutes').value)||15))*60000;
+  const timeoutMs=Math.max(1,Math.min(70,Number($('#reconTimeoutMinutes').value)||25))*60000;
   audit.timeoutMs=timeoutMs;
   let lastError=null;
   for(let attempt=1;attempt<=3;attempt++){
@@ -4644,7 +4652,7 @@ async function requestRegionLabels(regions, canvas){
   if(cfgv.proto === 'anthropic' && !relay){
     const body = { model:model, max_tokens:1200, system:ANALYZE_SYS,
                    messages:[{ role:'user', content:[{ type:'text', text:prompt }] }] };
-    const r = await fetch(baseURL() + '/v1/messages',
+    const r = await fetchWithTimeout(baseURL() + '/v1/messages',
       { method:'POST', headers:anthropicHeaders(cleanKey($('#key').value)), body:JSON.stringify(withReasoning(body,'visual')) });
     txt = await r.text();
     if(!r.ok) throw new Error(friendlyHttp(r.status, txt));
@@ -5192,7 +5200,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     base=request.base; endpoint=request.endpoint; body=request.body;
   }
   let r;
-  try{ r = await postJSON(base,endpoint,body,key,undefined,600000); }
+  try{ r = await postJSON(base,endpoint,body,key,undefined,1200000); }
   catch(e){
     if(e.name==='TimeoutError') throw new Error(tt('img.timeout'));
     const diag=await diagnoseConnection(base,key,model,'image');
@@ -5204,7 +5212,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
      so this retry remains a fresh multi-reference composition. */
   if(!r.ok && usedRefs && !nativeGemini){
     delete body.image; usedRefs=false;
-    try{ r = await postJSON(base,endpoint,body,key,undefined,600000); txt=await r.text(); }catch(e){}
+    try{ r = await postJSON(base,endpoint,body,key,undefined,1200000); txt=await r.text(); }catch(e){}
   }
   if(!r.ok){
     if(r.status===404){
