@@ -636,7 +636,7 @@ import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeRecon
 import {registerMissingObjects, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion} from './reconstruction-core.mjs?v=20261016b';
 import {calibrateEditableText} from './text-calibration.mjs?v=20261015';
 import {layoutEditableText} from './editable-text-layout.mjs?v=20261016';
-import {figureCanvas,imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261016';
+import {figureCanvas,imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261016b';
 import {importDesktopScene} from './desktop-scene.mjs?v=20261014';
 
 // Keep the large local index/CLIP assets across reloads and page re-entry.
@@ -5169,7 +5169,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const actualImage=await loadImage(exportImgSrc);
   const actualWidth=actualImage.naturalWidth||actualImage.width, actualHeight=actualImage.naturalHeight||actualImage.height;
   if(!verifyImageRatio(actualWidth,actualHeight,ratio)) throw new Error(tt('img.ratioMismatch',{ratio,width:actualWidth,height:actualHeight}));
-  if(!verifyImageResolution(actualWidth,actualHeight,resolution)) throw new Error(tt('img.resolutionMismatch',{resolution,width:actualWidth,height:actualHeight}));
+  if(!verifyImageResolution(actualWidth,actualHeight,resolution,dimensions.field==='size'?dimensions.value:null)) throw new Error(tt('img.resolutionMismatch',{resolution,width:actualWidth,height:actualHeight}));
   $('#out').style.display='block';
   $('#out').innerHTML = `<img data-step3-output="true" src="${esc(imgSrc)}" alt="draft">
     <div class="dl"><button class="btn-primary" id="dlImg">${tt('img.download')}</button>

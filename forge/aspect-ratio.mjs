@@ -20,8 +20,18 @@ export function imageRequestDimensions(provider,model,ratio,resolution='2K',nati
     const sizes={'16:9':'4096x2304','3:2':'4992x3328','4:3':'4704x3520','1:1':'4096x4096'};
     return {field:'size',value:sizes[ratio]};
   }
-  // These endpoints publish a limited set of exact output sizes. Never ask for
-  // a different size and silently stretch or crop the response.
+  // GPT Image 2/2.5 accept custom sizes: edges divisible by 16, <=3840px,
+  // and 655360-8294400 total pixels. Keep the requested ratio exact.
+  // https://developers.openai.com/api/docs/guides/image-generation#size-and-quality-options
+  if(provider==='oai' && /^gpt-image-2(?:\.5-(?:sunburst|flare))?$/i.test(model)){
+    const sizes={
+      '1K':{'16:9':'1280x720','3:2':'1152x768','4:3':'1024x768','1:1':'1024x1024'},
+      '2K':{'16:9':'2048x1152','3:2':'2304x1536','4:3':'2048x1536','1:1':'2048x2048'},
+      '4K':{'16:9':'3840x2160','3:2':'3456x2304','4:3':'3200x2400','1:1':'2816x2816'}
+    };
+    return {field:'size',value:sizes[resolution][ratio]};
+  }
+  // Older GPT Image endpoints publish a limited set of exact output sizes.
   if(provider==='oai' && /^gpt-image/i.test(model)){
     if(resolution==='1K' && ratio==='3:2') return {field:'size',value:'1536x1024'};
     if(resolution==='1K' && ratio==='1:1') return {field:'size',value:'1024x1024'};
@@ -37,7 +47,12 @@ export function verifyImageRatio(width,height,ratio){
   return Math.abs(width/height-pair[0]/pair[1])/(pair[0]/pair[1])<=0.012;
 }
 
-export function verifyImageResolution(width,height,resolution){
+export function verifyImageResolution(width,height,resolution,requestedSize){
+  if(requestedSize){
+    const match=/^(\d+)x(\d+)$/.exec(requestedSize);
+    if(match) return Number.isFinite(width) && Number.isFinite(height)
+      && width>=Number(match[1]) && height>=Number(match[2]);
+  }
   const minLongSide={'1K':1024,'2K':2000,'4K':4000}[resolution];
   return !!minLongSide && Number.isFinite(width) && Number.isFinite(height) && Math.max(width,height)>=minLongSide;
 }

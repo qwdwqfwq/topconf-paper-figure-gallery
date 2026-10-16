@@ -15,6 +15,22 @@ assert.throws(()=>imageRequestDimensions('ark','doubao-seedream-5-0','16:9','4K'
 assert.throws(()=>imageRequestDimensions('oai','gpt-image-1','1:1','2K'),/no verified/);
 assert.throws(()=>imageRequestDimensions('oai','dall-e-3','3:2','1K'),/no verified/);
 assert.deepEqual(imageRequestDimensions('oai','gpt-image-1','1:1','1K'),{field:'size',value:'1024x1024'});
+for(const model of ['gpt-image-2.5-sunburst','gpt-image-2.5-flare','gpt-image-2']){
+  for(const resolution of ['1K','2K','4K']){
+    for(const ratio of ['16:9','3:2','4:3','1:1']){
+      const request=imageRequestDimensions('oai',model,ratio,resolution);
+      assert.equal(request.field,'size');
+      const [width,height]=request.value.split('x').map(Number);
+      assert.equal(verifyImageRatio(width,height,ratio),true,`${model} ${resolution} ${ratio}`);
+      assert.equal(verifyImageResolution(width,height,resolution,request.value),true);
+      assert.equal(verifyImageResolution(width/2,height/2,resolution,request.value),false);
+      assert.equal(width%16,0); assert.equal(height%16,0);
+      assert.ok(Math.max(width,height)<=3840);
+      assert.ok(width*height>=655360 && width*height<=8294400);
+    }
+  }
+}
+assert.deepEqual(imageRequestDimensions('oai','gpt-image-2.5-sunburst','16:9','1K'),{field:'size',value:'1280x720'});
 assert.equal(verifyImageRatio(1024,1024,'16:9'),false);
 assert.equal(verifyImageResolution(2048,1152,'2K'),true);
 assert.equal(verifyImageResolution(1024,576,'2K'),false);
