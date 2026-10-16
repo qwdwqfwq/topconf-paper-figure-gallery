@@ -630,9 +630,9 @@
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult} from './image-api.mjs?v=20261016';
-import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=20261016-fidelity';
-import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=20261016-fidelity';
-import {registerMissingObjects, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion} from './reconstruction-core.mjs?v=20261016-fidelity';
+import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=20261017-repair';
+import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=20261017-repair';
+import {registerMissingObjects, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion} from './reconstruction-core.mjs?v=20261017-repair';
 import {calibrateEditableText} from './text-calibration.mjs?v=20261015';
 import {layoutEditableText} from './editable-text-layout.mjs?v=20261016';
 import {figureCanvas,imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261016d';
@@ -4281,7 +4281,10 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
       try{
         if(audit.objectRepair){
           const allowed=new Map(audit.catalog.nodes.map(n=>[n.id,n.type]));
-          const nodes=extractEditableNodes(extractJSON(txt)).filter(n=>typeof n.id==='string'&&allowed.get(n.id)===n.type);
+          // Geometry replacements are validated against bounds/types by
+          // replaceObjectRepairRegion. Do not discard them at the API boundary.
+          const nodes=extractEditableNodes(extractJSON(txt)).filter(n=>
+            (typeof n.id==='string'&&allowed.has(n.id))||(typeof n.replaces==='string'&&allowed.has(n.replaces)));
           scene=nodes.length?materializeEditableScene({nodes},W,H):{canvas:{width:W,height:H},nodes:[]};
         }else if(audit.omissionCheck){
           const nodes=extractEditableNodes(extractJSON(txt));
@@ -4421,8 +4424,9 @@ async function runReconstruction(){
     if(cached)Object.assign(wholeAudit,{state:'cached',attempts:0});
     reconstructionAudit.cacheHit=!!cached;
     let omissionChecked=!!cached?.omissionChecked;
+    let overviewChecked=!!cached?.overviewChecked;
     const completedIds=new Set(cached?.completedIds||[]);
-    const saveProgress=()=>writeReconstructionCache(cacheKey,{scene,omissionChecked,completedIds:[...completedIds]});
+    const saveProgress=()=>writeReconstructionCache(cacheKey,{scene,omissionChecked,overviewChecked,completedIds:[...completedIds]});
     await saveProgress();
     // Missing objects are proposed once against the full image and registered
     // centrally before any crop is allowed to update them.
@@ -4467,6 +4471,32 @@ async function runReconstruction(){
       let pptxQa=await compareEditableRender(canvas,pptxScene);
       reconstructionAudit.pptxQuality={score:pptxQa.score,localRecall:pptxQa.localRecall};
       const qualityPasses=(qa)=>qa.score>=.98 && qa.darkRecall>=.98 && qa.localRecall>=.97 && qa.edgeF1>=.97 && qa.colorSimilarity>=.98;
+      // Crops cannot relocate an initially misplaced module. Review the whole
+      // layout once, using the actual serialized export as the comparison.
+      // An average gain alone is insufficient: protect every spatial region.
+      if(!overviewChecked && !qualityPasses(pptxQa)){
+        const overviewAudit={wholeImage:true,overviewReview:true};
+        reconstructionAudit.overviewReview=overviewAudit;
+        try{
+          const proposal=createWholeImageCatalog(await requestScene(src,canvas.width,canvas.height,overviewAudit,
+            {...pptxQa,scene}));
+          const rendered=await readNativePptxScene(await buildNativePptx(proposal,zipStore),canvas.width,canvas.height);
+          const after=await compareEditableRender(canvas,rendered);
+          let safe=acceptReconstructionRepair(pptxQa,after)&&
+            auditExportLayout(proposal,rendered).issues.length<=auditExportLayout(scene,pptxScene).issues.length;
+          for(let row=0;safe&&row<3;row++)for(let col=0;safe&&col<4;col++){
+            const region={x:col*canvas.width/4,y:row*canvas.height/3,w:canvas.width/4,h:canvas.height/3};
+            const beforeRegion=await compareEditableRender(canvas,pptxScene,region);
+            const afterRegion=await compareEditableRender(canvas,rendered,region);
+            safe=['score','darkRecall','localRecall','edgeF1','colorSimilarity'].every(key=>
+              Number.isFinite(afterRegion[key])&&afterRegion[key]>=beforeRegion[key]-.002);
+          }
+          overviewAudit.accepted=safe;
+          if(safe){scene=proposal;pptxScene=rendered;pptxQa=after;completedIds.clear();reconstructionAudit.catalog=scene.nodes.map(n=>({id:n.id,type:n.type,...(n.type==='text'?{text:n.text}:{})}));}
+          overviewChecked=true;
+          await saveProgress();
+        }catch(error){overviewAudit.error=String(error?.message||error);}
+      }
       const initialLayout=auditExportLayout(scene,pptxScene);
       let jobs=omissionChecked && qualityPasses(pptxQa) && initialLayout.state==='passed' ? [] : planCatalogRepairs(scene,canvas.width,canvas.height);
       if(jobs.length && omissionChecked && initialLayout.state==='passed'){
@@ -4523,7 +4553,9 @@ async function runReconstruction(){
             reconstructionAudit.objectRepairs=(reconstructionAudit.objectRepairs||0)+1;
             measuredQuality=pptxQa;
           }
-          ids.forEach(id=>completedIds.add(id));
+          // Rejected or still-inaccurate repairs must remain retryable.
+          if(qualityPasses(await compareEditableRender(canvas,pptxScene,region)))
+            ids.forEach(id=>completedIds.add(id));
           await saveProgress();
         }catch(error){reconstructionAudit.objectRepairError=String(error?.message||error);}
         }

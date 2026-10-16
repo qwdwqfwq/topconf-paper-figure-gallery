@@ -21,7 +21,7 @@ const server = http.createServer((req,res)=>{
       const html=data.toString('utf8').replace(/\r\n/g,'\n')
         .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
         .replace('window.__ffReconstruct = () => runReconstruction();',
-          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestGenerateBitmap = genOaiImage; window.__ffTestZip = zipStore;')
+          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestGenerateBitmap = genOaiImage; window.__ffTestZip = zipStore; window.__ffTestRequestScene = requestEditableScene;')
         .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});",
           "MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});");
       data=Buffer.from(html);
@@ -59,6 +59,39 @@ const server = http.createServer((req,res)=>{
     assert.equal(fidelityRoundtrip.nodes[1].fill.toLowerCase(),'#cccccc');
     assert.match(fidelityRoundtrip.nodes[1].d,/Z/i);
     assert.deepEqual(fidelityRoundtrip.nodes.slice(2).map(n=>n.fill.toLowerCase()),['#ffcc00','#0088aa']);
+
+    // Exercise the API parser as well as the merge: the old parser silently
+    // dropped type changes and every child of a multicolor decomposition.
+    const parsedRepair=await page.evaluate(async()=>{
+      const {replaceObjectRepairRegion}=await import('./reconstruction-core.mjs');
+      document.querySelector('#provider').value='ark';
+      document.querySelector('#key').value='browser-test-key';
+      const model=document.querySelector('#analyzeModel');
+      model.add(new Option('doubao-vision-test','doubao-vision-test'));model.value='doubao-vision-test';
+      const scene={canvas:{width:400,height:300},nodes:[
+        {id:'matrix',type:'rect',x:40,y:40,w:80,h:80,fill:'#aaaaaa'},
+        {id:'arrow',type:'line',x:150,y:80,x2:250,y2:80,stroke:'#222222',strokeWidth:2}
+      ]};
+      const nodes=[
+        {replaces:'matrix',type:'rect',x:40,y:40,w:80,h:160,fill:'#ffcc00'},
+        {id:'new-cell',replaces:'matrix',type:'rect',x:120,y:40,w:80,h:160,fill:'#0088aa'},
+        {id:'arrow',type:'path',d:'M 260 110 L 420 110 L 420 100 L 460 120 L 420 140 L 420 130 L 260 130 Z',fill:'#cccccc',stroke:'#222222',strokeWidth:2},
+        {id:'unrelated',type:'rect',x:0,y:0,w:560,h:360,fill:'#ff0000'}
+      ];
+      const original=window.fetch;
+      window.fetch=async(url,options)=>String(url).endsWith('/chat/completions')?
+        new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes})}}]}),{status:200}):original(url,options);
+      try{
+        const canvas=document.createElement('canvas');canvas.width=560;canvas.height=360;
+        const parsed=await window.__ffTestRequestScene(canvas.toDataURL(),560,360,{objectRepair:true,catalog:scene});
+        return {parsed:parsed.nodes,merged:replaceObjectRepairRegion(scene,{x:20,y:20,w:280,h:180},parsed,2).nodes};
+      }finally{window.fetch=original;}
+    });
+    assert.equal(parsedRepair.parsed.length,3,'API boundary retains valid replacement geometry only');
+    assert.equal(parsedRepair.merged.length,3);
+    assert.deepEqual(parsedRepair.merged.slice(0,2).map(n=>n.fill.toLowerCase()),['#ffcc00','#0088aa']);
+    assert.equal(parsedRepair.merged[2].type,'path');
+    assert.equal(parsedRepair.merged[2].fill.toLowerCase(),'#cccccc');
 
     // Step 3 must offer a real bitmap download while Step 4's vision request
     // is still pending. Exercise the image generation path without a live API.
@@ -124,6 +157,8 @@ const server = http.createServer((req,res)=>{
           nodes=[...catalog.nodes.map(n=>({...n,...(n.type==='text'?{text:'INJECTED'}:{})})),
             {id:'unknown',type:'text',text:'EXTRA',x:50,y:50,w:80,h:20,fontSize:16},
             {type:'text',text:'MISSING ID',x:50,y:70,w:80,h:20,fontSize:16}];
+        }else if(prompt.includes('Prior editable scene JSON follows:')){
+          nodes=[{type:'rect',x:0,y:0,w:1200,h:500,fill:'#ff0000'}];
         }else{
           if(!prompt.includes('WHOLE IMAGE'))throw Error('Whole-image catalog required');
           nodes=[{type:'rect',x:450,y:50,w:300,h:180,fill:'#abcdef'},
@@ -149,7 +184,8 @@ const server = http.createServer((req,res)=>{
     assert.equal(result.scene.nodes.filter(n=>n.type==='text').length,1);
     assert.equal(result.scene.nodes.find(n=>n.type==='text').text,'Global label');
     assert.ok(result.repairs>0,'exercise crop catalog requests');
-    assert.equal(result.calls,result.repairs+3,'one timeout, global retry and completeness audit');
+    assert.equal(result.calls,result.repairs+4,'one timeout, global retry, completeness audit and guarded overview review');
+    assert.equal(result.audit.overviewReview.accepted,false,'reject destructive whole-scene revision');
     assert.equal(result.configuredTimeout,900000);
     assert.equal(result.audit.tiles[0].attempts,2);
     assert.equal(result.peak,3,'three actual concurrent detail requests');
@@ -169,7 +205,7 @@ const server = http.createServer((req,res)=>{
       let calls=0;const original=window.fetch;window.fetch=async(url,options)=>{if(!String(url).endsWith('/chat/completions'))return original(url,options);calls++;throw Error('offline');};
       return {ok:await window.__ffReconstruct(),calls,audit:window.__ffApiAudit.reconstruction};
     },await page.evaluate(()=>localStorage.getItem('test-bitmap')));
-    assert.equal(cached.ok,true);assert.equal(cached.calls,0);assert.equal(cached.audit.cacheHit,true);
+    assert.equal(cached.ok,true);assert.ok(cached.calls>0,'unfinished repairs remain retryable');assert.equal(cached.audit.cacheHit,true);
     const failed=await page.evaluate(async()=>{
       const select=document.querySelector('#analyzeModel');select.add(new Option('different','different'));select.value='different';
       window.fetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'{"description":"no objects"}'}}]}),{status:200});
@@ -205,7 +241,8 @@ const server = http.createServer((req,res)=>{
             if(!phase&&catalog.nodes.some(n=>n.text==='Label 0'))return new Response('unavailable',{status:503});
             output=catalog.nodes;
           }finally{active--;}
-        }else global++;
+        }else if(prompt.includes('Prior editable scene JSON follows:'))output=[...nodes,missing];
+        else global++;
         return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes:output})}}]}));
       };
       const ok=await window.__ffReconstruct(),audit=structuredClone(window.__ffApiAudit.reconstruction),texts=window.__ffExportState.scene.nodes.filter(n=>n.type==='text').map(n=>n.text);
@@ -223,6 +260,38 @@ const server = http.createServer((req,res)=>{
     assert.doesNotMatch(split.status.recon+split.status.export,/质量未达标|quality check failed|needs review/i);
     assert.equal(split.resumed,true);assert.equal(split.resumeAudit.cacheHit,true);assert.ok(split.resumeCalls>0);
     assert.equal(split.resumeAudit.failedDetailIds,undefined);
+    await page.reload();
+    await page.waitForFunction(()=>window.__ffExportState);
+    const overview=await page.evaluate(async()=>{
+      document.querySelector('#provider').value='ark';
+      document.querySelector('#key').value='browser-test-key';
+      const select=document.querySelector('#analyzeModel');
+      select.add(new Option('overview-test','overview-test'));select.value='overview-test';
+      const nodes=[{type:'rect',x:40,y:40,w:100,h:80,fill:'#224488',stroke:'none'},
+        {type:'rect',x:800,y:300,w:100,h:80,fill:'#cc8822',stroke:'none'}];
+      const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=500;
+      const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,1200,500);
+      nodes.forEach(n=>{ctx.fillStyle=n.fill;ctx.fillRect(n.x,n.y,n.w,n.h);});
+      window.__ffLastGeneratedImage=canvas.toDataURL();
+      const original=window.fetch;
+      window.fetch=async(url,options)=>{
+        if(!String(url).endsWith('/chat/completions'))return original(url,options);
+        const prompt=JSON.parse(options.body).messages[1].content[0].text;
+        let output;
+        if(prompt.includes('completeness audit'))output=[];
+        else if(prompt.includes('Prior editable scene JSON follows:'))output=nodes;
+        else if(prompt.includes('Catalog in crop coordinates: '))output=JSON.parse(prompt.split('Catalog in crop coordinates: ')[1]).nodes;
+        else output=[nodes[0],{...nodes[1],x:500,y:100}];
+        return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes:output})}}]}));
+      };
+      const ok=await window.__ffReconstruct();
+      return {ok,audit:window.__ffApiAudit.reconstruction,scene:window.__ffExportState.scene};
+    });
+    assert.equal(overview.ok,true);
+    assert.equal(overview.audit.overviewReview.accepted,true,'accept corrected module position while preserving correct module');
+    assert.equal(overview.scene.nodes[0].x,40);
+    assert.equal(overview.scene.nodes[1].x,800);
+    assert.equal(overview.scene.nodes[1].y,300);
     assert.deepEqual(errors,[]);
     console.log('Browser whole-image catalog, constrained crops and four exports: OK');
   }finally{await browser.close();}
