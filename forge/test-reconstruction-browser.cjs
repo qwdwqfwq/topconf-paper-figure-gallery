@@ -157,8 +157,10 @@ const server = http.createServer((req,res)=>{
           nodes=[...catalog.nodes.map(n=>({...n,...(n.type==='text'?{text:'INJECTED'}:{})})),
             {id:'unknown',type:'text',text:'EXTRA',x:50,y:50,w:80,h:20,fontSize:16},
             {type:'text',text:'MISSING ID',x:50,y:70,w:80,h:20,fontSize:16}];
-        }else if(prompt.includes('Prior editable scene JSON follows:')){
-          nodes=[{type:'rect',x:0,y:0,w:1200,h:500,fill:'#ff0000'}];
+        }else if(prompt.includes('WHOLE IMAGE layout correction')){
+          return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({groups:[{nodes:[{id:'unknown',x:0}]}]})}}]}));
+        }else if(prompt.includes('Independent bitmap transcription')){
+          nodes=[{type:'text',text:'Global label'}];
         }else{
           if(!prompt.includes('WHOLE IMAGE'))throw Error('Whole-image catalog required');
           nodes=[{type:'rect',x:450,y:50,w:300,h:180,fill:'#abcdef'},
@@ -184,19 +186,29 @@ const server = http.createServer((req,res)=>{
     assert.equal(result.scene.nodes.filter(n=>n.type==='text').length,1);
     assert.equal(result.scene.nodes.find(n=>n.type==='text').text,'Global label');
     assert.ok(result.repairs>0,'exercise crop catalog requests');
-    assert.equal(result.calls,result.repairs+4,'one timeout, global retry, completeness audit and guarded overview review');
-    assert.equal(result.audit.overviewReview.accepted,false,'reject destructive whole-scene revision');
+    assert.equal(result.calls,result.repairs+5,'one timeout, global retry, completeness audit, transcript and layout correction');
+    assert.equal(result.audit.globalLayout.rejected,1,'unknown objects cannot replace the scene');
     assert.equal(result.configuredTimeout,900000);
     assert.equal(result.audit.tiles[0].attempts,2);
     assert.equal(result.peak,3,'three actual concurrent detail requests');
     assert.equal(result.audit.pptxLayout.state,'passed',JSON.stringify(result.audit));
+    assert.equal(result.audit.transcription.state,'passed');
+    assert.match(result.audit.source.sha256,/^[a-f0-9]{64}$/);
+    assert.equal(result.audit.source.width,1200);
+    assert.equal(await page.locator('#exportConfirm').isDisabled(),true);
+    await page.locator('#exportDraft').check();
     for(const format of ['svg','pptx','vsdx','drawio']){
       await page.locator(`#exportActions [data-export="${format}"]`).click();
       const promise=page.waitForEvent('download',{timeout:30000});
       await page.locator('#exportConfirm').click();
       const download=await promise;
       assert.ok(fs.statSync(await download.path()).size>100);
+      assert.match(download.suggestedFilename(),/editable-draft/);
     }
+    await page.locator('#exportDraft').uncheck();
+    assert.equal(await page.locator('#exportMode').count(),0);
+    assert.equal(await page.locator('#exportConfirm').isDisabled(),true);
+    assert.equal(await page.locator('#exportComparison').isVisible(),true);
     await page.reload({waitUntil:'domcontentloaded'});
     const cached=await page.evaluate(async(src)=>{
       document.querySelector('#provider').value='ark';document.querySelector('#key').value='test';
@@ -241,7 +253,8 @@ const server = http.createServer((req,res)=>{
             if(!phase&&catalog.nodes.some(n=>n.text==='Label 0'))return new Response('unavailable',{status:503});
             output=catalog.nodes;
           }finally{active--;}
-        }else if(prompt.includes('Prior editable scene JSON follows:'))output=[...nodes,missing];
+        }else if(prompt.includes('WHOLE IMAGE layout correction'))return new Response(JSON.stringify({choices:[{message:{content:'{"groups":[]}'}}]}));
+        else if(prompt.includes('Independent bitmap transcription'))output=[...nodes,missing].map(n=>({type:'text',text:n.text}));
         else global++;
         return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes:output})}}]}));
       };
@@ -256,8 +269,8 @@ const server = http.createServer((req,res)=>{
     assert.ok(split.audit.revisions.some(r=>r.state==='subdivided'));
     assert.ok(split.audit.failedDetailIds.length>0);assert.equal(split.audit.state,'needs-review');
     assert.match(split.status.recon,/please inspect|请检查/);
-    assert.match(split.status.export,/Reconstruction succeeded|重建成功/);
-    assert.doesNotMatch(split.status.recon+split.status.export,/质量未达标|quality check failed|needs review/i);
+    assert.match(split.status.export,/Needs review|需复核/);
+
     assert.equal(split.resumed,true);assert.equal(split.resumeAudit.cacheHit,true);assert.ok(split.resumeCalls>0);
     assert.equal(split.resumeAudit.failedDetailIds,undefined);
     await page.reload();
@@ -278,8 +291,14 @@ const server = http.createServer((req,res)=>{
         if(!String(url).endsWith('/chat/completions'))return original(url,options);
         const prompt=JSON.parse(options.body).messages[1].content[0].text;
         let output;
-        if(prompt.includes('completeness audit'))output=[];
-        else if(prompt.includes('Prior editable scene JSON follows:'))output=nodes;
+        if(prompt.includes('completeness audit')||prompt.includes('Independent bitmap transcription'))output=[];
+        else if(prompt.includes('WHOLE IMAGE layout correction')){
+          const catalog=JSON.parse(prompt.split('Catalog: ')[1]);
+          return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({groups:[
+            {nodes:[{id:catalog.nodes[0].id,x:600}]},
+            {nodes:[{id:catalog.nodes[1].id,x:800,y:300}]}
+          ]})}}]}));
+        }
         else if(prompt.includes('Catalog in crop coordinates: '))output=JSON.parse(prompt.split('Catalog in crop coordinates: ')[1]).nodes;
         else output=[nodes[0],{...nodes[1],x:500,y:100}];
         return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes:output})}}]}));
@@ -288,10 +307,38 @@ const server = http.createServer((req,res)=>{
       return {ok,audit:window.__ffApiAudit.reconstruction,scene:window.__ffExportState.scene};
     });
     assert.equal(overview.ok,true);
-    assert.equal(overview.audit.overviewReview.accepted,true,'accept corrected module position while preserving correct module');
+    assert.equal(overview.audit.globalLayout.accepted,1,JSON.stringify(overview.audit.globalLayout));
+    assert.equal(overview.audit.globalLayout.rejected,1);
     assert.equal(overview.scene.nodes[0].x,40);
     assert.equal(overview.scene.nodes[1].x,800);
     assert.equal(overview.scene.nodes[1].y,300);
+    const invalidated=await page.evaluate(()=>{
+      const canvas=document.createElement('canvas');canvas.width=100;canvas.height=80;
+      window.__ffLastGeneratedImage=canvas.toDataURL();
+      window.__ffRefreshExportCard();
+      return {svg:window.__ffExportState.svg,binding:window.__ffExportState.sourceBinding,
+        comparisonHidden:document.querySelector('#exportComparison').hidden};
+    });
+    assert.equal(invalidated.svg,'');assert.equal(invalidated.binding,null);
+    assert.equal(invalidated.comparisonHidden,true);
+    assert.equal(await page.locator('#exportConfirm').isDisabled(),true);
+    const stale=await page.evaluate(async()=>{
+      const select=document.querySelector('#analyzeModel');select.add(new Option('stale','stale-test'));select.value='stale-test';
+      let release,started;const ready=new Promise(r=>started=r);
+      const original=window.fetch;
+      window.fetch=async(url,options)=>{
+        if(!String(url).endsWith('/chat/completions'))return original(url,options);
+        started();await new Promise(r=>release=r);
+        return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes:[{type:'rect',x:0,y:0,w:30,h:30,fill:'#000000'}]})}}]}));
+      };
+      const task=window.__ffReconstruct();await ready;
+      const canvas=document.createElement('canvas');canvas.width=101;canvas.height=81;
+      window.__ffLastGeneratedImage=canvas.toDataURL();window.__ffRefreshExportCard();
+      release();const ok=await task;
+      return {ok,svg:window.__ffExportState.svg,binding:window.__ffExportState.sourceBinding};
+    });
+    assert.equal(stale.ok,null,'late response is discarded');
+    assert.equal(stale.svg,'');assert.equal(stale.binding,null);
     assert.deepEqual(errors,[]);
     console.log('Browser whole-image catalog, constrained crops and four exports: OK');
   }finally{await browser.close();}

@@ -44,6 +44,27 @@ export function editableNodeBounds(n){
     right:Math.max(...xs),bottom:Math.max(...ys)};
   return Object.values(bounds).every(Number.isFinite)?bounds:null;
 }
+// Global corrections can cross crop boundaries, but cannot replace the catalog.
+// Apply each related group atomically so a module can move with its labels.
+export function applyGlobalLayoutRepair(scene, patches, width, height){
+  if(!Array.isArray(patches)||!patches.length)return null;
+  const originals=new Map(scene.nodes.map(n=>[n.id,n])), updates=new Map();
+  const fields=new Set(['id','type','x','y','w','h','x2','y2','d','points','fontSize','radius']);
+  for(const patch of patches){
+    if(!patch || typeof patch!=='object')return null;
+    const original=originals.get(patch.id);
+    if(!original || original.type==='image' || updates.has(patch.id) ||
+      (patch.type && patch.type!==original.type) || Object.keys(patch).some(k=>!fields.has(k)))return null;
+    const node={...original,...patch};
+    for(const key of ['x','y','w','h','x2','y2','fontSize','radius']){
+      if(key in patch && (!Number.isFinite(patch[key]) || (['w','h','fontSize'].includes(key)&&patch[key]<=0)))return null;
+    }
+    const b=editableNodeBounds(node);
+    if(!b || b.x<0 || b.y<0 || b.right>width || b.bottom>height)return null;
+    updates.set(patch.id,node);
+  }
+  return {...scene,nodes:scene.nodes.map(n=>updates.get(n.id)||n)};
+}
 export function planObjectRepairRegion(weak,scene,width,height){
   if(!weak)return null;
   const seed={x:Math.max(0,weak.x),y:Math.max(0,weak.y),
@@ -172,19 +193,19 @@ export function auditExportLayout(source,exported){
   }
   return {state:issues.length?'needs-review':'passed',issues,textCount:texts.length};
 }
-export function replaceObjectRepairRegion(scene,region,localScene,scale){
+export function replaceObjectRepairRegion(scene,region,localScene,scale,allowedIds){
   if(!Number.isFinite(scale)||scale<=0)return scene;
   const x1=region.x+region.w,y1=region.y+region.h;
   const inside=b=>b&&b.x>=region.x+1&&b.y>=region.y+1&&b.right<=x1-1&&b.bottom<=y1-1;
   const small=b=>b&&(b.right-b.x)<region.w*.85&&(b.bottom-b.y)<region.h*.85;
-  const originals=new Map((scene.nodes||[]).filter(n=>n.id&&inside(editableNodeBounds(n))&&small(editableNodeBounds(n))).map(n=>[String(n.id),n]));
+  const originals=new Map((scene.nodes||[]).filter(n=>n.id&&(!allowedIds||allowedIds.includes(n.id))&&inside(editableNodeBounds(n))&&small(editableNodeBounds(n))).map(n=>[String(n.id),n]));
   const updates=new Map();
   const components=new Map(),invalid=new Set();
   const geometryTypes=new Set(['rect','ellipse','line','polyline','path']);
   for(const source of localScene.nodes||[]){
     const key=String(source.replaces||source.id);
     const original=originals.get(key);
-    if(!original)continue;
+    if(!original || original.type==='image')continue;
     if(source.replaces){
       // Decompose only an existing geometric object, never text or photographs.
       const n=transformCatalogNode(source,1/scale,region.x,region.y);

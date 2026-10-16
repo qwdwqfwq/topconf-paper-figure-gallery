@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {registerMissingObjects,planCatalogRepairs,createWholeImageCatalog,objectRepairCatalog,auditExportLayout,extractEditableNodes,planReconstructionTiles,subdivideReconstructionTile,mergeReconstructionTiles,reconstructionQualityDeficit,acceptReconstructionRepair,planObjectRepairRegion,replaceObjectRepairRegion} from './reconstruction-core.mjs';
+import {applyGlobalLayoutRepair,registerMissingObjects,planCatalogRepairs,createWholeImageCatalog,objectRepairCatalog,auditExportLayout,extractEditableNodes,planReconstructionTiles,subdivideReconstructionTile,mergeReconstructionTiles,reconstructionQualityDeficit,acceptReconstructionRepair,planObjectRepairRegion,replaceObjectRepairRegion} from './reconstruction-core.mjs';
 
 assert.equal(reconstructionQualityDeficit({score:.98,darkRecall:.98,localRecall:.97,edgeF1:.97,colorSimilarity:.98}),0);
 assert.ok(reconstructionQualityDeficit({score:.9,darkRecall:.9,localRecall:.9,edgeF1:.9,colorSimilarity:.9})>0,
@@ -196,6 +196,10 @@ assert.equal(patched.nodes[2].y,151);
 assert.equal(patched.nodes[2].strokeWidth,2);
 assert.deepEqual(replaceObjectRepairRegion(patched,area,local,2),patched,'repeat crop is idempotent');
 assert.equal(objectRepairCatalog(catalog,{x:550,y:50,w:100,h:200},2).nodes.length,0,'partial cross-boundary objects are context only');
+assert.deepEqual(replaceObjectRepairRegion(catalog,area,local,2,[]),catalog,'unassigned objects cannot be repaired');
+assert.equal(replaceObjectRepairRegion(catalog,area,local,2,[catalog.nodes[0].id]).nodes[2].y,150,'context line cannot move');
+const movedImage={nodes:[{...imageCatalog.nodes[0],x:imageCatalog.nodes[0].x+2}]};
+assert.deepEqual(replaceObjectRepairRegion({nodes:[imageSource]},area,movedImage,2,['photo']).nodes,[imageSource],'source image crop and placement are frozen');
 local.nodes[0].fontSize=100;
 assert.equal(replaceObjectRepairRegion(catalog,area,local,2).nodes[0].fontSize,20,'large font drift rejected');
 assert.equal(auditExportLayout(catalog,catalog).state,'passed');
@@ -249,3 +253,17 @@ const invalidDetails={nodes:[...details.nodes.slice(0,2),{replaces:'matrix',type
 assert.deepEqual(replaceObjectRepairRegion(fidelity,repairArea,invalidDetails,2),fidelity,'one escaped child rejects entire decomposition');
 assert.deepEqual(replaceObjectRepairRegion(fidelity,repairArea,{nodes:[{replaces:'label',type:'rect',x:40,y:240,w:100,h:40}]},2),fidelity,'text cannot be replaced by geometric fragments');
 console.log('filled arrow correction and multicolor decomposition: OK');
+
+const layoutScene={nodes:[{id:'a',type:'rect',x:20,y:20,w:80,h:60,fill:'#123456'},
+  {id:'b',type:'text',x:30,y:30,w:50,h:20,text:'Exact label',fontSize:16}]};
+const moved=applyGlobalLayoutRepair(layoutScene,[{id:'a',x:700},{id:'b',x:710}],1000,500);
+assert.equal(moved.nodes[0].x,700);
+assert.equal(moved.nodes[1].text,'Exact label');
+assert.equal(moved.nodes[0].fill,'#123456');
+assert.equal(layoutScene.nodes[0].x,20);
+assert.equal(applyGlobalLayoutRepair(layoutScene,[{id:'b',x:710}],1000,500).nodes[0],layoutScene.nodes[0]);
+for(const patch of [null,{id:'missing',x:50},{id:'a',text:'rewritten'},{id:'a',fill:'#ff0000'},
+  {id:'a',x:NaN},{id:'a',x:999},{id:'a',type:'image'}]){
+  assert.equal(applyGlobalLayoutRepair(layoutScene,[{id:'b',x:710},patch],1000,500),null);
+}
+console.log('atomic global layout correction and preservation: OK');

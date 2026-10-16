@@ -1,0 +1,20 @@
+import assert from 'node:assert/strict';
+import {bitmapDigest,auditSourceText,canExportReconstruction} from './source-fidelity.mjs';
+
+const scene=text=>({nodes:[{type:'text',text}]});
+const source=scene('Video-Conditioned Diffusion Policy for Long-Horizon Robot Manipulation');
+const rewritten=scene('Diffusion Policy for Robot Manipulation from a Single Human Demonstration');
+assert.equal(auditSourceText(rewritten,source).state,'needs-review');
+assert.equal(auditSourceText(source,source).state,'passed');
+const data='data:image/png;base64,AAAA';
+assert.equal(await bitmapDigest(data),await bitmapDigest(data));
+assert.notEqual(await bitmapDigest(data),await bitmapDigest('data:image/png;base64,AAAB'));
+const state={source:'bitmap',bitmap:data,sourceBinding:{source:data},svg:'<svg/>',recon:{qualityState:'needs-review'},font:'original'};
+assert.equal(canExportReconstruction(state),false);
+assert.equal(canExportReconstruction({...state,allowDraft:true}),true);
+assert.equal(canExportReconstruction({...state,exportMode:'fidelity'}),false);
+assert.equal(canExportReconstruction({...state,recon:{qualityState:'succeeded'}}),true);
+assert.equal(canExportReconstruction({...state,recon:{qualityState:'succeeded'},font:'Arial'}),false);
+assert.equal(canExportReconstruction({...state,allowDraft:true,bitmap:'changed'}),false);
+assert.equal(canExportReconstruction({...state,exportMode:'fidelity',reconPending:true}),false);
+console.log('source hash, title transcription and export quality gates: OK');
