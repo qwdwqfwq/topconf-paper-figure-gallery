@@ -21,7 +21,7 @@ const server = http.createServer((req,res)=>{
       const html=data.toString('utf8').replace(/\r\n/g,'\n')
         .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
         .replace('window.__ffReconstruct = () => runReconstruction();',
-          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestGenerateBitmap = genOaiImage; window.__ffTestZip = zipStore; window.__ffTestRequestScene = requestEditableScene;')
+          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestMaterialize = materializeEditableScene; window.__ffTestCalibrate = calibrateEditableText; window.__ffTestGenerateBitmap = genOaiImage; window.__ffTestZip = zipStore; window.__ffTestRequestScene = requestEditableScene;')
         .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});",
           "MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});");
       data=Buffer.from(html);
@@ -42,6 +42,24 @@ const server = http.createServer((req,res)=>{
     page.on('requestfailed',r=>errors.push(`Request failed ${r.url()}: ${r.failure()?.errorText}`));
     await page.goto(`http://127.0.0.1:${server.address().port}/forge/`,{waitUntil:'domcontentloaded'});
     assert.equal(await page.evaluate(()=>typeof window.__ffReconstruct),'function',JSON.stringify(errors));
+
+    const textCheck=await page.evaluate(()=>{
+      const raw={nodes:[
+        {type:'rect',x:30,y:30,w:200,h:100,fill:'#eeeeee'},
+        {type:'line',x:230,y:80,x2:270,y2:80,arrow:true},
+        {type:'text',x:50,y:50,w:140,h:50,text:'Memory state\r\ninitialization',fontSize:22},
+        {type:'text',x:300,y:50,w:140,h:76,text:'Answer\nCandidate\nGeneration',fontSize:22}
+      ]};
+      const scene=window.__ffTestMaterialize(raw,600,400);
+      const canvas=document.createElement('canvas');canvas.width=600;canvas.height=400;
+      const before=JSON.stringify(scene.nodes);
+      window.__ffTestCalibrate(scene,canvas);
+      return {nodes:scene.nodes,unchanged:before===JSON.stringify(scene.nodes)};
+    });
+    assert.equal(textCheck.nodes[2].text,'Memory state\ninitialization');
+    assert.equal(textCheck.nodes[2].fontSize,22,'two lines retain recognized size');
+    assert.equal(textCheck.nodes[3].fontSize,22,'three lines retain recognized size');
+    assert.equal(textCheck.unchanged,true,'single-line calibrator must leave multiline labels and geometry alone');
 
     assert.equal(await page.inputValue('#reconTimeoutMinutes'),'25');
     await page.evaluate(()=>{

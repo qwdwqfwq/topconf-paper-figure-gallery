@@ -46,6 +46,7 @@ const scene = {
     {type:'text',x:300,y:395,w:300,h:45,text:'Editable 3D cube',fontSize:32,fontFamily:'Arial',fill:'#111111',bold:true},
     {type:'text',x:730,y:360,w:180,h:30,text:'Rotate',fontSize:19,rotation:34,fill:'#111111'},
     {type:'text',text:'Curve',textPath:{d:'M 750 400 A 65 65 0 0 1 880 400'},fontSize:19,fill:'#111111'},
+    {type:'text',x:50,y:450,w:160,h:60,text:'Memory state\ninitialization',fontSize:22,fontFamily:'Arial',fill:'#111111'},
     {type:'image',x:950,y:200,w:100,h:100,href:tinyPng},
   ],
 };
@@ -58,6 +59,8 @@ for (const face of scene.nodes.slice(1, 4)) {
 globalThis.fetch = async () => ({ok:true,json:async()=>JSON.parse(await readFile(resolve(root,'pptx-template.json'),'utf8'))});
 const pptx = await buildNativePptx(scene, zipStore);
 const pptxBytes=Buffer.from(await pptx.arrayBuffer());
+assert.match(pptxBytes.toString('utf8'), /<a:t>Memory state<\/a:t><\/a:r><a:endParaRPr[^>]*\/><\/a:p><a:p>/, 'PPTX keeps explicit paragraphs');
+assert.match(pptxBytes.toString('utf8'), /<a:lnSpc><a:spcPts val="\d+"\/><\/a:lnSpc>/);
 assert.match(pptxBytes.toString('utf8'),/<a:cubicBezTo>/,
   'cubic and SVG arc paths must export as editable PowerPoint curves');
 assert.match(pptxBytes.toString('utf8'),/rot="2040000"/,
@@ -72,6 +75,7 @@ assert.ok(vsdx.size > 10000, 'VSDX package should contain native parts');
 assert.equal((drawio.match(/<mxCell id="ff\d+"/g) || []).length, expandEditableTextPaths(scene).nodes.length);
 assert.match(drawio,/rotation=34/,'draw.io rotated text must keep its angle');
 const vsdxBytes=Buffer.from(await vsdx.arrayBuffer());
+assert.match(vsdxBytes.toString('utf8'), /Memory state\ninitialization/, 'VSDX keeps explicit line breaks');
 assert.match(vsdxBytes.toString('utf8'),/<Cell N="Angle"/,'Visio text rotation must remain editable');
 assert.equal((drawio.match(/shape=stencil\(/g) || []).length, 5, 'cube faces and curved paths must be editable stencils');
 const stencils=[...drawio.matchAll(/shape=stencil\(([^)]+)\)/g)].map(match =>

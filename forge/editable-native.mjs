@@ -219,7 +219,9 @@ function shapeXml(n,id,unit,media){
     const ptSize=Math.max(100,Math.round(font*unit/EMU*72*100));
     const color=rgb(n.fill)||'000000';
     const face=esc(String(n.fontFamily||'Arial').split(',')[0].replace(/["']/g,''));
-    const paragraphs=String(n.text||'').split(/\r?\n/).map(line=>`<a:p><a:pPr algn="${n.anchor==='middle'?'ctr':n.anchor==='end'?'r':'l'}"/><a:r><a:rPr lang="en-US" sz="${ptSize}" b="${n.bold?1:0}" i="${n.italic?1:0}"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:latin typeface="${face}"/></a:rPr><a:t>${esc(line)}</a:t></a:r><a:endParaRPr lang="en-US"/></a:p>`).join('');
+    const textLines=String(n.text||'').split(/\r?\n/);
+    const leading=textLines.length>1?`<a:lnSpc><a:spcPts val="${Math.round(ptSize*1.14)}"/></a:lnSpc><a:spcBef><a:spcPts val="0"/></a:spcBef><a:spcAft><a:spcPts val="0"/></a:spcAft>`:'';
+    const paragraphs=textLines.map(line=>`<a:p><a:pPr algn="${n.anchor==='middle'?'ctr':n.anchor==='end'?'r':'l'}">${leading}</a:pPr><a:r><a:rPr lang="en-US" sz="${ptSize}" b="${n.bold?1:0}" i="${n.italic?1:0}"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:latin typeface="${face}"/></a:rPr><a:t>${esc(line)}</a:t></a:r><a:endParaRPr lang="en-US"/></a:p>`).join('');
     const tx=`<p:txBody><a:bodyPr wrap="none" lIns="0" tIns="0" rIns="0" bIns="0" anchor="${n.verticalAlign==='middle'?'ctr':'t'}"/><a:lstStyle/>${paragraphs}</p:txBody>`;
     const rotation=Number.isFinite(Number(n.rotation))?` rot="${Math.round(num(n.rotation)*60000)}"`:'';
     return `<p:sp>${nv}<p:spPr><a:xfrm${rotation}><a:off x="${Math.round(x*unit)}" y="${Math.round(y*unit)}"/><a:ext cx="${Math.max(1,Math.round(w*unit))}" cy="${Math.max(1,Math.round(h*unit))}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr>${tx}</p:sp>`;

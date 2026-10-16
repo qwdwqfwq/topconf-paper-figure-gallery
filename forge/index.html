@@ -641,10 +641,10 @@
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult} from './image-api.mjs?v=20261016';
-import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=rollback-0d12f63-20261017';
+import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=text-lines-20261017';
 import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=rollback-0d12f63-20261017';
 import {registerMissingObjects, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion} from './reconstruction-core.mjs?v=rollback-0d12f63-20261017';
-import {calibrateEditableText} from './text-calibration.mjs?v=rollback-0d12f63-20261017';
+import {calibrateEditableText} from './text-calibration.mjs?v=text-lines-20261017';
 import {figureCanvas,imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261016d';
 import {infistarAuditStatus} from './infistar-audit.mjs?v=20261016b';
 import {importDesktopScene} from './desktop-scene.mjs?v=20261014';
@@ -4094,19 +4094,20 @@ function materializeEditableScene(raw,W,H){
       if(parseEditablePath(d).length) out.push(Object.assign(base,{type:'path',d}));
     }
     else if(type==='text' && String(pick(n,['text','content','label','value'],'')).trim()){
-      const label=String(pick(n,['text','content','label','value'],'')).replace(/[\r\n]+/g,' ').trim().slice(0,300);
+      const label=String(pick(n,['text','content','label','value'],'')).replace(/\r\n?/g,'\n').trim().slice(0,300);
       let fontSize=clamp(pick(n,['fontSize','font_size','size'],18),6,120);
       // The model may report a size from a magnified crop. Respect its
       // explicit label bounds so adjacent editable labels do not collide.
       const explicitW=sceneNumber(pick(n,['w','width'],null),0);
       const explicitH=sceneNumber(pick(n,['h','height'],null),0);
-      if(explicitH>0) fontSize=Math.min(fontSize,Math.max(6,explicitH*1.08));
+      const labelLines=label.split('\n');
+      if(explicitH>0) fontSize=Math.min(fontSize,Math.max(6,explicitH/(1+(labelLines.length-1)*1.14)*1.08));
       const clippedAtTileEdge=x<=4 || x+explicitW>=W-4;
       if(explicitW>0 && !clippedAtTileEdge && !n.textPath && !n.rotation){
         const font=String(pick(n,['fontFamily','font','family'],'Arial'));
         const measure=document.createElement('canvas').getContext('2d');
         measure.font=`${n.bold?'bold ':''}${fontSize}px ${font}`;
-        const measured=measure.measureText(label).width;
+        const measured=Math.max(...labelLines.map(line=>measure.measureText(line).width));
         if(measured>explicitW*1.04) fontSize=Math.max(6,fontSize*explicitW*1.04/measured);
       }
       out.push(Object.assign(base,{
@@ -4471,7 +4472,7 @@ async function runReconstruction(){
     // share this limit so subdivision cannot flood the API.
     const enqueue=visionQueue(3);
     const requestScene=(...args)=>enqueue(()=>requestEditableScene(...args));
-    const cacheKey=await reconstructionCacheKey(src,{model:editableReconstructionModel(),reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
+    const cacheKey=await reconstructionCacheKey(src,{textLayoutVersion:2,model:editableReconstructionModel(),reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
     const cached=await readReconstructionCache(cacheKey);
     const wholeAudit={wholeImage:true};
     reconstructionAudit.tiles.push(wholeAudit);
