@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {createWholeImageCatalog,objectRepairCatalog,auditExportLayout,extractEditableNodes,planReconstructionTiles,subdivideReconstructionTile,mergeReconstructionTiles,reconstructionQualityDeficit,acceptReconstructionRepair,planObjectRepairRegion,replaceObjectRepairRegion} from './reconstruction-core.mjs';
+import {registerMissingObjects,planCatalogRepairs,createWholeImageCatalog,objectRepairCatalog,auditExportLayout,extractEditableNodes,planReconstructionTiles,subdivideReconstructionTile,mergeReconstructionTiles,reconstructionQualityDeficit,acceptReconstructionRepair,planObjectRepairRegion,replaceObjectRepairRegion} from './reconstruction-core.mjs';
 
 assert.equal(reconstructionQualityDeficit({score:.98,darkRecall:.98,localRecall:.97,edgeF1:.97,colorSimilarity:.98}),0);
 assert.ok(reconstructionQualityDeficit({score:.9,darkRecall:.9,localRecall:.9,edgeF1:.9,colorSimilarity:.9})>0,
@@ -204,3 +204,21 @@ assert.ok(auditExportLayout(catalog,bad).issues.some(i=>i.kind==='duplicate-text
 const wrongFont={...catalog,nodes:catalog.nodes.map(n=>n.type==='text'?{...n,fontSize:30}:n)};
 assert.ok(auditExportLayout(catalog,wrongFont).issues.some(i=>i.kind==='font-size'));
 console.log('reconstruction catalog, crop identity, geometry and layout: OK');
+
+const registered=registerMissingObjects(catalog,{nodes:[
+ {...catalog.nodes[0],x:511},
+ {type:'text',text:'Missing',x:850,y:350,w:80,h:20,fontSize:16},
+ {type:'text',text:'Missing',x:851,y:350,w:80,h:20,fontSize:16}
+]});
+assert.equal(registered.nodes.length,catalog.nodes.length+1);
+assert.equal(registered.counts.registeredMissing,1);
+assert.equal(new Set(registered.nodes.map(n=>n.id)).size,registered.nodes.length);
+const distinct=registerMissingObjects({nodes:[{id:'a',type:'path',d:'M 10 10 L 50 50'}]},
+ {nodes:[{type:'path',d:'M 10 50 L 50 10'}]});
+assert.equal(distinct.nodes.length,2,'distinct curves with shared bounds are preserved');
+const nested=registerMissingObjects({nodes:[{id:'a',type:'rect',x:10,y:10,w:100,h:100}]},
+ {nodes:[{type:'rect',x:30,y:30,w:30,h:30}]});
+assert.equal(nested.nodes.length,2,'nested detail is not a duplicate panel');
+const jobs=planCatalogRepairs(registered,1200,500);
+const owners=jobs.flatMap(j=>j.ids);
+assert.equal(new Set(owners).size,owners.length,'each object belongs to one crop only');

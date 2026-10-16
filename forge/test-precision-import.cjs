@@ -54,21 +54,23 @@ const server = http.createServer((req,res)=>{
         document.querySelector('#key').value='fixture-only';
         const select=document.querySelector('#analyzeModel');
         select.add(new Option('doubao-vision-test','doubao-vision-test'));select.value='doubao-vision-test';
-        const originalFetch=window.fetch;let globalCalls=0,detailCalls=0;
+        const originalFetch=window.fetch;let globalCalls=0,detailCalls=0,omissionCalls=0;
         window.fetch=async(url,options)=>{
           if(!String(url).endsWith('/chat/completions'))return originalFetch(url,options);
           const prompt=JSON.parse(options.body).messages[1].content[0].text;
           const detail=prompt.includes('Catalog in crop coordinates: ');
-          const nodes=detail?JSON.parse(prompt.split('Catalog in crop coordinates: ')[1]).nodes:originalNodes;
-          if(detail)detailCalls++;else globalCalls++;
+          const omission=prompt.includes('WHOLE IMAGE completeness audit');
+          const nodes=detail?JSON.parse(prompt.split('Catalog in crop coordinates: ')[1]).nodes:omission?[]:originalNodes;
+          if(detail)detailCalls++;else if(omission)omissionCalls++;else globalCalls++;
           return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes})}}]}),{status:200});
         };
         window.__ffLastGeneratedImage=bitmap;
         const ok=await window.__ffReconstruct();
-        return {ok,globalCalls,detailCalls,audit:window.__ffApiAudit.reconstruction,
+        return {ok,globalCalls,detailCalls,omissionCalls,audit:window.__ffApiAudit.reconstruction,
           scene:window.__ffExportState.scene,svg:window.__ffExportState.svg};
       },bitmap);
-      assert.equal(replay.ok,true);assert.equal(replay.globalCalls,1);
+      assert.equal(replay.ok,true);assert.equal(replay.globalCalls,1);assert.equal(replay.omissionCalls,1);
+      assert.equal(replay.scene.nodes.length,scene.objects.length);
       assert.equal(new Set(replay.scene.nodes.map(n=>n.id)).size,replay.scene.nodes.length);
       assert.ok(replay.audit.pptxLayout,'PPTX layout audit must run');
       const output=path.join(root,'work','catalog-sample-report.json');

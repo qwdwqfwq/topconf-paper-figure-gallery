@@ -76,6 +76,51 @@ export function createWholeImageCatalog(scene){
   return {...scene,nodes,counts:{...scene.counts,total:nodes.length,
     text:nodes.filter(n=>n.type==='text').length,deduplicatedText}};
 }
+// Only this full-image registration step may allocate new identities.
+export function registerMissingObjects(scene,proposals){
+  const nodes=scene.nodes.map(n=>({...n}));let added=0;
+  for(const source of proposals.nodes||[]){
+    const b=editableNodeBounds(source);if(!b)continue;
+    if(nodes.some(n=>{
+      if(n.type!==source.type)return false;
+      if(n.type==='text'&&String(n.text).replace(/\s/g,'')!==String(source.text).replace(/\s/g,''))return false;
+      // Shared bounding boxes alone cannot identify distinct curves or arrows.
+      if(['path','polyline','line'].includes(n.type)&&JSON.stringify(geometrySegments(n))!==JSON.stringify(geometrySegments(source)))return false;
+      const a=editableNodeBounds(n);if(!a)return false;
+      const distance=Math.max(Math.abs(a.x-b.x),Math.abs(a.y-b.y),Math.abs(a.right-b.right),Math.abs(a.bottom-b.bottom));
+      const w=Math.max(0,Math.min(a.right,b.right)-Math.max(a.x,b.x));
+      const h=Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.y,b.y));
+      const area=(a.right-a.x)*(a.bottom-a.y)+(b.right-b.x)*(b.bottom-b.y)-w*h;
+      return distance<=4||(area>0&&w*h/area>.8);
+    }))continue;
+    let id='whole_added_'+(nodes.length+1);while(nodes.some(n=>n.id===id))id+='_';
+    nodes.push({...source,id});added++;
+  }
+  return {...scene,nodes,counts:{...scene.counts,total:nodes.length,registeredMissing:added}};
+}
+export function regionForObjects(nodes,width,height){
+  const boxes=nodes.map(editableNodeBounds).filter(Boolean);if(!boxes.length)return null;
+  const x=Math.min(...boxes.map(b=>b.x)),y=Math.min(...boxes.map(b=>b.y));
+  const right=Math.max(...boxes.map(b=>b.right)),bottom=Math.max(...boxes.map(b=>b.bottom));
+  const pad=Math.max(24,Math.max(right-x,bottom-y)*.12);
+  const left=Math.max(0,Math.floor(x-pad)),top=Math.max(0,Math.floor(y-pad));
+  return {x:left,y:top,w:Math.min(width,Math.ceil(right+pad))-left,h:Math.min(height,Math.ceil(bottom+pad))-top};
+}
+export function planCatalogRepairs(scene,width,height){
+  // Spatial batches own disjoint IDs. Crops can overlap, but never own the
+  // same arrow/text twice, and boundaries are expanded around whole objects.
+  const nodes=scene.nodes.filter(n=>editableNodeBounds(n)).sort((a,b)=>{
+    const x=editableNodeBounds(a),y=editableNodeBounds(b);
+    return Math.floor(x.y/(height/3))-Math.floor(y.y/(height/3))||x.x-y.x;
+  });
+  const size=Math.max(1,Math.min(16,Math.ceil(nodes.length/3))),jobs=[];
+  for(let i=0;i<nodes.length;i+=size){
+    const batch=nodes.slice(i,i+size),region=regionForObjects(batch,width,height);
+    const eligible=new Set(objectRepairCatalog({nodes:batch},region,1).nodes.map(n=>n.id));
+    if(eligible.size)jobs.push({region,ids:[...eligible]});
+  }
+  return jobs;
+}
 function transformCatalogNode(source,s,dx,dy){
   const n={...source};
   if(n.type==='path')n.d=transformEditablePath(n.d,s,s,dx,dy);
