@@ -24,6 +24,18 @@ RATIOS = {'16:9': 16 / 9, '3:2': 3 / 2, '4:3': 4 / 3, '1:1': 1}
 IMAGE_RE = re.compile(r'image|seedream|flux|kolors|dall-e|gpt-image|cogview|sd-|stable-diffusion|imagen|hy-image|wanx|qwen-image', re.I)
 
 
+def request_size(model, resolution, ratio):
+    if model.startswith('gpt-image-2.5-') and resolution == '1K':
+        return {'4:3': '1280x960', '1:1': '1152x1152'}.get(ratio, SIZES[resolution][ratio])
+    if model.startswith('doubao-seedream-5-0-') and resolution == '2K':
+        return {'16:9': '2848x1600', '3:2': '2496x1664',
+                '4:3': '2304x1728', '1:1': '2048x2048'}[ratio]
+    if model.startswith('doubao-seedream-4-0-') and resolution == '1K':
+        return {'16:9': '1280x720', '3:2': '1248x832',
+                '4:3': '1152x864', '1:1': '1024x1024'}[ratio]
+    return SIZES[resolution][ratio]
+
+
 def request_json(url, key, body=None, timeout=240):
     headers = {'Authorization': 'Bearer ' + key, 'Accept': 'application/json'}
     if body is not None:
@@ -48,6 +60,7 @@ def dimensions(item):
 
 def run_one(key, model, ratio, resolution):
     start = time.monotonic()
+    size = request_size(model, resolution, ratio)
     native = model.startswith('gemini-')
     chat = model == 'gemini-3.1-flash-lite-image'
     if chat:
@@ -63,9 +76,9 @@ def run_one(key, model, ratio, resolution):
     else:
         url = ROOT + '/v1/images/generations'
         body = {'model': model, 'prompt': 'Draw a simple blue circle on a white background.',
-                'size': SIZES[resolution][ratio]}
+                'size': size}
     result = {'model': model, 'ratio': ratio, 'resolution': resolution,
-              'requested': SIZES[resolution][ratio] if not native else f'{ratio} {resolution}'}
+              'requested': size if not native else f'{ratio} {resolution}'}
     try:
         payload = request_json(url, key, body)
         if chat:
@@ -83,7 +96,7 @@ def run_one(key, model, ratio, resolution):
         if not item:
             raise ValueError('No image in response: ' + json.dumps(payload, ensure_ascii=False)[:400])
         width, height = dimensions(item)
-        expected_width, expected_height = map(int, SIZES[resolution][ratio].split('x'))
+        expected_width, expected_height = map(int, size.split('x'))
         ratio_ok = abs(width / height / RATIOS[ratio] - 1) <= .012
         if native:
             resolution_ok = max(width, height) >= {'1K': 1024, '2K': 2000, '4K': 4000}[resolution]
