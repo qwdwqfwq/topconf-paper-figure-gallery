@@ -36,16 +36,30 @@ const server = http.createServer((req,res)=>{
     const page=await browser.newPage({serviceWorkers:'block'});
     const errors=[]; page.on('pageerror',e=>errors.push(e.message));
     await page.goto(`http://127.0.0.1:${server.address().port}/forge/`);
-    await page.locator('#useRelay').check();
-    await page.locator('#relayPreset').selectOption('https://infistar.cc/v1');
     assert.equal(await page.locator('#provider').inputValue(),'infistar');
-    assert.equal(await page.locator('#key').inputValue(),'');
-    assert.equal(await page.locator('#baseOverride').inputValue(),'https://infistar.cc/v1');
-    await page.locator('#relayPreset').selectOption('https://infistar.ai/v1');
+    const providers=await page.locator('#provider option').evaluateAll(xs=>xs.map(x=>x.value));
+    assert.equal(providers[0],'infistar');
+    for(const id of ['sf','claude','custom']) assert.ok(!providers.includes(id));
+    assert.equal(await page.locator('#relayToggle').isVisible(),false);
+    assert.equal(await page.locator('#relayRow').isVisible(),false);
+    assert.equal(await page.locator('#manifestHint').isVisible(),false);
+    assert.equal(await page.locator('#baseHint').isVisible(),false);
+    assert.equal(await page.locator('[data-i18n="hint.pdf"]').count(),0);
+    // Migrate obsolete saved selections without borrowing their credentials.
+    await page.evaluate(()=>{localStorage.setItem('ff_provider','claude');localStorage.setItem('ff_key_claude','old-provider-key');localStorage.setItem('ff_base_infistar','https://infistar.ai/v1');});
     await page.reload();
     assert.equal(await page.locator('#provider').inputValue(),'infistar');
+    assert.equal(await page.locator('#key').inputValue(),'');
     assert.equal(await page.locator('#baseOverride').inputValue(),'https://infistar.ai/v1');
-    await page.locator('#relayPreset').selectOption('https://infistar.cc/v1');
+    await page.evaluate(()=>localStorage.removeItem('ff_base_infistar'));
+    await page.reload();
+    await page.locator('[data-mode="image"]').click();
+    for(const id of ['figureRatio','imageResolution','analyzeModel']){
+      assert.equal(await page.locator('#'+id).evaluate(el=>getComputedStyle(el).borderTopStyle),'solid');
+    }
+    await page.setViewportSize({width:390,height:844});
+    assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+    await page.setViewportSize({width:1280,height:900});
     let requested=[];
     await page.route('https://infistar.cc/v1/**',route=>{
       requested.push({url:route.request().url(),headers:route.request().headers()});
@@ -56,20 +70,11 @@ const server = http.createServer((req,res)=>{
     await page.waitForFunction(()=>document.querySelector('#parseModel').value==='gpt-4o-mini');
     assert.deepEqual(await page.locator('#parseModel option').evaluateAll(xs=>xs.map(x=>x.value)),['gpt-4o-mini']);
     assert.ok(requested.every(r=>r.url==='https://infistar.cc/v1/models' && r.headers.authorization==='Bearer test-key'));
-    // Claude relay uses the same OpenAI path and Bearer auth.
-    await page.locator('#provider').selectOption('claude');
-    await page.locator('#useRelay').check();
-    await page.locator('#baseOverride').fill('https://infistar.cc/v1');
-    await page.locator('#key').fill('test-key');
-    requested=[];
-    await page.locator('#refreshModels').click();
-    await page.waitForTimeout(200);
-    assert.ok(requested.length>0 && requested.every(r=>r.url==='https://infistar.cc/v1/models' && r.headers.authorization==='Bearer test-key'));
-    await page.locator('#relayPreset').selectOption('https://infistar.cc/v1');
     await page.unroute('https://infistar.cc/v1/**');
     // Exercise the app's image branch and bitmap handoff to Step 4.
     // Reference payloads are covered by test-image-api.mjs; reconstruction is stubbed.
-    const pixel='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=';
+    await page.locator('#figureRatio').selectOption('1:1');
+    const pixel=await page.evaluate(()=>{const canvas=document.createElement('canvas');canvas.width=2048;canvas.height=2048;return canvas.toDataURL('image/png').split(',')[1];});
     let imageRequests=[];
     await page.route('https://infistar.cc/**',route=>{
       const req=route.request();
@@ -104,7 +109,8 @@ const server = http.createServer((req,res)=>{
       assert.match(result.reply,/FORGE_OK/);
       console.log('LIVE browser CORS, model discovery and chat passed:',JSON.stringify(result));
     }
+    await page.screenshot({path:path.join(root,'work/provider-ui-desktop.png'),fullPage:true});
     assert.deepEqual(errors,[]);
-    console.log('PASS Infistar presets, persistence, credential isolation, model filtering, Claude relay routing and Gemini image generation');
+    console.log('PASS provider cleanup, saved-provider migration, control styling, mobile layout, credential isolation, model filtering and Gemini image generation');
   }finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});

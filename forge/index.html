@@ -329,6 +329,11 @@
     .export-progress-track{height:8px;border-radius:999px;background:#e0e7ff;overflow:hidden}
     .export-progress-fill{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#6366f1,#4f46e5);transition:width .16s ease}
     @media(max-width:760px){.export-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
+/* Keep model and canvas controls visually consistent. */
+#figureRatio,#imageResolution,#analyzeModel,#reconTimeoutMinutes{border:1px solid #d9d5ed;border-radius:10px;padding:10px 14px;background:#fff;color:#1f2937;min-height:42px;box-shadow:0 1px 2px #312e8108}
+#figureRatio,#imageResolution{min-width:110px}
+#analyzeModel{flex:1;max-width:none;min-width:0}
+#figureRatio:focus-visible,#imageResolution:focus-visible,#analyzeModel:focus-visible,#reconTimeoutMinutes:focus-visible{outline:3px solid #c4b5fd;outline-offset:2px;border-color:#7c3aed}
 </style>
 </head>
 <body>
@@ -412,8 +417,7 @@
             <span class="blab" data-i18n="parseid"></span>
             <input type="text" id="parseCustomModel" data-i18n-ph="parseidPh">
           </div>
-          <p class="bnote" data-i18n="hint.pdf"></p>
-          <label class="chkline"><input type="checkbox" id="useRelay"><span data-i18n="relay.label"></span></label>
+          <label class="chkline" id="relayToggle"><input type="checkbox" id="useRelay"><span data-i18n="relay.label"></span></label>
           <div id="relayRow" hidden style="margin-top:9px">
             <div class="bfield">
               <span class="blab" data-i18n="relay.preset"></span>
@@ -434,7 +438,7 @@
           </div>
           <div class="corsnote" id="corsNote" hidden></div>
           <p class="bnote tiny" id="baseHint" hidden></p>
-          <p class="bnote tiny" id="manifestHint"></p>
+          <p class="bnote tiny" id="manifestHint" hidden></p>
         </section>
       </div>
     </div>
@@ -627,7 +631,7 @@
 </div>
 
 <script src="./i18n.js"></script>
-<script src="./i18n_forge.js?v=20261016"></script>
+<script src="./i18n_forge.js?v=20261016-ui2"></script>
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult} from './image-api.mjs?v=20261016';
@@ -681,7 +685,7 @@ function syncSubCount(){
 function syncBaseHint(){
   const el = $('#baseHint'); if(!el) return;
   el.textContent = tt('base.hint',{b:baseURL()||'–'});
-  el.hidden = !($('#useRelay').checked || $('#provider').value==='custom');
+  el.hidden = true;
 }
 
 const SKIP = /(embed|rerank|tts|speech|asx|transcri|whisper|ocr|audio|video|seedance|kling|wan.*(?:t2v|i2v))/i;
@@ -1543,9 +1547,19 @@ $('#analyzeModel').onchange = e=>localStorage.setItem('ff_amodel_'+$('#provider'
 function initProviders(){
   // Register independently of the periodically refreshed upstream manifest.
   MAN.providers.infistar={label:'Infistar 无限星河',base:'https://infistar.cc/v1',proto:'oai',cors:true,chat:[],vision:[],image:[]};
+  // Retire these providers even when a refreshed manifest still contains them.
+  for(const id of ['sf','claude','custom']) delete MAN.providers[id];
   const s = $('#provider');
-  Object.entries(MAN.providers).forEach(([k,v])=>{ const o=option(k); o.textContent=v.label; s.appendChild(o); });
-  s.value = localStorage.getItem('ff_provider')||'ark';
+  s.replaceChildren();
+  for(const k of ['infistar',...Object.keys(MAN.providers).filter(k=>k!=='infistar')]){
+    const o=option(k);
+    if(k==='infistar'){o.dataset.i18n='provider.infistar';o.textContent=tt('provider.infistar');}
+    else o.textContent=MAN.providers[k].label;
+    s.appendChild(o);
+  }
+  const saved=localStorage.getItem('ff_provider');
+  s.value=Object.hasOwn(MAN.providers,saved)?saved:'infistar';
+  localStorage.setItem('ff_provider',s.value);
   restoreProviderState(s.value);
   populateParserModels();
 }
@@ -1557,7 +1571,8 @@ function restoreProviderState(p){
   const c = cfg();
   const needRelay = c.cors===false || p==='infistar';
   $('#useRelay').checked = needRelay || localStorage.getItem('ff_relay_'+p)==='1';
-  $('#relayRow').hidden = !$('#useRelay').checked;
+  $('#relayToggle').hidden = p==='infistar';
+  $('#relayRow').hidden = p==='infistar' || !$('#useRelay').checked;
   $('#customModelRow').hidden = p!=='custom';
   $('#corsNote').hidden = c.cors!==false;
   if(c.cors===false) $('#corsNote').innerHTML = tt('cors.note');
