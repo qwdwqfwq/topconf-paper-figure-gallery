@@ -4273,6 +4273,8 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         ? 'Refine ONLY the supplied catalog IDs from this high-resolution crop. Return STRICT JSON {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. All geometry and font sizes use crop pixels. Return complete updated nodes with their original id and type. Never add objects, split objects, duplicate labels, change text content, or redraw contextual objects absent from the catalog. Omit unchanged nodes. Empty nodes is valid. Catalog in crop coordinates: '+JSON.stringify(audit.catalog)
         : revision
         ? 'Image 1 is the ORIGINAL tile and image 2 is its editable render. Following images are paired close-ups of the weakest regions: ORIGINAL then RENDER, in the order of these tile-local crop coordinates: '+JSON.stringify((revision.weakRegions||[]).slice(0,2))+'. Compare each pair carefully. Keep correct objects and their coordinates; fix missing, misplaced, wrong-colored or spurious objects, especially small text and lines visible in the close-ups. Return the COMPLETE corrected scene, not only a patch. Previous comparison score: '+revision.score.toFixed(3)+'. Prior editable scene JSON follows:\n'+priorScene+'\n'+prompt
+        : attempt>1 && lastError && lastError.sceneFormatFailure
+        ? editableSceneRetryPrompt(W,H)
         : prompt;
       let txt='';
       let responseDiagnostics='';
@@ -4351,7 +4353,14 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         }else if(audit.omissionCheck){
           const nodes=extractEditableNodes(extractJSON(txt));
           scene=nodes.length?materializeEditableScene({nodes},W,H):{canvas:{width:W,height:H},nodes:[]};
-        }else scene=parseEditableSceneResponse(txt,W,H);
+        }else{
+          scene=parseEditableSceneResponse(txt,W,H);
+          if(!scene.nodes.length){
+            const error=new Error('Vision model returned an empty editable scene');
+            error.sceneFormatFailure=true;
+            throw error;
+          }
+        }
       }
       catch(err){
         if(err.sceneFormatFailure) err.message+=' ('+responseDiagnostics+')';
