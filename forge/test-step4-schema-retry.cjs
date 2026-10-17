@@ -19,6 +19,7 @@ const server = http.createServer((req, res) => {
       const html = data.toString('utf8').replace(/\r\n/g, '\n')
         .replace("import * as T from './vendor/transformers.min.js';", 'const T={};')
         .replace('async function requestEditableScene(', 'window.__testRequestEditableScene=async function requestEditableScene(')
+        .replace('function editableReconstructionModel(', 'window.__testParseEditableSceneResponse=parseEditableSceneResponse;\nfunction editableReconstructionModel(')
         .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});",
           "MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});");
       data = Buffer.from(html);
@@ -52,11 +53,20 @@ const server = http.createServer((req, res) => {
       model.value = 'test-vision';
       const audit = {};
       const scene = await window.__testRequestEditableScene(source,1376,768,audit);
-      return {nodes:scene.nodes.length,attempts:audit.attempts,state:audit.state};
+      const recovered = window.__testParseEditableSceneResponse(
+        '{"status":"analyzed"}\n' + JSON.stringify({sections:[
+          {shapes:[{type:'rect',x:1,y:1,w:10,h:10}],labels:[{type:'text',x:2,y:2,text:'A'}]},
+          {shapes:[{type:'line',x:1,y:1,x2:10,y2:10}]}
+        ]}),1376,768);
+      return {nodes:scene.nodes.length,attempts:audit.attempts,state:audit.state,
+        recoveredNodes:recovered.nodes.length,
+        captured:window.__ffReconResponses?.[0]?.content};
     }, imageDataUri);
-    assert.deepEqual(result, {nodes:1,attempts:2,state:'succeeded'});
+    assert.deepEqual(result, {nodes:1,attempts:2,state:'succeeded',recoveredNodes:3,
+      captured:JSON.stringify({summary:'A figure without editable nodes'})});
     assert.equal(prompts.length, 2);
     assert.match(prompts[1], /previous answer could not be used/i);
+    assert.match(prompts[1], /A figure without editable nodes/);
     console.log(JSON.stringify(result));
   } finally {
     await browser.close();

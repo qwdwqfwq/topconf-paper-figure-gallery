@@ -200,7 +200,8 @@ export function replaceObjectRepairRegion(scene,region,localScene,scale){
   return {...scene,nodes:(scene.nodes||[]).map(n=>updates.get(String(n.id))||n)};
 }
 export function extractEditableNodes(raw){
-  const nodeKeys=['nodes','elements','objects','items','shapes','components','primitives'];
+  const nodeKeys=['nodes','elements','objects','items','shapes','components','primitives',
+    'labels','texts','arrows','connectors','rectangles','circles','lines','paths','images','panels'];
   const wrapperKeys=['scene','diagram','result','data','payload','output','response','figure','drawing','vector','content','layers','groups'];
   const seen=new Set();
   const explicitNodeTypes=['rect','rectangle','ellipse','circle','line','arrow','polyline','polygon','path','text','image'];
@@ -233,7 +234,8 @@ export function extractEditableNodes(raw){
       if(value.every(nodeLike)) return value.map(normalizeNode);
       if(fromNodeKey){
         const nodes=value.filter(nodeLike);
-        if(nodes.length) return nodes.map(normalizeNode);
+        const nested=value.filter(item=>!nodeLike(item)).map(item=>find(item,depth+1)).filter(Boolean).flat();
+        if(nodes.length||nested.length) return [...nodes.map(normalizeNode),...nested];
       }
       const nested=value.map(item=>find(item,depth+1)).filter(Boolean);
       return nested.length?nested.flat():null;
@@ -243,28 +245,32 @@ export function extractEditableNodes(raw){
       if(entries.length && entries.every(([,node])=>nodeLike(node)))
         return entries.map(([id,node])=>normalizeNode({id,...node}));
     }
+    const explicit=[];
     for(const key of nodeKeys){
       if(value[key]!==undefined){
         const found=find(value[key],depth+1,true);
-        if(found) return found;
+        if(found) explicit.push(...found);
       }
     }
+    const wrapped=[];
     for(const key of wrapperKeys){
       if(value[key]!==undefined){
         const found=find(value[key],depth+1);
-        if(found) return found;
+        if(found) wrapped.push(...found);
       }
     }
     // Relays and models sometimes invent one more envelope name. Only traverse
     // objects/arrays; metadata strings cannot become scene nodes.
+    const nested=[];
     for(const [key,child] of Object.entries(value)){
       if(nodeKeys.includes(key)||wrapperKeys.includes(key)) continue;
       if(child&&typeof child==='object'){
         const found=find(child,depth+1);
-        if(found) return found;
+        if(found) nested.push(...found);
       }
     }
-    return null;
+    const all=[...explicit,...wrapped,...nested];
+    return all.length?all:null;
   }
   const found=find(raw,0);
   if(found) return found;

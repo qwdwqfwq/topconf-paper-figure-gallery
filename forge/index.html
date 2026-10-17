@@ -576,6 +576,7 @@
       <div class="export-recon" id="exportRecon" hidden>
         <div class="recon-row">
           <button type="button" class="btn-primary" id="reconBtn" data-i18n="recon.btn"></button>
+          <button type="button" id="downloadReconResponse" hidden>下载模型原始返回</button>
           <span class="recon-status" id="reconStatus"></span>
         </div>
       </div>
@@ -4000,6 +4001,14 @@ function editableScenePrompt(W,H,paper){
 function editableSceneRetryPrompt(W,H){
   return 'The previous answer could not be used. Inspect the attached image crop and return ONLY a JSON object with this exact outer shape: {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[{"type":"rect","x":0,"y":0,"w":10,"h":10,"fill":"#ffffff"}]}. Replace the example node with the actual visible, separately editable rectangles, lines, arrows, text, polygons and photographic regions. Coordinates are pixels within this crop. Every node needs a type. For text use {"type":"text","x":0,"y":0,"w":100,"h":20,"text":"actual words","fontSize":14,"fill":"#000000"}. For a completely blank white crop, nodes may be empty. No descriptions, analysis, Markdown, or other keys are needed.';
 }
+function rememberFailedReconResponse(audit,txt,diagnostics,error){
+  const record={time:new Date().toISOString(),model:audit.model,attempt:audit.attempt,
+    diagnostics,error:String(error&&error.message||error),content:String(txt||'')};
+  (window.__ffReconResponses||(window.__ffReconResponses=[])).push(record);
+  if(window.__ffReconResponses.length>12) window.__ffReconResponses.shift();
+  const button=$('#downloadReconResponse');
+  if(button) button.hidden=false;
+}
 
 function sceneNumber(v, fallback){
   const n=Number(v);
@@ -4154,19 +4163,27 @@ function materializeEditableScene(raw,W,H){
   };
 }
 function parseEditableSceneResponse(txt,W,H){
-  // A provider may prepend a valid JSON status object before the actual scene.
-  // extractJSON returns that first object, so inspect every balanced candidate.
-  let lastError=null;
-  try{ return materializeEditableScene(extractJSON(txt),W,H); }
-  catch(err){ lastError=err; }
-  const candidates=jsonCandidateSlices(String(txt||''));
+  // The first JSON block can be a status/analysis envelope. Inspect every
+  // balanced block, including repairable variants, and retain the fullest scene.
+  const source=String(txt||'');
+  const candidates=jsonCandidateSlices(source);
+  if(source.trim()) candidates.unshift(source.trim());
+  const first=source.search(/[\[{]/);
+  if(first>=0) candidates.push(source.slice(first));
+  let best=null, parsedAny=false;
   for(const candidate of candidates){
-    try{
-      const parsed=JSON.parse(candidate);
-      return materializeEditableScene(parsed,W,H);
-    }catch(err){ lastError=err; }
+    const variants=[candidate,candidate.replace(/,\s*([}\]])/g,'$1'),closeJsonCandidate(candidate)];
+    for(const variant of variants){
+      try{
+        const parsed=JSON.parse(variant);
+        parsedAny=true;
+        const scene=materializeEditableScene(parsed,W,H);
+        if(!best||scene.nodes.length>best.nodes.length) best=scene;
+      }catch(_){ /* Try the next candidate or repair. */ }
+    }
   }
-  const err=new Error(lastError && /nodes array/.test(String(lastError.message))
+  if(best) return best;
+  const err=new Error(parsedAny
     ? 'Vision model returned JSON without an editable nodes array'
     : tt('recon.badjson'));
   err.sceneFormatFailure=true;
@@ -4269,6 +4286,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   const timeoutMs=Math.max(1,Math.min(60,Number($('#reconTimeoutMinutes').value)||15))*60000;
   audit.timeoutMs=timeoutMs;
   let lastError=null;
+  let previousResponse='';
   const maxAttempts=Math.max(1,Math.min(3,Number(audit.maxAttempts)||3));
   for(let attempt=1;attempt<=maxAttempts;attempt++){
     audit.attempt=attempt;
@@ -4280,7 +4298,9 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         : revision
         ? 'Image 1 is the ORIGINAL tile and image 2 is its editable render. Following images are paired close-ups of the weakest regions: ORIGINAL then RENDER, in the order of these tile-local crop coordinates: '+JSON.stringify((revision.weakRegions||[]).slice(0,2))+'. Compare each pair carefully. Keep correct objects and their coordinates; fix missing, misplaced, wrong-colored or spurious objects, especially small text and lines visible in the close-ups. Return the COMPLETE corrected scene, not only a patch. Previous comparison score: '+revision.score.toFixed(3)+'. Prior editable scene JSON follows:\n'+priorScene+'\n'+prompt
         : attempt>1 && lastError && lastError.sceneFormatFailure
-        ? editableSceneRetryPrompt(W,H)
+        ? editableSceneRetryPrompt(W,H)+(previousResponse
+          ? '\nUse the objects and text already identified in the PREVIOUS RESPONSE below. Convert or complete them into the required nodes array, checking coordinates against the attached image. Do not discard valid detail. Previous response:\n'+previousResponse.slice(0,36000)
+          : '')
         : prompt;
       let txt='';
       let responseDiagnostics='';
@@ -4369,6 +4389,10 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         }
       }
       catch(err){
+        if(err.sceneFormatFailure || /editable nodes array|empty editable scene/.test(String(err.message))){
+          previousResponse=txt;
+          rememberFailedReconResponse(audit,txt,responseDiagnostics,err);
+        }
         if(err.sceneFormatFailure) err.message+=' ('+responseDiagnostics+')';
         throw err;
       }
@@ -4516,6 +4540,9 @@ async function runReconstruction(){
   if(!src){ st.reconFailed = true; st.reconError = 'No bitmap source'; renderEditableExportCard(); say('recon.nobitmap'); return false; }
   Object.assign(st,{svg:'',baseSvg:'',scene:null,vectorScene:null,fidelityScene:null,
     vectorSvg:'',fidelitySvg:'',exportMode:'vector',recon:null,reconFailed:false,reconError:''});
+  window.__ffReconResponses=[];
+  const responseButton=$('#downloadReconResponse');
+  if(responseButton) responseButton.hidden=true;
   renderEditableExportCard();
   try{
     say('recon.reading');
@@ -4834,6 +4861,8 @@ function renderEditableExportCard(){
   }
   document.querySelectorAll('#exportActions [data-export]').forEach(btn=>btn.disabled = locked);
   const reconBtn=$('#reconBtn'); if(reconBtn) reconBtn.disabled = !hasBitmap || state.reconPending;
+  const responseButton=$('#downloadReconResponse');
+  if(responseButton) responseButton.hidden=!(window.__ffReconResponses&&window.__ffReconResponses.length);
   const confirm=$('#exportConfirm'); if(confirm) confirm.disabled = locked || !state.target;
   if(!locked) syncExportSelection();
 }
@@ -5145,6 +5174,11 @@ window.__ffReconstruct = () => runReconstruction();
 window.__ffRefreshExportCard = () => renderEditableExportCard();
 
 /* Step 4 and its manual retry use the same vision reconstruction path. */
+$('#downloadReconResponse')?.addEventListener('click', function(){
+  const responses=window.__ffReconResponses||[];
+  if(responses.length) downloadText('figure-forge-reconstruction-response.json',
+    JSON.stringify({version:1,responses},null,2),'application/json;charset=utf-8');
+});
 $('#step4BitmapInput')?.addEventListener('change', async function(event){
   const file=event.target.files?.[0];
   if(!file) return;
