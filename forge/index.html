@@ -563,6 +563,12 @@
     <div class="flow-note" data-i18n-html="export.intro"></div>
     <section class="box b-slate">
       <h4><span class="bi" aria-hidden="true">✏️</span><span data-i18n="export.title"></span></h4>
+      <div class="export-font-row">
+        <label for="step4BitmapInput">直接测试第 4 步</label>
+        <input type="file" id="step4BitmapInput" accept="image/png,image/jpeg,image/webp">
+        <span class="hint" id="step4BitmapStatus">选择第 3 步已生成的位图，即可跳过重新生成。</span>
+      </div>
+      <img id="step4BitmapPreview" alt="第 4 步导入的位图" hidden style="max-width:100%;max-height:320px;margin:12px 0">
       <div class="export-recon" id="exportRecon" hidden>
         <div class="recon-row">
           <button type="button" class="btn-primary" id="reconBtn" data-i18n="recon.btn"></button>
@@ -4473,7 +4479,9 @@ async function runReconstruction(){
     const enqueue=visionQueue(3);
     const requestScene=(...args)=>enqueue(()=>requestEditableScene(...args));
     const cacheKey=await reconstructionCacheKey(src,{textLayoutVersion:2,model:editableReconstructionModel(),reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
-    const cached=await readReconstructionCache(cacheKey);
+    const bypassCache=!!st.skipReconCacheOnce;
+    st.skipReconCacheOnce=false;
+    const cached=bypassCache?null:await readReconstructionCache(cacheKey);
     const wholeAudit={wholeImage:true};
     reconstructionAudit.tiles.push(wholeAudit);
     let scene=cached?.scene||createWholeImageCatalog(await requestScene(src,canvas.width,canvas.height,wholeAudit));
@@ -5081,6 +5089,29 @@ window.__ffReconstruct = () => runReconstruction();
 window.__ffRefreshExportCard = () => renderEditableExportCard();
 
 /* Step 4 and its manual retry use the same vision reconstruction path. */
+$('#step4BitmapInput')?.addEventListener('change', async function(event){
+  const file=event.target.files?.[0];
+  if(!file) return;
+  const status=$('#step4BitmapStatus');
+  if(!/^image\/(png|jpeg|webp)$/.test(file.type) && !/\.(png|jpe?g|webp)$/i.test(file.name)){
+    if(status) status.textContent='请选择 PNG、JPEG 或 WebP 图片。';
+    return;
+  }
+  try{
+    const src=await fileToDataURI(file);
+    markStep3Output(src);
+    const st=ensureExportState();
+    Object.assign(st,{svg:'',baseSvg:'',scene:null,vectorScene:null,fidelityScene:null,
+      vectorSvg:'',fidelitySvg:'',exportMode:'vector',recon:null,
+      reconPending:false,reconFailed:false,reconError:'',target:'',skipReconCacheOnce:true});
+    const preview=$('#step4BitmapPreview');
+    if(preview){ preview.src=src; preview.hidden=false; }
+    if(status) status.textContent=`已导入 ${file.name}。点击“重建可编辑图形”运行第 4 步。`;
+    renderEditableExportCard();
+  }catch(error){
+    if(status) status.textContent='读取位图失败：'+safeExportError(error);
+  }
+});
 $('#reconBtn')?.addEventListener('click', async function(){
   const btn = $('#reconBtn');
   const st = window.__ffExportState;
