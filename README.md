@@ -7,6 +7,20 @@
 
 <img src="docs/demo.gif" alt="Search, filter and lightbox demo" width="920">
 
+### ✨ FigureForge 生图成品 · Generated examples
+
+以下是画廊 FigureForge 的实际生图示例。点击缩略图可查看完整细节。
+
+<table>
+  <tr>
+    <td width="50%" align="center"><a href="docs/figureforge-examples/robot-policy.png"><img src="docs/figureforge-examples/robot-policy.png" alt="FigureForge 生成的机器人策略与执行论文主图" width="430"></a><br><strong>机器人策略与执行</strong><br><sub>Robot policy &amp; execution</sub></td>
+    <td width="50%" align="center"><a href="docs/figureforge-examples/hierarchical-memory.png"><img src="docs/figureforge-examples/hierarchical-memory.png" alt="FigureForge 生成的层级工作记忆论文主图" width="430"></a><br><strong>层级工作记忆</strong><br><sub>Hierarchical working memory</sub></td>
+  </tr>
+  <tr>
+    <td colspan="2" align="center"><a href="docs/figureforge-examples/memory-system.png"><img src="docs/figureforge-examples/memory-system.png" alt="FigureForge 生成的工作记忆系统论文主图" width="870"></a><br><strong>工作记忆系统 · 从输入到结果</strong><br><sub>Memory system overview</sub></td>
+  </tr>
+</table>
+
 [![Website](https://img.shields.io/website?down_color=lightgrey&label=Gallery&up_color=blue&up_message=online&url=https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)
 ![Figures](https://img.shields.io/badge/figures-3452-orange)
 ![Best/Oral/Spotlight](https://img.shields.io/badge/Best%C2%B7Oral%C2%B7Spotlight-26%C2%B7616%C2%B7950-gold)

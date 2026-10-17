@@ -1,0 +1,21 @@
+{
+  "description": "Owner-approved FigureForge Step 3 and Step 4 workflow baseline. Changes require explicit owner consent.",
+  "algorithm": "sha256",
+  "files": {
+    "forge/aspect-ratio.mjs": "bdfe7719ba487238b02c6971184198bc5a8450230a8a44d45bc223a39c1d47a4",
+    "forge/desktop-scene.mjs": "c76ded1e2fa75a49b1b39b9e24b5bf0bf382c97dfc6ace0f1dc360011d8caf57",
+    "forge/editable-native.mjs": "06f7eaa157e35da06847e67b9d971f2c4a65f329707d85566354457649fb59b5",
+    "forge/editable-text-layout.mjs": "368a9666636f6d1636f04edc0fe78a3ca6c956abbd1f72e443b6ad89c8bb2296",
+    "forge/i18n.js": "c48a762f153a1f35408a3de5dedc113adf414e8221375b05fae2797524d6e8a7",
+    "forge/i18n_forge.js": "0fb819c5f6be6622fbb56b6d1586f7c03df500fa921aca0289dff60460c7df17",
+    "forge/image-api.mjs": "a784c6cf0779074331f21fc818f4da4c08ec677fe3192386e4aa102837e427c0",
+    "forge/index.html": "784cb85eea1734236a562d9048e583a9cf1ddb7712cee6515e1fd759e3a6878f",
+    "forge/infistar-audit.mjs": "8e81d793248883bf825d64d533b7e6f213d444e4f767839f22b924fb362e384d",
+    "forge/pptx-template.json": "42a2c16730178c74755fddd1f2130ab04b939426df2be999c4762d43900f73bb",
+    "forge/reconstruction-core.mjs": "da8d268b2d9a065018a2c8d71af5f068eb5ef72b053cee2928cabca16d3cf0c7",
+    "forge/reconstruction-session.mjs": "3c93e903d44c2b81790aec824f2bf4815240ab17280b369e115e3f6f4ca26ff7",
+    "forge/source-fidelity.mjs": "8498588b578d19c8a052b53124d13e3838171da894085c277d6ee56c90ae0725",
+    "forge/sw.js": "aea2704aba7be0217bd1284d2e41e0b007acbba15f0e0501e628fc9f3d433b04",
+    "forge/text-calibration.mjs": "9322867d6c7f7510333c8b412e2630d4d70cd8508781b13010c1c2e65d049fb5"
+  }
+}
