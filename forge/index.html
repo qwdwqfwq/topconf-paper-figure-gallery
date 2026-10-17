@@ -4283,15 +4283,20 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   }):'';
   const referenceImages=await editableRevisionImages(imageDataUri,revision,W,H);
   const isFatal=(err)=>/\b400\b|\b401\b|\b403\b|\b404\b|invalid\s+api\s*key|permission|quota|insufficient|billing/i.test(String(err&&err.message||err));
-  const timeoutMs=Math.min(
+  const configuredTimeoutMs=Math.min(
     Math.max(1,Math.min(60,Number($('#reconTimeoutMinutes').value)||15))*60000,
     Number.isFinite(audit.timeoutMsOverride)?audit.timeoutMsOverride:Infinity);
-  audit.timeoutMs=timeoutMs;
   let lastError=null;
   let previousResponse='';
   const maxAttempts=Math.max(1,Math.min(3,Number(audit.maxAttempts)||3));
   for(let attempt=1;attempt<=maxAttempts;attempt++){
+    const remainingBudget=Number.isFinite(audit.maxTotalMs)
+      ? audit.maxTotalMs-(Date.now()-audit.startedAt) : Infinity;
+    if(remainingBudget<1000) break;
+    const timeoutMs=Math.min(configuredTimeoutMs,remainingBudget);
+    audit.timeoutMs=timeoutMs;
     audit.attempt=attempt;
+    audit.attemptStartedAt=Date.now();
     try{
       const attemptPrompt=audit.omissionCheck
         ? 'WHOLE IMAGE completeness audit. Compare the entire original image with the registered objects below. Return STRICT JSON {"nodes":[]} if nothing is missing; otherwise nodes must contain ONLY genuinely missing editable objects using the same scene schema. Never duplicate existing text, arrows, borders or icons. Do not return replacements or changes to existing objects. Examine small labels, chart marks and internal icon details. Global coordinates in pixels. Existing catalog: '+JSON.stringify(audit.catalog)+'\n'+prompt
@@ -4423,7 +4428,8 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
     }catch(err){
       lastError=err;
       audit.lastError=String(err&&err.message||err);
-      if(isFatal(err) || attempt===maxAttempts) break;
+      if(isFatal(err) || attempt===maxAttempts || err.visionTimeout ||
+        (Number.isFinite(audit.maxTotalMs)&&Date.now()-audit.startedAt>=audit.maxTotalMs-3000)) break;
       audit.state='retrying';
       await new Promise(resolve=>setTimeout(resolve,1000*2**(attempt-1)));
     }
@@ -4488,8 +4494,10 @@ function syncStep3Bitmap(){
 async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cachedScene,measureScene=compareEditableRender){
   const W=canvas.width,H=canvas.height;
   let wholeCatalog=cachedScene||null,wholeQuality=null;
+  audit.phase='whole';
   if(!wholeCatalog){
-    const wholeAudit={wholeImage:true,maxAttempts:2};
+    // A silent whole-image call must not hold regional reconstruction for 25+ minutes.
+    const wholeAudit={wholeImage:true,maxAttempts:2,timeoutMsOverride:240000,maxTotalMs:240000};
     audit.tiles.push(wholeAudit);
     try{
       wholeCatalog=createWholeImageCatalog(await requestScene(src,W,H,wholeAudit));
@@ -4517,6 +4525,7 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cach
     }
   }
   const initialTiles=planReconstructionTiles(W,H,700,40);
+  audit.phase='regions';
   audit.strategy=wholeCatalog?'whole-then-tiled':'tiled-fallback';
   audit.totalTiles=initialTiles.length+(wholeCatalog?1:0);
   const results=[];
@@ -4550,6 +4559,7 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cach
   }
   try{
     await Promise.all(initialTiles.map(tile=>reconstructTile(tile,0)));
+    audit.phase='merge';
     if(!results.length) throw new Error('Vision model returned no editable objects from image crops');
     const merged=mergeReconstructionTiles(results,W,H);
     if(!merged.nodes.length) throw new Error('Vision model returned no editable objects after merging image crops');
@@ -4592,10 +4602,44 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cach
     return wholeCatalog;
   }
 }
+function reconstructionProgressText(audit){
+  const zh=GAL_I18N.lang==='zh',elapsed=Math.floor((Date.now()-audit.startedAt)/1000);
+  const clock=Math.floor(elapsed/60)+':'+String(elapsed%60).padStart(2,'0');
+  const calls=[...(audit.tiles||[]),audit.omissionAudit,...(audit.revisions||[])].filter(Boolean);
+  const running=calls.filter(call=>call.state==='pending');
+  const queued=calls.filter(call=>call.state==='queued').length;
+  const phase=audit.phase||'prepare';
+  let stage;
+  if(zh) stage={prepare:'准备图像',whole:'整图识别',regions:'分区重建',merge:'合并分区',omission:'整图查漏',quality:'质量检查',repair:'局部精修',final:'生成导出'}[phase]||'重建中';
+  else stage={prepare:'Preparing image',whole:'Whole-image recognition',regions:'Regional reconstruction',merge:'Merging regions',omission:'Whole-image completeness check',quality:'Quality check',repair:'Object refinement',final:'Preparing export'}[phase]||'Reconstructing';
+  const parts=[stage,zh?'已用 '+clock:'elapsed '+clock];
+  if(phase==='regions'){
+    const wholeDone=audit.completedTiles>0&&audit.strategy!=='tiled-fallback'?1:0;
+    const done=Math.max(0,audit.completedTiles-wholeDone),total=Math.max(0,audit.totalTiles-wholeDone);
+    parts.push(zh
+      ? '分区 '+done+'/'+total+'，已细分 '+audit.fallbackTiles+' 次'
+      : 'regions '+done+'/'+total+', subdivided '+audit.fallbackTiles+' times');
+  }
+  if(phase==='repair') parts.push(zh
+    ? '对象组 '+(audit.revisions||[]).filter(call=>call.state==='succeeded').length+'/'+(audit.revisions||[]).length
+    : 'object groups '+(audit.revisions||[]).filter(call=>call.state==='succeeded').length+'/'+(audit.revisions||[]).length);
+  if(running.length){
+    const remaining=running.filter(call=>Number.isFinite(call.timeoutMs)&&Number.isFinite(call.attemptStartedAt))
+      .map(call=>Math.max(0,Math.ceil((call.timeoutMs-(Date.now()-call.attemptStartedAt))/1000)));
+    parts.push(zh?'进行中 '+running.length+' 个':'active '+running.length);
+    if(remaining.length){
+      const nearest=Math.min(...remaining);
+      parts.push(zh?'下一请求约 '+Math.ceil(nearest/60)+' 分钟后超时':'next request timeout in about '+Math.ceil(nearest/60)+' min');
+    }
+  }
+  if(queued) parts.push(zh?'排队 '+queued+' 个':'queued '+queued);
+  return parts.join(' · ');
+}
 async function runReconstruction(){
   const st = ensureExportState();
   const status = $('#reconStatus');
   const say = function(k, vars){ if(status) status.textContent = tt(k, vars); };
+  let progressTimer=null;
   let src = '';
   try{
     src = await ensureBitmapDataUrl(syncStep3Bitmap());
@@ -4621,15 +4665,27 @@ async function runReconstruction(){
     canvas.height = im.naturalHeight || im.height;
     canvas.getContext('2d').drawImage(im, 0, 0);
     const reconstructionAudit=(window.__ffApiAudit||(window.__ffApiAudit={})).reconstruction={
-      state:'pending',startedAt:Date.now(),totalTiles:1,completedTiles:0,
+      state:'pending',phase:'prepare',startedAt:Date.now(),totalTiles:1,completedTiles:0,
       fallbackTiles:0,repairCalls:0,revisions:[],tiles:[]
     };
+    const updateProgress=()=>{
+      if(reconstructionAudit.state!=='pending')return;
+      const message=reconstructionProgressText(reconstructionAudit);
+      if(status)status.textContent=message;
+      const exportStatus=$('#exportStatus');
+      if(exportStatus)setExportStatus(exportStatus,message);
+    };
+    progressTimer=setInterval(updateProgress,1000);
+    updateProgress();
 
     // Keep the provider busy without allowing a slow crop to stall every
     // other crop. All Vision calls (including retries and object repairs)
     // share this limit so subdivision cannot flood the API.
     const enqueue=visionQueue(3);
-    const requestScene=(...args)=>enqueue(()=>requestEditableScene(...args));
+    const requestScene=(...args)=>{
+      if(args[3])args[3].state='queued';
+      return enqueue(()=>requestEditableScene(...args));
+    };
     const cacheKey=await reconstructionCacheKey(src,{textLayoutVersion:2,catalogQualityVersion:2,model:editableReconstructionModel(),reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
     const bypassCache=!!st.skipReconCacheOnce;
     st.skipReconCacheOnce=false;
@@ -4646,8 +4702,9 @@ async function runReconstruction(){
     // Missing objects are proposed once against the full image and registered
     // centrally before any crop is allowed to update them.
     if(!omissionChecked){
+      reconstructionAudit.phase='omission';
       const catalog={canvas:scene.canvas,nodes:scene.nodes.map(n=>{const copy={...n};delete copy.href;return copy;})};
-      const omissionAudit={omissionCheck:true,catalog};
+      const omissionAudit={omissionCheck:true,catalog,maxAttempts:1,timeoutMsOverride:180000};
       reconstructionAudit.omissionAudit=omissionAudit;
       try{
         const proposals=await requestScene(src,canvas.width,canvas.height,omissionAudit);
@@ -4658,6 +4715,7 @@ async function runReconstruction(){
     }
     reconstructionAudit.catalog=scene.nodes.map(n=>({id:n.id,type:n.type,...(n.type==='text'?{text:n.text}:{})}));
     reconstructionAudit.deduplicatedText=scene.counts.deduplicatedText;
+    reconstructionAudit.phase='quality';
     // Measure text against the actual bitmap before committing the refinement.
     // Reject it when the rendered scene becomes less similar overall.
     let measuredQuality=null;
@@ -4684,6 +4742,7 @@ async function runReconstruction(){
       let pptxQa=await compareEditableRender(canvas,pptxScene);
       reconstructionAudit.pptxQuality={score:pptxQa.score,localRecall:pptxQa.localRecall};
       const jobs=planCatalogRepairs(scene,canvas.width,canvas.height);
+      reconstructionAudit.phase='repair';
       const plannedIds=new Set(jobs.flatMap(job=>job.ids));
       reconstructionAudit.unrefinedIds=scene.nodes.filter(n=>!plannedIds.has(n.id)&&!completedIds.has(n.id)).map(n=>n.id);
       const refine=async(job,depth=0)=>{
@@ -4695,7 +4754,8 @@ async function runReconstruction(){
         crop.getContext('2d').drawImage(canvas,region.x,region.y,region.w,region.h,0,0,crop.width,crop.height);
         const catalog=objectRepairCatalog(scene,region,scale);
         catalog.nodes=catalog.nodes.filter(n=>ids.includes(n.id));
-        const repairAudit={objectRepair:true,region,catalog,depth,requireCompleteObjects:true};
+        const repairAudit={objectRepair:true,region,catalog,depth,requireCompleteObjects:true,
+          maxAttempts:1,timeoutMsOverride:Math.max(90000,180000-depth*30000)};
         reconstructionAudit.revisions.push(repairAudit);
         try{
           const local=await requestScene(crop.toDataURL('image/png'),crop.width,crop.height,repairAudit);
@@ -4741,6 +4801,7 @@ async function runReconstruction(){
       reconstructionAudit.pptxQuality={score:pptxQa.score,localRecall:pptxQa.localRecall};
     }catch(error){reconstructionAudit.pptxQaError=String(error?.message||error);}
     const svg = sceneToSvgString(scene), audit = auditReconScene(scene);
+    reconstructionAudit.phase='final';
     if(audit.dominantBitmap){
       throw new Error('Vision model returned a dominant bitmap instead of editable objects');
     }
@@ -4804,6 +4865,8 @@ async function runReconstruction(){
     say('recon.failedDetail', { msg: msg });
     renderEditableExportCard();
     return false;
+  }finally{
+    if(progressTimer)clearInterval(progressTimer);
   }
 }
 
