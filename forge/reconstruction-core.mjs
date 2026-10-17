@@ -84,8 +84,9 @@ export function registerMissingObjects(scene,proposals){
     if(nodes.some(n=>{
       if(n.type!==source.type)return false;
       if(n.type==='text'&&String(n.text).replace(/\s/g,'')!==String(source.text).replace(/\s/g,''))return false;
+      if(n.type==='line'&&sameLinearEntity(n,source))return true;
       // Shared bounding boxes alone cannot identify distinct curves or arrows.
-      if(['path','polyline','line'].includes(n.type)&&JSON.stringify(geometrySegments(n))!==JSON.stringify(geometrySegments(source)))return false;
+      if(['path','polyline','line'].includes(n.type)&&!sameCurveGeometry(n,source))return false;
       const a=editableNodeBounds(n);if(!a)return false;
       const distance=Math.max(Math.abs(a.x-b.x),Math.abs(a.y-b.y),Math.abs(a.right-b.right),Math.abs(a.bottom-b.bottom));
       const w=Math.max(0,Math.min(a.right,b.right)-Math.max(a.x,b.x));
@@ -114,12 +115,33 @@ export function planCatalogRepairs(scene,width,height){
     return Math.floor(x.y/(height/3))-Math.floor(y.y/(height/3))||x.x-y.x;
   });
   const size=Math.max(1,Math.min(16,Math.ceil(nodes.length/3))),jobs=[];
+  const planned=new Set();
   for(let i=0;i<nodes.length;i+=size){
     const batch=nodes.slice(i,i+size),region=regionForObjects(batch,width,height);
     const eligible=new Set(objectRepairCatalog({nodes:batch},region,1).nodes.map(n=>n.id));
-    if(eligible.size)jobs.push({region,ids:[...eligible]});
+    if(eligible.size){jobs.push({region,ids:[...eligible]});eligible.forEach(id=>planned.add(id));}
+  }
+  // Long cross-region connectors and large panels need their own complete crop.
+  for(const node of nodes){
+    if(planned.has(node.id))continue;
+    const region=regionForObjects([node],width,height);
+    if(region&&objectRepairCatalog({nodes:[node]},region,1,true).nodes.length)
+      jobs.push({region,ids:[node.id],allowLarge:true});
   }
   return jobs;
+}
+// A crop may only update objects whose complete bounds and centre belong to it.
+// The global catalog remains the sole authority for IDs and object count.
+export function tileDetailCatalog(scene,tile){
+  const left=tile.coreX??tile.x,top=tile.coreY??tile.y;
+  const right=tile.coreRight??tile.x+tile.w,bottom=tile.coreBottom??tile.y+tile.h;
+  const owned=(scene.nodes||[]).filter(node=>{
+    const b=editableNodeBounds(node);
+    if(!b)return false;
+    const cx=(b.x+b.right)/2,cy=(b.y+b.bottom)/2;
+    return cx>=left&&cx<right&&cy>=top&&cy<bottom;
+  });
+  return objectRepairCatalog({nodes:owned},tile,1);
 }
 function transformCatalogNode(source,s,dx,dy){
   const n={...source};
@@ -134,13 +156,13 @@ function transformCatalogNode(source,s,dx,dy){
   if(n.textPath?.d)n.textPath={...n.textPath,d:transformEditablePath(n.textPath.d,s,s,dx,dy)};
   return n;
 }
-export function objectRepairCatalog(scene,region,scale){
+export function objectRepairCatalog(scene,region,scale,allowLarge=false){
   return {canvas:{width:Math.round(region.w*scale),height:Math.round(region.h*scale)},
     nodes:(scene.nodes||[]).filter(n=>{
       const b=editableNodeBounds(n);
-      return b&&b.x>=region.x+1&&b.y>=region.y+1&&
-        b.right<=region.x+region.w-1&&b.bottom<=region.y+region.h-1&&
-        b.right-b.x<region.w*.85&&b.bottom-b.y<region.h*.85;
+      return b&&b.x>=region.x-1&&b.y>=region.y-1&&
+        b.right<=region.x+region.w+1&&b.bottom<=region.y+region.h+1&&
+        (allowLarge||b.right-b.x<region.w*.85&&b.bottom-b.y<region.h*.85);
     }).map(n=>{
       const entry=transformCatalogNode(n,scale,-region.x*scale,-region.y*scale);
       // The crop bitmap supplies image pixels; do not duplicate data URLs in the prompt.
@@ -172,11 +194,11 @@ export function auditExportLayout(source,exported){
   }
   return {state:issues.length?'needs-review':'passed',issues,textCount:texts.length};
 }
-export function replaceObjectRepairRegion(scene,region,localScene,scale){
+export function replaceObjectRepairRegion(scene,region,localScene,scale,allowLarge=false){
   if(!Number.isFinite(scale)||scale<=0)return scene;
   const x1=region.x+region.w,y1=region.y+region.h;
-  const inside=b=>b&&b.x>=region.x+1&&b.y>=region.y+1&&b.right<=x1-1&&b.bottom<=y1-1;
-  const small=b=>b&&(b.right-b.x)<region.w*.85&&(b.bottom-b.y)<region.h*.85;
+  const inside=b=>b&&b.x>=region.x-1&&b.y>=region.y-1&&b.right<=x1+1&&b.bottom<=y1+1;
+  const small=b=>b&&(allowLarge||(b.right-b.x)<region.w*.85&&(b.bottom-b.y)<region.h*.85);
   const originals=new Map((scene.nodes||[]).filter(n=>n.id&&inside(editableNodeBounds(n))&&small(editableNodeBounds(n))).map(n=>[String(n.id),n]));
   const updates=new Map();
   for(const source of localScene.nodes||[]){
@@ -194,7 +216,7 @@ export function replaceObjectRepairRegion(scene,region,localScene,scale){
     // Keep a complete icon or chart even when it nearly fills the repair crop.
     // Reject only a dominant panel/background invented by the local model.
     const area=(b.right-b.x)*(b.bottom-b.y);
-    if(['rect','image'].includes(n.type)&&area>region.w*region.h*.8)continue;
+    if(!allowLarge&&['rect','image'].includes(n.type)&&area>region.w*region.h*.8)continue;
     updates.set(String(n.id),{...original,...n});
   }
   return {...scene,nodes:(scene.nodes||[]).map(n=>updates.get(String(n.id))||n)};
@@ -246,17 +268,24 @@ export function extractEditableNodes(raw){
         return entries.map(([id,node])=>normalizeNode({id,...node}));
     }
     const explicit=[];
+    let explicitEmpty=false;
     for(const key of nodeKeys){
       if(value[key]!==undefined){
         const found=find(value[key],depth+1,true);
-        if(found) explicit.push(...found);
+        if(found!==null){
+          if(!found.length) explicitEmpty=true;
+          explicit.push(...found);
+        }
       }
     }
     const wrapped=[];
     for(const key of wrapperKeys){
       if(value[key]!==undefined){
         const found=find(value[key],depth+1);
-        if(found) wrapped.push(...found);
+        if(found!==null){
+          if(!found.length) explicitEmpty=true;
+          wrapped.push(...found);
+        }
       }
     }
     // Relays and models sometimes invent one more envelope name. Only traverse
@@ -266,14 +295,17 @@ export function extractEditableNodes(raw){
       if(nodeKeys.includes(key)||wrapperKeys.includes(key)) continue;
       if(child&&typeof child==='object'){
         const found=find(child,depth+1);
-        if(found) nested.push(...found);
+        if(found!==null){
+          if(!found.length) explicitEmpty=true;
+          nested.push(...found);
+        }
       }
     }
     const all=[...explicit,...wrapped,...nested];
-    return all.length?all:null;
+    return all.length?all:explicitEmpty?[]:null;
   }
   const found=find(raw,0);
-  if(found) return found;
+  if(found!==null) return found;
   throw new Error('Vision model returned JSON without an editable nodes array');
 }
 export function planReconstructionTiles(width, height, target=900, overlap=28){
@@ -308,6 +340,102 @@ function movedPoints(points,dx,dy){
   const out=[];
   for(let i=0;i+1<nums.length;i+=2) out.push(`${nums[i]+dx},${nums[i+1]+dy}`);
   return out.join(' ');
+}
+
+function sourceTileId(node){
+  return /^tile([^_]+)_/.exec(String(node.id||''))?.[1]||null;
+}
+
+function sameStrokeStyle(a,b){
+  return String(a.stroke||'').toLowerCase()===String(b.stroke||'').toLowerCase()
+    && Math.abs(Number(a.strokeWidth||1)-Number(b.strokeWidth||1))<=1
+    && Boolean(a.dash)===Boolean(b.dash);
+}
+
+function sameCurveGeometry(a,b){
+  if(!sameStrokeStyle(a,b))return false;
+  const as=geometrySegments(a),bs=geometrySegments(b);
+  return as.length===bs.length&&as.every((segment,i)=>
+    segment.closed===bs[i].closed&&segment.points.length===bs[i].points.length&&
+    segment.points.every((point,j)=>Math.hypot(point.x-bs[i].points[j].x,
+      point.y-bs[i].points[j].y)<=4));
+}
+
+function sameLinearEntity(a,b){
+  if(!sameStrokeStyle(a,b))return null;
+  const ax=Number(a.x),ay=Number(a.y),bx=Number(a.x2),by=Number(a.y2);
+  const cx=Number(b.x),cy=Number(b.y),dx=Number(b.x2),dy=Number(b.y2);
+  if(![ax,ay,bx,by,cx,cy,dx,dy].every(Number.isFinite))return null;
+  const length=Math.hypot(bx-ax,by-ay),otherLength=Math.hypot(dx-cx,dy-cy);
+  if(length<6||otherLength<6)return null;
+  const ux=(bx-ax)/length,uy=(by-ay)/length;
+  const perpendicular=(x,y)=>Math.abs((x-ax)*uy-(y-ay)*ux);
+  const parallel=Math.abs((dx-cx)*uy-(dy-cy)*ux)/otherLength;
+  const t1=(cx-ax)*ux+(cy-ay)*uy,t2=(dx-ax)*ux+(dy-ay)*uy;
+  const overlap=Math.max(0,Math.min(length,Math.max(t1,t2))-Math.max(0,Math.min(t1,t2)));
+  if(parallel>.018||perpendicular(cx,cy)>3||perpendicular(dx,dy)>3||
+    overlap<Math.max(8,Math.min(30,.1*Math.min(length,otherLength))))return null;
+  return {ax,ay,ux,uy,length,t1,t2};
+}
+
+// A crop can describe only part of a long connector. Its centre may lie in a
+// different owning core from another description of that same connector.
+// Merge collinear, overlapping descriptions after both are in global space.
+function mergeCrossTileLines(nodes){
+  let merged=0;
+  for(let i=0;i<nodes.length;i++){
+    const a=nodes[i];
+    if(a.type!=='line')continue;
+    for(let j=i+1;j<nodes.length;){
+      const b=nodes[j],ownerA=sourceTileId(a),ownerB=sourceTileId(b);
+      if(b.type!=='line'||!ownerA||!ownerB||ownerA===ownerB||!sameStrokeStyle(a,b)){
+        j++;continue;
+      }
+      const match=sameLinearEntity(a,b);
+      if(!match){j++;continue;}
+      const {ax,ay,ux,uy,length,t1,t2}=match;
+      const low=Math.min(0,t1,t2),high=Math.max(length,t1,t2);
+      // Keep the direction of the arrow-bearing observation when possible.
+      if(b.arrow&&!a.arrow){
+        a.x=Number(b.x);a.y=Number(b.y);
+        a.x2=Number(b.x2);a.y2=Number(b.y2);a.arrow=b.arrow;
+      }
+      const direction=((Number(a.x2)-Number(a.x))*ux+(Number(a.y2)-Number(a.y))*uy)>=0;
+      const start=direction?low:high,end=direction?high:low;
+      a.x=ax+start*ux;a.y=ay+start*uy;
+      a.x2=ax+end*ux;a.y2=ay+end*uy;
+      a.arrow=Boolean(a.arrow||b.arrow);
+      nodes.splice(j,1);merged++;
+      // The extended connector may also match a third crop.
+      j=i+1;
+    }
+  }
+  return merged;
+}
+
+function deduplicateCrossTileShapes(nodes){
+  let removed=0;
+  const shapeTypes=new Set(['rect','ellipse','polyline','path']);
+  for(let i=0;i<nodes.length;i++){
+    const a=nodes[i],ownerA=sourceTileId(a);
+    if(!ownerA||!shapeTypes.has(a.type))continue;
+    const ab=editableNodeBounds(a);if(!ab)continue;
+    for(let j=i+1;j<nodes.length;){
+      const b=nodes[j],ownerB=sourceTileId(b);
+      if(!ownerB||ownerA===ownerB||a.type!==b.type||
+        String(a.fill||'').toLowerCase()!==String(b.fill||'').toLowerCase()||
+        !sameStrokeStyle(a,b)){j++;continue;}
+      const bb=editableNodeBounds(b);if(!bb){j++;continue;}
+      const distance=Math.max(Math.abs(ab.x-bb.x),Math.abs(ab.y-bb.y),
+        Math.abs(ab.right-bb.right),Math.abs(ab.bottom-bb.bottom));
+      if(distance>4){j++;continue;}
+      if(a.type==='path'||a.type==='polyline'){
+        if(!sameCurveGeometry(a,b)){j++;continue;}
+      }
+      nodes.splice(j,1);removed++;
+    }
+  }
+  return removed;
 }
 
 function boundaryTextStitches(results){
@@ -569,12 +697,15 @@ export function mergeReconstructionTiles(results,width,height){
   // of which tile supplied each object. Larger backgrounds go first.
   nodes.unshift(...[...uniquePanels,...remainingFragments].sort((a,b)=>b.w*b.h-a.w*a.h));
   nodes.push(...stitched);
+  const mergedCrossTileLines=mergeCrossTileLines(nodes);
+  const deduplicatedCrossTileShapes=deduplicateCrossTileShapes(nodes);
   const reconciledTextFragments=reconcileTextFragments(nodes);
   const deduplicatedText=deduplicateText(nodes);
   return {schema:'figureforge.scene.v4',canvas:{width,height,w:width,h:height},nodes,
     counts:{total:nodes.length,text:nodes.filter(n=>n.type==='text').length,
       shapes:nodes.filter(n=>n.type!=='text'&&n.type!=='image').length,
       images:nodes.filter(n=>n.type==='image').length,
-      filteredArtifactLines,reconciledTextFragments,deduplicatedText,
+      filteredArtifactLines,mergedCrossTileLines,deduplicatedCrossTileShapes,
+      reconciledTextFragments,deduplicatedText,
       stitchedTextFragments:[...skip.values()].reduce((sum,parts)=>sum+parts.size,0)}};
 }

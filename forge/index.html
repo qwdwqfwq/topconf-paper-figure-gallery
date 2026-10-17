@@ -654,7 +654,7 @@ import * as T from './vendor/transformers.min.js';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult} from './image-api.mjs?v=20261016';
 import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=text-lines-20261017';
 import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=baseline-09a60b5-text-v2-20261017';
-import {registerMissingObjects, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion, planReconstructionTiles, subdivideReconstructionTile, mergeReconstructionTiles} from './reconstruction-core.mjs?v=baseline-09a60b5-text-v3-20261017';
+import {registerMissingObjects, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, tileDetailCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion, planReconstructionTiles, subdivideReconstructionTile} from './reconstruction-core.mjs?v=global-ids-20261018';
 import {calibrateEditableText} from './text-calibration.mjs?v=text-lines-20261017';
 import {figureCanvas,imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261016d';
 import {infistarAuditStatus} from './infistar-audit.mjs?v=20261016b';
@@ -3996,7 +3996,7 @@ async function ensureBitmapDataUrl(src){
 }
 
 function editableScenePrompt(W,H,paper){
-  return 'Reconstruct this scientific figure as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. This is the WHOLE IMAGE object catalog. Give every object a unique string id; retain each cross-region arrow, icon and text label exactly once as a complete object. Every node MUST have a string "type" field, for example {"type":"rect","x":1,"y":2,"w":3,"h":4}; never nest it as {"rect":{...}}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Transcribe each visible text line exactly, preserving capitalization, punctuation, mathematical symbols and line breaks. Use ONE text node for each complete continuous label or line; never split a word or label into several text nodes at a crop edge, duplicate its overlapping characters, or combine unrelated nearby labels. Estimate fontSize from visible glyph height, not the surrounding box. Give the line a tight x,y,w,h bounding box that does not overlap other labels. If tiny text is unreadable, omit it rather than inventing characters. Text must be OCR transcription, not a description. Inspect dense modules for short connectors, dashed returns, repeated tiny boxes and axis ticks before returning JSON. Keep adjacent boxes, graph nodes and arrows as separate objects. For curved arrows and rings use path d with SVG M/L/C/Q/A/Z commands; preserve true arcs and curves rather than polygonal approximations. For rotated text set rotation in degrees. For text following a ring or arc use a text node with textPath:{d:"M ... A ...",startOffset:0.5}; keep the text transcribed as editable characters. Treat each small icon, chart, and dense module as a whole object: reconstruct its complete outline and interior details, never stop at a crop boundary. For 3D-looking bars, cubes, prisms, or beveled objects, draw the front, top, and side faces as separate closed polygons with their own fill colors and edges; never flatten them to a rectangle. Preserve geometry and layer order. Do not return a single full-canvas bitmap as a substitute. For every line or arrow, both endpoints must coincide with visible endpoints in this crop. Never use (0,0), a crop corner, or a crop edge as a placeholder endpoint. Omit an uncertain line instead of inventing its geometry. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,closed,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor,rotation,textPath}, and image {x,y,w,h,href}. Use image only for photographic/illustrative content that cannot be decomposed, and include a crop object when possible. Keep z-order from background to foreground. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
+  return 'Reconstruct this scientific figure as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. This is the WHOLE IMAGE object catalog. Give every object a unique string id; retain each cross-region arrow, icon and text label exactly once as a complete object. Every node MUST have a string "type" field, for example {"type":"rect","x":1,"y":2,"w":3,"h":4}; never nest it as {"rect":{...}}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Transcribe each visible text line exactly, preserving capitalization, punctuation, mathematical symbols and line breaks. Use ONE text node for each complete continuous label or line; never split a word or label into several text nodes at a crop edge, duplicate its overlapping characters, or combine unrelated nearby labels. Estimate fontSize from visible glyph height, not the surrounding box. Give the line a tight x,y,w,h bounding box that does not overlap other labels. If tiny text is unreadable, omit it rather than inventing characters. Text must be OCR transcription, not a description. Inspect dense modules for short connectors, dashed returns, repeated tiny boxes and axis ticks before returning JSON. Keep adjacent boxes, graph nodes and arrows as separate objects. For curved arrows and rings use path d with SVG M/L/C/Q/A/Z commands; preserve true arcs and curves rather than polygonal approximations. For rotated text set rotation in degrees. For text following a ring or arc use a text node with textPath:{d:"M ... A ...",startOffset:0.5}; keep the text transcribed as editable characters. Treat each small icon, chart, and dense module as a collection of distinct primitives. Assign each outline, interior mark, text label, and connector its own unique ID; preserve the full geometry of every object across crop boundaries. This global catalog fixes all object IDs and the object count before crop requests. Inspect every region and include small internal lines and shapes now; do not defer missing objects to later crop requests. For 3D-looking bars, cubes, prisms, or beveled objects, draw the front, top, and side faces as separate closed polygons with their own fill colors and edges; never flatten them to a rectangle. Preserve geometry and layer order. Do not return a single full-canvas bitmap as a substitute. For every line or arrow, both endpoints must coincide with visible endpoints in this crop. Never use (0,0), a crop corner, or a crop edge as a placeholder endpoint. Omit an uncertain line instead of inventing its geometry. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,closed,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor,rotation,textPath}, and image {x,y,w,h,href}. Use image only for photographic/illustrative content that cannot be decomposed, and include a crop object when possible. Keep z-order from background to foreground. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
 }
 function editableSceneRetryPrompt(W,H){
   return 'The previous answer could not be used. Inspect the attached image crop and return ONLY a JSON object with this exact outer shape: {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[{"type":"rect","x":0,"y":0,"w":10,"h":10,"fill":"#ffffff"}]}. Replace the example node with the actual visible, separately editable rectangles, lines, arrows, text, polygons and photographic regions. Coordinates are pixels within this crop. Every node needs a type. For text use {"type":"text","x":0,"y":0,"w":100,"h":20,"text":"actual words","fontSize":14,"fill":"#000000"}. For a completely blank white crop, nodes may be empty. No descriptions, analysis, Markdown, or other keys are needed.';
@@ -4303,11 +4303,11 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         : audit.objectRepair
         ? 'Refine ONLY the supplied catalog IDs from this high-resolution crop. Return STRICT JSON {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. All geometry and font sizes use crop pixels. Return complete updated nodes with their original id and type. Never add objects, split objects, duplicate labels, change text content, or redraw contextual objects absent from the catalog. Omit unchanged nodes. Empty nodes is valid. Catalog in crop coordinates: '+JSON.stringify(audit.catalog)
         : audit.detailCatalog
-        ? 'This image is a crop of a figure already recognized as a whole. Inspect every visible element at this resolution, including small symbols, arrows, lines, chart marks and labels. Return a COMPLETE editable scene for this crop in STRICT JSON with canvas and nodes. Coordinates are relative to this crop. Reuse the supplied IDs for matching objects, and use new IDs only for genuinely missing objects. Existing whole-image catalog within this crop: '+JSON.stringify(audit.detailCatalog)+'\n'+prompt
+        ? 'Inspect this high-resolution crop and refine ONLY the supplied global catalog IDs. Return STRICT JSON {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. Give complete crop-relative geometry and visual details for each refined object. Preserve every id, type and text content. Never add, split or duplicate objects, including objects crossing a crop boundary. Contextual objects absent from the catalog are for visual reference only. Omit unchanged nodes; empty nodes is valid. Global catalog objects owned by this crop, in crop coordinates: '+JSON.stringify(audit.detailCatalog)
         : revision
         ? 'Image 1 is the ORIGINAL tile and image 2 is its editable render. Following images are paired close-ups of the weakest regions: ORIGINAL then RENDER, in the order of these tile-local crop coordinates: '+JSON.stringify((revision.weakRegions||[]).slice(0,2))+'. Compare each pair carefully. Keep correct objects and their coordinates; fix missing, misplaced, wrong-colored or spurious objects, especially small text and lines visible in the close-ups. Return the COMPLETE corrected scene, not only a patch. Previous comparison score: '+revision.score.toFixed(3)+'. Prior editable scene JSON follows:\n'+priorScene+'\n'+prompt
         : attempt>1 && lastError && lastError.sceneFormatFailure
-        ? editableSceneRetryPrompt(W,H)+(previousResponse
+        ? editableSceneRetryPrompt(W,H)+'\nRetain the full original catalog requirements below; do not simplify or merge small objects.\n'+prompt+(previousResponse
           ? '\nUse the objects and text already identified in the PREVIOUS RESPONSE below. Convert or complete them into the required nodes array, checking coordinates against the attached image. Do not discard valid detail. Previous response:\n'+previousResponse.slice(0,36000)
           : '')
         : prompt;
@@ -4381,8 +4381,8 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
       }
       let scene;
       try{
-        if(audit.objectRepair){
-          const allowed=new Map(audit.catalog.nodes.map(n=>[n.id,n.type]));
+        if(audit.objectRepair||audit.detailCatalog){
+          const allowed=new Map((audit.catalog||audit.detailCatalog).nodes.map(n=>[n.id,n.type]));
           const nodes=extractEditableNodes(extractJSON(txt)).filter(n=>typeof n.id==='string'&&allowed.get(n.id)===n.type);
           scene=nodes.length?materializeEditableScene({nodes},W,H):{canvas:{width:W,height:H},nodes:[]};
         }else if(audit.omissionCheck){
@@ -4495,45 +4495,50 @@ function isRecoverableReconstructionError(error){
   return !!(error?.sceneFormatFailure||error?.outputTruncated||error?.visionTimeout||
     /^HTTP 5\d\d\b/.test(String(error?.message||error)));
 }
-async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cachedScene,measureScene=compareEditableRender){
+async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cachedScene,cachedOmissionChecked=false,measureScene=compareEditableRender){
   const W=canvas.width,H=canvas.height;
   let wholeCatalog=cachedScene||null,wholeQuality=null;
   audit.phase='whole';
   if(!wholeCatalog){
-    // A silent whole-image call must not hold regional reconstruction for 25+ minutes.
-    const wholeAudit={wholeImage:true,maxAttempts:2,timeoutMsOverride:240000,maxTotalMs:240000};
+    // The complete global object catalog is required before any crop pass.
+    const wholeAudit={wholeImage:true,maxAttempts:2,timeoutMsOverride:1500000,maxTotalMs:1500000};
     audit.tiles.push(wholeAudit);
-    try{
-      wholeCatalog=createWholeImageCatalog(await requestScene(src,W,H,wholeAudit));
-    }catch(error){
-      if(!isRecoverableReconstructionError(error)) throw error;
-      audit.wholeImageError=String(error.message||error);
-    }
+    wholeCatalog=createWholeImageCatalog(await requestScene(src,W,H,wholeAudit));
   }else audit.tiles.push({wholeImage:true,state:'cached',attempts:0});
-  if(wholeCatalog){
-    audit.completedTiles=1;
+  audit.completedTiles=1;
+  if(!cachedOmissionChecked){
+    // Whole-image additions are registered before detail crops are allowed to run.
+    audit.phase='omission';
+    const catalog={canvas:wholeCatalog.canvas,nodes:wholeCatalog.nodes.map(n=>{const copy={...n};delete copy.href;return copy;})};
+    const omissionAudit={omissionCheck:true,catalog,maxAttempts:1,timeoutMsOverride:180000};
+    audit.omissionAudit=omissionAudit;
     try{
-      wholeQuality=await measureScene(canvas,wholeCatalog);
-      audit.wholeQuality={score:wholeQuality.score,darkRecall:wholeQuality.darkRecall,
-        localRecall:wholeQuality.localRecall};
-      // The full image establishes the object catalog. Always inspect crops
-      // on a fresh run: a strong global score can hide tiny missing objects.
-      if(cachedScene&&audit.cachedDetailComplete&&
-        wholeQuality.darkRecall>=.80&&wholeQuality.localRecall>=.68){
-        audit.strategy='cached-catalog';
-        return wholeCatalog;
-      }
-    }catch(error){
-      audit.wholeQualityError=String(error?.message||error);
-      // Continue to local inspection even when the initial render cannot be scored.
+      const proposals=await requestScene(src,W,H,omissionAudit);
+      wholeCatalog=registerMissingObjects(wholeCatalog,proposals);
+      audit.registeredMissing=wholeCatalog.counts.registeredMissing;
+      audit.omissionChecked=true;
+    }catch(error){audit.omissionError=String(error?.message||error);}
+  }else audit.omissionChecked=true;
+  try{
+    wholeQuality=await measureScene(canvas,wholeCatalog);
+    audit.wholeQuality={score:wholeQuality.score,darkRecall:wholeQuality.darkRecall,
+      localRecall:wholeQuality.localRecall};
+    if(cachedScene&&audit.cachedDetailComplete&&
+      wholeQuality.darkRecall>=.80&&wholeQuality.localRecall>=.68){
+      audit.strategy='cached-catalog';
+      return wholeCatalog;
     }
+  }catch(error){
+    audit.wholeQualityError=String(error?.message||error);
   }
   const initialTiles=planReconstructionTiles(W,H,700,40);
   audit.phase='regions';
-  audit.strategy=wholeCatalog?'whole-then-tiled':'tiled-fallback';
-  audit.totalTiles=initialTiles.length+(wholeCatalog?1:0);
+  audit.strategy='whole-then-id-refinement';
+  audit.totalTiles=initialTiles.length+1;
   const results=[];
   async function reconstructTile(tile,depth){
+    const localCatalog=tileDetailCatalog(wholeCatalog,tile);
+    if(!localCatalog.nodes.length){audit.completedTiles++;return;}
     const crop=document.createElement('canvas');
     crop.width=tile.w;crop.height=tile.h;
     crop.getContext('2d').drawImage(canvas,tile.x,tile.y,tile.w,tile.h,0,0,tile.w,tile.h);
@@ -4541,10 +4546,7 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cach
     // whole-image timeout twice. Smaller descendants have shorter budgets.
     const tileAudit={tile:tile.index,depth,maxAttempts:1,
       timeoutMsOverride:Math.max(90000,240000-depth*60000)};
-    if(wholeCatalog){
-      const localCatalog=objectRepairCatalog(wholeCatalog,tile,1);
-      tileAudit.detailCatalog=localCatalog.nodes.length?localCatalog:null;
-    }
+    tileAudit.detailCatalog=localCatalog;
     audit.tiles.push(tileAudit);
     try{
       const scene=await requestScene(crop.toDataURL('image/png'),tile.w,tile.h,tileAudit);
@@ -4565,45 +4567,22 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cach
   try{
     await Promise.all(initialTiles.map(tile=>reconstructTile(tile,0)));
     audit.phase='merge';
-    if(!results.length) throw new Error('Vision model returned no editable objects from image crops');
-    const merged=mergeReconstructionTiles(results,W,H);
-    if(!merged.nodes.length) throw new Error('Vision model returned no editable objects after merging image crops');
     audit.mergedTiles=results.length;
-    const tiledCatalog=createWholeImageCatalog(merged);
-    if(!wholeCatalog){audit.tilePassComplete=true;return tiledCatalog;}
-    const tiledQuality=await measureScene(canvas,tiledCatalog);
-    audit.tiledQuality={score:tiledQuality.score,darkRecall:tiledQuality.darkRecall,
-      localRecall:tiledQuality.localRecall};
-    // Keep whole-image identities and add objects found only in crops. Local
-    // views may improve detail without discarding the global object graph.
-    const enrichedCatalog=registerMissingObjects(wholeCatalog,merged);
-    audit.tileRegisteredMissing=enrichedCatalog.counts.registeredMissing;
-    const enrichedQuality=await measureScene(canvas,enrichedCatalog);
-    audit.enrichedQuality={score:enrichedQuality.score,darkRecall:enrichedQuality.darkRecall,
-      localRecall:enrichedQuality.localRecall};
+    let refined=wholeCatalog;
+    for(const {tile,scene} of results){
+      const candidate=replaceObjectRepairRegion(refined,tile,scene,1);
+      if(candidate.nodes.every((node,i)=>node===refined.nodes[i]))continue;
+      try{
+        const before=await measureScene(canvas,refined,tile);
+        const after=await measureScene(canvas,candidate,tile);
+        if(acceptReconstructionRepair(before,after))refined=candidate;
+      }catch(error){audit.tileQualityError=String(error?.message||error);}
+    }
     audit.tilePassComplete=true;
-    if(audit.tileRegisteredMissing>0&&(!wholeQuality&&
-      reconstructionQualityDeficit(enrichedQuality)<=reconstructionQualityDeficit(tiledQuality)+.01||
-      wholeQuality&&
-      reconstructionQualityDeficit(enrichedQuality)+.005<reconstructionQualityDeficit(wholeQuality)&&
-      enrichedQuality.darkRecall>=wholeQuality.darkRecall-.01&&
-      enrichedQuality.localRecall>=wholeQuality.localRecall-.01)){
-      audit.selectedTiledDetail=true;
-      audit.selectedEnrichedCatalog=true;
-      return enrichedCatalog;
-    }
-    if(!wholeQuality||reconstructionQualityDeficit(tiledQuality)+.005<reconstructionQualityDeficit(wholeQuality)&&
-      tiledQuality.darkRecall>=wholeQuality.darkRecall-.01&&
-      tiledQuality.localRecall>=wholeQuality.localRecall-.01){
-      audit.selectedTiledDetail=true;
-      return tiledCatalog;
-    }
-    audit.strategy=cachedScene?'cached-catalog':'whole-image-catalog';
-    return wholeCatalog;
+    audit.tileUpdatedObjects=refined.nodes.filter((node,i)=>node!==wholeCatalog.nodes[i]).length;
+    return refined;
   }catch(error){
-    if(!wholeCatalog)throw error;
     audit.tiledDetailError=String(error?.message||error);
-    audit.strategy=cachedScene?'cached-catalog':'whole-image-catalog';
     return wholeCatalog;
   }
 }
@@ -4694,33 +4673,19 @@ async function runReconstruction(){
       if(args[3])args[3].state='queued';
       return enqueue(()=>requestEditableScene(...args));
     };
-    const cacheKey=await reconstructionCacheKey(src,{textLayoutVersion:2,catalogQualityVersion:2,model:editableReconstructionModel(),reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
+    const cacheKey=await reconstructionCacheKey(src,{textLayoutVersion:2,catalogQualityVersion:4,model:editableReconstructionModel(),reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
     const bypassCache=!!st.skipReconCacheOnce;
     st.skipReconCacheOnce=false;
     const cached=bypassCache?null:await readReconstructionCache(cacheKey);
     reconstructionAudit.cachedDetailComplete=!!cached?.detailComplete;
-    let scene=await reconstructCatalogWithFallback(canvas,src,requestScene,reconstructionAudit,cached?.scene);
+    let scene=await reconstructCatalogWithFallback(canvas,src,requestScene,reconstructionAudit,cached?.scene,!!cached?.omissionChecked);
     reconstructionAudit.cacheHit=!!cached;
-    let omissionChecked=!!cached?.omissionChecked&&!reconstructionAudit.selectedTiledDetail;
-    const completedIds=new Set(reconstructionAudit.selectedTiledDetail?[]:(cached?.completedIds||[]));
+    let omissionChecked=!!reconstructionAudit.omissionChecked;
+    const completedIds=new Set(cached?.completedIds||[]);
     const saveProgress=()=>writeReconstructionCache(cacheKey,{scene,omissionChecked,
       detailComplete:!!cached?.detailComplete||!!reconstructionAudit.tilePassComplete,
       completedIds:[...completedIds]});
     await saveProgress();
-    // Missing objects are proposed once against the full image and registered
-    // centrally before any crop is allowed to update them.
-    if(!omissionChecked){
-      reconstructionAudit.phase='omission';
-      const catalog={canvas:scene.canvas,nodes:scene.nodes.map(n=>{const copy={...n};delete copy.href;return copy;})};
-      const omissionAudit={omissionCheck:true,catalog,maxAttempts:1,timeoutMsOverride:180000};
-      reconstructionAudit.omissionAudit=omissionAudit;
-      try{
-        const proposals=await requestScene(src,canvas.width,canvas.height,omissionAudit);
-        scene=registerMissingObjects(scene,proposals);omissionChecked=true;
-        reconstructionAudit.registeredMissing=scene.counts.registeredMissing;
-        await saveProgress();
-      }catch(error){reconstructionAudit.omissionError=String(error?.message||error);}
-    }
     reconstructionAudit.catalog=scene.nodes.map(n=>({id:n.id,type:n.type,...(n.type==='text'?{text:n.text}:{})}));
     reconstructionAudit.deduplicatedText=scene.counts.deduplicatedText;
     reconstructionAudit.phase='quality';
@@ -4754,20 +4719,21 @@ async function runReconstruction(){
       const plannedIds=new Set(jobs.flatMap(job=>job.ids));
       reconstructionAudit.unrefinedIds=scene.nodes.filter(n=>!plannedIds.has(n.id)&&!completedIds.has(n.id)).map(n=>n.id);
       const refine=async(job,depth=0)=>{
-        const {region}=job,ids=job.ids.filter(id=>!completedIds.has(id));
+        const {region,allowLarge=false}=job,ids=job.ids.filter(id=>!completedIds.has(id));
         if(!ids.length)return [];
         const scale=Math.min(3,Math.max(1.35,1000/Math.max(region.w,region.h)));
         const crop=document.createElement('canvas');
         crop.width=Math.round(region.w*scale);crop.height=Math.round(region.h*scale);
         crop.getContext('2d').drawImage(canvas,region.x,region.y,region.w,region.h,0,0,crop.width,crop.height);
-        const catalog=objectRepairCatalog(scene,region,scale);
+        const catalog=objectRepairCatalog(scene,region,scale,allowLarge);
         catalog.nodes=catalog.nodes.filter(n=>ids.includes(n.id));
+        if(!catalog.nodes.length)return [];
         const repairAudit={objectRepair:true,region,catalog,depth,requireCompleteObjects:true,
           maxAttempts:1,timeoutMsOverride:Math.max(90000,180000-depth*30000)};
         reconstructionAudit.revisions.push(repairAudit);
         try{
           const local=await requestScene(crop.toDataURL('image/png'),crop.width,crop.height,repairAudit);
-          return [{local,region,scale,ids}];
+          return [{local,region,scale,ids,allowLarge}];
         }catch(error){
           // Release the queue slot before enqueuing children: retries/splits
           // still share three slots and cannot deadlock waiting on themselves.
@@ -4786,9 +4752,9 @@ async function runReconstruction(){
       };
       const objectRepairRequests=jobs.map(job=>refine(job));
       for(const requested of objectRepairRequests){
-        for(const {region,scale,local,ids} of await requested){
+        for(const {region,scale,local,ids,allowLarge} of await requested){
         try{
-          const candidate=replaceObjectRepairRegion(scene,region,local,scale);
+          const candidate=replaceObjectRepairRegion(scene,region,local,scale,allowLarge);
           const candidatePptx=await buildNativePptx(candidate,zipStore);
           const rendered=await readNativePptxScene(candidatePptx,canvas.width,canvas.height);
           const before=await compareEditableRender(canvas,pptxScene,region);

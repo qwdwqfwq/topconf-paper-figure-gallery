@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {registerMissingObjects,planCatalogRepairs,createWholeImageCatalog,objectRepairCatalog,auditExportLayout,extractEditableNodes,planReconstructionTiles,subdivideReconstructionTile,mergeReconstructionTiles,reconstructionQualityDeficit,acceptReconstructionRepair,planObjectRepairRegion,replaceObjectRepairRegion} from './reconstruction-core.mjs';
+import {registerMissingObjects,planCatalogRepairs,tileDetailCatalog,createWholeImageCatalog,objectRepairCatalog,auditExportLayout,extractEditableNodes,planReconstructionTiles,subdivideReconstructionTile,mergeReconstructionTiles,reconstructionQualityDeficit,acceptReconstructionRepair,planObjectRepairRegion,replaceObjectRepairRegion} from './reconstruction-core.mjs';
 
 assert.equal(reconstructionQualityDeficit({score:.98,darkRecall:.98,localRecall:.97,edgeF1:.97,colorSimilarity:.98}),0);
 assert.ok(reconstructionQualityDeficit({score:.9,darkRecall:.9,localRecall:.9,edgeF1:.9,colorSimilarity:.9})>0,
@@ -66,6 +66,28 @@ const path=merged.nodes.find(n=>n.id==='tile2_right-path');
 assert.equal(path.type,'path');
 assert.match(path.d,new RegExp(`M ${tiles[1].x+40} 500 C `));
 assert.equal(merged.counts.total,merged.nodes.length);
+
+// Two crops can each own the centre of a different fragment of one line.
+// The final graph must contain the union once, even when the whole-image
+// catalog did not identify that connector.
+const seamGeometry=mergeReconstructionTiles([
+  {tile:tiles[0],scene:{nodes:[
+    {id:'left-fragment',type:'line',x:600,y:420,x2:828,y2:420,stroke:'#222'},
+    {id:'small-box',type:'rect',x:783,y:260,w:30,h:24,fill:'#ABCDEF',stroke:'#222'}
+  ]}},
+  {tile:tiles[1],scene:{nodes:[
+    {id:'right-fragment',type:'line',x:0,y:420,x2:228,y2:420,stroke:'#222',arrow:true},
+    {id:'small-box-copy',type:'rect',x:13,y:260,w:30,h:24,fill:'#ABCDEF',stroke:'#222'}
+  ]}}
+],1600,900);
+const joinedLine=seamGeometry.nodes.filter(n=>n.type==='line');
+assert.equal(joinedLine.length,1,'cross-tile connector fragments must form one editable line');
+assert.deepEqual([joinedLine[0].x,joinedLine[0].x2],[600,1000]);
+assert.equal(joinedLine[0].arrow,true);
+assert.equal(seamGeometry.nodes.filter(n=>n.type==='rect').length,1,
+  'same small shape observed on each side of a seam must have one owner');
+assert.equal(seamGeometry.counts.mergedCrossTileLines,1);
+assert.equal(seamGeometry.counts.deduplicatedCrossTileShapes,1);
 
 // A large filled panel may have its centre outside this tile's owning core.
 // Its visible part must survive and must stop at the core boundary.
@@ -216,9 +238,39 @@ assert.equal(new Set(registered.nodes.map(n=>n.id)).size,registered.nodes.length
 const distinct=registerMissingObjects({nodes:[{id:'a',type:'path',d:'M 10 10 L 50 50'}]},
  {nodes:[{type:'path',d:'M 10 50 L 50 10'}]});
 assert.equal(distinct.nodes.length,2,'distinct curves with shared bounds are preserved');
+const registeredLine=registerMissingObjects({nodes:[
+ {id:'whole-connector',type:'line',x:600,y:420,x2:850,y2:420,stroke:'#222'}
+]},{nodes:[
+ {type:'line',x:770,y:421,x2:1000,y2:421,stroke:'#222',arrow:true},
+ {type:'line',x:770,y:432,x2:1000,y2:432,stroke:'#222'}
+]});
+assert.equal(registeredLine.nodes.length,2,
+ 'a jittered connector from a crop is not registered twice, while a separate parallel line remains');
 const nested=registerMissingObjects({nodes:[{id:'a',type:'rect',x:10,y:10,w:100,h:100}]},
  {nodes:[{type:'rect',x:30,y:30,w:30,h:30}]});
 assert.equal(nested.nodes.length,2,'nested detail is not a duplicate panel');
 const jobs=planCatalogRepairs(registered,1200,500);
 const owners=jobs.flatMap(j=>j.ids);
 assert.equal(new Set(owners).size,owners.length,'each object belongs to one crop only');
+const crossRegion={canvas:{width:1600,height:900},nodes:[
+  {id:'cross-region-arrow',type:'line',x:100,y:250,x2:1500,y2:250,stroke:'#222',arrow:true},
+  {id:'local-box',type:'rect',x:180,y:300,w:100,h:80,fill:'#fff'}
+]};
+const crossTiles=planReconstructionTiles(1600,900,700,40);
+assert.equal(crossTiles.flatMap(tile=>tileDetailCatalog(crossRegion,tile).nodes)
+  .filter(node=>node.id==='cross-region-arrow').length,0,
+  'a tile cannot recreate a partial cross-region arrow');
+const crossJobs=planCatalogRepairs(crossRegion,1600,900);
+assert.equal(crossJobs.flatMap(job=>job.ids).filter(id=>id==='cross-region-arrow').length,1,
+  'one complete repair owns each cross-region arrow');
+const crossJob=crossJobs.find(job=>job.ids.includes('cross-region-arrow'));
+assert.equal(crossJob.allowLarge,true);
+const crossLocal=objectRepairCatalog(crossRegion,crossJob.region,1,true);
+crossLocal.nodes=crossLocal.nodes.filter(node=>crossJob.ids.includes(node.id));
+assert.equal(crossLocal.nodes.length,1);
+crossLocal.nodes[0].y+=2;crossLocal.nodes[0].y2+=2;
+crossLocal.nodes.push({id:'invented-crossing',type:'line',x:0,y:0,x2:100,y2:100});
+const crossPatched=replaceObjectRepairRegion(crossRegion,crossJob.region,crossLocal,1,true);
+assert.equal(crossPatched.nodes.length,crossRegion.nodes.length,
+  'a regional repair never changes the global object count');
+assert.equal(crossPatched.nodes[0].y,252);
