@@ -45,7 +45,7 @@ A searchable, filterable gallery of Figure 1 / teaser figures. Static HTML/CSS/J
 - 🔬 **主流模型一站接入**：聚合 Claude、OpenAI、DeepSeek 等模型，支持图表代码生成（TikZ / Python）、论文润色与图表解析。
 - 📉 **降低科研成本**：部分模型价格低至官方 0.1 折，倍率以平台实时公示为准。
 - ⚡ **高并发支持**：支持开票；模型可用性与限流规则以平台实时状态为准。
-- 🎁 **专属体验礼**：通过[专属推广链接](https://www.infistar.cc/register?aff=RZ4MDTRU&ref_source=link)注册，可领取 $5 体验额度与首充特惠，具体以活动页面为准。
+- 🎁 **专属体验礼**：通过[专属推广链接](https://www.infistar.cc/register?aff=RZ4MDTRU&ref_source=link)注册，可领取 5 元体验额度与首充特惠，具体以活动页面为准。
 
 ---
 
