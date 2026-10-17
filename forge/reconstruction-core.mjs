@@ -231,8 +231,17 @@ export function extractEditableNodes(raw){
     if(Array.isArray(value)){
       if(value.length===0) return fromNodeKey?[]:null;
       if(value.every(nodeLike)) return value.map(normalizeNode);
+      if(fromNodeKey){
+        const nodes=value.filter(nodeLike);
+        if(nodes.length) return nodes.map(normalizeNode);
+      }
       const nested=value.map(item=>find(item,depth+1)).filter(Boolean);
       return nested.length?nested.flat():null;
+    }
+    if(fromNodeKey){
+      const entries=Object.entries(value);
+      if(entries.length && entries.every(([,node])=>nodeLike(node)))
+        return entries.map(([id,node])=>normalizeNode({id,...node}));
     }
     for(const key of nodeKeys){
       if(value[key]!==undefined){

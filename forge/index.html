@@ -653,7 +653,7 @@ import * as T from './vendor/transformers.min.js';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult} from './image-api.mjs?v=20261016';
 import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=text-lines-20261017';
 import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=baseline-09a60b5-text-v2-20261017';
-import {registerMissingObjects, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion} from './reconstruction-core.mjs?v=baseline-09a60b5-text-v2-20261017';
+import {registerMissingObjects, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion, planReconstructionTiles, subdivideReconstructionTile, mergeReconstructionTiles} from './reconstruction-core.mjs?v=baseline-09a60b5-text-v3-20261017';
 import {calibrateEditableText} from './text-calibration.mjs?v=text-lines-20261017';
 import {figureCanvas,imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261016d';
 import {infistarAuditStatus} from './infistar-audit.mjs?v=20261016b';
@@ -4269,7 +4269,8 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   const timeoutMs=Math.max(1,Math.min(60,Number($('#reconTimeoutMinutes').value)||15))*60000;
   audit.timeoutMs=timeoutMs;
   let lastError=null;
-  for(let attempt=1;attempt<=3;attempt++){
+  const maxAttempts=Math.max(1,Math.min(3,Number(audit.maxAttempts)||3));
+  for(let attempt=1;attempt<=maxAttempts;attempt++){
     audit.attempt=attempt;
     try{
       const attemptPrompt=audit.omissionCheck
@@ -4394,7 +4395,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
     }catch(err){
       lastError=err;
       audit.lastError=String(err&&err.message||err);
-      if(isFatal(err) || attempt===3) break;
+      if(isFatal(err) || attempt===maxAttempts) break;
       audit.state='retrying';
       await new Promise(resolve=>setTimeout(resolve,1000*2**(attempt-1)));
     }
@@ -4402,7 +4403,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   audit.state='failed';
   audit.finishedAt=Date.now();
   audit.durationMs=audit.finishedAt-audit.startedAt;
-  audit.attempts=audit.attempt||2;
+  audit.attempts=audit.attempt||maxAttempts;
   audit.error=String(lastError&&lastError.message||lastError||tt('recon.badjson'));
   throw lastError||new Error(tt('recon.badjson'));
 }
@@ -4456,6 +4457,48 @@ function syncStep3Bitmap(){
   }
   return src;
 }
+async function reconstructCatalogWithFallback(canvas,src,requestScene,audit){
+  const W=canvas.width,H=canvas.height;
+  const wholeAudit={wholeImage:true,maxAttempts:2};
+  audit.tiles.push(wholeAudit);
+  try{
+    const whole=await requestScene(src,W,H,wholeAudit);
+    audit.strategy='whole-image-catalog';
+    audit.completedTiles=1;
+    return createWholeImageCatalog(whole);
+  }catch(error){
+    if(!(error.sceneFormatFailure||error.outputTruncated||error.visionTimeout)) throw error;
+    audit.wholeImageError=String(error.message||error);
+  }
+  const initialTiles=planReconstructionTiles(W,H,700,40);
+  audit.strategy='tiled-fallback';
+  audit.totalTiles=initialTiles.length;
+  const results=[];
+  async function reconstructTile(tile,depth){
+    const crop=document.createElement('canvas');
+    crop.width=tile.w;crop.height=tile.h;
+    crop.getContext('2d').drawImage(canvas,tile.x,tile.y,tile.w,tile.h,0,0,tile.w,tile.h);
+    const tileAudit={tile:tile.index,depth,maxAttempts:2};
+    audit.tiles.push(tileAudit);
+    try{
+      const scene=await requestScene(crop.toDataURL('image/png'),tile.w,tile.h,tileAudit);
+      results.push({tile,scene});
+      audit.completedTiles++;
+    }catch(error){
+      if(!(error.sceneFormatFailure||error.outputTruncated||error.visionTimeout) || depth>=2 || Math.max(tile.w,tile.h)<300) throw error;
+      const children=subdivideReconstructionTile(tile,450,20);
+      if(children.length<2) throw error;
+      audit.fallbackTiles+=children.length;
+      await Promise.all(children.map(child=>reconstructTile(child,depth+1)));
+    }
+  }
+  await Promise.all(initialTiles.map(tile=>reconstructTile(tile,0)));
+  if(!results.length) throw new Error('Vision model returned no editable objects from image crops');
+  const merged=mergeReconstructionTiles(results,W,H);
+  if(!merged.nodes.length) throw new Error('Vision model returned no editable objects after merging image crops');
+  audit.mergedTiles=results.length;
+  return createWholeImageCatalog(merged);
+}
 async function runReconstruction(){
   const st = ensureExportState();
   const status = $('#reconStatus');
@@ -4481,9 +4524,8 @@ async function runReconstruction(){
     canvas.width = im.naturalWidth || im.width;
     canvas.height = im.naturalHeight || im.height;
     canvas.getContext('2d').drawImage(im, 0, 0);
-    const tiles=[{index:1,x:0,y:0,w:canvas.width,h:canvas.height}];
     const reconstructionAudit=(window.__ffApiAudit||(window.__ffApiAudit={})).reconstruction={
-      state:'pending',startedAt:Date.now(),totalTiles:tiles.length,completedTiles:0,
+      state:'pending',startedAt:Date.now(),totalTiles:1,completedTiles:0,
       fallbackTiles:0,repairCalls:0,revisions:[],tiles:[]
     };
 
@@ -4496,10 +4538,12 @@ async function runReconstruction(){
     const bypassCache=!!st.skipReconCacheOnce;
     st.skipReconCacheOnce=false;
     const cached=bypassCache?null:await readReconstructionCache(cacheKey);
-    const wholeAudit={wholeImage:true};
-    reconstructionAudit.tiles.push(wholeAudit);
-    let scene=cached?.scene||createWholeImageCatalog(await requestScene(src,canvas.width,canvas.height,wholeAudit));
-    if(cached)Object.assign(wholeAudit,{state:'cached',attempts:0});
+    let scene=cached?.scene||await reconstructCatalogWithFallback(canvas,src,requestScene,reconstructionAudit);
+    if(cached){
+      reconstructionAudit.tiles.push({wholeImage:true,state:'cached',attempts:0});
+      reconstructionAudit.strategy='cached-catalog';
+      reconstructionAudit.completedTiles=1;
+    }
     reconstructionAudit.cacheHit=!!cached;
     let omissionChecked=!!cached?.omissionChecked;
     const completedIds=new Set(cached?.completedIds||[]);
@@ -4518,8 +4562,6 @@ async function runReconstruction(){
         await saveProgress();
       }catch(error){reconstructionAudit.omissionError=String(error?.message||error);}
     }
-    reconstructionAudit.completedTiles=1;
-    reconstructionAudit.strategy='whole-image-catalog';
     reconstructionAudit.catalog=scene.nodes.map(n=>({id:n.id,type:n.type,...(n.type==='text'?{text:n.text}:{})}));
     reconstructionAudit.deduplicatedText=scene.counts.deduplicatedText;
     // Measure text against the actual bitmap before committing the refinement.
