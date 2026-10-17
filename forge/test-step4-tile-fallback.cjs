@@ -82,11 +82,45 @@ const server=http.createServer((req,res)=>{
       const scene=await window.__testReconstructCatalogWithFallback(canvas,src,request,audit,null,measure);
       return {calls,strategy:audit.strategy,selected:audit.selectedTiledDetail,nodes:scene.nodes.length};
     },source);
-    assert.equal(sparse.strategy,'tiled-detail-check');
+    assert.equal(sparse.strategy,'whole-then-tiled');
     assert.equal(sparse.selected,true);
     assert(sparse.nodes>1);
     assert.equal(sparse.calls,5);
     console.log(JSON.stringify(sparse));
+    const stalled=await page.evaluate(async src=>{
+      const im=new Image();im.src=src;await im.decode();
+      const canvas=document.createElement('canvas');canvas.width=im.width;canvas.height=im.height;
+      canvas.getContext('2d').drawImage(im,0,0);
+      const audit={tiles:[],completedTiles:0,totalTiles:1,fallbackTiles:0};
+      const calls=[];
+      const request=async (_image,w,h,detail)=>{
+        calls.push({w,h,depth:detail.depth,timeout:detail.timeoutMsOverride,
+          context:!!detail.detailCatalog});
+        if(detail.tile===1&&detail.depth===0){
+          const error=new Error('Vision request timed out');error.visionTimeout=true;throw error;
+        }
+        return {canvas:{width:w,height:h},nodes:[
+          {id:'shape',type:'rect',x:20,y:20,w:50,h:50,fill:'#000000'}]};
+      };
+      const measure=async (_canvas,scene)=>({score:scene.nodes.length>1?.82:.70,
+        darkRecall:scene.nodes.length>1?.82:.70,
+        localRecall:scene.nodes.length>1?.75:.60,
+        edgeF1:scene.nodes.length>1?.8:.7,colorSimilarity:.9});
+      const scene=await window.__testReconstructCatalogWithFallback(canvas,src,request,audit,null,measure);
+      return {calls,mergedTiles:audit.mergedTiles,totalTiles:audit.totalTiles,
+        completedTiles:audit.completedTiles,fallbackTiles:audit.fallbackTiles,
+        strategy:audit.strategy,nodes:scene.nodes.length,tilePassComplete:audit.tilePassComplete};
+    },source);
+    assert.equal(stalled.strategy,'whole-then-tiled');
+    assert(stalled.fallbackTiles>=1);
+    assert(stalled.calls.some(call=>call.depth===1&&call.w<stalled.calls[1].w));
+    assert(stalled.calls.filter(call=>call.depth===0).every(call=>call.timeout===240000));
+    assert(stalled.calls.filter(call=>call.depth===1).every(call=>call.timeout===180000));
+    assert(stalled.calls.slice(1).some(call=>call.context));
+    assert.equal(stalled.completedTiles,stalled.totalTiles);
+    assert.equal(stalled.tilePassComplete,true);
+    assert(stalled.nodes>0);
+    console.log(JSON.stringify(stalled));
     const cached=await page.evaluate(async src=>{
       const im=new Image();im.src=src;await im.decode();
       const canvas=document.createElement('canvas');canvas.width=im.width;canvas.height=im.height;

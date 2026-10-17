@@ -4283,7 +4283,9 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   }):'';
   const referenceImages=await editableRevisionImages(imageDataUri,revision,W,H);
   const isFatal=(err)=>/\b400\b|\b401\b|\b403\b|\b404\b|invalid\s+api\s*key|permission|quota|insufficient|billing/i.test(String(err&&err.message||err));
-  const timeoutMs=Math.max(1,Math.min(60,Number($('#reconTimeoutMinutes').value)||15))*60000;
+  const timeoutMs=Math.min(
+    Math.max(1,Math.min(60,Number($('#reconTimeoutMinutes').value)||15))*60000,
+    Number.isFinite(audit.timeoutMsOverride)?audit.timeoutMsOverride:Infinity);
   audit.timeoutMs=timeoutMs;
   let lastError=null;
   let previousResponse='';
@@ -4295,6 +4297,8 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         ? 'WHOLE IMAGE completeness audit. Compare the entire original image with the registered objects below. Return STRICT JSON {"nodes":[]} if nothing is missing; otherwise nodes must contain ONLY genuinely missing editable objects using the same scene schema. Never duplicate existing text, arrows, borders or icons. Do not return replacements or changes to existing objects. Examine small labels, chart marks and internal icon details. Global coordinates in pixels. Existing catalog: '+JSON.stringify(audit.catalog)+'\n'+prompt
         : audit.objectRepair
         ? 'Refine ONLY the supplied catalog IDs from this high-resolution crop. Return STRICT JSON {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. All geometry and font sizes use crop pixels. Return complete updated nodes with their original id and type. Never add objects, split objects, duplicate labels, change text content, or redraw contextual objects absent from the catalog. Omit unchanged nodes. Empty nodes is valid. Catalog in crop coordinates: '+JSON.stringify(audit.catalog)
+        : audit.detailCatalog
+        ? 'This image is a crop of a figure already recognized as a whole. Inspect every visible element at this resolution, including small symbols, arrows, lines, chart marks and labels. Return a COMPLETE editable scene for this crop in STRICT JSON with canvas and nodes. Coordinates are relative to this crop. Reuse the supplied IDs for matching objects, and use new IDs only for genuinely missing objects. Existing whole-image catalog within this crop: '+JSON.stringify(audit.detailCatalog)+'\n'+prompt
         : revision
         ? 'Image 1 is the ORIGINAL tile and image 2 is its editable render. Following images are paired close-ups of the weakest regions: ORIGINAL then RENDER, in the order of these tile-local crop coordinates: '+JSON.stringify((revision.weakRegions||[]).slice(0,2))+'. Compare each pair carefully. Keep correct objects and their coordinates; fix missing, misplaced, wrong-colored or spurious objects, especially small text and lines visible in the close-ups. Return the COMPLETE corrected scene, not only a patch. Previous comparison score: '+revision.score.toFixed(3)+'. Prior editable scene JSON follows:\n'+priorScene+'\n'+prompt
         : attempt>1 && lastError && lastError.sceneFormatFailure
@@ -4500,38 +4504,47 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cach
       wholeQuality=await measureScene(canvas,wholeCatalog);
       audit.wholeQuality={score:wholeQuality.score,darkRecall:wholeQuality.darkRecall,
         localRecall:wholeQuality.localRecall};
-      // A valid scene can still omit most of the small objects. Compare the
-      // rendered catalog with the bitmap before accepting a successful JSON.
-      if(wholeQuality.darkRecall>=.80&&wholeQuality.localRecall>=.68){
-        audit.strategy=cachedScene?'cached-catalog':'whole-image-catalog';
+      // The full image establishes the object catalog. Always inspect crops
+      // on a fresh run: a strong global score can hide tiny missing objects.
+      if(cachedScene&&audit.cachedDetailComplete&&
+        wholeQuality.darkRecall>=.80&&wholeQuality.localRecall>=.68){
+        audit.strategy='cached-catalog';
         return wholeCatalog;
       }
     }catch(error){
       audit.wholeQualityError=String(error?.message||error);
-      // A measurement error is not evidence that tiling will improve output.
-      audit.strategy=cachedScene?'cached-catalog':'whole-image-catalog';
-      return wholeCatalog;
+      // Continue to local inspection even when the initial render cannot be scored.
     }
   }
   const initialTiles=planReconstructionTiles(W,H,700,40);
-  audit.strategy=wholeCatalog?'tiled-detail-check':'tiled-fallback';
-  audit.totalTiles=initialTiles.length;
+  audit.strategy=wholeCatalog?'whole-then-tiled':'tiled-fallback';
+  audit.totalTiles=initialTiles.length+(wholeCatalog?1:0);
   const results=[];
   async function reconstructTile(tile,depth){
     const crop=document.createElement('canvas');
     crop.width=tile.w;crop.height=tile.h;
     crop.getContext('2d').drawImage(canvas,tile.x,tile.y,tile.w,tile.h,0,0,tile.w,tile.h);
-    const tileAudit={tile:tile.index,depth,maxAttempts:2};
+    // A stalled crop should split promptly instead of spending the full
+    // whole-image timeout twice. Smaller descendants have shorter budgets.
+    const tileAudit={tile:tile.index,depth,maxAttempts:1,
+      timeoutMsOverride:Math.max(90000,240000-depth*60000)};
+    if(wholeCatalog){
+      const localCatalog=objectRepairCatalog(wholeCatalog,tile,1);
+      tileAudit.detailCatalog=localCatalog.nodes.length?localCatalog:null;
+    }
     audit.tiles.push(tileAudit);
     try{
       const scene=await requestScene(crop.toDataURL('image/png'),tile.w,tile.h,tileAudit);
       results.push({tile,scene});
       audit.completedTiles++;
     }catch(error){
+      tileAudit.fallbackCause=error.visionTimeout?'timeout':
+        error.outputTruncated?'output-limit':error.sceneFormatFailure?'scene-format':'request-error';
       if(!(error.sceneFormatFailure||error.outputTruncated||error.visionTimeout) || depth>=2 || Math.max(tile.w,tile.h)<300) throw error;
       const children=subdivideReconstructionTile(tile,450,20);
       if(children.length<2) throw error;
-      audit.fallbackTiles+=children.length;
+      audit.fallbackTiles++;
+      audit.totalTiles+=children.length-1;
       await Promise.all(children.map(child=>reconstructTile(child,depth+1)));
     }
   }
@@ -4542,11 +4555,29 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cach
     if(!merged.nodes.length) throw new Error('Vision model returned no editable objects after merging image crops');
     audit.mergedTiles=results.length;
     const tiledCatalog=createWholeImageCatalog(merged);
-    if(!wholeCatalog)return tiledCatalog;
+    if(!wholeCatalog){audit.tilePassComplete=true;return tiledCatalog;}
     const tiledQuality=await measureScene(canvas,tiledCatalog);
     audit.tiledQuality={score:tiledQuality.score,darkRecall:tiledQuality.darkRecall,
       localRecall:tiledQuality.localRecall};
-    if(reconstructionQualityDeficit(tiledQuality)+.005<reconstructionQualityDeficit(wholeQuality)&&
+    // Keep whole-image identities and add objects found only in crops. Local
+    // views may improve detail without discarding the global object graph.
+    const enrichedCatalog=registerMissingObjects(wholeCatalog,merged);
+    audit.tileRegisteredMissing=enrichedCatalog.counts.registeredMissing;
+    const enrichedQuality=await measureScene(canvas,enrichedCatalog);
+    audit.enrichedQuality={score:enrichedQuality.score,darkRecall:enrichedQuality.darkRecall,
+      localRecall:enrichedQuality.localRecall};
+    audit.tilePassComplete=true;
+    if(audit.tileRegisteredMissing>0&&(!wholeQuality&&
+      reconstructionQualityDeficit(enrichedQuality)<=reconstructionQualityDeficit(tiledQuality)+.01||
+      wholeQuality&&
+      reconstructionQualityDeficit(enrichedQuality)+.005<reconstructionQualityDeficit(wholeQuality)&&
+      enrichedQuality.darkRecall>=wholeQuality.darkRecall-.01&&
+      enrichedQuality.localRecall>=wholeQuality.localRecall-.01)){
+      audit.selectedTiledDetail=true;
+      audit.selectedEnrichedCatalog=true;
+      return enrichedCatalog;
+    }
+    if(!wholeQuality||reconstructionQualityDeficit(tiledQuality)+.005<reconstructionQualityDeficit(wholeQuality)&&
       tiledQuality.darkRecall>=wholeQuality.darkRecall-.01&&
       tiledQuality.localRecall>=wholeQuality.localRecall-.01){
       audit.selectedTiledDetail=true;
@@ -4599,15 +4630,18 @@ async function runReconstruction(){
     // share this limit so subdivision cannot flood the API.
     const enqueue=visionQueue(3);
     const requestScene=(...args)=>enqueue(()=>requestEditableScene(...args));
-    const cacheKey=await reconstructionCacheKey(src,{textLayoutVersion:2,catalogQualityVersion:1,model:editableReconstructionModel(),reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
+    const cacheKey=await reconstructionCacheKey(src,{textLayoutVersion:2,catalogQualityVersion:2,model:editableReconstructionModel(),reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
     const bypassCache=!!st.skipReconCacheOnce;
     st.skipReconCacheOnce=false;
     const cached=bypassCache?null:await readReconstructionCache(cacheKey);
+    reconstructionAudit.cachedDetailComplete=!!cached?.detailComplete;
     let scene=await reconstructCatalogWithFallback(canvas,src,requestScene,reconstructionAudit,cached?.scene);
     reconstructionAudit.cacheHit=!!cached;
     let omissionChecked=!!cached?.omissionChecked&&!reconstructionAudit.selectedTiledDetail;
     const completedIds=new Set(reconstructionAudit.selectedTiledDetail?[]:(cached?.completedIds||[]));
-    const saveProgress=()=>writeReconstructionCache(cacheKey,{scene,omissionChecked,completedIds:[...completedIds]});
+    const saveProgress=()=>writeReconstructionCache(cacheKey,{scene,omissionChecked,
+      detailComplete:!!cached?.detailComplete||!!reconstructionAudit.tilePassComplete,
+      completedIds:[...completedIds]});
     await saveProgress();
     // Missing objects are proposed once against the full image and registered
     // centrally before any crop is allowed to update them.
@@ -4742,8 +4776,8 @@ async function runReconstruction(){
     if(reconstructionAudit.fallbackTiles){
       const timedOutTiles=reconstructionAudit.tiles.filter(tile=>tile.fallbackCause==='timeout').length;
       status.textContent=GAL_I18N.lang==='zh'
-        ? '已生成 '+scene.nodes.length+' 个可编辑对象；'+reconstructionAudit.fallbackTiles+' 个区域使用可编辑色块保底（其中 '+timedOutTiles+' 个区域因视觉 API 超时）。请检查这些区域的文字和细节。'
-        : 'Generated '+scene.nodes.length+' editable objects; '+reconstructionAudit.fallbackTiles+' regions used editable color blocks ('+timedOutTiles+' after a vision API timeout). Check text and fine details in those regions.';
+        ? '已生成 '+scene.nodes.length+' 个可编辑对象；'+reconstructionAudit.fallbackTiles+' 个区域已细分重建（其中 '+timedOutTiles+' 个因视觉 API 超时）。请检查这些区域的文字和细节。'
+        : 'Generated '+scene.nodes.length+' editable objects; '+reconstructionAudit.fallbackTiles+' regions were subdivided for reconstruction ('+timedOutTiles+' after a vision API timeout). Check text and fine details in those regions.';
     }else say(audit.defects.length ? 'recon.audit' : 'recon.done',{n:scene.nodes.length,d:audit.defects.length});
     if(reconstructionAudit.objectRepairError||reconstructionAudit.omissionError)status.textContent+=GAL_I18N.lang==='zh'?' 部分检查或精修失败，已保留并缓存结果；再次重建可继续。':' Some checks or refinements failed; results are cached. Rebuild to resume.';
     const layoutIssues=reconstructionAudit.pptxLayout?.issues||[];
