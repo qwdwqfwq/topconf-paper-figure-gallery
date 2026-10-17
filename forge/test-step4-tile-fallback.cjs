@@ -68,6 +68,29 @@ const server=http.createServer((req,res)=>{
     assert(result.types.includes('rect'));
     assert(result.types.includes('text'));
     assert.equal(new Set(result.ids).size,result.ids.length);
+    const providerFailure=await page.evaluate(async src=>{
+      const im=new Image();im.src=src;await im.decode();
+      const canvas=document.createElement('canvas');canvas.width=im.width;canvas.height=im.height;
+      canvas.getContext('2d').drawImage(im,0,0);
+      const audit={tiles:[],completedTiles:0,totalTiles:1,fallbackTiles:0};
+      const request=async (_image,w,h,detail)=>{
+        if(detail.wholeImage || detail.tile===1&&detail.depth===0)
+          throw new Error('HTTP 500: upstream error: do request failed');
+        return {canvas:{width:w,height:h},nodes:[
+          {id:'label',type:'text',x:40,y:40,w:100,h:30,text:'Editable label',fontSize:18}]};
+      };
+      const scene=await window.__testReconstructCatalogWithFallback(canvas,src,request,audit);
+      return {strategy:audit.strategy,wholeError:audit.wholeImageError,
+        fallbackTiles:audit.fallbackTiles,completedTiles:audit.completedTiles,
+        totalTiles:audit.totalTiles,nodes:scene.nodes.length,
+        causes:audit.tiles.map(tile=>tile.fallbackCause).filter(Boolean)};
+    },source);
+    assert.equal(providerFailure.strategy,'tiled-fallback');
+    assert.match(providerFailure.wholeError,/HTTP 500/);
+    assert(providerFailure.fallbackTiles>=1);
+    assert(providerFailure.causes.includes('provider-5xx'));
+    assert.equal(providerFailure.completedTiles,providerFailure.totalTiles);
+    assert(providerFailure.nodes>0);
     const progress=await page.evaluate(()=>{
       const now=Date.now();
       return window.__testReconstructionProgressText({phase:'regions',startedAt:now-62000,

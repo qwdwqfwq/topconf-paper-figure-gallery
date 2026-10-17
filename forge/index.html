@@ -4491,6 +4491,10 @@ function syncStep3Bitmap(){
   }
   return src;
 }
+function isRecoverableReconstructionError(error){
+  return !!(error?.sceneFormatFailure||error?.outputTruncated||error?.visionTimeout||
+    /^HTTP 5\d\d\b/.test(String(error?.message||error)));
+}
 async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cachedScene,measureScene=compareEditableRender){
   const W=canvas.width,H=canvas.height;
   let wholeCatalog=cachedScene||null,wholeQuality=null;
@@ -4502,7 +4506,7 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cach
     try{
       wholeCatalog=createWholeImageCatalog(await requestScene(src,W,H,wholeAudit));
     }catch(error){
-      if(!(error.sceneFormatFailure||error.outputTruncated||error.visionTimeout)) throw error;
+      if(!isRecoverableReconstructionError(error)) throw error;
       audit.wholeImageError=String(error.message||error);
     }
   }else audit.tiles.push({wholeImage:true,state:'cached',attempts:0});
@@ -4548,8 +4552,9 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cach
       audit.completedTiles++;
     }catch(error){
       tileAudit.fallbackCause=error.visionTimeout?'timeout':
-        error.outputTruncated?'output-limit':error.sceneFormatFailure?'scene-format':'request-error';
-      if(!(error.sceneFormatFailure||error.outputTruncated||error.visionTimeout) || depth>=2 || Math.max(tile.w,tile.h)<300) throw error;
+        error.outputTruncated?'output-limit':error.sceneFormatFailure?'scene-format':
+        /^HTTP 5\d\d\b/.test(String(error?.message||error))?'provider-5xx':'request-error';
+      if(!isRecoverableReconstructionError(error) || depth>=2 || Math.max(tile.w,tile.h)<300) throw error;
       const children=subdivideReconstructionTile(tile,450,20);
       if(children.length<2) throw error;
       audit.fallbackTiles++;
@@ -4619,6 +4624,9 @@ function reconstructionProgressText(audit){
     parts.push(zh
       ? '分区 '+done+'/'+total+'，已细分 '+audit.fallbackTiles+' 次'
       : 'regions '+done+'/'+total+', subdivided '+audit.fallbackTiles+' times');
+    if(audit.wholeImageError) parts.push(zh
+      ? '整图识别失败，分区结果缺少全局对象目录'
+      : 'whole-image recognition failed; regions have no global object catalog');
   }
   if(phase==='repair') parts.push(zh
     ? '对象组 '+(audit.revisions||[]).filter(call=>call.state==='succeeded').length+'/'+(audit.revisions||[]).length
