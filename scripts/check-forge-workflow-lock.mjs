@@ -9,7 +9,9 @@ const manifestPath = join(root, '.github', 'forge-workflow-lock.json');
 const protectedNames = readdirSync(forge)
   .filter((name) => /\.(?:html|js|mjs|json)$/.test(name) && !name.startsWith('test-'))
   .sort();
-const digest = (name) => createHash('sha256').update(readFileSync(join(forge, name))).digest('hex');
+const digest = (name) => createHash('sha256')
+  .update(readFileSync(join(forge, name), 'utf8').replace(/\r\n/g, '\n'))
+  .digest('hex');
 const snapshot = Object.fromEntries(protectedNames.map((name) => [`forge/${name}`, digest(name)]));
 
 if (process.argv.includes('--record')) {
