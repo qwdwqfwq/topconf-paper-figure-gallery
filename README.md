@@ -17,7 +17,8 @@
     <td width="50%" align="center"><a href="docs/figureforge-examples/hierarchical-memory.png"><img src="docs/figureforge-examples/hierarchical-memory.png" alt="FigureForge 生成的层级工作记忆论文主图" width="430"></a><br><strong>层级工作记忆</strong><br><sub>Hierarchical working memory</sub></td>
   </tr>
   <tr>
-    <td colspan="2" align="center"><a href="docs/figureforge-examples/memory-system.png"><img src="docs/figureforge-examples/memory-system.png" alt="FigureForge 生成的工作记忆系统论文主图" width="870"></a><br><strong>工作记忆系统 · 从输入到结果</strong><br><sub>Memory system overview</sub></td>
+    <td width="50%" align="center"><a href="docs/figureforge-examples/memory-system.png"><img src="docs/figureforge-examples/memory-system.png" alt="FigureForge 生成的工作记忆系统论文主图" width="430"></a><br><strong>工作记忆系统 · 从输入到结果</strong><br><sub>Memory system overview</sub></td>
+    <td width="50%" align="center"><a href="docs/figureforge-examples/sycophancy-analysis.png"><img src="docs/figureforge-examples/sycophancy-analysis.png" alt="FigureForge 生成的 LLM 迎合行为因果分析论文主图" width="430"></a><br><strong>LLM 迎合行为因果分析</strong><br><sub>Internal causes of sycophancy in LLMs</sub></td>
   </tr>
 </table>
 
