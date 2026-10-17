@@ -205,6 +205,8 @@
   .bnote{font-size:11.5px;line-height:1.55;color:#6b7280;margin-top:6px;overflow-wrap:anywhere}
   .bnote.tiny{font-size:11px;color:#9ca3af;margin-top:7px}
   .bnote .warn-txt{color:#dc2626;font-weight:700}
+  .infistar-signup{margin:0 0 10px;padding-left:95px;font-size:12px}
+  .infistar-signup a{color:#6d28d9;font-weight:700;text-decoration:underline;text-underline-offset:2px}
   .box .chkline{margin-top:9px}
   .box .corsnote{margin-top:9px}
   .btn-sm{padding:7px 12px;font-size:12.5px;white-space:nowrap}
@@ -240,6 +242,7 @@
     .box .tabs button,.box .pass-tabs button{flex:1 1 46%;min-width:0}
     .bfield{flex-wrap:wrap}
     .blab{min-width:0}
+    .infistar-signup{padding-left:0}
     .bfield select,.bfield input[type=text],.bfield input[type=password],#key{flex:1 1 100%}
     .filters{width:100%}
     .field{flex:1 1 auto;justify-content:space-between}
@@ -405,6 +408,7 @@
             <span class="blab" data-i18n="provider"></span>
             <select id="provider"></select>
           </div>
+          <p class="bnote infistar-signup" id="infistarSignup"><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link" target="_blank" rel="noopener noreferrer sponsored" data-i18n="infistar.signup"></a></p>
           <div class="bfield">
             <span class="blab">API Key</span>
             <input type="password" id="key" data-i18n-ph="keyPh">
@@ -1611,6 +1615,7 @@ function initProviders(){
   populateParserModels();
 }
 function restoreProviderState(p){
+  $('#infistarSignup').hidden = p!=='infistar';
   $('#key').value = localStorage.getItem('ff_key_'+p)||'';
   $('#baseOverride').value = localStorage.getItem('ff_base_'+p)||'';
   $('#customModel').value = localStorage.getItem('ff_cmodel_'+p)||'';
