@@ -65,5 +65,51 @@ const server=http.createServer((req,res)=>{
     assert(result.types.includes('text'));
     assert.equal(new Set(result.ids).size,result.ids.length);
     console.log(JSON.stringify(result));
+    const sparse=await page.evaluate(async src=>{
+      const im=new Image();im.src=src;await im.decode();
+      const canvas=document.createElement('canvas');canvas.width=im.width;canvas.height=im.height;
+      canvas.getContext('2d').drawImage(im,0,0);
+      const audit={tiles:[],completedTiles:0,totalTiles:1,fallbackTiles:0};
+      let calls=0;
+      const request=async (_image,w,h)=>{
+        calls++;
+        return {canvas:{width:w,height:h},nodes:Array.from({length:w===canvas.width?1:4},(_,i)=>
+          ({id:'node-'+i,type:'rect',x:30+i*45,y:30,w:30,h:30,fill:'#ffffff'}))};
+      };
+      const measure=async (_canvas,scene)=>({score:scene.nodes.length>4?.85:.65,
+        darkRecall:scene.nodes.length>4?.86:.6,localRecall:scene.nodes.length>4?.75:.5,
+        edgeF1:scene.nodes.length>4?.8:.6,colorSimilarity:.9});
+      const scene=await window.__testReconstructCatalogWithFallback(canvas,src,request,audit,null,measure);
+      return {calls,strategy:audit.strategy,selected:audit.selectedTiledDetail,nodes:scene.nodes.length};
+    },source);
+    assert.equal(sparse.strategy,'tiled-detail-check');
+    assert.equal(sparse.selected,true);
+    assert(sparse.nodes>1);
+    assert.equal(sparse.calls,5);
+    console.log(JSON.stringify(sparse));
+    const cached=await page.evaluate(async src=>{
+      const im=new Image();im.src=src;await im.decode();
+      const canvas=document.createElement('canvas');canvas.width=im.width;canvas.height=im.height;
+      canvas.getContext('2d').drawImage(im,0,0);
+      const audit={tiles:[],completedTiles:0,totalTiles:1,fallbackTiles:0};
+      const old={canvas:{width:im.width,height:im.height},nodes:[
+        {id:'old',type:'rect',x:10,y:10,w:50,h:50,fill:'#ffffff'}]};
+      let calls=0;
+      const request=async (_image,w,h)=>{
+        calls++;
+        return {canvas:{width:w,height:h},nodes:[
+          {id:'weak',type:'rect',x:10,y:10,w:10,h:10,fill:'#ffffff'}]};
+      };
+      const measure=async (_canvas,scene)=>({score:scene.nodes[0]?.id==='old' ? .70 : .55,
+        darkRecall:scene.nodes[0]?.id==='old' ? .70 : .55,
+        localRecall:scene.nodes[0]?.id==='old' ? .60 : .45,
+        edgeF1:scene.nodes[0]?.id==='old' ? .70 : .55,colorSimilarity:.9});
+      const scene=await window.__testReconstructCatalogWithFallback(canvas,src,request,audit,old,measure);
+      return {calls,strategy:audit.strategy,nodes:scene.nodes.length,kept:scene.nodes[0]?.id};
+    },source);
+    assert.equal(cached.calls,4);
+    assert.equal(cached.strategy,'cached-catalog');
+    assert.equal(cached.kept,'old');
+    console.log(JSON.stringify(cached));
   }finally{await browser.close();server.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;server.close();});

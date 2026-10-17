@@ -4481,21 +4481,40 @@ function syncStep3Bitmap(){
   }
   return src;
 }
-async function reconstructCatalogWithFallback(canvas,src,requestScene,audit){
+async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cachedScene,measureScene=compareEditableRender){
   const W=canvas.width,H=canvas.height;
-  const wholeAudit={wholeImage:true,maxAttempts:2};
-  audit.tiles.push(wholeAudit);
-  try{
-    const whole=await requestScene(src,W,H,wholeAudit);
-    audit.strategy='whole-image-catalog';
+  let wholeCatalog=cachedScene||null,wholeQuality=null;
+  if(!wholeCatalog){
+    const wholeAudit={wholeImage:true,maxAttempts:2};
+    audit.tiles.push(wholeAudit);
+    try{
+      wholeCatalog=createWholeImageCatalog(await requestScene(src,W,H,wholeAudit));
+    }catch(error){
+      if(!(error.sceneFormatFailure||error.outputTruncated||error.visionTimeout)) throw error;
+      audit.wholeImageError=String(error.message||error);
+    }
+  }else audit.tiles.push({wholeImage:true,state:'cached',attempts:0});
+  if(wholeCatalog){
     audit.completedTiles=1;
-    return createWholeImageCatalog(whole);
-  }catch(error){
-    if(!(error.sceneFormatFailure||error.outputTruncated||error.visionTimeout)) throw error;
-    audit.wholeImageError=String(error.message||error);
+    try{
+      wholeQuality=await measureScene(canvas,wholeCatalog);
+      audit.wholeQuality={score:wholeQuality.score,darkRecall:wholeQuality.darkRecall,
+        localRecall:wholeQuality.localRecall};
+      // A valid scene can still omit most of the small objects. Compare the
+      // rendered catalog with the bitmap before accepting a successful JSON.
+      if(wholeQuality.darkRecall>=.80&&wholeQuality.localRecall>=.68){
+        audit.strategy=cachedScene?'cached-catalog':'whole-image-catalog';
+        return wholeCatalog;
+      }
+    }catch(error){
+      audit.wholeQualityError=String(error?.message||error);
+      // A measurement error is not evidence that tiling will improve output.
+      audit.strategy=cachedScene?'cached-catalog':'whole-image-catalog';
+      return wholeCatalog;
+    }
   }
   const initialTiles=planReconstructionTiles(W,H,700,40);
-  audit.strategy='tiled-fallback';
+  audit.strategy=wholeCatalog?'tiled-detail-check':'tiled-fallback';
   audit.totalTiles=initialTiles.length;
   const results=[];
   async function reconstructTile(tile,depth){
@@ -4516,12 +4535,31 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit){
       await Promise.all(children.map(child=>reconstructTile(child,depth+1)));
     }
   }
-  await Promise.all(initialTiles.map(tile=>reconstructTile(tile,0)));
-  if(!results.length) throw new Error('Vision model returned no editable objects from image crops');
-  const merged=mergeReconstructionTiles(results,W,H);
-  if(!merged.nodes.length) throw new Error('Vision model returned no editable objects after merging image crops');
-  audit.mergedTiles=results.length;
-  return createWholeImageCatalog(merged);
+  try{
+    await Promise.all(initialTiles.map(tile=>reconstructTile(tile,0)));
+    if(!results.length) throw new Error('Vision model returned no editable objects from image crops');
+    const merged=mergeReconstructionTiles(results,W,H);
+    if(!merged.nodes.length) throw new Error('Vision model returned no editable objects after merging image crops');
+    audit.mergedTiles=results.length;
+    const tiledCatalog=createWholeImageCatalog(merged);
+    if(!wholeCatalog)return tiledCatalog;
+    const tiledQuality=await measureScene(canvas,tiledCatalog);
+    audit.tiledQuality={score:tiledQuality.score,darkRecall:tiledQuality.darkRecall,
+      localRecall:tiledQuality.localRecall};
+    if(reconstructionQualityDeficit(tiledQuality)+.005<reconstructionQualityDeficit(wholeQuality)&&
+      tiledQuality.darkRecall>=wholeQuality.darkRecall-.01&&
+      tiledQuality.localRecall>=wholeQuality.localRecall-.01){
+      audit.selectedTiledDetail=true;
+      return tiledCatalog;
+    }
+    audit.strategy=cachedScene?'cached-catalog':'whole-image-catalog';
+    return wholeCatalog;
+  }catch(error){
+    if(!wholeCatalog)throw error;
+    audit.tiledDetailError=String(error?.message||error);
+    audit.strategy=cachedScene?'cached-catalog':'whole-image-catalog';
+    return wholeCatalog;
+  }
 }
 async function runReconstruction(){
   const st = ensureExportState();
@@ -4561,19 +4599,14 @@ async function runReconstruction(){
     // share this limit so subdivision cannot flood the API.
     const enqueue=visionQueue(3);
     const requestScene=(...args)=>enqueue(()=>requestEditableScene(...args));
-    const cacheKey=await reconstructionCacheKey(src,{textLayoutVersion:2,model:editableReconstructionModel(),reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
+    const cacheKey=await reconstructionCacheKey(src,{textLayoutVersion:2,catalogQualityVersion:1,model:editableReconstructionModel(),reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
     const bypassCache=!!st.skipReconCacheOnce;
     st.skipReconCacheOnce=false;
     const cached=bypassCache?null:await readReconstructionCache(cacheKey);
-    let scene=cached?.scene||await reconstructCatalogWithFallback(canvas,src,requestScene,reconstructionAudit);
-    if(cached){
-      reconstructionAudit.tiles.push({wholeImage:true,state:'cached',attempts:0});
-      reconstructionAudit.strategy='cached-catalog';
-      reconstructionAudit.completedTiles=1;
-    }
+    let scene=await reconstructCatalogWithFallback(canvas,src,requestScene,reconstructionAudit,cached?.scene);
     reconstructionAudit.cacheHit=!!cached;
-    let omissionChecked=!!cached?.omissionChecked;
-    const completedIds=new Set(cached?.completedIds||[]);
+    let omissionChecked=!!cached?.omissionChecked&&!reconstructionAudit.selectedTiledDetail;
+    const completedIds=new Set(reconstructionAudit.selectedTiledDetail?[]:(cached?.completedIds||[]));
     const saveProgress=()=>writeReconstructionCache(cacheKey,{scene,omissionChecked,completedIds:[...completedIds]});
     await saveProgress();
     // Missing objects are proposed once against the full image and registered
