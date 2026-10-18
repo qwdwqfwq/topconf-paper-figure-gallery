@@ -21,7 +21,7 @@ const server = http.createServer((req,res)=>{
       const html=data.toString('utf8').replace(/\r\n/g,'\n')
         .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
         .replace('window.__ffReconstruct = () => runReconstruction();',
-          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestMaterialize = materializeEditableScene; window.__ffTestCalibrate = calibrateEditableText; window.__ffTestGenerateBitmap = genOaiImage; window.__ffTestZip = zipStore; window.__ffTestRequestScene = requestEditableScene;')
+          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestMaterialize = materializeEditableScene; window.__ffTestCalibrate = calibrateEditableText; window.__ffTestGenerateBitmap = genOaiImage; window.__ffTestZip = zipStore; window.__ffTestRequestScene = requestEditableScene; window.__ffTestParseSvg = parseSvgScene; window.__ffTestParseBitmap = parseBitmapSvgScene; window.__ffTestDrawio = sceneToDrawio; window.__ffTestVsdx = sceneToVsdxFiles; window.__ffTestPptx = buildNativePptx; window.__ffTestSvgString = sceneToSvgString;')
         .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});",
           "MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});");
       data=Buffer.from(html);
@@ -42,6 +42,55 @@ const server = http.createServer((req,res)=>{
     page.on('requestfailed',r=>errors.push(`Request failed ${r.url()}: ${r.failure()?.errorText}`));
     await page.goto(`http://127.0.0.1:${server.address().port}/forge/`,{waitUntil:'domcontentloaded'});
     assert.equal(await page.evaluate(()=>typeof window.__ffReconstruct),'function',JSON.stringify(errors));
+
+    const svgCheck=await page.evaluate(async()=>{
+      const svg='<svg xmlns="http://www.w3.org/2000/svg" width="500" height="300" viewBox="0 0 500 300"><style>.label{font:25px Arial;fill:#123456}.wire{fill:none;stroke:#345678;stroke-width:2;stroke-dasharray:5 3;marker-end:url(#tip)}</style><defs><marker id="tip" markerWidth="5" markerHeight="5" refX="5" refY="2"><path d="M0 0 L5 2 L0 4"/></marker></defs><rect x="0" y="0" width="500" height="300" fill="#FFFFFF"/><g transform="translate(20 10)"><text class="label" x="220" y="70" text-anchor="middle">FEATURE EXTRACTION</text><path class="wire" d="M 10 120 L 180 120"/><path class="wire" d="M 190 120 L 190 190"/><polygon points="220,110 260,110 240,145" fill="#abcdef"/><path d="M 270 120 C 300 80 340 170 370 120" fill="none" stroke="#345678"/></g></svg>';
+      const scene=window.__ffTestParseSvg(svg);
+      const bitmapParserScene=window.__ffTestParseBitmap(svg);
+      const host=document.createElement('div');host.style.cssText='position:absolute;left:-10000px;top:0;visibility:hidden';
+      host.innerHTML=svg;document.body.appendChild(host);
+      const original=host.querySelector('text');const box=original.getBBox();const font=getComputedStyle(original).fontSize;host.remove();
+      const label=scene.nodes.find(n=>n.type==='text'&&n.text==='FEATURE EXTRACTION');
+      const lines=scene.nodes.filter(n=>n.type==='line');
+      const polygon=scene.nodes.find(n=>n.type==='polyline'&&n.closed);
+      const curve=scene.nodes.find(n=>n.type==='path'&&n.d&&n.d.includes(' C '));
+      const drawio=window.__ffTestDrawio({...scene,svgSource:true});
+      const vsdx=window.__ffTestVsdx({...scene,svgSource:true},'Arial');
+      const visioPage=vsdx.find(f=>f.name==='visio/pages/page1.xml');
+      const visioXml=typeof visioPage.data==='string'?visioPage.data:new TextDecoder().decode(visioPage.data);
+      const pptx=await window.__ffTestPptx({...scene,svgSource:true},window.__ffTestZip);
+      const pptxXml=new TextDecoder().decode(await pptx.arrayBuffer());
+      const roundtrip=window.__ffTestSvgString({...scene,svgSource:true});
+      return {label,bitmapLabel:bitmapParserScene.nodes.find(n=>n.type==='text'&&n.text==='FEATURE EXTRACTION'),expectedX:box.x+20,expectedY:box.y+10,font,lines,polygon,curve,
+        background:scene.nodes.find(n=>n.type==='rect'),drawio,visioXml,pptxXml,roundtrip};
+    });
+    assert.ok(Math.abs(svgCheck.label.x-svgCheck.expectedX)<0.1,'centered SVG text uses measured left edge');
+    assert.ok(Math.abs(svgCheck.label.y-svgCheck.expectedY)<0.1,'SVG text uses measured top edge');
+    assert.equal(svgCheck.label.fontSize,25,'class font size survives');
+    assert.equal(svgCheck.label.fill,'123456','class text fill survives');
+    assert.equal(svgCheck.bitmapLabel.x,240,'bitmap fallback retains its original SVG parser coordinates');
+    assert.equal(svgCheck.bitmapLabel.fontSize,16,'bitmap fallback retains its original style parser');
+    assert.equal(svgCheck.background.fill,'FFFFFF','white background survives');
+    assert.equal(svgCheck.lines.length,2,'horizontal and vertical path lines survive');
+    assert.ok(svgCheck.lines.every(n=>n.dash&&n.arrow),'class dash and marker survive');
+    assert.equal(svgCheck.polygon.points,'240 120 280 120 260 155','transformed polygon points survive');
+    assert.match(svgCheck.curve.d,/M 290 130 C 320 90 360 180 390 130/,'Bezier controls are transformed');
+    assert.match(svgCheck.drawio,/dashed=1/,'Draw.io receives dash');
+    assert.match(svgCheck.drawio,/endArrow=classic/,'Draw.io receives arrow');
+    assert.match(svgCheck.visioXml,/EndArrow/,'Visio receives arrow');
+    assert.match(svgCheck.visioXml,/LinePattern/,'Visio receives dashed line');
+    assert.match(svgCheck.pptxXml,/FEATURE EXTRACTION/,'PPTX contains editable label');
+    const pptxUnit=9144000/500;
+    assert.ok(svgCheck.pptxXml.includes(`<a:off x="${Math.round(svgCheck.label.x*pptxUnit)}" y="${Math.round(svgCheck.label.y*pptxUnit)}"/>`),'PPTX text uses measured SVG top-left');
+    assert.match(svgCheck.pptxXml,/<a:prstDash val="dash"\/>/,'PPTX retains dashed line');
+    assert.match(svgCheck.pptxXml,/<a:tailEnd type="triangle"\/>/,'PPTX retains arrow');
+    assert.match(svgCheck.pptxXml,/cubicBezTo/,'PPTX retains cubic path');
+    assert.match(svgCheck.roundtrip,/marker-end="url\(#ff-arrow\)"/,'SVG roundtrip retains arrow');
+    assert.match(svgCheck.roundtrip,/stroke-dasharray=/,'SVG roundtrip retains dash');
+    if(process.env.SVG_ONLY==='1'){
+      console.log('SVG editable browser regression: OK');
+      return;
+    }
 
     const textCheck=await page.evaluate(()=>{
       const raw={nodes:[
