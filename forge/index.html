@@ -1146,7 +1146,7 @@ function parserInstruction(target, query){
   const label=$('#target').selectedOptions[0]?.textContent||target;
   const detail=$('#targetDesc').value.trim();
   const focus=TARGET_SECTION_HINTS[target]||TARGET_SECTION_HINTS.overview;
-  return `你是科研论文图表策划器。请阅读附带的 PDF 论文，为“${label}”生成可靠的绘图内容提纲。${detail?`用户补充要求：${detail}。`:''}${query?`需要优先定位：${query}。`:''}\n目标重点：${focus}。\n请从论文实际内容中选择最相关的章节和连续段落，先保留标题、摘要和必要的上下文，再用自己的话忠实归纳；保留模块名、输入输出、流程顺序、指标和数字，不得编造。输出严格 JSON，不要 Markdown：{"title":"论文标题","abstract":"摘要或摘要要点","selectedSections":[{"section":"章节名/页码","summary":"该段落对绘图有用的忠实归纳","evidence":"可核对的原文短句或页码"}],"figurePrompt":"一段可直接交给出图模型的具体中文或英文提示词"}`;
+  return `你是科研论文图表策划器。请阅读附带的 PDF 论文，为“${label}”生成可靠的绘图内容提纲。${detail?`用户补充要求：${detail}。`:''}${query?`需要优先定位：${query}。`:''}\n目标重点：${focus}。\n请从论文实际内容中选择最相关的章节和连续段落。优先归纳明确的绘图要求、方法流程、关键模块及其输入输出、必要的结果和数字；标题、摘要和其他背景只保留理解图所必需的部分。selectedSections 按绘图相关性排序，不按论文页码排序；figurePrompt 应独立、具体，包含画图需要的论文事实。忠实于原文，不得编造。输出严格 JSON，不要 Markdown：{"title":"论文标题","abstract":"摘要或摘要要点","selectedSections":[{"section":"章节名/页码","summary":"该段落对绘图有用的忠实归纳","evidence":"可核对的原文短句或页码"}],"figurePrompt":"一段可直接交给出图模型的具体中文或英文提示词"}`;
 }
 function parseResponseText(d){
   if(d?.output_text) return d.output_text;
@@ -1159,6 +1159,29 @@ function pdfDataPart(){ return dataURIToParts(pdfContext.dataUri); }
    summarises the sections; used when a provider refuses a document part) ---- */
 const MAX_PDF_CHARS = 60000;
 const MAX_PDF_IMAGES = 8;
+function relevantPdfText(text, target, query){
+  if(text.length<=MAX_PDF_CHARS) return text;
+  const pages=text.split(/(?=【第 \d+ 页】)/).filter(Boolean);
+  if(pages.length<2) return text.slice(0,MAX_PDF_CHARS);
+  const terms=['figure','diagram','illustrat','visualiz','method','approach','framework','architecture','pipeline','workflow','module','component','input','output','result','experiment','ablation','图','方法','流程','框架','架构','模块','输入','输出','结果','实验','消融'];
+  if(target==='results') terms.push('benchmark','metric','accuracy','performance','指标','性能','对比');
+  const requested=(query||'').toLowerCase().split(/[\s,，;；、]+/).filter(x=>x.length>1).slice(0,8);
+  const ranked=pages.map((page,index)=>{
+    const body=page.toLowerCase();
+    const score=terms.reduce((sum,term)=>sum+(body.includes(term)?1:0),0)
+      +requested.reduce((sum,term)=>sum+(body.includes(term)?4:0),0);
+    return {page,index,score};
+  }).sort((a,b)=>b.score-a.score||a.index-b.index);
+  let used=0;
+  return ranked.map(({page},index)=>{
+    const separator=index?2:0;
+    const remaining=MAX_PDF_CHARS-used-separator;
+    if(remaining<=0) return '';
+    const part=page.slice(0,remaining);
+    used+=part.length+separator;
+    return part;
+  }).filter(Boolean).join('\n\n');
+}
 let pdfjsPromise = null;
 function loadPdfjs(){
   if(window.pdfjsLib) return Promise.resolve(window.pdfjsLib);
@@ -1290,7 +1313,7 @@ async function callPdfParser(mode, payload){
   let r, body;
   if(mode==='text'){
     const ex=payload;
-    const text = instruction+'\n\n'+tt('ps.texthdr',{f:pdfContext.fileName,p:ex.pages})+'\n'+ex.text.slice(0, MAX_PDF_CHARS);
+    const text = instruction+'\n\n'+tt('ps.texthdr',{f:pdfContext.fileName,p:ex.pages})+'\n'+relevantPdfText(ex.text,$('#target').value,$('#contentQuery').value.trim());
     if(c.proto==='anthropic'){
       body={model,max_tokens:5000,system:'只输出严格 JSON。',messages:[{role:'user',content:[{type:'text',text}]}]};
       r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},780000);
@@ -1345,7 +1368,7 @@ async function callPdfParser(mode, payload){
 function renderPdfSummary(data){
   const sections=Array.isArray(data.selectedSections)?data.selectedSections.filter(x=>x&&x.summary).slice(0,6):[];
   if(!sections.length) throw new Error('解析模型没有返回相关章节摘要');
-  const pieces=[data.title&&`标题：${data.title}`,data.abstract&&`摘要要点：${data.abstract}`,sections.map(x=>`【${x.section||'相关章节'}】${x.summary}${x.evidence?`\n证据：${x.evidence}`:''}`).join('\n\n'),data.figurePrompt&&`绘图提示词：${data.figurePrompt}`].filter(Boolean);
+  const pieces=[data.figurePrompt&&`绘图提示词：${data.figurePrompt}`,sections.map(x=>`【${x.section||'相关章节'}】${x.summary}${x.evidence?`\n证据：${x.evidence}`:''}`).join('\n\n'),data.title&&`标题：${data.title}`,data.abstract&&`摘要要点：${data.abstract}`].filter(Boolean);
   $('#paper').value=pieces.join('\n\n').slice(0,12000);
 }
 function setParseStatus(state){
@@ -2029,7 +2052,7 @@ function imageStyleText(j){
     if(names.length) rows.push(`- panels: ${names.join(' | ')}`);
   }
   if(Array.isArray(j.layoutBlueprint) && j.layoutBlueprint.length){
-    const blueprint = j.layoutBlueprint.slice(0,14).map((z,i)=>{
+    const blueprint = j.layoutBlueprint.slice(0,16).map((z,i)=>{
       if(!z || typeof z!=='object') return '';
       const vals=[z.x,z.y,z.w,z.h];
       const geo=vals.every(v=>Number.isFinite(Number(v)))
@@ -2072,7 +2095,7 @@ function designContractText(j, ratio='16:9'){
     rows.push(`- panel geometry (canvas ${canvas.width}x${canvas.height}, origin top-left): ${panels.join(' | ')}`);
   }
   if(Array.isArray(j.layoutBlueprint) && j.layoutBlueprint.length){
-    const blueprint=j.layoutBlueprint.slice(0,14).map((z,i)=>{
+    const blueprint=j.layoutBlueprint.slice(0,16).map((z,i)=>{
       if(!z || typeof z!=='object') return '';
       const vals=[z.x,z.y,z.w,z.h];
       const geo=vals.every(v=>Number.isFinite(Number(v)))
@@ -4813,22 +4836,26 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cach
     // Whole-image additions are registered before detail crops are allowed to run.
     audit.phase='omission';
     const catalog={canvas:wholeCatalog.canvas,nodes:wholeCatalog.nodes.map(n=>{const copy={...n};delete copy.href;return copy;})};
-    const omissionAudit={omissionCheck:true,catalog,maxAttempts:1,timeoutMsOverride:180000};
+    const omissionAudit={omissionCheck:true,catalog,maxAttempts:2,timeoutMsOverride:180000};
     audit.omissionAudit=omissionAudit;
     try{
       const proposals=await requestScene(src,W,H,omissionAudit);
       wholeCatalog=registerMissingObjects(wholeCatalog,proposals);
       audit.registeredMissing=wholeCatalog.counts.registeredMissing;
       audit.omissionChecked=true;
-    }catch(error){audit.omissionError=String(error?.message||error);}
+    }catch(error){
+      audit.omissionError=String(error?.message||error);
+      throw new Error('整图查漏未完成，不能开始分区重建：'+audit.omissionError);
+    }
   }else audit.omissionChecked=true;
   try{
     wholeQuality=await measureScene(canvas,wholeCatalog);
     audit.wholeQuality={score:wholeQuality.score,darkRecall:wholeQuality.darkRecall,
       localRecall:wholeQuality.localRecall};
     if(cachedScene&&audit.cachedDetailComplete&&
-      wholeQuality.darkRecall>=.80&&wholeQuality.localRecall>=.68){
+      reconstructionQualityDeficit(wholeQuality)===0){
       audit.strategy='cached-catalog';
+      audit.tilePassComplete=true;
       return wholeCatalog;
     }
   }catch(error){
@@ -4838,7 +4865,8 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cach
   audit.phase='regions';
   audit.strategy='whole-then-id-refinement';
   audit.totalTiles=initialTiles.length+1;
-  const results=[];
+  const results=[],failedTiles=[];
+  audit.tilePassComplete=false;
   async function reconstructTile(tile,depth){
     const localCatalog=tileDetailCatalog(wholeCatalog,tile);
     if(!localCatalog.nodes.length){audit.completedTiles++;return;}
@@ -4859,34 +4887,45 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cach
       tileAudit.fallbackCause=error.visionTimeout?'timeout':
         error.outputTruncated?'output-limit':error.sceneFormatFailure?'scene-format':
         /^HTTP 5\d\d\b/.test(String(error?.message||error))?'provider-5xx':'request-error';
-      if(!isRecoverableReconstructionError(error) || depth>=2 || Math.max(tile.w,tile.h)<300) throw error;
+      if(!isRecoverableReconstructionError(error) || depth>=2 || Math.max(tile.w,tile.h)<300){
+        failedTiles.push({tile:tile.index,depth,error:String(error?.message||error)});return;
+      }
       const children=subdivideReconstructionTile(tile,450,20);
-      if(children.length<2) throw error;
+      if(children.length<2){
+        failedTiles.push({tile:tile.index,depth,error:String(error?.message||error)});return;
+      }
       audit.fallbackTiles++;
       audit.totalTiles+=children.length-1;
-      await Promise.all(children.map(child=>reconstructTile(child,depth+1)));
+      const settled=await Promise.allSettled(children.map(child=>reconstructTile(child,depth+1)));
+      settled.forEach((result,i)=>{if(result.status==='rejected')failedTiles.push({tile:children[i].index,error:String(result.reason?.message||result.reason)});});
     }
   }
+  let refined=wholeCatalog;
   try{
-    await Promise.all(initialTiles.map(tile=>reconstructTile(tile,0)));
+    // Settle every branch before merging; one failed crop must not erase siblings.
+    const settled=await Promise.allSettled(initialTiles.map(tile=>reconstructTile(tile,0)));
+    settled.forEach((result,i)=>{if(result.status==='rejected')failedTiles.push({tile:initialTiles[i].index,error:String(result.reason?.message||result.reason)});});
+    audit.failedTiles=failedTiles;
+    if(failedTiles.length)audit.tiledDetailError=failedTiles.map(item=>item.error).join('; ');
     audit.phase='merge';
     audit.mergedTiles=results.length;
-    let refined=wholeCatalog;
     for(const {tile,scene} of results){
-      const candidate=replaceObjectRepairRegion(refined,tile,scene,1);
-      if(candidate.nodes.every((node,i)=>node===refined.nodes[i]))continue;
       try{
+        const candidate=replaceObjectRepairRegion(refined,tile,scene,1);
+        if(candidate.nodes.every((node,i)=>node===refined.nodes[i]))continue;
         const before=await measureScene(canvas,refined,tile);
         const after=await measureScene(canvas,candidate,tile);
         if(acceptReconstructionRepair(before,after))refined=candidate;
+        else if(reconstructionQualityDeficit(before)>0)audit.rejectedTiles=(audit.rejectedTiles||0)+1;
       }catch(error){audit.tileQualityError=String(error?.message||error);}
     }
-    audit.tilePassComplete=true;
+    audit.tilePassComplete=!failedTiles.length&&!audit.tileQualityError&&!audit.rejectedTiles;
     audit.tileUpdatedObjects=refined.nodes.filter((node,i)=>node!==wholeCatalog.nodes[i]).length;
     return refined;
   }catch(error){
     audit.tiledDetailError=String(error?.message||error);
-    return wholeCatalog;
+    audit.tilePassComplete=false;
+    return refined;
   }
 }
 function reconstructionProgressText(audit){
@@ -4976,7 +5015,7 @@ async function runReconstruction(){
       if(args[3])args[3].state='queued';
       return enqueue(()=>requestEditableScene(...args));
     };
-    const cacheKey=await reconstructionCacheKey(src,{textLayoutVersion:2,catalogQualityVersion:4,model:editableReconstructionModel(),reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
+    const cacheKey=await reconstructionCacheKey(src,{textLayoutVersion:2,catalogQualityVersion:5,model:editableReconstructionModel(),reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
     const bypassCache=!!st.skipReconCacheOnce;
     st.skipReconCacheOnce=false;
     const cached=bypassCache?null:await readReconstructionCache(cacheKey);
@@ -4986,7 +5025,7 @@ async function runReconstruction(){
     let omissionChecked=!!reconstructionAudit.omissionChecked;
     const completedIds=new Set(cached?.completedIds||[]);
     const saveProgress=()=>writeReconstructionCache(cacheKey,{scene,omissionChecked,
-      detailComplete:!!cached?.detailComplete||!!reconstructionAudit.tilePassComplete,
+      detailComplete:!!reconstructionAudit.tilePassComplete,
       completedIds:[...completedIds]});
     await saveProgress();
     reconstructionAudit.catalog=scene.nodes.map(n=>({id:n.id,type:n.type,...(n.type==='text'?{text:n.text}:{})}));
@@ -5067,8 +5106,12 @@ async function runReconstruction(){
             scene=candidate;pptxScene=rendered;pptxQa=await compareEditableRender(canvas,rendered);
             reconstructionAudit.objectRepairs=(reconstructionAudit.objectRepairs||0)+1;
             measuredQuality=pptxQa;
+            ids.forEach(id=>completedIds.add(id));
+          }else if(reconstructionQualityDeficit(before)===0){
+            ids.forEach(id=>completedIds.add(id));
+          }else{
+            reconstructionAudit.rejectedDetailIds=[...(reconstructionAudit.rejectedDetailIds||[]),...ids];
           }
-          ids.forEach(id=>completedIds.add(id));
           await saveProgress();
         }catch(error){reconstructionAudit.objectRepairError=String(error?.message||error);}
         }
@@ -5099,7 +5142,8 @@ async function runReconstruction(){
       quality.darkRecall<.98 || quality.localRecall<.97 ||
       quality.edgeF1<.97 || quality.colorSimilarity<.98 ||
       reconstructionAudit.fallbackTiles>0 || reconstructionAudit.pptxQaError ||
-      reconstructionAudit.objectRepairError || reconstructionAudit.omissionError || reconstructionAudit.unrefinedIds?.length ||
+      reconstructionAudit.objectRepairError || reconstructionAudit.omissionError || reconstructionAudit.tiledDetailError ||
+      reconstructionAudit.tileQualityError || reconstructionAudit.rejectedDetailIds?.length || reconstructionAudit.unrefinedIds?.length ||
       reconstructionAudit.pptxLayout?.state!=='passed';
     reconstructionAudit.state=qualityNeedsReview?'needs-review':'succeeded';
     reconstructionAudit.finishedAt=Date.now();
@@ -5117,7 +5161,7 @@ async function runReconstruction(){
         ? '已生成 '+scene.nodes.length+' 个可编辑对象；'+reconstructionAudit.fallbackTiles+' 个区域已细分重建（其中 '+timedOutTiles+' 个因视觉 API 超时）。请检查这些区域的文字和细节。'
         : 'Generated '+scene.nodes.length+' editable objects; '+reconstructionAudit.fallbackTiles+' regions were subdivided for reconstruction ('+timedOutTiles+' after a vision API timeout). Check text and fine details in those regions.';
     }else say(audit.defects.length ? 'recon.audit' : 'recon.done',{n:scene.nodes.length,d:audit.defects.length});
-    if(reconstructionAudit.objectRepairError||reconstructionAudit.omissionError)status.textContent+=GAL_I18N.lang==='zh'?' 部分检查或精修失败，已保留并缓存结果；再次重建可继续。':' Some checks or refinements failed; results are cached. Rebuild to resume.';
+    if(reconstructionAudit.objectRepairError||reconstructionAudit.omissionError||reconstructionAudit.tiledDetailError||reconstructionAudit.tileQualityError)status.textContent+=GAL_I18N.lang==='zh'?' 部分检查或精修失败，已保留并缓存结果；再次重建可继续。':' Some checks or refinements failed; results are cached. Rebuild to resume.';
     const layoutIssues=reconstructionAudit.pptxLayout?.issues||[];
     if(layoutIssues.length)status.textContent+=GAL_I18N.lang==='zh'
       ? ' PPTX 排版检查发现 '+layoutIssues.length+' 项文字重叠、缺失或字号偏差，请复核。'
@@ -5127,9 +5171,9 @@ async function runReconstruction(){
         ? '；已过滤 '+scene.counts.filteredArtifactLines+' 条从裁片边界发出的异常连线。'
         : '; filtered '+scene.counts.filteredArtifactLines+' invalid lines from crop boundaries.';
     }
-    status.textContent += GAL_I18N.lang==='zh'
-      ? ' 重建成功，可导出原生可编辑图形。'
-      : ' Reconstruction complete. Native editable export is ready.';
+    status.textContent += qualityNeedsReview
+      ? (GAL_I18N.lang==='zh'?' 尚未通过完整质量检查；当前结果可导出，但请先复核，或再次重建继续精修。':' Full quality checks have not passed. Review the current export or rebuild to continue refinement.')
+      : (GAL_I18N.lang==='zh'?' 重建成功，可导出原生可编辑图形。':' Reconstruction complete. Native editable export is ready.');
     return true;
   }catch(err){
     console.warn('reconstruction failed', err);
@@ -5619,6 +5663,64 @@ function renderSVG(svg, usedVision, useIds, truncated, auditRes){
   showEditableExportStep(svg);
 }
 
+function imagePromptBudget(model){
+  // Qwen's documented prompt limits are in tokens; leave room for tokenizer variance.
+  if(/qwen-image-2\.0/i.test(model)) return {unit:'tokens',limit:1050};
+  if(/qwen-image/i.test(model)) return {unit:'tokens',limit:650};
+  // Other gateways do not expose a uniform prompt limit. Use a practical ceiling
+  // rather than pretending their image models all share the same token window.
+  return {unit:'chars',limit:6000};
+}
+function imagePromptSize(text,budget){
+  if(budget.unit==='chars') return text.length;
+  const nonAscii=(text.match(/[^\x00-\x7f]/g)||[]).length;
+  return Math.ceil(nonAscii*1.5+(text.length-nonAscii)/3);
+}
+function fitImagePrompt(text,budget,available){
+  if(available<=0) return '';
+  if(imagePromptSize(text,budget)<=available) return text;
+  let low=0,high=text.length;
+  while(low<high){
+    const mid=Math.ceil((low+high)/2);
+    if(imagePromptSize(text.slice(0,mid),budget)<=available) low=mid;
+    else high=mid-1;
+  }
+  return text.slice(0,low).trimEnd();
+}
+function prioritizedImagePaper(content,budget,available){
+  const paragraphs=String(content||'').split(/\n\s*\n/).map((text,index)=>({text:text.trim(),index})).filter(x=>x.text);
+  const score=text=>{
+    const head=text.slice(0,120).toLowerCase();
+    return (/绘图提示|figure prompt|绘图要求|drawing requirement/.test(head)?100:0)
+      +(/方法|流程|pipeline|method|framework|architecture|模块|module|input|output|输入|输出/.test(head)?20:0)
+      +(/结果|实验|result|benchmark|metric|性能/.test(head)?10:0)
+      -(/^(标题|title|摘要|abstract)[:：]/.test(head)?10:0);
+  };
+  paragraphs.sort((a,b)=>score(b.text)-score(a.text)||a.index-b.index);
+  const selected=[];
+  for(const paragraph of paragraphs){
+    const remaining=available-imagePromptSize(selected.join('\n\n'),budget);
+    const fitted=fitImagePrompt(paragraph.text,budget,remaining-(selected.length?2:0));
+    if(fitted) selected.push(fitted);
+    if(fitted.length<paragraph.text.length) break;
+  }
+  return selected.join('\n\n');
+}
+function compactImageGuide(j){
+  if(!j || !Array.isArray(j.layoutBlueprint)) return '';
+  const zones=j.layoutBlueprint.slice(0,16).map((z,i)=>{
+    if(!z || typeof z!=='object') return '';
+    const name=String(z.role||z.id||z.name||'module').slice(0,10);
+    const nums=[z.x,z.y,z.w,z.h].map(Number);
+    const box=nums.every(Number.isFinite)?` @${nums.map((n,k)=>Math.round(n/(k%2?900:1600)*100)).join(',')}%`:'';
+    return `${i+1}:${name}${box}`;
+  }).filter(Boolean);
+  const palette=Array.isArray(j.palette)?j.palette.slice(0,5).join(',')
+    : j.palette && typeof j.palette==='object'
+      ? ['background','primary','accent','neutral'].map(k=>j.palette[k]).filter(Boolean).slice(0,5).join(',')
+      : '';
+  return zones.length ? `Layout zones (${zones.length}; preserve every zone): ${zones.join(' | ')}.\n${palette?`Palette: ${palette}.\n`:''}` : '';
+}
 async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const useIds = refIds||[...refs];
   const ratio=$('#figureRatio').value, resolution=$('#imageResolution').value;
@@ -5629,7 +5731,9 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     ? `COMMON VISUAL GRAMMAR extracted across all selected references (highest priority; synthesize recurring panel topology, relative geometry, density, palette, spacing, arrows and hierarchy):\n${layoutGuide}\n\n`
     : '';
   const logicalCanvas=figureCanvas(ratio);
-  const imgPrompt = `Required canvas aspect ratio ${ratio}; compose on a ${logicalCanvas.width}×${logicalCanvas.height} logical layout grid. Requested output resolution ${resolution} is independent of the canvas ratio. Preserve this canvas shape and render crisp legible details.\n\n${guide}`
+  const hasAnalyzedLayout=passMode==='two' && !!analysis?.j;
+  const zonePriority=compactImageGuide(hasAnalyzedLayout?analysis.j:null);
+  const detailedPrompt = `Required canvas aspect ratio ${ratio}; compose on a ${logicalCanvas.width}×${logicalCanvas.height} logical layout grid. Requested output resolution ${resolution} is independent of the canvas ratio. Preserve this canvas shape and render crisp legible details.\n${zonePriority}\n${guide}`
     + `${tg.img}. Derive a fresh composition from the recurring visual grammar shared by all supplied references; no single reference is a master and no reference is privileged by upload order. `
     + `Mirror the common panel divisions, relative proportions, nesting, reading direction, spacing rhythm, palette, stroke language, arrow language and visual density, while inventing new paper-specific contents. `
     + `When the references support it, use 3-5 dense panels with thick outer containers and finer module borders, mixed solid/dashed frames, and a meaningful visual element in every slot. `
@@ -5698,8 +5802,23 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
     + `Can a reader follow the flow from the arrows alone? Add a connector if a step is unclear. `
     + `Is the colour varied enough that sections and groups read apart, without turning garish? `
     + `The goal is a figure that is full, varied and specific to this paper — what a top-conference `
-    + `reviewer would find clear and well judged. `
-    + `Paper content: ${content.slice(0,2000)}`;
+    + `reviewer would find clear and well judged. `;
+  const budget=imagePromptBudget(model);
+  const compact=`Create a publication-quality ${ratio} paper figure. Preserve panel hierarchy, arrows, palette and dense meaningful modules.\n`
+    +zonePriority
+    +`Populate every zone with this paper's actual method and results. ${tg.img.slice(0,100)}. Short legible labels.\n`
+    +(budget.unit==='chars' || !hasAnalyzedLayout
+      ? fitImagePrompt(layoutGuide||'',budget,Math.floor(budget.limit*(hasAnalyzedLayout?.35:.3)))+'\n'
+      : '');
+  // Reserve paper space before fitting long style guidance. The PDF summary is
+  // already ordered by figure relevance; this also handles manually pasted text.
+  const paperReserve=Math.min(imagePromptSize(content,budget),Math.floor(budget.limit*(budget.unit==='tokens'?.25:.35)));
+  const promptBase=budget.unit==='tokens' || imagePromptSize(detailedPrompt,budget)>budget.limit-paperReserve
+    ? compact : detailedPrompt;
+  const paperHeader='\nPaper content (figure-critical facts first):\n';
+  const fittedBase=fitImagePrompt(promptBase,budget,budget.limit-paperReserve-imagePromptSize(paperHeader,budget));
+  const paper=prioritizedImagePaper(content,budget,budget.limit-imagePromptSize(fittedBase+paperHeader,budget));
+  const imgPrompt=fittedBase+paperHeader+paper;
   let body;
   let endpoint='/images/generations';
   let usedRefs=false;
