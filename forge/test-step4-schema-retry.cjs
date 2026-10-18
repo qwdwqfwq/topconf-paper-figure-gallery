@@ -67,6 +67,22 @@ const server = http.createServer((req, res) => {
     assert.equal(prompts.length, 2);
     assert.match(prompts[1], /previous answer could not be used/i);
     assert.match(prompts[1], /A figure without editable nodes/);
+    const timeouts=await page.evaluate(async source=>{
+      document.querySelector('#reconTimeoutMinutes').value='60';
+      const whole={wholeImage:true,timeoutMsOverride:1500000,maxTotalMs:1500000,maxAttempts:1};
+      const omission={omissionCheck:true,catalog:{canvas:{width:1376,height:768},nodes:[]},
+        timeoutMsOverride:180000,maxAttempts:1};
+      const region={tile:1,timeoutMsOverride:240000,maxAttempts:1};
+      await window.__testRequestEditableScene(source,1376,768,whole);
+      await window.__testRequestEditableScene(source,1376,768,omission);
+      await window.__testRequestEditableScene(source,1376,768,region);
+      return {whole:whole.timeoutMs,omission:omission.timeoutMs,region:region.timeoutMs,
+        states:[whole.state,omission.state,region.state]};
+    },imageDataUri);
+    assert.ok(timeouts.whole>1490000 && timeouts.whole<=1500000);
+    assert.equal(timeouts.omission,180000);
+    assert.equal(timeouts.region,240000);
+    assert.deepEqual(timeouts.states,['succeeded','succeeded','succeeded']);
     console.log(JSON.stringify(result));
   } finally {
     await browser.close();

@@ -4566,6 +4566,8 @@ async function editableRevisionImages(sourceDataUri, revision, W, H){
   return images;
 }
 
+// Bitmap request pipeline verified against 0919a98 (2026-10-18 03:37 +08:00).
+// SVG export fixes from f96ff8b are retained. Release: bitmap-0919a98-svg-f96ff8b.
 async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   const cfgv=cfg(), relay=relayBase(), model=editableReconstructionModel();
   if(!model) throw new Error(tt('analyze.needmodel'));
