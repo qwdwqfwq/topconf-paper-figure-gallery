@@ -9,7 +9,7 @@
 
 ### ✨ FigureForge 生图成品 · Generated examples
 
-以下是画廊 FigureForge 的实际生图示例。点击缩略图可查看完整细节。
+以下是画廊 FigureForge 的实际生图示例。**导出可编辑所有细节**。
 
 <table>
   <tr>
