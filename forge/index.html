@@ -190,6 +190,11 @@
   .box h4 small:not(:first-child){margin-left:auto;font-weight:600}
   .b-indigo{background:#f7f8ff;border-color:#dde2ff}
   .b-indigo h4{color:#4338ca}
+  .editable-demo-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px;padding:13px;background:#fff;border:1px solid var(--line);border-radius:13px}
+  .editable-demo-grid figure{min-width:0;margin:0;padding:10px;background:#f7f8ff;border:1px solid #dde2ff;border-radius:11px}
+  .editable-demo-grid figcaption{margin-bottom:9px;font-size:13px;font-weight:750;color:#4338ca}
+  .editable-demo-grid img{display:block;width:100%;height:auto;border:1px solid var(--line);border-radius:8px}
+  @media(max-width:720px){.editable-demo-grid{grid-template-columns:1fr}}
   .b-green{background:#f5fdf9;border-color:#cdeee1}
   .b-green h4{color:#047857}
   .b-purple{background:#faf8ff;border-color:#e2dbff}
@@ -624,6 +629,17 @@
       <img src="tutorial/02_pick_refs.png?v=20261001c" data-i18n-aria="tut1" style="width:100%;border:1px solid var(--line);border-radius:11px">
       <div class="step" style="margin:16px 0 8px;font-size:13px" data-i18n="tut2"></div>
       <img src="tutorial/compare.png?v=20261002" data-i18n-aria="tut2" style="width:100%;border:1px solid var(--line);border-radius:11px">
+      <div class="step" style="margin:16px 0 8px;font-size:13px" data-i18n="tut3"></div>
+      <div class="editable-demo-grid">
+        <figure>
+          <figcaption data-i18n="tut3.editable"></figcaption>
+          <img src="tutorial/editable-details.png" data-i18n-aria="tut3.editable" loading="lazy">
+        </figure>
+        <figure>
+          <figcaption data-i18n="tut3.result"></figcaption>
+          <img src="tutorial/exported-figure.png" data-i18n-aria="tut3.result" loading="lazy">
+        </figure>
+      </div>
     </section>
   </div>
 </div>
@@ -642,7 +658,7 @@
 </div>
 
 <script src="./i18n.js"></script>
-<script src="./i18n_forge.js?v=20261017-infistar-models"></script>
+<script src="./i18n_forge.js?v=20261018-editable-demo"></script>
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult} from './image-api.mjs?v=20261016';
