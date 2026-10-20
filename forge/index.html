@@ -4675,7 +4675,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   if(audit.retryRender)referenceImages.push(audit.retryRender);
   if(audit.fullSourceImage)referenceImages.push(audit.fullSourceImage);
   const configuredTimeoutMs=Math.min(
-    Math.max(1,Math.min(60,Number($('#reconTimeoutMinutes').value)||15))*60000,
+    Math.max(1,Math.min(70,Number($('#reconTimeoutMinutes').value)||25))*60000,
     Number.isFinite(audit.timeoutMsOverride)?audit.timeoutMsOverride:Infinity);
   let lastError=null;
   let previousResponse='';
@@ -4850,7 +4850,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   audit.finishedAt=Date.now();
   audit.durationMs=audit.finishedAt-audit.startedAt;
   audit.attempts=audit.attempt||maxAttempts;
-  if(lastError)lastError.message=reconstructionFailureMessage(lastError,audit.attempts,GAL_I18N.lang==='zh')||lastError.message;
+  if(lastError)lastError.message=reconstructionFailureMessage(lastError,audit.attempts,GAL_I18N.lang==='zh',audit)||lastError.message;
   audit.error=String(lastError&&lastError.message||lastError||tt('recon.badjson'));
   throw lastError||new Error(tt('recon.badjson'));
 }
@@ -4961,7 +4961,7 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cach
   audit.phase='whole';
   let scene=cachedScene?recoverDocumentInk(rejectUnsupportedLines(cachedScene,canvas),canvas):null;
   if(!scene){
-    const task={wholeImage:true,structureOnly:true,maxAttempts:2,timeoutMsOverride:180000};
+    const task={wholeImage:true,structureOnly:true,maxAttempts:2};
     audit.tiles.push(task);
     scene=createWholeImageCatalog(await requestScene(src,W,H,task));
   }
@@ -4993,7 +4993,7 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cach
       const snapshot=scene,versions=snapshotVersions(snapshot);
       const context={x:Math.max(0,region.x-80),y:Math.max(0,region.y-80)};
       context.w=Math.min(W-context.x,region.w+160);context.h=Math.min(H-context.y,region.h+160);
-      const task={regionPatch:true,region:region.id,attempt,maxAttempts:1,timeoutMsOverride:180000,
+      const task={regionPatch:true,region:region.id,attempt,maxAttempts:1,
         detailCatalog:regionObjectCatalog(snapshot,region),contextImage:crop(context),contextOrigin:context,
         fullSourceImage:src,sourceRegion:{x:region.x,y:region.y,w:region.w,h:region.h},
         ownership:{x:region.coreX-region.x,y:region.coreY-region.y,w:region.coreRight-region.coreX,h:region.coreBottom-region.coreY}};

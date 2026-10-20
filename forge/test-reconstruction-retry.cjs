@@ -89,6 +89,54 @@ const server = http.createServer((req,res)=>{
     assert.equal(compatibility.calls,0);
     console.log('PASS Infistar direct-mode model selection and invalid-model preflight');
 
+    // Accelerated clock: a successful response at virtual 200 seconds must
+    // survive the former 180-second cutoff, including body consumption.
+    const source=fs.readFileSync(path.join(__dirname,'index.html'),'utf8');
+    assert.doesNotMatch(source,/const task=\{wholeImage:[^\n]*timeoutMsOverride/);
+    assert.doesNotMatch(source,/const task=\{regionPatch:[^\n]*timeoutMsOverride/);
+    for(const probe of [
+      {minutes:'25',flags:{wholeImage:true},expected:1500000},
+      {minutes:'7',flags:{regionPatch:true,region:'panel-1'},expected:420000},
+      {minutes:'70',flags:{wholeImage:true},expected:4200000},
+      {minutes:'',flags:{wholeImage:true},expected:1500000},
+      {minutes:'1',flags:{wholeImage:true},expected:60000,fail:true},
+      {minutes:'1',flags:{regionPatch:true,region:'panel-1'},expected:60000,fail:true},
+      {minutes:'25',flags:{objectRepair:true,timeoutMsOverride:90000},expected:90000,fail:true}
+    ]){
+      const result=await page.evaluate(async probe=>{
+        document.querySelector('#provider').value='ark';
+        document.querySelector('#key').value='test-key';
+        const select=document.querySelector('#analyzeModel');
+        select.add(new Option('vision-test','vision-test'));select.value='vision-test';
+        document.querySelector('#reconTimeoutMinutes').value=probe.minutes;
+        const originalFetch=window.fetch,originalTimer=window.setTimeout;
+        let calls=0;const timers=[];
+        window.setTimeout=(fn,ms,...args)=>{timers.push(ms);return originalTimer(fn,ms/1000,...args);};
+        window.fetch=async(url,init)=>{
+          calls++;
+          return {ok:true,status:200,headers:new Headers(),text:()=>new Promise((resolve,reject)=>{
+            const timer=originalTimer(()=>resolve(JSON.stringify({choices:[{message:{content:JSON.stringify({operations:[],nodes:[{type:'rect',x:0,y:0,w:5,h:5,fill:'#fff'}]})}}]})),200);
+            init.signal.addEventListener('abort',()=>{clearTimeout(timer);reject(new DOMException('Aborted','AbortError'));},{once:true});
+          })};
+        };
+        const canvas=document.createElement('canvas');canvas.width=10;canvas.height=10;
+        const audit={maxAttempts:1,...probe.flags};
+        try{await window.__ffTestRequestScene(canvas.toDataURL(),10,10,audit);return {ok:true,calls,timers,audit};}
+        catch(e){return {ok:false,calls,timers,audit,message:e.message};}
+        finally{window.fetch=originalFetch;window.setTimeout=originalTimer;}
+      },probe);
+      assert.equal(result.ok,!probe.fail,JSON.stringify(result));
+      assert.equal(result.audit.timeoutMs,probe.expected);
+      assert.equal(result.calls,1);
+      assert.ok(result.timers.includes(probe.expected));
+      if(probe.fail){
+        assert.match(result.message,/原图仍保留|original image is preserved/);
+        assert.match(result.message,probe.flags.wholeImage?/整图结构识别|Whole-image/:probe.flags.regionPatch?/panel-1/:/局部细节修复|Detail repair/);
+      }
+    }
+    await page.evaluate(()=>{document.querySelector('#reconTimeoutMinutes').value='25';});
+    console.log('PASS slow response body, configured timeout limits, and stage-specific timeout errors');
+
     for(const scenario of ['recover','persistent','unauthorized','format','budget']){
       const result=await page.evaluate(async(scenario)=>{
         document.querySelector('#provider').value='ark';
