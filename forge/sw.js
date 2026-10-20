@@ -1,4 +1,4 @@
-const CACHE_NAME = 'figureforge-static-v22';
+const CACHE_NAME = 'figureforge-static-v23';
 const STATIC_FILE = /\.(?:html|css|js|mjs|wasm|onnx|json|bin|png|gif)(?:$|\?)/i;
 
 // Keep the manifest network-first so a newly published model/data version is
@@ -41,12 +41,8 @@ self.addEventListener('fetch', event => {
   const url = new URL(request.url);
   if(request.method !== 'GET' || url.origin !== self.location.origin) return;
 
-  // Always prefer the network for the document so a new deployment is seen.
-  if(request.mode === 'navigate'){
-    event.respondWith(fetch(request).catch(() => caches.match('./index.html')));
-    return;
-  }
-  if(!STATIC_FILE.test(url.pathname)) return;
+  const documentRequest=request.mode === 'navigate'||/\.html$/i.test(url.pathname);
+  if(!documentRequest&&!STATIC_FILE.test(url.pathname)) return;
 
   const key = cacheRequest(request);
 
@@ -54,10 +50,12 @@ self.addEventListener('fetch', event => {
   // fix is hidden indefinitely by the old service worker's cached .mjs file.
   // Preserve cache-first behavior for the large model and vendor assets.
   const appCode=/\.(?:m?js|css)$/i.test(url.pathname) && !url.pathname.includes('/vendor/');
-  if(url.pathname.endsWith('/manifest.json')||appCode){
+  if(documentRequest||url.pathname.endsWith('/manifest.json')||appCode){
     event.respondWith((async() => {
       try{
-        const response = await fetch(request);
+        // Network-first alone still returns fresh entries from HTTP cache.
+        // Revalidate the HTML and modules together on every load.
+        const response = await fetch(request, {cache:'no-cache'});
         if(response.ok) event.waitUntil(writeCache(key, response.clone()).catch(() => {}));
         return response;
       }catch(e){

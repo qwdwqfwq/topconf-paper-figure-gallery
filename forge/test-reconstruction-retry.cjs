@@ -19,6 +19,7 @@ const server = http.createServer((req,res)=>{
     // manifest. Replace startup only in this test response, never in the app.
     if(pathname==='/forge/index.html'){
       const html=data.toString('utf8').replace(/\r\n/g,'\n')
+        .replace('function reconstructionProgressText(audit){','window.__ffTestProgress = reconstructionProgressText;\nfunction reconstructionProgressText(audit){')
         .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
         .replace('window.__ffReconstruct = () => runReconstruction();',
           'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestModel = editableReconstructionModel; window.__ffTestPopulateDirect = async()=>{mode="image";passMode="direct";syncPassUI();await populateModels();}; window.__ffTestMaterialize = materializeEditableScene; window.__ffTestCalibrate = calibrateEditableText; window.__ffTestGenerateBitmap = genOaiImage; window.__ffTestZip = zipStore; window.__ffTestRequestScene = requestEditableScene; window.__ffTestParseSvg = parseSvgScene; window.__ffTestParseBitmap = parseBitmapSvgScene; window.__ffTestDrawio = sceneToDrawio; window.__ffTestVsdx = sceneToVsdxFiles; window.__ffTestPptx = buildNativePptx; window.__ffTestSvgString = sceneToSvgString;')
@@ -127,6 +128,15 @@ const server = http.createServer((req,res)=>{
       },probe);
       assert.equal(result.ok,!probe.fail,JSON.stringify(result));
       assert.equal(result.audit.timeoutMs,probe.expected);
+      if(probe.minutes==='25'&&probe.flags.wholeImage){
+        const progress=await page.evaluate(audit=>{
+          const now=Date.now();
+          return window.__ffTestProgress({phase:'whole',startedAt:now-51000,
+            tiles:[{...audit,state:'pending',attemptStartedAt:now-51000}]});
+        },result.audit);
+        assert.match(progress,/25 (?:分钟|min)/);
+        assert.match(progress,/24:09/);
+      }
       assert.equal(result.calls,1);
       assert.ok(result.timers.includes(probe.expected));
       if(probe.fail){

@@ -560,6 +560,7 @@
       <p class="bnote warn-inline" id="modelWarn" hidden></p>
       <p class="bnote" id="pdfModelHint" data-i18n="hint.model"></p>
       <label class="bfield" style="margin-top:9px">重建请求超时（分钟） / Reconstruction timeout (minutes)<input id="reconTimeoutMinutes" type="number" min="1" max="70" step="1" value="25"></label>
+      <small id="reconRelease">重建版本 / Reconstruction version: 20261021-timeout-2</small>
       <div class="bfield" id="analyzeModelRow" hidden style="margin-top:9px"><span class="blab" data-i18n="analyzemodel"></span><select id="analyzeModel"></select></div>
       <div class="bfield" style="margin-top:9px"><span class="blab">视觉推理强度</span><select id="visualReasoningEffort" aria-label="视觉推理强度"><option value="">服务商默认</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">极高</option></select></div>
       <p class="bnote">用于参考图归纳及步骤四重建、修正。需模型及服务商支持；默认不指定强度。</p>
@@ -686,7 +687,7 @@ import {registerMissingObjects, editableNodeBounds, regionForObjects, planCatalo
 import {planSemanticRegions,snapshotVersions,applyRegionPatch,fitSourceFills,calibrateShapeGeometry,expandStructuredNodes,regionObjectCatalog,rollbackRegionChanges,rejectUnsupportedLines,recoverDocumentInk,repairStructuralLayers} from './reconstruction-pipeline.mjs?v=geometry-20261020';
 import {calibrateEditableText} from './text-calibration.mjs?v=text-lines-20261017';
 import {figureCanvas,imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261016d';
-import {reconstructionHttpError,reconstructionRetryDelay,reconstructionFailureMessage} from './reconstruction-retry.mjs?v=20261020';
+import {reconstructionHttpError,reconstructionRetryDelay,reconstructionFailureMessage} from './reconstruction-retry.mjs?v=20261021-timeout-2';
 import {infistarAuditStatus} from './infistar-audit.mjs?v=20261016b';
 import {importDesktopScene} from './desktop-scene.mjs?v=20261014';
 
@@ -5101,7 +5102,11 @@ function reconstructionProgressText(audit){
     parts.push(zh?'进行中 '+running.length+' 个':'active '+running.length);
     if(remaining.length){
       const nearest=Math.min(...remaining);
-      parts.push(zh?'下一请求约 '+Math.ceil(nearest/60)+' 分钟后超时':'next request timeout in about '+Math.ceil(nearest/60)+' min');
+      const limits=[...new Set(running.filter(call=>Number.isFinite(call.timeoutMs)).map(call=>Math.round(call.timeoutMs/60000*100)/100))].sort((a,b)=>a-b);
+      const limit=limits.length===1?String(limits[0]):limits[0]+'–'+limits[limits.length-1];
+      const countdown=Math.floor(nearest/60)+':'+String(nearest%60).padStart(2,'0');
+      parts.push(zh?'本次请求上限 '+limit+' 分钟':'request limit '+limit+' min');
+      parts.push(zh?'下一请求剩余 '+countdown:'next request remaining '+countdown);
     }
   }
   if(queued) parts.push(zh?'排队 '+queued+' 个':'queued '+queued);
