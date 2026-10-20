@@ -661,6 +661,7 @@
 <script src="./i18n_forge.js?v=20261020-image-recovery"></script>
 <script type="module">
 import * as T from './vendor/transformers.min.js';
+import {prepareQuery,buildIndex,rank} from './retrieval.mjs';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261020-edits';
 import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=text-lines-20261017';
 import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=baseline-09a60b5-text-v2-20261017';
@@ -861,50 +862,41 @@ function matchTier(f, t){
   if(t==='spotlight') return f.tier==='spotlight' || f.tier==='oral' || f.award;
   return true;
 }
+let retrievalIndex;
+let retrievalLastQuery = '';
+let retrievalLastVector;
 async function search(){
   await boot();
   if(bootError || !data || !data.bm) throw new Error('检索索引尚未就绪，请稍后重试。');
   const q = $('#paper').value.trim();
   const pv=$('#venue').value, yr=$('#year').value, tv=$('#tier').value, pt=$('#pattern').value;
-  let clipScores = null;
-  if(q){
-    const qv = await queryVec(q);
-    clipScores = new Float32Array(data.N);
-    for(let i=0;i<data.N;i++) clipScores[i]=0.6*dot(i,qv)+0.4*dotT(i,qv);
-  }
-  const qt = q ? tokenize(q) : [];
-  const bm = data.bm;
-  const scored = [];
-  for(let i=0;i<data.N;i++){
-    const f = data.figs?.[i];
-    // Defensive: ids.json, bm25.docs and the embedding matrices must all stay the
-    // same length as figures.json. If they ever drift, one missing record used to
-    // throw on the next line and abort the whole retrieval, leaving an empty grid.
-    // Skipping the row keeps the rest of the search usable instead.
-    if(!f) continue;
-    if(pv!=='all' && f.venue!==pv) continue;
-    if(yr!=='all' && f.year!=+yr) continue;
-    if(tv!=='all' && !matchTier(f,tv)) continue;
-    if(pt!=='all' && f.pattern!==pt) continue;
-    let s;
-    const bms = qt.length ? bm25Score(qt, bm.docs[i], bm.idf, bm.k1, bm.b, bm.avgdl) : 0;
-    if(clipScores) s = 0.55*clipScores[i] + 0.45*(bms/(bms+4));
-    else s = bms;
-    scored.push({i, s});
-  }
-  if(q) scored.sort((a,b)=>b.s-a.s);
-  else scored.sort((a,b)=>{                       // no query: browse like the gallery home page
-    const fa=data.figs[a.i], fb=data.figs[b.i];
-    return (VENUE_RANK[fa.venue]??9)-(VENUE_RANK[fb.venue]??9) || fa.year-fb.year || String(fa.id).localeCompare(String(fb.id));
+  const candidates = data.figs.map((f,i)=>i).filter(i=>{
+    const f=data.figs[i];
+    return (pv==='all'||f.venue===pv) && (yr==='all'||f.year==+yr) &&
+      (tv==='all'||matchTier(f,tv)) && (pt==='all'||f.pattern===pt);
   });
-  const hasQ = !!clipScores;
-  results = scored.map(x=>{
-    const f=data.figs?.[x.i];
-    if(!f) return null;
-    return {...f, matchScore: hasQ ? Math.max(0,Math.min(100,Math.round(x.s*100))) : null};
-  }).filter(Boolean);
+  let scored=[];
+  if(q){
+    retrievalIndex ||= buildIndex(data);
+    const prepared=prepareQuery(q,retrievalIndex.idf);
+    const modelQuery=prepared.clipText;
+    if(retrievalLastQuery!==modelQuery || !retrievalLastVector){
+      retrievalLastVector=await queryVec(modelQuery);
+      retrievalLastQuery=modelQuery;
+    }
+    const images=new Float32Array(data.N), texts=new Float32Array(data.N);
+    for(const i of candidates){ images[i]=dot(i,retrievalLastVector); texts[i]=dotT(i,retrievalLastVector); }
+    scored=rank(retrievalIndex,prepared,candidates,images,texts);
+  }else{
+    scored=candidates.map(i=>({i})).sort((a,b)=>{
+      const fa=data.figs[a.i], fb=data.figs[b.i];
+      return (VENUE_RANK[fa.venue]??9)-(VENUE_RANK[fb.venue]??9)||fa.year-fb.year||String(fa.id).localeCompare(String(fb.id));
+    });
+  }
+  results=scored.map(x=>({...data.figs[x.i],matchScore:q?x.score:null,matchReason:x.reason||''}));
   renderGrid(results);
 }
+
 
 /* ---------------- render cards (incremental: browse the whole gallery) ---------------- */
 const PAGE_SIZE = 60;
@@ -922,7 +914,7 @@ function cardHtml(f){
   return `<div class="rc ${sel?'sel':''}" data-id="${esc(f.id)}" role="button" tabindex="0" aria-pressed="${sel}" aria-label="${tt(sel?'card.ariaSel':'card.aria',{t:esc(f.title)})}">
       <img class="thumb" loading="lazy" src="../${esc(f.image)}" alt="${esc(f.title)}">
       <div class="pick">${sel?tt('pick.sel'):tt('pick.add')}</div>
-      <div class="score">${f.matchScore!=null?f.matchScore:''}</div>
+      <div class="score" title="${esc(f.matchReason||'')}">${f.matchScore!=null?f.matchScore:''}</div>
       <div class="body">
         <h3>${esc(f.title)}</h3>
       <div class="chips">
