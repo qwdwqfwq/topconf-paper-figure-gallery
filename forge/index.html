@@ -340,10 +340,10 @@
     .export-progress-fill{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#6366f1,#4f46e5);transition:width .16s ease}
     @media(max-width:760px){.export-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* Keep model and canvas controls visually consistent. */
-#parseReasoningEffort,#visualReasoningEffort,#figureRatio,#imageResolution,#analyzeModel,#reconTimeoutMinutes{border:1px solid #d9d5ed;border-radius:10px;padding:10px 14px;background:#fff;color:#1f2937;min-height:42px;box-shadow:0 1px 2px #312e8108}
+#parseReasoningEffort,#visualReasoningEffort,#figureRatio,#imageResolution,#analyzeModel{border:1px solid #d9d5ed;border-radius:10px;padding:10px 14px;background:#fff;color:#1f2937;min-height:42px;box-shadow:0 1px 2px #312e8108}
 #figureRatio,#imageResolution{min-width:110px}
 #analyzeModel{flex:1;max-width:none;min-width:0}
-#figureRatio:focus-visible,#imageResolution:focus-visible,#analyzeModel:focus-visible,#reconTimeoutMinutes:focus-visible{outline:3px solid #c4b5fd;outline-offset:2px;border-color:#7c3aed}
+#figureRatio:focus-visible,#imageResolution:focus-visible,#analyzeModel:focus-visible{outline:3px solid #c4b5fd;outline-offset:2px;border-color:#7c3aed}
 </style>
 </head>
 <body>
@@ -553,7 +553,7 @@
       <p class="bnote warn-inline" id="imageRatioWarn" hidden></p>
       <p class="bnote warn-inline" id="modelWarn" hidden></p>
       <p class="bnote" id="pdfModelHint" data-i18n="hint.model"></p>
-      <label class="bfield" style="margin-top:9px">重建请求超时（分钟） / Reconstruction timeout (minutes)<input id="reconTimeoutMinutes" type="number" min="1" max="70" step="1" value="25"></label>
+      <small style="display:block;margin-top:9px">步骤一至四不设模型等待时限；极高推理可能需要更久。 / Steps 1–4 have no model waiting limit; extra-high reasoning may take longer.</small>
       <small id="reconRelease">重建版本 / Reconstruction version: 20261021-fidelity-4</small>
       <div class="bfield" id="analyzeModelRow" hidden style="margin-top:9px"><span class="blab" data-i18n="analyzemodel"></span><select id="analyzeModel"></select></div>
       <div class="bfield" style="margin-top:9px"><span class="blab">视觉推理强度</span><select id="visualReasoningEffort" aria-label="视觉推理强度"><option value="">服务商默认</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">极高</option></select></div>
@@ -671,8 +671,8 @@
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 import {prepareQuery,buildIndex,rank} from './retrieval.mjs';
-import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=20261020-recovery';
-import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261020-provider-image-protocol';
+import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=20261021-unlimited';
+import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261021-unlimited';
 import {ImageRoutes, safeImageFailover} from './image-routes.mjs?v=20261020';
 const imageRoutes=new ImageRoutes();
 import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=fidelity-20261021-4';
@@ -1328,10 +1328,10 @@ async function callPdfParser(mode, payload){
     const text = instruction+'\n\n'+tt('ps.texthdr',{f:pdfContext.fileName,p:ex.pages})+'\n'+relevantPdfText(ex.text,$('#target').value,$('#contentQuery').value.trim());
     if(c.proto==='anthropic'){
       body={model,max_tokens:5000,system:'只输出严格 JSON。',messages:[{role:'user',content:[{type:'text',text}]}]};
-      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},780000);
+      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},Infinity);
     }else if(/openai\.com/i.test(base)){
       body={model,input:[{role:'user',content:[{type:'input_text',text}]}],max_output_tokens:5000};
-      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},780000);
+      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},Infinity);
     }else{
       body={model,temperature:0.1,max_tokens:5000,messages:[{role:'system',content:'只输出严格 JSON。'},{role:'user',content:text}]};
       if($('#provider').value==='ark' && !relayBase()) body.thinking={type:'disabled'};
@@ -1344,12 +1344,12 @@ async function callPdfParser(mode, payload){
       const blocks=ex.imgs.map(u=>({type:'image',source:{type:'base64',media_type:'image/jpeg',data:dataURIToParts(u).data}}));
       blocks.push({type:'text',text:note});
       body={model,max_tokens:5000,system:'只输出严格 JSON。',messages:[{role:'user',content:blocks}]};
-      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},780000);
+      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},Infinity);
     }else if(/openai\.com/i.test(base)){
       const content=ex.imgs.map(u=>({type:'input_image',image_url:u}));
       content.push({type:'input_text',text:note});
       body={model,input:[{role:'user',content}],max_output_tokens:5000};
-      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},780000);
+      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},Infinity);
     }else{
       const content=ex.imgs.map(u=>({type:'image_url',image_url:{url:u}}));
       content.push({type:'text',text:note});
@@ -1365,10 +1365,10 @@ async function callPdfParser(mode, payload){
       const blocks=[{type:'document',source:{type:'base64',media_type:part.media||'application/pdf',data:part.data}},
                     {type:'text',text:instruction}];
       body={model,max_tokens:5000,system:'只输出严格 JSON。',messages:[{role:'user',content:blocks}]};
-      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},780000);
+      r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},Infinity);
     }else if(dm==='openai_responses'){
       body={model,input:[{role:'user',content:[{type:'input_file',filename:pdfContext.fileName,file_data:pdfContext.dataUri},{type:'input_text',text:instruction}]}],max_output_tokens:5000};
-      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},780000);
+      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},Infinity);
     }else{
       body={model,temperature:0.1,max_tokens:5000,messages:[{role:'system',content:'只输出严格 JSON。'},{role:'user',content:[{type:'file',file:{filename:pdfContext.fileName,file_data:pdfContext.dataUri}},{type:'text',text:instruction}]}]};
       r=await postJSON(base,'/chat/completions',withReasoning(body,'parse'),key);
@@ -1638,17 +1638,6 @@ async function populateAnalyzeModels(){
   const saved = localStorage.getItem('ff_amodel_'+$('#provider').value);
   if(saved && [...s.options].some(o=>o.value===saved)) s.value=saved;
 }
-const reconTimeoutInput=$('#reconTimeoutMinutes');
-// Migrate an existing timeout once; subsequent user adjustments remain unchanged.
-if(localStorage.getItem('ff_recon_timeout_extension_v1')!=='done'){
-  const savedTimeout=Number(localStorage.getItem('ff_recon_timeout_minutes'));
-  if(Number.isFinite(savedTimeout)&&savedTimeout>0){
-    localStorage.setItem('ff_recon_timeout_minutes',String(Math.min(70,Math.max(1,savedTimeout)+10)));
-  }
-  localStorage.setItem('ff_recon_timeout_extension_v1','done');
-}
-reconTimeoutInput.value=localStorage.getItem('ff_recon_timeout_minutes')||'25';
-reconTimeoutInput.onchange=()=>{reconTimeoutInput.value=String(Math.max(1,Math.min(70,Number(reconTimeoutInput.value)||25)));localStorage.setItem('ff_recon_timeout_minutes',reconTimeoutInput.value);};
 $('#analyzeModel').onchange = e=>localStorage.setItem('ff_amodel_'+$('#provider').value, e.target.value);
 function initProviders(){
   // Register independently of the periodically refreshed upstream manifest.
@@ -2249,12 +2238,12 @@ function friendlyHttp(status, txt){
   if(status===400) return tt('err.400',{t:txt.slice(0,200)})+apiContext();
   return tt('err.http',{s:status,t:txt.slice(0,200)})+apiContext();
 }
-function postJSON(base, path, body, key, extraHeaders, timeoutMs=900000){
+function postJSON(base, path, body, key, extraHeaders, timeoutMs=Infinity){
   return (path==='/chat/completions'?requestChat:fetchWithTimeout)(base+path,{method:'POST',
     headers:{'Content-Type':'application/json',Authorization:'Bearer '+key,...extraHeaders},
     body:JSON.stringify(body)},timeoutMs);
 }
-function fetchWithTimeout(url, options={}, timeoutMs=900000){
+function fetchWithTimeout(url, options={}, timeoutMs=Infinity){
   return fetchBufferedWithTimeout(url,options,timeoutMs);
 }
 function safeExportError(err){
@@ -2265,20 +2254,24 @@ function safeExportError(err){
 }
 // Keep the timer active while the response body streams. A fulfilled fetch()
 // only means headers arrived; the previous timer was cleared before r.text().
-async function fetchTextWithTimeout(url, options={}, timeoutMs=780000){
+async function fetchTextWithTimeout(url, options={}, timeoutMs=Infinity){
   const ac=new AbortController();
-  const to=setTimeout(()=>ac.abort(),timeoutMs);
+  const cancel=()=>ac.abort();
+  options.signal?.addEventListener("abort",cancel,{once:true});
+  if(options.signal?.aborted)ac.abort();
+  const to=Number.isFinite(timeoutMs)?setTimeout(()=>ac.abort(),timeoutMs):null;
   try{
     const r=await fetch(url,{...options,signal:ac.signal});
     return {ok:r.ok,status:r.status,retryAfter:r.headers.get('retry-after'),text:await r.text()};
   }catch(err){
+    if(options.signal?.aborted)throw new DOMException("Reconstruction stopped","AbortError");
     if(ac.signal.aborted){
       const timeout=new Error('Vision API timed out after '+Math.round(timeoutMs/1000)+' seconds');
       timeout.visionTimeout=true;
       throw timeout;
     }
     throw err;
-  }finally{ clearTimeout(to); }
+  }finally{ clearTimeout(to); options.signal?.removeEventListener("abort",cancel); }
 }
 /* When a POST fails at network level, find out WHY. Some providers (Ark) do
    not allow browser CORS on /models, and omit CORS headers on error responses,
@@ -4657,9 +4650,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   if(audit.contextImage)referenceImages.push(audit.contextImage);
   if(audit.retryRender)referenceImages.push(audit.retryRender);
   if(audit.fullSourceImage)referenceImages.push(audit.fullSourceImage);
-  const configuredTimeoutMs=Math.min(
-    Math.max(1,Math.min(70,Number($('#reconTimeoutMinutes').value)||25))*60000,
-    Number.isFinite(audit.timeoutMsOverride)?audit.timeoutMsOverride:Infinity);
+  const configuredTimeoutMs=Infinity;
   let lastError=null;
   let previousResponse='';
   const formatAttempts=Math.max(1,Math.min(3,Number(audit.maxAttempts)||3));
@@ -5108,6 +5099,7 @@ function reconstructionProgressText(audit){
     const remaining=running.filter(call=>Number.isFinite(call.timeoutMs)&&Number.isFinite(call.attemptStartedAt))
       .map(call=>Math.max(0,Math.ceil((call.timeoutMs-(Date.now()-call.attemptStartedAt))/1000)));
     parts.push(zh?'进行中 '+running.length+' 个':'active '+running.length);
+    if(!remaining.length) parts.push(zh?'等待模型响应，不设等待时限':'Waiting for model response; no waiting limit');
     if(remaining.length){
       const nearest=Math.min(...remaining);
       const limits=[...new Set(running.filter(call=>Number.isFinite(call.timeoutMs)).map(call=>Math.round(call.timeoutMs/60000*100)/100))].sort((a,b)=>a-b);
