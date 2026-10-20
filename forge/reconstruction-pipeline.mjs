@@ -226,6 +226,27 @@ export function planSemanticRegions(scene,width,height){
       coreX:x,coreY:y,coreRight:right,coreBottom:bottom};
   });
 }
+// A semantic panel is a layout unit, not a sufficient recognition resolution.
+// Preserve the panel pass, then inspect native-resolution crops with disjoint
+// ownership cores and overlap for labels crossing a crop boundary.
+export function planDetailRegions(regions,width,height,maxCore=900,padding=128){
+  const result=[];
+  for(const r of regions){
+    const left=r.coreX??r.x,top=r.coreY??r.y,right=r.coreRight??r.x+r.w,bottom=r.coreBottom??r.y+r.h;
+    const cols=Math.ceil((right-left)/maxCore),rows=Math.ceil((bottom-top)/maxCore);
+    if(cols===1&&rows===1)continue;
+    for(let row=0;row<rows;row++)for(let col=0;col<cols;col++){
+      const coreX=Math.floor(left+(right-left)*col/cols),coreY=Math.floor(top+(bottom-top)*row/rows);
+      const coreRight=Math.floor(left+(right-left)*(col+1)/cols),coreBottom=Math.floor(top+(bottom-top)*(row+1)/rows);
+      const x=Math.max(0,coreX-padding),y=Math.max(0,coreY-padding);
+      result.push({...r,id:`${r.id}_detail_${row}_${col}`,parentRegionId:r.id,editableOwners:[r.id],detailPass:true,
+        index:result.length,x,y,w:Math.min(width,coreRight+padding)-x,h:Math.min(height,coreBottom+padding)-y,
+        coreX,coreY,coreRight,coreBottom});
+    }
+  }
+  return result;
+}
+const ownsRegionNode=(region,n)=>!n.owner||n.owner===region.id||(region.editableOwners||[]).includes(n.owner);
 export const objectVersion=n=>Number(n.version)||0;
 export function snapshotVersions(scene){return Object.fromEntries(scene.nodes.map(n=>[n.id,objectVersion(n)]));}
 // Roll back only objects owned by rejected regions, including deletes/splits.
@@ -256,7 +277,7 @@ function patchCatalog(scene,region){
 }
 const excluded=(r,x,y)=>(r.excludeRects||[]).some(b=>x>=b.x&&y>=b.y&&x<b.x+b.w&&y<b.y+b.h);
 export function regionObjectCatalog(scene,region){
-  const owned=patchCatalog(scene,region).filter(n=>{const b=patchBounds(n),cx=(b.x+b.right)/2,cy=(b.y+b.bottom)/2;return !excluded(region,cx,cy)&&(!n.owner||n.owner===region.id)&&cx>=(region.coreX??region.x)&&cy>=(region.coreY??region.y)&&cx<(region.coreRight??region.x+region.w)&&cy<(region.coreBottom??region.y+region.h);});
+  const owned=patchCatalog(scene,region).filter(n=>{const b=patchBounds(n),cx=(b.x+b.right)/2,cy=(b.y+b.bottom)/2;return !excluded(region,cx,cy)&&ownsRegionNode(region,n)&&cx>=(region.coreX??region.x)&&cy>=(region.coreY??region.y)&&cx<(region.coreRight??region.x+region.w)&&cy<(region.coreBottom??region.y+region.h);});
   const ids=new Set(owned.map(n=>n.id));
   return {canvas:{width:region.w,height:region.h},nodes:owned.map(n=>translateNode(n,-region.x,-region.y)),readOnlyContext:scene.nodes.filter(n=>{const b=patchBounds(n);return !ids.has(n.id)&&b&&b.x<region.x+region.w&&b.right>region.x&&b.y<region.y+region.h&&b.bottom>region.y;}).map(n=>translateNode(n,-region.x,-region.y)),excludeRects:(region.excludeRects||[]).map(b=>({...b,x:b.x-region.x,y:b.y-region.y}))};
 }
@@ -266,7 +287,7 @@ export function regionObjectCatalog(scene,region){
 export function applyRegionPatch(scene,region,patch,versions){
   let nodes=scene.nodes.slice();const conflicts=[],rejected=[],ignored=[];
   const owns=n=>{const b=patchBounds(n);if(!b)return false;const cx=(b.x+b.right)/2,cy=(b.y+b.bottom)/2;
-    return !excluded(region,cx,cy)&&(!n.owner||n.owner===region.id)&&cx>=(region.coreX??region.x)&&cy>=(region.coreY??region.y)&&cx<(region.coreRight??region.x+region.w)&&cy<(region.coreBottom??region.y+region.h);};
+    return !excluded(region,cx,cy)&&ownsRegionNode(region,n)&&cx>=(region.coreX??region.x)&&cy>=(region.coreY??region.y)&&cx<(region.coreRight??region.x+region.w)&&cy<(region.coreBottom??region.y+region.h);};
   const allowed=new Set(patchCatalog(scene,region).filter(owns).map(n=>n.id));
   const inside=n=>{const b=patchBounds(n);return b&&b.x>=region.x-1&&b.y>=region.y-1&&b.right<=region.x+region.w+1&&b.bottom<=region.y+region.h+1;};
   const global=n=>{

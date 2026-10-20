@@ -54,3 +54,23 @@ const bounded=audit();const attempts=[];
 await run(canvas,'src',async(s,w,h,a)=>{attempts.push(a);if(a.attempt===0)throw Error('temporary failure');return refined(a);},bounded,cached,true,quality,undefined,{maxAttempts:2,retryBudget:1});
 assert.equal(attempts.length,3);assert.equal(bounded.retryRegions.length,1);assert.equal(bounded.tilePassComplete,false);
 console.log('PASS: whole-image failure, concurrent partial persistence, selective resume, cache remeasurement, quality rejection, bounded retry');
+
+// An overview can pass while small details are still wrong: it must not end work.
+context.planSemanticRegions=()=>[{id:'large',x:0,y:0,w:2800,h:700,coreX:0,coreY:0,coreRight:2800,coreBottom:700}];
+const denseCanvas={width:2800,height:700};
+const denseScene={canvas:denseCanvas,nodes:[100,800,1500,2200].map((x,i)=>({id:`dense${i}`,type:'rect',x,y:100,w:100,h:100,fill:'#ffffff',owner:'large'}))};
+const detailQuality=(c,s,r)=>{
+ const value=!r.detailPass||s.nodes.filter(n=>n.x>=r.coreX&&n.x<r.coreRight).every(n=>n.fill==='#000000')?1:.5;
+ return Object.fromEntries(['score','darkRecall','localRecall','edgeF1','colorSimilarity'].map(k=>[k,value]));
+};
+const denseAudit=audit(),detailCalls=[];
+const denseResult=await run(denseCanvas,'src',async(s,w,h,a)=>{detailCalls.push(a.region);return refined(a);},denseAudit,denseScene,true,detailQuality,undefined,once);
+assert.equal(detailCalls.length,4);
+assert.equal(denseAudit.totalTiles,6);
+assert.equal(denseAudit.completedTiles,6);
+assert.equal(denseAudit.tilePassComplete,true);
+assert.ok(denseResult.nodes.every(n=>n.fill==='#000000'));
+const failureAudit=audit();
+await run(denseCanvas,'src',async()=>{throw Error('detail unavailable');},failureAudit,denseScene,true,detailQuality,undefined,once);
+assert.equal(failureAudit.tilePassComplete,false,'passed overview cannot hide failed detail crops');
+console.log('PASS: overview success still requires detail refinement; failed details remain incomplete');

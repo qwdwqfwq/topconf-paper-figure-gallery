@@ -554,7 +554,7 @@
       <p class="bnote warn-inline" id="modelWarn" hidden></p>
       <p class="bnote" id="pdfModelHint" data-i18n="hint.model"></p>
       <label class="bfield" style="margin-top:9px">重建请求超时（分钟） / Reconstruction timeout (minutes)<input id="reconTimeoutMinutes" type="number" min="1" max="70" step="1" value="25"></label>
-      <small id="reconRelease">重建版本 / Reconstruction version: 20261021-timeout-2</small>
+      <small id="reconRelease">重建版本 / Reconstruction version: 20261021-detail-1</small>
       <div class="bfield" id="analyzeModelRow" hidden style="margin-top:9px"><span class="blab" data-i18n="analyzemodel"></span><select id="analyzeModel"></select></div>
       <div class="bfield" style="margin-top:9px"><span class="blab">视觉推理强度</span><select id="visualReasoningEffort" aria-label="视觉推理强度"><option value="">服务商默认</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">极高</option></select></div>
       <p class="bnote">用于参考图归纳及步骤四重建、修正。需模型及服务商支持；默认不指定强度。</p>
@@ -675,13 +675,13 @@ import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=2026
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261020-provider-image-protocol';
 import {ImageRoutes, safeImageFailover} from './image-routes.mjs?v=20261020';
 const imageRoutes=new ImageRoutes();
-import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=geometry-20261020';
+import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=detail-20261021';
 import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=baseline-09a60b5-text-v2-20261017';
 import {registerMissingObjects, editableNodeBounds, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, tileDetailCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion, planReconstructionTiles, subdivideReconstructionTile} from './reconstruction-core.mjs?v=regional-completeness-20261019';
-import {planSemanticRegions,snapshotVersions,applyRegionPatch,fitSourceFills,calibrateShapeGeometry,expandStructuredNodes,regionObjectCatalog,rollbackRegionChanges,rejectUnsupportedLines,recoverDocumentInk,repairStructuralLayers} from './reconstruction-pipeline.mjs?v=geometry-20261020';
+import {planDetailRegions,planSemanticRegions,snapshotVersions,applyRegionPatch,fitSourceFills,calibrateShapeGeometry,expandStructuredNodes,regionObjectCatalog,rollbackRegionChanges,rejectUnsupportedLines,recoverDocumentInk,repairStructuralLayers} from './reconstruction-pipeline.mjs?v=detail-20261021';
 import {calibrateEditableText} from './text-calibration.mjs?v=text-lines-20261017';
 import {figureCanvas,imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261016d';
-import {reconstructionHttpError,reconstructionRetryDelay,reconstructionFailureMessage} from './reconstruction-retry.mjs?v=20261021-timeout-2';
+import {reconstructionHttpError,reconstructionRetryDelay,reconstructionFailureMessage} from './reconstruction-retry.mjs?v=20261021-detail-1';
 import {infistarAuditStatus} from './infistar-audit.mjs?v=20261016b';
 import {importDesktopScene} from './desktop-scene.mjs?v=20261014';
 
@@ -4951,8 +4951,10 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cach
   scene=repairStructuralLayers(scene,canvas);
   audit.strategy='semantic-parallel-patches';audit.omissionChecked=false;
   const regions=planSemanticRegions(scene,W,H).filter(r=>!options.regionIds||options.regionIds.includes(r.id));
+  const detailRegions=options.actualRenderFeedback?[]:planDetailRegions(regions,W,H);
+  audit.detailRegions=detailRegions.map(r=>r.id);
   audit.regionStates={...(scene.regionStates||{})};
-  audit.totalTiles=regions.length+1;audit.completedTiles=1;audit.phase='regions';
+  audit.totalTiles=regions.length+detailRegions.length+1;audit.completedTiles=1;audit.phase='regions';
   await onProgress({...scene,regionStates:{...audit.regionStates}},false);
   let commit=Promise.resolve();
   const crop=r=>{const c=document.createElement('canvas');c.width=r.w;c.height=r.h;c.getContext('2d').drawImage(canvas,r.x,r.y,r.w,r.h,0,0,r.w,r.h);return c.toDataURL('image/png');};
@@ -5051,6 +5053,19 @@ async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cach
     await runRegions(retryRegions,1);
     if(retryRegions.length)await revalidateRegions();
   }
+  // Large panels need their own native-resolution detail pass even when the
+  // overview score hides a small missing chart, table, icon or label.
+  if(!options.actualRenderFeedback){
+    const details=detailRegions;
+    audit.phase='details';
+    await runRegions(details,0);
+    if((options.maxAttempts??2)>1){
+      const retryDetails=details.filter(r=>audit.regionStates[r.id]?.state!=='passed');
+      await runRegions(retryDetails,1);
+    }
+    regions.push(...details);
+    await revalidateRegions();
+  }
   audit.tilePassComplete=regions.every(r=>audit.regionStates[r.id]?.state==='passed');
   return {...scene,regionStates:audit.regionStates};
 }
@@ -5062,15 +5077,15 @@ function reconstructionProgressText(audit){
   const queued=calls.filter(call=>call.state==='queued').length;
   const phase=audit.phase||'prepare';
   let stage;
-  if(zh) stage={prepare:'准备图像',whole:'整图识别',regions:'分区重建',merge:'合并分区',omission:'整图查漏',quality:'质量检查',repair:'局部精修',final:'生成导出'}[phase]||'重建中';
-  else stage={prepare:'Preparing image',whole:'Whole-image recognition',regions:'Regional reconstruction',merge:'Merging regions',omission:'Whole-image completeness check',quality:'Quality check',repair:'Object refinement',final:'Preparing export'}[phase]||'Reconstructing';
+  if(zh) stage={prepare:'准备图像',whole:'整图识别',regions:'面板重建',details:'原分辨率细节精修',merge:'合并分区',omission:'整图查漏',quality:'质量检查',repair:'局部精修',final:'生成导出'}[phase]||'重建中';
+  else stage={prepare:'Preparing image',whole:'Whole-image recognition',regions:'Panel reconstruction',details:'Native-resolution detail refinement',merge:'Merging regions',omission:'Whole-image completeness check',quality:'Quality check',repair:'Object refinement',final:'Preparing export'}[phase]||'Reconstructing';
   const parts=[stage,zh?'已用 '+clock:'elapsed '+clock];
-  if(phase==='regions'){
+  if(phase==='regions'||phase==='details'){
     const wholeDone=audit.completedTiles>0&&audit.strategy!=='tiled-fallback'?1:0;
     const done=Math.max(0,audit.completedTiles-wholeDone),total=Math.max(0,audit.totalTiles-wholeDone);
     parts.push(zh
-      ? '分区 '+done+'/'+total+'，已细分 '+audit.fallbackTiles+' 次'
-      : 'regions '+done+'/'+total+', subdivided '+audit.fallbackTiles+' times');
+      ? '分区 '+done+'/'+total+'（含 '+(audit.detailRegions?.length||0)+' 个细节块）'
+      : 'regions '+done+'/'+total+' (including '+(audit.detailRegions?.length||0)+' detail crops)');
     if(audit.wholeImageError) parts.push(zh
       ? '整图识别失败，分区结果缺少全局对象目录'
       : 'whole-image recognition failed; regions have no global object catalog');

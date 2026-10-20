@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {applyRegionPatch,snapshotVersions,planSemanticRegions,expandStructuredNodes,regionObjectCatalog,fitSourceFills,calibrateShapeGeometry,rollbackRegionChanges,rejectUnsupportedLines,recoverDocumentInk,repairStructuralLayers} from './reconstruction-pipeline.mjs';
+import {applyRegionPatch,snapshotVersions,planDetailRegions,planSemanticRegions,expandStructuredNodes,regionObjectCatalog,fitSourceFills,calibrateShapeGeometry,rollbackRegionChanges,rejectUnsupportedLines,recoverDocumentInk,repairStructuralLayers} from './reconstruction-pipeline.mjs';
 
 const region={id:'a',x:10,y:10,w:100,h:100,coreX:10,coreY:10,coreRight:110,coreBottom:110};
 const text={id:'label',type:'text',x:20,y:20,w:50,h:15,text:'old',fontSize:12,version:2};
@@ -127,3 +127,23 @@ assert.ok(!restoredPrint.nodes.some(n=>n.id==='fake-print'),'placeholder text mu
 assert.ok(restoredPrint.nodes.some(n=>n.sourceDetail==='untranscribed-ink'));
 const readablePrint={...fakePrint,id:'real-text',text:'Readable document text'};
 assert.ok(recoverDocumentInk({nodes:[paper,readablePrint]},sourceCanvas).nodes.some(n=>n.id==='real-text'),'real transcription remains editable text');
+
+// Dense poster panels receive complete disjoint cores, with source-pixel overlap.
+const posterDetails=planDetailRegions([{id:'panel',x:0,y:0,w:5504,h:3072}],5504,3072);
+assert.equal(posterDetails.length,28);
+assert.equal(posterDetails.reduce((sum,r)=>sum+(r.coreRight-r.coreX)*(r.coreBottom-r.coreY),0),5504*3072);
+assert.ok(posterDetails.every(r=>r.coreRight-r.coreX<=900&&r.coreBottom-r.coreY<=900&&r.x>=0&&r.y>=0&&r.x+r.w<=5504&&r.y+r.h<=3072));
+assert.equal(planDetailRegions([{id:'small',x:0,y:0,w:700,h:700}],700,700).length,0);
+const detail=posterDetails[0];
+const parentScene={nodes:[{...text,owner:'panel'},{...text,id:'foreign',owner:'other-panel'},
+  {id:'frame',type:'rect',x:0,y:0,w:5504,h:3072,owner:'panel'}]};
+assert.deepEqual(regionObjectCatalog(parentScene,detail).nodes.map(n=>n.id),['label']);
+const refined=applyRegionPatch(parentScene,detail,{operations:[{op:'update',id:'label',node:{...text,text:'refined'}}]},snapshotVersions(parentScene));
+assert.equal(refined.rejected.length,0);
+assert.equal(refined.scene.nodes[0].text,'refined');
+assert.equal(refined.scene.nodes[0].owner,detail.id);
+assert.equal(regionObjectCatalog(refined.scene,detail).nodes.length,1,'retry can still edit a detail-owned object');
+assert.ok(applyRegionPatch(parentScene,detail,{operations:[{op:'delete',id:'frame'}]},snapshotVersions(parentScene)).rejected.length);
+assert.ok(applyRegionPatch(parentScene,detail,{operations:[{op:'delete',id:'foreign'}]},snapshotVersions(parentScene)).rejected.length);
+for(const other of posterDetails.slice(1))assert.equal(regionObjectCatalog(refined.scene,other).nodes.some(n=>n.id==='label'),false);
+console.log('Native-resolution detail coverage and inherited ownership tests passed');
