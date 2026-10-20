@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="416" height="64" viewBox="0 0 416 64" role="img" aria-labelledby="title">
+  <title id="title">导出可编辑所有细节。</title>
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffe49a"/>
+      <stop offset=".48" stop-color="#ffc34d"/>
+      <stop offset="1" stop-color="#ff982e"/>
+    </linearGradient>
+    <filter id="glow" x="-15%" y="-80%" width="130%" height="260%" color-interpolation-filters="sRGB">
+      <feGaussianBlur stdDeviation="3.5"/>
+    </filter>
+  </defs>
+  <g font-family="'Microsoft YaHei','PingFang SC','Noto Sans CJK SC',sans-serif" font-size="32" font-weight="700" text-anchor="middle">
+    <text x="208" y="32" fill="#ffab30" opacity=".52" filter="url(#glow)" aria-hidden="true">导出可编辑所有细节。</text>
+    <text x="208" y="32" fill="url(#gold)">导出可编辑所有细节。</text>
+  </g>
+</svg>
