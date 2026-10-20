@@ -2178,11 +2178,15 @@ function designContractText(j, ratio='16:9'){
   return rows.join('\n');
 }
 
-function buildPrompt(content, layoutGuide, refIds){
-  const t = $('#target').value;
-  const targetInfo = t==='custom'
+function generationIntent(content){
+  const t = Object.hasOwn(TARGETS,$('#target').value) ? $('#target').value : 'overview';
+  const description = t==='custom'
     ? ($('#targetDesc').value.trim() || content)
     : TARGETS[t].instr;
+  return `Drawing intent / 绘图意图：${TARGETS[t].label}\n${description}\n`;
+}
+function buildPrompt(content, layoutGuide, refIds){
+  const targetInfo = generationIntent(content);
   const useIds = refIds || [...refs];
   const refLines = useIds.map((id,idx)=>{
     const f = data.figs.find(x=>x.id===id);
@@ -2193,7 +2197,7 @@ function buildPrompt(content, layoutGuide, refIds){
   const guide = layoutGuide
     ? `## Design contract (shared visual grammar — synthesize recurring structure across all references)\n没有单一母版。必须从所有参考图提取反复出现的面板划分、相对密度、嵌套分组、模块槽位、连接线拓扑、配色和层级，再生成一张内容全新的图；不要按上传顺序偏向第一张，也不要把任意一张图整图照抄。\n${layoutGuide}\n\n`
     : '';
-  return `你是顶尖 ML 论文的配图设计师。我要：${TARGETS[t].label}。
+  return `你是顶尖 ML 论文的配图设计师。
 ${guide}${targetInfo}
 
 我的论文内容：
@@ -6029,7 +6033,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
     + `Mirror the common panel divisions, relative proportions, nesting, reading direction, spacing rhythm, palette, stroke language, arrow language and visual density, while inventing new paper-specific contents. `
     + `When the references support it, use 3-5 dense panels with thick outer containers and finer module borders, mixed solid/dashed frames, and a meaningful visual element in every slot. `
     + `Do not copy any one reference's exact composition, subject matter, text, thumbnails, icons or image pixels, and do not create a generic empty grid. `
-    + `Publication-quality Figure 1 for a top-tier ML paper. `
+    + `Publication-quality scientific figure for a top-tier ML paper. `
     + `Use a prominent bold TITLE line when that is a recurring convention in the references, otherwise keep a compact top region. `
     + `Use the recurring zone count, order, relative widths/heights and module-slot density from the design contract, allowing a new arrangement that combines the shared structure. `
     + `Do not collapse the shared structure into a sparse or symmetric generic grid. Treat the blueprint as a construction plan; every defined slot must receive `
@@ -6101,15 +6105,20 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
     +(budget.unit==='chars' || !hasAnalyzedLayout
       ? fitImagePrompt(layoutGuide||'',budget,Math.floor(budget.limit*(hasAnalyzedLayout?.35:.3)))+'\n'
       : '');
-  // Reserve paper space before fitting long style guidance. The PDF summary is
-  // already ordered by figure relevance; this also handles manually pasted text.
+  // Keep the selected intent outside style compression, including custom text.
+  const intent=generationIntent(content)+'\n';
   const paperReserve=Math.min(imagePromptSize(content,budget),Math.floor(budget.limit*(budget.unit==='tokens'?.25:.35)));
+  const paperHeader='\nPaper content (figure-critical facts first):\n';
+  if(imagePromptSize(intent+paperHeader,budget)+paperReserve>=budget.limit){
+    throw new Error(GAL_I18N.lang==='en'
+      ? 'The drawing intent is too long for this image model. Shorten it or choose another model.'
+      : '绘图意图超出当前图像模型的提示词预算，请缩短自定义描述或更换模型。');
+  }
   const promptBase=budget.unit==='tokens' || imagePromptSize(detailedPrompt,budget)>budget.limit-paperReserve
     ? compact : detailedPrompt;
-  const paperHeader='\nPaper content (figure-critical facts first):\n';
-  const fittedBase=fitImagePrompt(promptBase,budget,budget.limit-paperReserve-imagePromptSize(paperHeader,budget));
-  const paper=prioritizedImagePaper(content,budget,budget.limit-imagePromptSize(fittedBase+paperHeader,budget));
-  const imgPrompt=fittedBase+paperHeader+paper;
+  const fittedBase=fitImagePrompt(promptBase,budget,budget.limit-paperReserve-imagePromptSize(intent+paperHeader,budget));
+  const paper=prioritizedImagePaper(content,budget,budget.limit-imagePromptSize(intent+fittedBase+paperHeader,budget));
+  const imgPrompt=intent+fittedBase+paperHeader+paper;
   let body;
   let endpoint='/images/generations';
   let usedRefs=false;
