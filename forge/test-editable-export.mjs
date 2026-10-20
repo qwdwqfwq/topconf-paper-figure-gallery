@@ -68,6 +68,14 @@ assert.match(pptxBytes.toString('utf8'),/rot="2040000"/,
 assert.equal(parseEditablePath('M 750 330 A 65 65 0 0 1 880 330')[0].commands.some(c=>c.type==='cubic'),true);
 assert.equal(expandEditableTextPaths(scene).nodes.filter(n=>String(n.id||'').startsWith('text_char')).length,5,
   'arc labels must remain editable individual characters');
+const compound=await buildNativePptx({canvas:scene.canvas,nodes:[{type:'path',
+  d:'M 10 10 L 90 10 L 90 90 L 10 90 Z M 30 30 L 30 70 L 70 70 L 70 30 Z M 100 10 L 120 30',
+  fill:'#000000',stroke:'#222222',strokeWidth:1}]},zipStore);
+const compoundXml=Buffer.from(await compound.arrayBuffer()).toString('utf8');
+const pathList=compoundXml.match(/<a:pathLst>([\s\S]*?)<\/a:pathLst>/)[1];
+assert.equal((pathList.match(/<a:path /g)||[]).length,2,'closed compound contours share one fill; open contours remain separate');
+assert.equal((pathList.match(/<a:close\/>/g)||[]).length,2,'both hole and outline are preserved');
+assert.match(pathList,/fill="none"/,'open contour remains unfilled');
 const vsdx = zipStore(sceneToVsdxFiles(scene, 'Arial'));
 const drawio = sceneToDrawio(scene);
 assert.ok(pptx.size > 10000, 'PPTX package should contain native parts');

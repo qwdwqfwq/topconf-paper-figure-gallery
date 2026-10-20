@@ -211,7 +211,7 @@ function shapeXml(n,id,unit,media){
     const minX=Math.min(...coords.map(p=>p.x)),maxX=Math.max(...coords.map(p=>p.x));
     const minY=Math.min(...coords.map(p=>p.y)),maxY=Math.max(...coords.map(p=>p.y));
     x=minX;y=minY;w=Math.max(maxX-minX,0.001);h=Math.max(maxY-minY,0.001);
-    const pathXml=(editablePaths||paths).map(p=>{
+    let pathXml=(editablePaths||paths).map(p=>{
       if(editablePaths){
         const pt=q=>`<a:pt x="${Math.round((q.x-minX)*unit)}" y="${Math.round((q.y-minY)*unit)}"/>`;
         const commands=p.commands.map(command=>command.type==='cubic'?
@@ -223,6 +223,9 @@ function shapeXml(n,id,unit,media){
       const first=pts[0];
       return `<a:path w="${Math.max(1,Math.round(w*unit))}" h="${Math.max(1,Math.round(h*unit))}"${p.closed?'':' fill="none"'}><a:moveTo><a:pt x="${first.x}" y="${first.y}"/></a:moveTo>${pts.slice(1).map(q=>`<a:lnTo><a:pt x="${q.x}" y="${q.y}"/></a:lnTo>`).join('')}${p.closed?'<a:close/>':''}</a:path>`;
     }).join('');
+    // Closed SVG contours share one fill operation. Separate OOXML paths
+    // fill holes independently, blacking out glyph counters and icon cutouts.
+    pathXml=pathXml.replace(/<a:close\/><\/a:path><a:path w="\d+" h="\d+">/g,'<a:close/>');
     geometry=`<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="l" t="t" r="r" b="b"/><a:pathLst>${pathXml}</a:pathLst></a:custGeom>`;
   }else{
     const preset=n.type==='ellipse'?'ellipse':(n.radius>0?'roundRect':'rect');

@@ -191,6 +191,14 @@ console.log('Native-resolution detail coverage and inherited ownership tests pas
   assert.equal(fixed.nodes[0].sourceDetail,'source-box');
   assert.equal(fixed.nodes[0].type,'rect');
   assert.equal(recoverSourceBoxes(fixed,canvas).nodes.length,2,'repeat repair must not duplicate source boxes');
+  const grid=[{x:80,y:60,x2:80,y2:110},{x:280,y:60,x2:280,y2:110},
+    {x:80,y:60,x2:180,y2:60},{x:180,y:60,x2:280,y2:60},{x:80,y:110,x2:280,y2:110}]
+    .map((n,i)=>({...n,id:`grid-${i}`,type:'line',stroke:'#222222',strokeWidth:2}));
+  assert.equal(recoverSourceBoxes({nodes:[...grid,label]},canvas).nodes.length,6,'shared and split table grid edges must not acquire duplicate cell frames');
+  assert.equal(recoverSourceBoxes({nodes:[...grid.slice(1),label]},canvas).nodes.length,6,'an incomplete grid must still permit frame recovery');
+  const outer={id:'table',type:'rect',x:20,y:20,w:260,h:130,stroke:'#222222',strokeWidth:2,radius:0};
+  const outerGrid=[outer,grid[0],...grid.slice(2),label];
+  assert.equal(recoverSourceBoxes({nodes:outerGrid},canvas).nodes.length,outerGrid.length,'outer table rectangle must supply the last column edge');
   for(let y=60;y<=110;y++)data.set([255,255,255,255],(y*W+80)*4);
   assert.equal(recoverSourceBoxes({nodes:[label]},canvas).nodes.length,1,'an open color region is not a missing framed box');
 }

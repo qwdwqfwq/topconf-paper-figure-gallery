@@ -37,6 +37,30 @@ export function recoverSourceBoxes(scene,canvas){
     if([...scene.nodes,...recovered].some(n=>n.type==='rect'&&
       Math.max(0,Math.min(x+w,n.x+n.w)-Math.max(x,n.x))*Math.max(0,Math.min(y+h,n.y+n.h)-Math.max(y,n.y))/
       Math.max(1,Math.max(w*h,n.w*n.h))>.75))continue;
+    // A table cell may already be bounded by shared grid lines rather than
+    // a rectangle. Do not inset another frame inside those existing edges.
+    const tolerance=Math.max(step*4,Math.min(w,h)*.08);
+    const gridEdges=scene.nodes.filter(n=>n.stroke!=='none'&&n.strokeWidth>0).flatMap(n=>{
+      if(n.type==='line')return [n];
+      if(n.type==='rect'&&!n.radius)return [
+        {x:n.x,y:n.y,x2:n.x+n.w,y2:n.y},{x:n.x,y:n.y+n.h,x2:n.x+n.w,y2:n.y+n.h},
+        {x:n.x,y:n.y,x2:n.x,y2:n.y+n.h},{x:n.x+n.w,y:n.y,x2:n.x+n.w,y2:n.y+n.h}
+      ];
+      return [];
+    });
+    const covered=(vertical,position,start,length)=>{
+      const intervals=gridEdges.flatMap(n=>{
+        const a=vertical?n.x:n.y,b=vertical?n.x2:n.y2;
+        if(Math.abs(a-position)>tolerance||Math.abs(b-position)>tolerance)return [];
+        const lo=Math.min(vertical?n.y:n.x,vertical?n.y2:n.x2);
+        const hi=Math.max(vertical?n.y:n.x,vertical?n.y2:n.x2);
+        return [[Math.max(start,lo),Math.min(start+length,hi)]];
+      }).filter(([a,b])=>b>a).sort((a,b)=>a[0]-b[0]);
+      let end=start,total=0;
+      for(const [a,b] of intervals){total+=Math.max(0,b-Math.max(end,a));end=Math.max(end,b);}
+      return total/length>.9;
+    };
+    if(covered(true,x,y,h)&&covered(true,x+w,y,h)&&covered(false,y,x,w)&&covered(false,y+h,x,w))continue;
     const edge=(vertical,position,start,length)=>{
       let hits=0,total=0;
       for(let f=.2;f<=.8;f+=.025){total++;let hit=false;
