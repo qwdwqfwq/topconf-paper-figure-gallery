@@ -23,7 +23,8 @@ export function acceptReconstructionRepair(before,after){
     if(!Number.isFinite(Number(after[key])) ||
       Number(after[key])+maximumLoss[key]<Number(before[key])) return false;
   }
-  return reconstructionQualityDeficit(after)<reconstructionQualityDeficit(before)-.005;
+  // A single chart tick or fine line may move a crop score by less than .005.
+  return reconstructionQualityDeficit(after)<reconstructionQualityDeficit(before)-.0005;
 }
 export function editableNodeBounds(n){
   if(!n||typeof n!=='object')return null;
@@ -68,15 +69,15 @@ export function planObjectRepairRegion(weak,scene,width,height){
   const bottom=Math.min(height,Math.ceil(box.bottom+margin));
   return {x,y,w:right-x,h:bottom-y};
 }
-// IDs are assigned once from the full image, never from a detail crop.
+// Give the first pass stable IDs; later passes may register missed objects.
 export function createWholeImageCatalog(scene){
   const nodes=(scene.nodes||[]).map(n=>({...n}));
   const deduplicatedText=deduplicateText(nodes);
-  nodes.forEach((n,i)=>{n.id=`whole_${i+1}`;});
+  const ids=new Set();nodes.forEach((n,i)=>{if(!n.id||ids.has(n.id)){n.id=`whole_${i+1}`;while(ids.has(n.id))n.id+='_';}ids.add(n.id);n.version=Number(n.version)||0;});
   return {...scene,nodes,counts:{...scene.counts,total:nodes.length,
     text:nodes.filter(n=>n.type==='text').length,deduplicatedText}};
 }
-// Only this full-image registration step may allocate new identities.
+// Register genuinely new objects from whole-image or regional inspections.
 export function registerMissingObjects(scene,proposals){
   const nodes=scene.nodes.map(n=>({...n}));let added=0;
   for(const source of proposals.nodes||[]){
@@ -97,7 +98,8 @@ export function registerMissingObjects(scene,proposals){
     let id='whole_added_'+(nodes.length+1);while(nodes.some(n=>n.id===id))id+='_';
     nodes.push({...source,id});added++;
   }
-  return {...scene,nodes,counts:{...scene.counts,total:nodes.length,registeredMissing:added}};
+  return {...scene,nodes,counts:{...scene.counts,total:nodes.length,
+    registeredMissing:(scene.counts?.registeredMissing||0)+added}};
 }
 export function regionForObjects(nodes,width,height){
   const boxes=nodes.map(editableNodeBounds).filter(Boolean);if(!boxes.length)return null;
@@ -130,8 +132,7 @@ export function planCatalogRepairs(scene,width,height){
   }
   return jobs;
 }
-// A crop may only update objects whose complete bounds and centre belong to it.
-// The global catalog remains the sole authority for IDs and object count.
+// Existing objects are owned by the crop containing their centre.
 export function tileDetailCatalog(scene,tile){
   const left=tile.coreX??tile.x,top=tile.coreY??tile.y;
   const right=tile.coreRight??tile.x+tile.w,bottom=tile.coreBottom??tile.y+tile.h;
@@ -201,25 +202,42 @@ export function replaceObjectRepairRegion(scene,region,localScene,scale,allowLar
   const small=b=>b&&(allowLarge||(b.right-b.x)<region.w*.85&&(b.bottom-b.y)<region.h*.85);
   const originals=new Map((scene.nodes||[]).filter(n=>n.id&&inside(editableNodeBounds(n))&&small(editableNodeBounds(n))).map(n=>[String(n.id),n]));
   const updates=new Map();
+  const additions=[];
+  const existingIds=new Set((scene.nodes||[]).filter(n=>n.id!=null).map(n=>String(n.id)));
+  const coreLeft=region.coreX??region.x,coreTop=region.coreY??region.y;
+  const coreRight=region.coreRight??x1,coreBottom=region.coreBottom??y1;
   for(const source of localScene.nodes||[]){
     const original=originals.get(String(source.id));
-    if(!original||original.type!==source.type||updates.has(String(source.id)))continue;
+    if(original&&(original.type!==source.type||updates.has(String(source.id))))continue;
+    if(!original&&source.id!=null&&existingIds.has(String(source.id)))continue;
     const n=transformCatalogNode(source,1/scale,region.x,region.y);
-    // Text content belongs exclusively to the full-image catalog.
-    if(n.type==='text'){
-      n.text=original.text;
+    if(original&&n.type==='text'){
       if(!Number.isFinite(n.fontSize)||Math.abs(n.fontSize/original.fontSize-1)>.2)continue;
     }
-    // A local view may refine an object, but cannot change its identity.
     const b=editableNodeBounds(n);
     if(!inside(b))continue;
     // Keep a complete icon or chart even when it nearly fills the repair crop.
     // Reject only a dominant panel/background invented by the local model.
     const area=(b.right-b.x)*(b.bottom-b.y);
     if(!allowLarge&&['rect','image'].includes(n.type)&&area>region.w*region.h*.8)continue;
-    updates.set(String(n.id),{...original,...n});
+    if(original){updates.set(String(n.id),{...original,...n});continue;}
+    const cx=(b.x+b.right)/2,cy=(b.y+b.bottom)/2;
+    if(cx<coreLeft||cx>=coreRight||cy<coreTop||cy>=coreBottom)continue;
+    if(!small(b))continue;
+    additions.push(n);
   }
-  return {...scene,nodes:(scene.nodes||[]).map(n=>updates.get(String(n.id))||n)};
+  const updated={...scene,nodes:(scene.nodes||[]).map(n=>updates.get(String(n.id))||n)};
+  // A new transcription at the same location is a correction proposal, not a
+  // second text box. Existing-ID corrections above handle that case.
+  const novel=additions.filter(n=>n.type!=='text'||!updated.nodes.some(other=>{
+    if(other.type!=='text')return false;
+    const a=editableNodeBounds(other),b=editableNodeBounds(n);
+    if(!a||!b)return false;
+    const overlap=Math.max(0,Math.min(a.right,b.right)-Math.max(a.x,b.x))*
+      Math.max(0,Math.min(a.bottom,b.bottom)-Math.max(a.y,b.y));
+    return overlap>Math.min((a.right-a.x)*(a.bottom-a.y),(b.right-b.x)*(b.bottom-b.y))*.65;
+  }));
+  return registerMissingObjects(updated,{nodes:novel});
 }
 export function extractEditableNodes(raw){
   const nodeKeys=['nodes','elements','objects','items','shapes','components','primitives',

@@ -3,21 +3,23 @@
   "algorithm": "sha256",
   "files": {
     "forge/aspect-ratio.mjs": "22b65f782fc86aa2027886ed4a33e9459eb8324b66d3bb072bf9c7e59576efb6",
+    "forge/container-geometry.mjs": "5881e73390d562e4e563c1ecc425c2c588ab6c59c36c6dbcbe18802253138362",
     "forge/desktop-scene.mjs": "3db64b8f4c1b6d455bc72580728d1d4e23d8778a173ae26adbf6d50a52da4bb0",
-    "forge/editable-native.mjs": "15035a821650b985d211f9bfbe41f213c4be3775f91e7875fa09ac59adc44013",
+    "forge/editable-native.mjs": "ecfa43f15d9dc1e409a788629089686e0b9178222f1ccd93126be0530811541d",
     "forge/editable-text-layout.mjs": "5b00dcc216c060cab7bdc96fec4e2b828224182d152e4a78f59376a57a601924",
     "forge/i18n.js": "49e1b9fdf5dc9267969af11e8928e88d9f03f8c295dabef98e115c8e2f72e68a",
     "forge/i18n_forge.js": "ba5fa41577f76c31ade84440bb8587ec8f27727eec094bab2d00a83b8717de90",
     "forge/image-api.mjs": "cc22843c9e82bb4fb3536e20f4e865d8d3445661f501c15d9103d919380ecf57",
-    "forge/index.html": "2955955298be8df4103b281439bf9e63ee5e849135518b5401c8dd1fb09236ee",
+    "forge/index.html": "72cec2224b6ace77ab3fd832ecf8b13ed1fbeb4f5d2f1137684d7d390c40ca74",
     "forge/infistar-audit.mjs": "145679bef9bf4251261e03a9eeb7868c1f83d3b5e57f2642c7767f12dee69f8d",
     "forge/pptx-template.json": "42a2c16730178c74755fddd1f2130ab04b939426df2be999c4762d43900f73bb",
-    "forge/reconstruction-core.mjs": "ce17e7385f122573dcc3e4165b87818a33d0f61016e9344b11951e6b68dc3bdf",
+    "forge/reconstruction-core.mjs": "bc1d7c4b2d6f1de03688b36b6eae9d02d5bc4d3ce3a81744b72095f2a67eadbe",
+    "forge/reconstruction-pipeline.mjs": "4003787adc1a67b0a350bb71419f2651e4eb1aaa24ecd2b47f61dd9d5dad50d5",
     "forge/reconstruction-retry.mjs": "88ced32e1b956e2624cd29674aa82fff64dadff6da9678fcee7607703022faaa",
     "forge/reconstruction-session.mjs": "28f3aabd17a611fec49be27bfea513c303768a0b2ed34d31dd6f327cba557117",
+    "forge/retrieval.mjs": "fed62f0dfc3abd06817bf986865a320dffe64ef9750097b8a1e12dd30b373ba1",
     "forge/source-fidelity.mjs": "58abadd0e0c2dc845419b7b211897728de99370e4a772132f6a743ab36896cb1",
     "forge/sw.js": "c1bc6e26ab6831d5aa59a47cad18e62b8f411f3d36ea57cb466813b3d4605667",
-    "forge/text-calibration.mjs": "512b87e55f2b96438009ccf22620d6a5898f679d7680e5299bd029dd9429c558",
-    "forge/retrieval.mjs": "fed62f0dfc3abd06817bf986865a320dffe64ef9750097b8a1e12dd30b373ba1"
+    "forge/text-calibration.mjs": "94ae769599820967cb7aafdfcd8a75639fa28c65ff32631ad52670ebd594e0bf"
   }
 }

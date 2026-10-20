@@ -187,7 +187,8 @@ assert.ok(region.x<=120&&region.x+region.w>=220,'repair crop must contain the en
 const repaired=replaceObjectRepairRegion(arcScene,region,{nodes:[
   {id:'new-arc',type:'path',d:'M 10 70 A 50 50 0 0 1 110 70',stroke:'#222',fill:'none'},
 ]},1);
-assert.deepEqual(repaired,arcScene,'unknown IDs cannot create or replace objects');
+assert.equal(repaired.nodes.length,3,'a crop can register a missing editable curve');
+assert.ok(repaired.nodes[2].id.startsWith('whole_added_'));
 const catalog=createWholeImageCatalog({canvas:{width:1200,height:500},nodes:[
   {id:'duplicate',type:'text',text:'Global label',x:510,y:100,w:170,h:24,fontSize:20},
   {id:'duplicate',type:'text',text:'Global label',x:512,y:100,w:170,h:24,fontSize:20},
@@ -208,14 +209,16 @@ assert.equal(imageCatalog.nodes[0].id,'photo');
 assert.equal(imageCatalog.nodes[0].href,undefined);
 assert.equal(imageCatalog.nodes[0].crop,undefined);
 assert.ok(imageSource.href,'prompt sanitization must not mutate the source image');
-local.nodes[0].text='Unauthorized transcription';
+local.nodes[0].text='Corrected transcription';
 local.nodes[1].y+=2;local.nodes[1].y2+=2;
 local.nodes.push({id:'invented',type:'text',text:'Global label',x:100,y:100,w:50,h:20,fontSize:20});
+local.nodes.push({type:'text',text:'Axis 10',x:600,y:260,w:100,h:30,fontSize:20});
 const patched=replaceObjectRepairRegion(catalog,area,local,2);
-assert.equal(patched.nodes.length,3);
-assert.equal(patched.nodes[0].text,'Global label');
+assert.equal(patched.nodes.length,4,'a crop restores a missed editable label while suppressing duplicate text');
+assert.equal(patched.nodes[0].text,'Corrected transcription');
 assert.equal(patched.nodes[2].y,151);
 assert.equal(patched.nodes[2].strokeWidth,2);
+assert.equal(patched.nodes[3].text,'Axis 10');
 assert.deepEqual(replaceObjectRepairRegion(patched,area,local,2),patched,'repeat crop is idempotent');
 assert.equal(objectRepairCatalog(catalog,{x:550,y:50,w:100,h:200},2).nodes.length,0,'partial cross-boundary objects are context only');
 local.nodes[0].fontSize=100;
@@ -269,8 +272,8 @@ const crossLocal=objectRepairCatalog(crossRegion,crossJob.region,1,true);
 crossLocal.nodes=crossLocal.nodes.filter(node=>crossJob.ids.includes(node.id));
 assert.equal(crossLocal.nodes.length,1);
 crossLocal.nodes[0].y+=2;crossLocal.nodes[0].y2+=2;
-crossLocal.nodes.push({id:'invented-crossing',type:'line',x:0,y:0,x2:100,y2:100});
+crossLocal.nodes.push({id:'invented-crossing',type:'line',x:-20,y:-20,x2:100,y2:100});
 const crossPatched=replaceObjectRepairRegion(crossRegion,crossJob.region,crossLocal,1,true);
 assert.equal(crossPatched.nodes.length,crossRegion.nodes.length,
-  'a regional repair never changes the global object count');
+  'a regional repair rejects objects crossing its boundary');
 assert.equal(crossPatched.nodes[0].y,252);
