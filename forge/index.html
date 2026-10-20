@@ -658,10 +658,10 @@
 </div>
 
 <script src="./i18n.js"></script>
-<script src="./i18n_forge.js?v=20261018-editable-demo"></script>
+<script src="./i18n_forge.js?v=20261020-image-recovery"></script>
 <script type="module">
 import * as T from './vendor/transformers.min.js';
-import {usesInfistarGemini, geminiImageRequest, geminiImageResult} from './image-api.mjs?v=20261016';
+import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261020-edits';
 import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=text-lines-20261017';
 import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=baseline-09a60b5-text-v2-20261017';
 import {registerMissingObjects, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, tileDetailCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion, planReconstructionTiles, subdivideReconstructionTile} from './reconstruction-core.mjs?v=global-ids-20261018';
@@ -2209,6 +2209,7 @@ function friendlyHttp(status, txt){
       return tt('err.notenabled',{t:txt.slice(0,160)})+apiContext();
     return tt('err.404')+apiContext();
   }
+  if(imageFailureKind(status,txt)==='upstream') return tt('img.upstream',{t:txt.slice(0,500)})+apiContext();
   if(status===429) return tt('err.429')+apiContext();
   if($('#provider').value==='infistar' && status===422)
     return tt('err.infistar422',{t:body||txt.slice(0,200)})+apiContext();
@@ -2231,9 +2232,7 @@ function postJSON(base, path, body, key, extraHeaders, timeoutMs=900000){
     body:JSON.stringify(body)},timeoutMs);
 }
 function fetchWithTimeout(url, options={}, timeoutMs=900000){
-  const ac=new AbortController();
-  const to=setTimeout(()=>ac.abort(new DOMException('timeout','TimeoutError')),timeoutMs);
-  return fetch(url,{...options,signal:ac.signal}).finally(()=>clearTimeout(to));
+  return fetchBufferedWithTimeout(url,options,timeoutMs);
 }
 function safeExportError(err){
   let message=String(err&&err.message||err||'Unknown error');
@@ -5841,22 +5840,21 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   if(nativeGemini){
     const request=geminiImageRequest(base,model,imgPrompt,body.image||[],dimensions);
     base=request.base; endpoint=request.endpoint; body=request.body;
+  }else{
+    const request=compatibleImageRequest(body);
+    endpoint=request.endpoint;body=request.body;
   }
   let r;
-  try{ r = await postJSON(base,endpoint,body,key,undefined,1200000); }
-  catch(e){
-    if(e.name==='TimeoutError') throw new Error(tt('img.timeout'));
-    const diag=await diagnoseConnection(base,key,model,'image');
-    throw new Error(diag || tt('svg.blocked'));
+  try{
+    r=await requestImageWithRecovery({url:base+endpoint,body,key,
+      usedReferences:usedRefs,allowReferenceFallback:false,
+      onRecovery:kind=>{ $('#genBtn').textContent=tt('img.recovery.'+kind); }});
+  }catch(e){
+    if(e.name==='TimeoutError') throw new Error(tt('img.timeout')+apiContext());
+    throw new Error(tt('img.connection')+apiContext());
   }
-  let txt = await r.text();
-  /* A normal generation request can retry without references when a provider
-     rejects image input. The prompt still carries the shared visual grammar,
-     so this retry remains a fresh multi-reference composition. */
-  if(!r.ok && usedRefs && !nativeGemini){
-    delete body.image; usedRefs=false;
-    try{ r = await postJSON(base,endpoint,body,key,undefined,1200000); txt=await r.text(); }catch(e){}
-  }
+  usedRefs=r.usedReferences;
+  const txt=r.text;
   if(!r.ok){
     if(r.status===404){
       // A hosted model manifest is only a suggestion: each user's provider
@@ -5884,7 +5882,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   $('#out').style.display='block';
   $('#out').innerHTML = `<img data-step3-output="true" src="${esc(imgSrc)}" alt="draft">
     <div class="dl"><button type="button" class="btn-primary" id="dlImg">${tt('img.download')}</button>
-    <span class="hint">${usedRefs?tt('img.hintRef',{n:useIds.length}):tt('img.hint')} · ${ratio} · ${actualWidth}×${actualHeight}px</span></div>`;
+    <span class="hint">${r.referenceFallback?tt('img.referenceFallback'):usedRefs?tt('img.hintRef',{n:useIds.length}):tt('img.hint')} · ${ratio} · ${actualWidth}×${actualHeight}px</span></div>`;
   // Bind the bitmap download as soon as Step 3 has its verified image. Step 4
   // can take minutes and must never gate or replace this button.
   $('#dlImg').onclick = async ()=>{

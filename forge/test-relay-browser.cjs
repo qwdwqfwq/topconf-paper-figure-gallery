@@ -21,7 +21,7 @@ const server = http.createServer((req,res)=>{
       const html=data.toString('utf8').replace(/\r\n/g,'\n')
         .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
         .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});",
-          "window.__testGenImage=genOaiImage; runReconstruction=async()=>false; MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});");
+          "window.__testGenImage=genOaiImage; window.__testGenImageRefs=async(...args)=>{const saved=refDataURIs;refDataURIs=async()=>Array(10).fill('data:image/png;base64,AA==');try{return await genOaiImage(...args);}finally{refDataURIs=saved;}}; runReconstruction=async()=>false; MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});");
       data=Buffer.from(html);
     }
     res.writeHead(200,{'Content-Type':mime[path.extname(filename)]||'application/octet-stream'});
@@ -114,6 +114,43 @@ const server = http.createServer((req,res)=>{
     assert.equal(await page.locator('#dlImg').isEnabled(),true);
     assert.equal(await page.locator('#out img').getAttribute('src'),'data:image/png;base64,'+widePixel);
     await page.unroute('https://infistar.cc/v1/images/generations');
+    // Exercise recovery through the real Step 3 UI, including output disclosure.
+    const upstreamError={error:{message:'context canceled',code:'read_response_body_failed'}};
+    for(const scenario of ['success','reference','upstream','latest-error','unauthorized']){
+      const attempts=[];
+      await page.route('https://infistar.cc/v1/images/edits',async route=>{
+        const req=route.request();
+        const form=await new Response(req.postDataBuffer(),{headers:{'Content-Type':req.headers()['content-type']}}).formData();
+        assert.equal(form.getAll('image[]').length,10);
+        assert.equal(form.get('image[]').type,'image/png');
+        assert.equal(form.get('image[]').size,1);
+        attempts.push({image:true,size:form.get('size'),prompt:form.get('prompt')});
+        if(scenario==='unauthorized') return route.fulfill({status:401,json:{error:{message:'bad key'}}});
+        if(scenario==='reference') return route.fulfill({status:422,json:{error:{message:'现在没有线路支持这次要求的生成方式（用参考图生成）'}}});
+        if(scenario!=='success' && attempts.length===1) return route.fulfill({status:500,json:upstreamError});
+        if(scenario==='latest-error') return route.fulfill({status:422,json:{error:{message:'FINAL_REQUEST_ID: text route unavailable'}}});
+        return route.fulfill({json:{data:[{b64_json:widePixel}]}});
+      });
+      const error=await page.evaluate(async()=>{
+        try{await window.__testGenImageRefs('https://infistar.cc/v1','gpt-image-2.5-sunburst','test-key','Draw a research diagram','infistar',['test-ref'],'layout description');return '';}
+        catch(e){return e.message;}
+      });
+      assert.equal(attempts.length,['upstream','latest-error'].includes(scenario)?2:1,scenario);
+      assert.ok(attempts[0].image);
+      if(attempts[1]){
+        assert.equal(Boolean(attempts[1].image),true);
+        assert.equal(attempts[1].size,attempts[0].size);
+        assert.equal(attempts[1].prompt,attempts[0].prompt);
+      }
+      if(scenario==='latest-error')assert.match(error,/FINAL_REQUEST_ID/);
+      else if(scenario==='unauthorized'||scenario==='reference')assert.ok(error);
+      else{
+        assert.equal(error,'');assert.equal(await page.locator('#dlImg').isEnabled(),true);
+        assert.match(await page.locator('#out .hint').innerText(),/多图参考输入/);
+      }
+      await page.unroute('https://infistar.cc/v1/images/edits');
+    }
+    console.log('PASS Step 3 multipart edits with 10 references, bounded recovery without dropping references, final errors and auth failures');
     if(process.env.INFISTAR_IMAGE_TEST_KEY){
       await page.evaluate(async key=>window.__testGenImage('https://infistar.cc/v1','gemini-3.1-flash-image',key,'Draw two boxes labelled Input and Output, connected by an arrow.','infistar',[],''),process.env.INFISTAR_IMAGE_TEST_KEY);
       const result=await page.locator('#out img').evaluate(async img=>{await img.decode();return {width:img.naturalWidth,height:img.naturalHeight,srcLength:img.src.length}});
@@ -134,6 +171,7 @@ const server = http.createServer((req,res)=>{
       assert.match(result.reply,/FORGE_OK/);
       console.log('LIVE browser CORS, model discovery and chat passed:',JSON.stringify(result));
     }
+    fs.mkdirSync(path.join(root,'work'),{recursive:true});
     await page.screenshot({path:path.join(root,'work/provider-ui-desktop.png'),fullPage:true});
     assert.deepEqual(errors,[]);
     console.log('PASS provider cleanup, saved-provider migration, control styling, mobile layout, credential isolation, model filtering and Gemini image generation');
