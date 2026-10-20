@@ -21,7 +21,7 @@ const server = http.createServer((req,res)=>{
       const html=data.toString('utf8').replace(/\r\n/g,'\n')
         .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
         .replace('window.__ffReconstruct = () => runReconstruction();',
-          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestMaterialize = materializeEditableScene; window.__ffTestCalibrate = calibrateEditableText; window.__ffTestGenerateBitmap = genOaiImage; window.__ffTestZip = zipStore; window.__ffTestRequestScene = requestEditableScene; window.__ffTestParseSvg = parseSvgScene; window.__ffTestParseBitmap = parseBitmapSvgScene; window.__ffTestDrawio = sceneToDrawio; window.__ffTestVsdx = sceneToVsdxFiles; window.__ffTestPptx = buildNativePptx; window.__ffTestSvgString = sceneToSvgString;')
+          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestModel = editableReconstructionModel; window.__ffTestPopulateDirect = async()=>{mode="image";passMode="direct";syncPassUI();await populateModels();}; window.__ffTestMaterialize = materializeEditableScene; window.__ffTestCalibrate = calibrateEditableText; window.__ffTestGenerateBitmap = genOaiImage; window.__ffTestZip = zipStore; window.__ffTestRequestScene = requestEditableScene; window.__ffTestParseSvg = parseSvgScene; window.__ffTestParseBitmap = parseBitmapSvgScene; window.__ffTestDrawio = sceneToDrawio; window.__ffTestVsdx = sceneToVsdxFiles; window.__ffTestPptx = buildNativePptx; window.__ffTestSvgString = sceneToSvgString;')
         .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});",
           "MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});");
       data=Buffer.from(html);
@@ -43,6 +43,51 @@ const server = http.createServer((req,res)=>{
     await page.goto(`http://127.0.0.1:${server.address().port}/forge/`,{waitUntil:'domcontentloaded'});
     assert.equal(await page.evaluate(()=>typeof window.__ffReconstruct),'function',JSON.stringify(errors));
 
+
+    const compatibility=await page.evaluate(async()=>{
+      document.querySelector('#provider').value='infistar';
+      document.querySelector('#key').value='test-key';
+      const originalFetch=window.fetch;
+      const models=['gpt-image-2','gemini-3-pro-image','qwen3-32b','qwen3-vl-plus','gpt-4o','gemini-2.5-pro','gpt-6.1-sol'];
+      window.fetch=async()=>new Response(JSON.stringify({data:models.map(id=>({id}))}));
+      try{
+        await window.__ffTestPopulateDirect();
+        const visual=document.querySelector('#analyzeModel');
+        const available=[...visual.options].map(o=>o.value);
+        visual.value='gemini-2.5-pro';
+        const gemini=window.__ffTestModel();
+        visual.value='gpt-4o';
+        const gpt4=window.__ffTestModel();
+        visual.value='gpt-6.1-sol';
+        const gpt6=window.__ffTestModel();
+        let sent;
+        window.fetch=async(url,init)=>{
+          sent={url,body:JSON.parse(init.body),auth:init.headers.Authorization};
+          return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes:[{type:'rect',x:0,y:0,w:5,h:5,fill:'#fff'}]})}}]}));
+        };
+        const probe=document.createElement('canvas');probe.width=10;probe.height=10;
+        await window.__ffTestRequestScene(probe.toDataURL(),10,10,{maxAttempts:1});
+        visual.innerHTML='';
+        document.querySelector('#model').value='gpt-image-2';
+        let calls=0;window.fetch=async()=>{calls++;throw new Error('Should not send an image model to chat');};
+        const canvas=document.createElement('canvas');canvas.width=10;canvas.height=10;
+        let blocked=false;
+        try{await window.__ffTestRequestScene(canvas.toDataURL(),10,10,{});}catch(e){blocked=true;}
+        return {available,gemini,gpt4,gpt6,sent,blocked,calls,visible:!document.querySelector('#analyzeModelRow').hidden};
+      }finally{window.fetch=originalFetch;}
+    });
+    assert.deepEqual(compatibility.available,['qwen3-vl-plus','gpt-4o','gemini-2.5-pro','gpt-6.1-sol']);
+    assert.equal(compatibility.gemini,'gemini-2.5-pro');
+    assert.equal(compatibility.gpt4,'gpt-4o');
+    assert.equal(compatibility.sent.url,'https://infistar.cc/v1/chat/completions');
+    assert.equal(compatibility.sent.auth,'Bearer test-key');
+    assert.equal(compatibility.gpt6,'gpt-6.1-sol');
+    assert.equal(compatibility.sent.body.model,'gpt-6.1-sol');
+    assert.ok(compatibility.sent.body.messages[1].content.some(part=>part.type==='image_url' && part.image_url.url.startsWith('data:image/')));
+    assert.equal(compatibility.visible,true);
+    assert.equal(compatibility.blocked,true);
+    assert.equal(compatibility.calls,0);
+    console.log('PASS Infistar direct-mode model selection and invalid-model preflight');
 
     for(const scenario of ['recover','persistent','unauthorized','format','budget']){
       const result=await page.evaluate(async(scenario)=>{

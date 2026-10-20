@@ -719,6 +719,12 @@ function syncBaseHint(){
 const SKIP = /(embed|rerank|tts|speech|asx|transcri|whisper|ocr|audio|video|seedance|kling|wan.*(?:t2v|i2v))/i;
 const IMGRE = /(image|seedream|flux|kolors|dall-e|gpt-image|cogview|sd-|stable-diffusion|imagen|hy-image|wanx|qwen-image)/i;
 const kindOf = id => SKIP.test(id) ? 'skip' : IMGRE.test(id) ? 'image' : 'chat';
+// A model listed by /models is not necessarily able to understand images.
+// Never route image generators or ordinary text-only Qwen models to reconstruction.
+function isVisualChatModel(model, knownVision=[]){
+  return !!model && kindOf(model)==='chat' && (knownVision.includes(model) ||
+    /vision|(?:^|[-_/])vl(?:[-_/]|$)|visual|multimodal|seed[-_ ]?[12]|gpt[-_ ]?[456]|gemini|kimi[-_ ]?k|sonnet|opus/i.test(model));
+}
 
 const TARGETS = {
  overview:{label:tt('tg.overview'), img:'Design a publication-quality Figure 1 teaser/overview figure that follows the supplied reference composition',
@@ -1581,7 +1587,7 @@ async function populateModels(){
   liveModels.model = res.ok ? online : null;
   checkModelEnabled('#model','#modelWarn',liveModels.model);
   syncImageRatioSupport();
-  if(mode==='image' && passMode==='two') populateAnalyzeModels();
+  if(mode==='image') await populateAnalyzeModels();
 }
 async function populateParserModels(){
   const p=$('#provider').value, c=cfg(), s=$('#parseModel'); s.innerHTML='';
@@ -1609,7 +1615,7 @@ async function populateAnalyzeModels(){
   const requestBase=baseURL(), requestKey=cleanKey($('#key').value), requestProvider=$('#provider').value;
   const res = await fetchOnlineModels();
   if(requestProvider!==$('#provider').value || requestBase!==baseURL() || requestKey!==cleanKey($('#key').value)) return;
-  const vis = res.list.filter(m=>kindOf(m)==='chat' && /(vision|vl|visual|multimodal|seed-1-6|seed-2|gpt-[456]|gemini|qwen3|kimi-k|sonnet|opus)/i.test(m));
+  const vis = res.list.filter(m=>isVisualChatModel(m,c.vision));
   if(vis.length){ const g=optgroup(tt('og.live')); [...new Set(vis)].forEach(m=>g.appendChild(option(m))); s.appendChild(g); }
   else if(key_present() && !res.ok && !c.vision.length){
     const g=optgroup(tt('og.nolive'));
@@ -1708,7 +1714,7 @@ document.querySelectorAll('#modeTabs button').forEach(b=>b.onclick=async ()=>{
   syncPassUI();
 });
 function syncPassUI(){
-  $('#analyzeModelRow').hidden = !(mode==='image' && passMode==='two');
+  $('#analyzeModelRow').hidden = mode!=='image';
 }
 document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
   $('#genErr').hidden=true;
@@ -4519,11 +4525,10 @@ function editableReconstructionModel(){
   const vision=Array.isArray(cfgv.vision) ? cfgv.vision : [];
   const selectedAnalyze=$('#analyzeModel') && $('#analyzeModel').value;
   const selectedMain=$('#model') && $('#model').value;
-  const isVision=function(m){ return !!m && (/vision|vl|visual|multimodal|seed[-_ ]?[12]|gpt[-_ ]?5|kimi[-_ ]?k|sonnet|opus/i.test(String(m)) || vision.indexOf(m)>=0); };
+  const isVision=m=>isVisualChatModel(m,vision);
   if(isVision(selectedAnalyze)) return selectedAnalyze;
   if(isVision(selectedMain)) return selectedMain;
-  if(vision.length) return vision[0];
-  return selectedAnalyze || selectedMain || '';
+  return vision.find(isVision) || '';
 }
 
 function editableResponseText(d){
