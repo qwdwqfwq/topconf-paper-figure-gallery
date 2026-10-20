@@ -43,8 +43,8 @@ export function calibrateEditableText(scene, sourceCanvas, options={}){
     }
     if(sourceCount<12||sourceCount>rw*rh*.7) continue;
     const preferredFont=String(node.fontFamily||'Arial').split(',')[0].trim();
-    const fonts=[preferredFont,'Arial','Times New Roman','Georgia','Calibri'];
-    const uniqueFonts=[...new Set(fonts)];
+    const fonts=[preferredFont,'Arial','Arial Narrow','Calibri','Roboto Condensed'];
+    const uniqueFonts=[...new Set(fonts)].filter(font=>font===preferredFont||document.fonts.check(`16px "${font}"`));
     const candidate=document.createElement('canvas');candidate.width=rw;candidate.height=rh;
     const ctx=candidate.getContext('2d',{willReadFrequently:true});
     const initialX=x-left,initialY=y-top;
@@ -56,6 +56,7 @@ export function calibrateEditableText(scene, sourceCanvas, options={}){
       ctx.font=`${node.bold?'bold ':''}${node.italic?'italic ':''}${fontSize}px "${font.replace(/"/g,'')}"`;
       ctx.textBaseline='alphabetic';ctx.fillStyle='#000000';
       const measured=ctx.measureText(text).width;
+      if(node.cellBounds&&measured>node.cellBounds.w-4)continue;
       const maskCanvas=document.createElement('canvas');
       maskCanvas.width=Math.max(1,Math.min(rw,Math.ceil(measured)+4));
       maskCanvas.height=Math.max(1,Math.ceil(fontSize*1.4)+4);
@@ -68,6 +69,10 @@ export function calibrateEditableText(scene, sourceCanvas, options={}){
         if(pixels[(py*maskCanvas.width+px)*4+3]>110) points.push([px-2,py-2]);
       if(points.length<8) continue;
       for(const dy of shifts) for(const dx of shifts){
+        const region=options.region||(options.regions||[]).find(r=>r.id===node.owner);
+        if(region&&(x+dx<region.x||y+dy<region.y||x+dx+Number(node.w)>region.x+region.w||y+dy+Math.max(Number(node.h)||0,fontSize)>region.y+region.h))continue;
+        if(region&&(x+dx+Number(node.w)/2<region.coreX||y+dy+Number(node.h)/2<region.coreY||x+dx+Number(node.w)/2>=region.coreRight||y+dy+Number(node.h)/2>=region.coreBottom))continue;
+        if(node.cellBounds&&(x+dx<node.cellBounds.x+1||y+dy<node.cellBounds.y+1||x+dx+measured>node.cellBounds.x+node.cellBounds.w-1||y+dy+fontSize>node.cellBounds.y+node.cellBounds.h-1))continue;
         const tx=Math.round(initialX+dx),ty=Math.round(initialY+dy),
           anchor=node.anchor==='middle'?(Number(node.w)||0)/2-measured/2:
             node.anchor==='end'?(Number(node.w)||0)-measured:0;
@@ -77,7 +82,7 @@ export function calibrateEditableText(scene, sourceCanvas, options={}){
           if(xx>=0&&xx<rw&&yy>=0&&yy<rh&&sourceMask[yy*rw+xx]) hit++;
         }
         const precision=hit/points.length;
-        const score=precision-.004*(Math.abs(dx)+Math.abs(dy))-
+        const score=2*hit/(points.length+sourceCount)-.004*(Math.abs(dx)+Math.abs(dy))-
           (font===preferredFont?0:.015)-Math.abs(fontSize-size)/size*.03;
         if(font===preferredFont&&fontSize===Math.round(size)&&dx===0&&dy===0)
           original={score,precision};

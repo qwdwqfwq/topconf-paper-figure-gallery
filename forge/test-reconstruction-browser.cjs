@@ -21,7 +21,7 @@ const server = http.createServer((req,res)=>{
       const html=data.toString('utf8').replace(/\r\n/g,'\n')
         .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
         .replace('window.__ffReconstruct = () => runReconstruction();',
-          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestMaterialize = materializeEditableScene; window.__ffTestCalibrate = calibrateEditableText; window.__ffTestGenerateBitmap = genOaiImage; window.__ffTestZip = zipStore; window.__ffTestRequestScene = requestEditableScene; window.__ffTestParseSvg = parseSvgScene; window.__ffTestParseBitmap = parseBitmapSvgScene; window.__ffTestDrawio = sceneToDrawio; window.__ffTestVsdx = sceneToVsdxFiles; window.__ffTestPptx = buildNativePptx; window.__ffTestSvgString = sceneToSvgString;')
+          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestLongLines = filterUnsupportedLongLines; window.__ffTestMaterialize = materializeEditableScene; window.__ffTestCalibrate = calibrateEditableText; window.__ffTestGenerateBitmap = genOaiImage; window.__ffTestZip = zipStore; window.__ffTestRequestScene = requestEditableScene; window.__ffTestParseSvg = parseSvgScene; window.__ffTestParseBitmap = parseBitmapSvgScene; window.__ffTestDrawio = sceneToDrawio; window.__ffTestVsdx = sceneToVsdxFiles; window.__ffTestPptx = buildNativePptx; window.__ffTestSvgString = sceneToSvgString;')
         .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});",
           "MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});");
       data=Buffer.from(html);
@@ -42,6 +42,77 @@ const server = http.createServer((req,res)=>{
     page.on('requestfailed',r=>errors.push(`Request failed ${r.url()}: ${r.failure()?.errorText}`));
     await page.goto(`http://127.0.0.1:${server.address().port}/forge/`,{waitUntil:'domcontentloaded'});
     assert.equal(await page.evaluate(()=>typeof window.__ffReconstruct),'function',JSON.stringify(errors));
+    const colors=await page.evaluate(()=>{
+      const node={type:'rect',x:10,y:10,w:80,h:40};
+      const scene=window.__ffTestMaterialize({nodes:[{...node,fill:{color:'#abcdef'}},{...node,fill:{type:'linear',angle:90,stops:[{offset:0,color:'#abcdee'},{offset:1,color:'#fedcba'}]}}]},100,100);
+      let rejected=false;try{window.__ffTestMaterialize({nodes:[{...node,fill:'#[object Object]'}]},100,100);}catch{rejected=true;}
+      return {fills:scene.nodes.map(n=>n.fill),gradient:scene.nodes[1].gradient,rejected};
+    });
+    assert.deepEqual(colors.fills,['#abcdef','#abcdee']);
+    assert.equal(colors.gradient.stops.length,2,'gradient objects survive materialization');
+    assert.equal(colors.rejected,true,'invalid colors cannot silently export as black');
+    const lineEvidence=await page.evaluate(()=>{
+      const canvas=document.createElement('canvas');canvas.width=500;canvas.height=300;
+      const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,500,300);
+      ctx.strokeStyle='#111';ctx.lineWidth=3;ctx.beginPath();ctx.moveTo(20,80);ctx.lineTo(460,80);ctx.stroke();
+      const base={nodes:[]};
+      const candidate={nodes:[
+        {id:'real',type:'line',x:20,y:80,x2:460,y2:80},
+        {id:'invented',type:'line',x:20,y:190,x2:460,y2:190}
+      ]};
+      return window.__ffTestLongLines(canvas,base,candidate).nodes.map(n=>n.id);
+    });
+    assert.deepEqual(lineEvidence,['real'],'long lines require source-pixel support');
+    const containers=await page.evaluate(async()=>{
+      const {repairContainerGeometry}=await import('./container-geometry.mjs');
+      const {readNativePptxScene}=await import('./editable-native.mjs');
+      const canvas=document.createElement('canvas');canvas.width=500;canvas.height=400;
+      const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,500,400);
+      ctx.strokeStyle='#111111';ctx.lineWidth=2;
+      ctx.beginPath();ctx.roundRect(20,20,400,350,12);ctx.stroke();
+      const scene={canvas:{width:500,height:400},nodes:[
+        {id:'panel',type:'rect',x:20,y:20,w:400,h:350,radius:60,stroke:'#111111',strokeWidth:2,fill:'#ffffff'},
+        {id:'header',type:'rect',x:20,y:20,w:400,h:40,radius:20,fill:'#506472',stroke:'none',strokeWidth:0}
+      ]};
+      const fixed=repairContainerGeometry(scene,canvas),again=repairContainerGeometry(fixed,canvas);
+      const blob=await window.__ffTestPptx(fixed,window.__ffTestZip);
+      const roundtrip=await readNativePptxScene(blob,500,400);
+      const visioPage=window.__ffTestVsdx(fixed,'Arial').find(f=>f.name==='visio/pages/page1.xml');
+      const visioXml=typeof visioPage.data==='string'?visioPage.data:new TextDecoder().decode(visioPage.data);
+      return {fixed,again,roundtrip,visioXml,drawio:window.__ffTestDrawio(fixed)};
+    });
+    assert.ok(Math.abs(containers.fixed.nodes[0].radius-12)<=2,'radius measured from source rather than panel height');
+    assert.equal(containers.fixed.nodes[1].type,'path','header follows shared rounded container boundary');
+    assert.equal(containers.fixed.nodes[1].x,21,'fill stays inside the stroke');
+    assert.deepEqual(containers.again,containers.fixed,'container geometry repair is idempotent');
+    assert.ok(Math.abs(containers.roundtrip.nodes[0].radius-containers.fixed.nodes[0].radius)<.01,'PPTX radius survives native export/readback');
+    assert.ok(!/<Cell N="Rounding" V="(?!0")/.test(containers.visioXml),'Visio does not round explicit rounded geometry a second time');
+
+    const drawioCorners=await page.evaluate((containerXml)=>{
+      const sizes=[{w:400,h:350,radius:1},{w:800,h:40,radius:0.375},
+        {w:40,h:800,radius:12},{w:80,h:40,radius:100},{w:80,h:40,radius:0}];
+      const xml=window.__ffTestDrawio({canvas:{width:1000,height:1000},nodes:sizes.map(n=>({
+        type:'rect',x:20.25,y:20.5,fill:'#ffffff',stroke:'#111111',strokeWidth:1,...n}))});
+      const parse=xml=>new DOMParser().parseFromString(xml,'application/xml');
+      const cells=[...parse(xml).querySelectorAll('mxCell[vertex]')];
+      const radii=cells.map(cell=>{
+        const style=Object.fromEntries(cell.getAttribute('style').split(';').filter(Boolean).map(s=>s.split('=')));
+        const g=cell.querySelector('mxGeometry');
+        // Rendering contract from mxRectangleShape.paintBackground (absolute arc size).
+        return {absolute:style.absoluteArcSize,rounded:style.rounded,
+          radius:style.rounded==='1'?Math.min(+g.getAttribute('width')/2,+g.getAttribute('height')/2,+style.arcSize/2):0,
+          x:+g.getAttribute('x'),y:+g.getAttribute('y')};
+      });
+      const repaired=[...parse(containerXml).querySelectorAll('mxCell[vertex]')];
+      return {radii,headerStyle:repaired[1].getAttribute('style'),
+        headerX:+repaired[1].querySelector('mxGeometry').getAttribute('x')};
+    },containers.drawio);
+    assert.deepEqual(drawioCorners.radii.map(n=>n.radius),[1,.375,12,20,0],
+      'draw.io preserves small, fractional and tall-panel radii, clamping only to shape bounds');
+    assert.ok(drawioCorners.radii.slice(0,4).every(n=>n.absolute==='1'));
+    assert.ok(drawioCorners.radii.every(n=>n.x===20.25&&n.y===20.5),'fractional border insets survive export');
+    assert.match(drawioCorners.headerStyle,/shape=stencil\(/,'repaired header keeps its explicit outline');
+    assert.equal(drawioCorners.headerX,21,'draw.io header remains inside outer stroke');
 
     const svgCheck=await page.evaluate(async()=>{
       const svg='<svg xmlns="http://www.w3.org/2000/svg" width="500" height="300" viewBox="0 0 500 300"><style>.label{font:25px Arial;fill:#123456}.wire{fill:none;stroke:#345678;stroke-width:2;stroke-dasharray:5 3;marker-end:url(#tip)}</style><defs><marker id="tip" markerWidth="5" markerHeight="5" refX="5" refY="2"><path d="M0 0 L5 2 L0 4"/></marker></defs><rect x="0" y="0" width="500" height="300" fill="#FFFFFF"/><g transform="translate(20 10)"><text class="label" x="220" y="70" text-anchor="middle">FEATURE EXTRACTION</text><path class="wire" d="M 10 120 L 180 120"/><path class="wire" d="M 190 120 L 190 190"/><polygon points="220,110 260,110 240,145" fill="#abcdef"/><path d="M 270 120 C 300 80 340 170 370 120" fill="none" stroke="#345678"/></g></svg>';
@@ -85,8 +156,15 @@ const server = http.createServer((req,res)=>{
     assert.match(svgCheck.pptxXml,/<a:prstDash val="dash"\/>/,'PPTX retains dashed line');
     assert.match(svgCheck.pptxXml,/<a:tailEnd type="triangle"\/>/,'PPTX retains arrow');
     assert.match(svgCheck.pptxXml,/cubicBezTo/,'PPTX retains cubic path');
-    assert.match(svgCheck.roundtrip,/marker-end="url\(#ff-arrow\)"/,'SVG roundtrip retains arrow');
+    assert.match(svgCheck.roundtrip,/marker-end="url\(#arrow\d+\)"/,'SVG roundtrip retains arrow');
     assert.match(svgCheck.roundtrip,/stroke-dasharray=/,'SVG roundtrip retains dash');
+    const multilinePptx=await page.evaluate(async()=>{
+      const scene={canvas:{width:500,height:300},nodes:[{id:'table',type:'text',x:25,y:40,w:200,h:90,fontSize:16,text:'First row\nSecond row\nThird row',fill:'#000000'}]};
+      const blob=await window.__ffTestPptx(scene,window.__ffTestZip);
+      return new TextDecoder().decode(await blob.arrayBuffer());
+    });
+    assert.ok(multilinePptx.includes(`<a:off x="${Math.round(25*pptxUnit)}" y="${Math.round(40*pptxUnit)}"/>`),'multiline PPTX label starts at the top of its bounds');
+    assert.ok(multilinePptx.includes(`cy="${Math.round(90*pptxUnit)}"`),'multiline PPTX label keeps enough height for its rows');
     if(process.env.SVG_ONLY==='1'){
       console.log('SVG editable browser regression: OK');
       return;
@@ -162,59 +240,49 @@ const server = http.createServer((req,res)=>{
     await page.reload({waitUntil:'domcontentloaded'});
 
     const result=await page.evaluate(async()=>{
-      document.querySelector('#provider').value='ark';
-      document.querySelector('#key').value='browser-test-key';
-      const select=document.querySelector('#analyzeModel');
-      select.add(new Option('doubao-vision-test','doubao-vision-test'));select.value='doubao-vision-test';
-      let calls=0,repairs=0,active=0,peak=0;
-      const timer=window.setTimeout.bind(window);
-      let configuredTimeout=0;
-      window.setTimeout=(fn,ms,...args)=>{if(ms>=180000&&!configuredTimeout)configuredTimeout=ms;return timer(fn,ms>=180000?80:ms,...args);};
+      document.querySelector('#provider').value='ark';document.querySelector('#key').value='test';
+      const select=document.querySelector('#analyzeModel');select.add(new Option('test','gpt-6.1-sol'));select.value='gpt-6.1-sol';
+      let calls=0,active=0,peak=0;
       const original=window.fetch;
       window.fetch=async(url,options)=>{
         if(!String(url).endsWith('/chat/completions'))return original(url,options);
-        calls++;
-        if(calls===1)return new Response(JSON.stringify({choices:[{message:{content:'{"description":"no nodes"}'}}]}),{status:200});
-        const prompt=JSON.parse(options.body).messages[1].content[0].text;
-        let nodes;
-        if(prompt.includes('Catalog in crop coordinates: ')){
-          repairs++;active++;peak=Math.max(peak,active);
-          await new Promise(resolve=>timer(resolve,20));active--;
-          const catalog=JSON.parse(prompt.split('Catalog in crop coordinates: ')[1]);
-          nodes=[...catalog.nodes.map(n=>({...n,...(n.type==='text'?{text:'INJECTED'}:{})})),
-            {id:'unknown',type:'text',text:'EXTRA',x:50,y:50,w:80,h:20,fontSize:16},
-            {type:'text',text:'MISSING ID',x:50,y:70,w:80,h:20,fontSize:16}];
-        }else{
-          if(!prompt.includes('WHOLE IMAGE')&&!prompt.includes('previous answer could not be used'))throw Error('Whole-image catalog required');
-          nodes=[{type:'rect',x:450,y:50,w:300,h:180,fill:'#abcdef'},
-            {type:'text',x:510,y:100,w:170,h:24,fontSize:20,text:'Global label'},
-            {type:'text',x:512,y:100,w:170,h:24,fontSize:20,text:'Global label'},
-            {type:'line',x:480,y:150,x2:800,y2:150,stroke:'#111111',strokeWidth:2}];
-        }
-        return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes})}}]}),{status:200});
+        const body=JSON.parse(options.body);if(body.model!=='gpt-6.1-sol')throw Error('Wrong selected vision model: '+body.model);
+        const prompt=body.messages[1].content[0].text;calls++;
+        let output;
+        if(prompt.includes('Return STRICT JSON {"operations"')){
+          if(body.messages[1].content.filter(c=>c.type==='image_url').length!==4)throw Error('Detail reconstruction requires crop, context, render and full source');
+          active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,20));active--;
+          const ownership=JSON.parse(prompt.split(' Ownership: ')[1].split(' Context origin: ')[0]);
+          output={operations:[{op:'add',node:{type:'rect',x:ownership.x+30,y:30,w:20,h:20,fill:'#123456',stroke:'none'}}],uncertainties:[]};
+        }else output={regions:[0,1,2].map(i=>({id:'r'+i,x:i*100,y:0,w:100,h:100})),nodes:[{id:'panel',type:'rect',x:0,y:0,w:300,h:100,fill:'#ffffff',stroke:'none'}]};
+        return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(output)}}]}));
       };
-      const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=500;
-      const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,1200,500);
-      ctx.fillStyle='#abcdef';ctx.fillRect(450,50,300,180);ctx.fillStyle='black';ctx.font='20px Arial';ctx.fillText('Global label',510,120);
-      ctx.fillRect(480,150,320,2);ctx.fillRect(560,180,60,15);
-      window.__ffLastGeneratedImage=canvas.toDataURL('image/png');
-      localStorage.setItem('test-bitmap',window.__ffLastGeneratedImage);
-      const ok=await window.__ffReconstruct();
-      return {ok,calls,repairs,peak,configuredTimeout,audit:window.__ffApiAudit.reconstruction,scene:window.__ffExportState.scene};
+      const canvas=document.createElement('canvas');canvas.width=300;canvas.height=100;const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,300,100);
+      ctx.fillStyle='#123456';for(let i=0;i<3;i++)ctx.fillRect(i*100+30,30,20,20);
+      window.__ffLastGeneratedImage=canvas.toDataURL();localStorage.setItem('test-bitmap',window.__ffLastGeneratedImage);
+      const ok=await window.__ffReconstruct();return {ok,calls,peak,nodes:window.__ffExportState.scene?.nodes,audit:window.__ffApiAudit.reconstruction};
     });
     assert.equal(result.ok,true,JSON.stringify(result));
-    assert.equal(result.audit.strategy,'whole-image-catalog');
-    assert.equal(result.audit.deduplicatedText,1);
-    assert.equal(result.scene.nodes.length,3);
-    assert.equal(result.scene.nodes.filter(n=>n.type==='text').length,1);
-    assert.equal(result.scene.nodes.find(n=>n.type==='text').text,'Global label');
-    assert.ok(result.repairs>0,'exercise crop catalog requests');
-    assert.equal(result.calls,result.repairs+5,'schema retry, regional inspection and completeness audit');
-    assert.ok(result.configuredTimeout>235000&&result.configuredTimeout<=240000,
-      'whole-image request stays within the four-minute budget');
-    assert.equal(result.audit.tiles[0].attempts,2);
-    assert.equal(result.peak,3,'three actual concurrent detail requests');
-    assert.equal(result.audit.pptxLayout.state,'passed',JSON.stringify(result.audit));
+    assert.equal(result.audit.strategy,'semantic-parallel-patches');
+    assert.equal(result.peak,3,'three concurrent native detail requests');
+    assert.ok(result.calls>=4);
+    assert.equal(result.nodes.filter(n=>n.type==='rect'&&n.fill==='#123456').length,3,'regional additions survive concurrent commits');
+    assert.equal(result.audit.actualPptxRenderVerified,false,'roundtrip XML is not an Office render');
+    assert.equal(result.audit.state,'needs-review','actual renderer remains required');
+    const office=await page.evaluate(async()=>{
+      let renders=0;
+      const blank=document.createElement('canvas');blank.width=300;blank.height=100;
+      const ctx=blank.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,300,100);
+      window.__ffRenderPptx=async()=>++renders===1?blank.toDataURL():window.__ffLastGeneratedImage;
+      const ok=await window.__ffReconstruct();
+      delete window.__ffRenderPptx;
+      return {ok,renders,audit:window.__ffApiAudit.reconstruction};
+    });
+    assert.equal(office.ok,true);
+    assert.equal(office.renders,2,'failed Office regions trigger one bounded actual-render feedback round');
+    assert.equal(office.audit.actualPptxRenderVerified,true);
+    assert.equal(office.audit.officeRetry.accepted,true);
+    assert.ok(Object.values(office.audit.regionStates).every(r=>r.state==='passed'));
     for(const format of ['svg','pptx','vsdx','drawio']){
       await page.locator(`#exportActions [data-export="${format}"]`).click();
       const promise=page.waitForEvent('download',{timeout:30000});
@@ -225,15 +293,15 @@ const server = http.createServer((req,res)=>{
     await page.reload({waitUntil:'domcontentloaded'});
     const cached=await page.evaluate(async(src)=>{
       document.querySelector('#provider').value='ark';document.querySelector('#key').value='test';
-      const select=document.querySelector('#analyzeModel');select.add(new Option('test','doubao-vision-test'));select.value='doubao-vision-test';
+      const select=document.querySelector('#analyzeModel');select.add(new Option('test','gpt-6.1-sol'));select.value='gpt-6.1-sol';
       window.__ffLastGeneratedImage=src;
       let calls=0;const original=window.fetch;window.fetch=async(url,options)=>{if(!String(url).endsWith('/chat/completions'))return original(url,options);calls++;throw Error('offline');};
       return {ok:await window.__ffReconstruct(),calls,audit:window.__ffApiAudit.reconstruction};
     },await page.evaluate(()=>localStorage.getItem('test-bitmap')));
     assert.equal(cached.ok,true);assert.equal(cached.audit.cacheHit,true);
-    assert.ok(cached.calls<=2,'cached catalog may retry an unfinished detail pass');
+    assert.equal(cached.calls,0,'measured accurate regions make no refinement requests');
     const failed=await page.evaluate(async()=>{
-      const select=document.querySelector('#analyzeModel');select.add(new Option('different','different'));select.value='different';
+      const select=document.querySelector('#analyzeModel');select.add(new Option('different','vision-different'));select.value='vision-different';
       window.fetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'{"description":"no objects"}'}}]}),{status:200});
       const ok=await window.__ffReconstruct();
       return {ok,scene:window.__ffExportState.scene,audit:window.__ffApiAudit.reconstruction};
@@ -241,47 +309,7 @@ const server = http.createServer((req,res)=>{
     assert.equal(failed.ok,false,'invalid whole image must not invent tile fallback objects');
     assert.equal(failed.scene,null);
     assert.equal(failed.audit.state,'failed');
-    const split=await page.evaluate(async()=>{
-      const select=document.querySelector('#analyzeModel');select.add(new Option('split','split-test'));select.value='split-test';
-      const timer=window.setTimeout.bind(window);
-      window.setTimeout=(fn,ms,...args)=>timer(fn,ms>=90000?20:ms>=1000?1:ms,...args);
-      const nodes=Array.from({length:12},(_,i)=>({type:'text',text:'Label '+i,x:80+(i%4)*260,y:50+Math.floor(i/4)*110,w:80,h:20,fontSize:16,fill:'#000000'}));
-      const missing={type:'text',text:'Small detail',x:850,y:420,w:100,h:20,fontSize:16,fill:'#000000'};
-      const canvas=document.createElement('canvas');canvas.width=1200;canvas.height=500;
-      const ctx=canvas.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,1200,500);ctx.fillStyle='black';ctx.font='16px Arial';
-      [...nodes,missing].forEach(n=>ctx.fillText(n.text,n.x,n.y+16));
-      window.__ffLastGeneratedImage=canvas.toDataURL();
-      let active=0,peak=0,global=0,phase=0,detailCalls=0;
-      const original=window.fetch;
-      window.fetch=async(url,options)=>{
-        if(!String(url).endsWith('/chat/completions'))return original(url,options);
-        const prompt=JSON.parse(options.body).messages[1].content[0].text;
-        let output=nodes;
-        if(prompt.includes('completeness audit'))output=[missing,{...nodes[0],x:nodes[0].x+1},missing];
-        else if(prompt.includes('Catalog in crop coordinates: ')){
-          const catalog=JSON.parse(prompt.split('Catalog in crop coordinates: ')[1]);
-          detailCalls++;active++;peak=Math.max(peak,active);
-          try{
-            if(!phase&&catalog.nodes.length>2)await new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new DOMException('Aborted','AbortError'))));
-            await new Promise(resolve=>timer(resolve,2));
-            if(!phase&&catalog.nodes.some(n=>n.text==='Label 0'))return new Response('unavailable',{status:503});
-            output=catalog.nodes;
-          }finally{active--;}
-        }else global++;
-        return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({nodes:output})}}]}));
-      };
-      const ok=await window.__ffReconstruct(),audit=structuredClone(window.__ffApiAudit.reconstruction),texts=window.__ffExportState.scene.nodes.filter(n=>n.type==='text').map(n=>n.text);
-      phase=1;const firstCalls=detailCalls;
-      const resumed=await window.__ffReconstruct();
-      return {ok,audit,texts,peak,global,resumed,resumeCalls:detailCalls-firstCalls,resumeAudit:window.__ffApiAudit.reconstruction};
-    });
-    assert.equal(split.ok,true);assert.equal(split.peak,3);assert.ok(split.global>=1);
-    assert.equal(split.audit.registeredMissing,1);assert.equal(split.texts.length,13);assert.equal(new Set(split.texts).size,13);
-    assert.ok(split.audit.revisions.some(r=>r.state==='subdivided'));
-    assert.ok(split.audit.failedDetailIds.length>0);assert.equal(split.audit.state,'needs-review');
-    assert.equal(split.resumed,true);assert.equal(split.resumeAudit.cacheHit,true);assert.ok(split.resumeCalls>0);
-    assert.equal(split.resumeAudit.failedDetailIds,undefined);
     assert.deepEqual(errors,[]);
-    console.log('Browser whole-image catalog, constrained crops and four exports: OK');
+    console.log('Browser semantic regions, concurrent patches and four exports: OK');
   }finally{await browser.close();}
 })().catch(err=>{console.error(err);process.exitCode=1;}).finally(()=>server.close());

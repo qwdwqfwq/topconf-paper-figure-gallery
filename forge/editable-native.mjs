@@ -17,6 +17,11 @@ const xmlLine = (n, unit) => {
   return `<a:ln w="${width}"><a:solidFill><a:srgbClr val="${stroke}"/></a:solidFill>${n.dash ? '<a:prstDash val="dash"/>' : ''}${n.arrow ? '<a:tailEnd type="triangle"/>' : ''}</a:ln>`;
 };
 const xmlFill = n => {
+  const stops=n.gradient?.stops;
+  if(Array.isArray(stops)&&stops.length>=2){
+    const angle=((num(n.gradient.angle)%360)+360)%360;
+    return `<a:gradFill rotWithShape="1"><a:gsLst>${stops.map(s=>`<a:gs pos="${Math.round(Math.max(0,Math.min(1,num(s.offset)))*100000)}"><a:srgbClr val="${rgb(s.color)||'FFFFFF'}"/></a:gs>`).join('')}</a:gsLst><a:lin ang="${Math.round(angle*60000)}" scaled="1"/></a:gradFill>`;
+  }
   const fill = rgb(n.fill);
   return fill ? `<a:solidFill><a:srgbClr val="${fill}"/></a:solidFill>` : '<a:noFill/>';
 };
@@ -210,7 +215,8 @@ function shapeXml(n,id,unit,media){
     geometry=`<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="l" t="t" r="r" b="b"/><a:pathLst>${pathXml}</a:pathLst></a:custGeom>`;
   }else{
     const preset=n.type==='ellipse'?'ellipse':(n.radius>0?'roundRect':'rect');
-    geometry=`<a:prstGeom prst="${preset}"><a:avLst/></a:prstGeom>`;
+    const adjustment=preset==='roundRect'?`<a:gd name="adj" fmla="val ${Math.round(Math.min(.5,Math.max(0,n.radius/Math.max(1,Math.min(n.w,n.h))))*100000)}"/>`:'';
+    geometry=`<a:prstGeom prst="${preset}"><a:avLst>${adjustment}</a:avLst></a:prstGeom>`;
   }
   if(n.type==='text'){
     const font=num(n.fontSize||16), boxW=Math.max(num(n.w),font*0.7),boxH=Math.max(num(n.h),font*1.3);
@@ -295,6 +301,9 @@ export async function readNativePptxScene(blob,width,height){
     const solid=child(parent,'solidFill');
     return child(solid,'srgbClr')?.getAttribute('val') ? '#'+child(solid,'srgbClr').getAttribute('val') : 'none';
   };
+  const gradient=parent=>{const g=child(parent,'gradFill');if(!g)return undefined;
+    return {angle:Number(child(g,'lin')?.getAttribute('ang')||0)/60000,
+      stops:descendants(g,'gs').map(s=>({offset:Number(s.getAttribute('pos'))/100000,color:'#'+child(s,'srgbClr')?.getAttribute('val')}))};};
   const coord=(xfrm)=>{
     const off=child(xfrm,'off'),ext=child(xfrm,'ext');
     return {x:Number(off?.getAttribute('x')||0)/unit,y:Number(off?.getAttribute('y')||0)/unit,
@@ -305,7 +314,7 @@ export async function readNativePptxScene(blob,width,height){
     if(shape.localName!=='sp'&&shape.localName!=='pic')continue;
     const props=child(shape,'spPr'),xfrm=child(props,'xfrm');if(!xfrm)continue;
     const box=coord(xfrm),line=child(props,'ln');
-    const common={...box,fill:fill(props),stroke:fill(line),
+    const common={...box,fill:fill(props),gradient:gradient(props),stroke:fill(line),
       strokeWidth:line?Number(line.getAttribute('w')||0)/unit:0,
       arrow:!!child(line,'tailEnd')};
     if(shape.localName==='pic'){
@@ -344,8 +353,11 @@ export async function readNativePptxScene(blob,width,height){
         if(d)nodes.push({type:'path',d,...common,fill:path.getAttribute('fill')==='none'?'none':common.fill});
       }
     }else{
-      const preset=child(props,'prstGeom')?.getAttribute('prst');
-      nodes.push({type:preset==='ellipse'?'ellipse':'rect',...common,radius:preset==='roundRect'?Math.min(box.w,box.h)*.1:0});
+      const geometry=child(props,'prstGeom'),preset=geometry?.getAttribute('prst');
+      const formula=descendants(geometry||props,'gd').find(g=>g.getAttribute('name')==='adj')?.getAttribute('fmla');
+      const match=/^val\s+(-?\d+(?:\.\d+)?)$/.exec(formula||'');
+      const adjustment=match?Math.max(0,Math.min(50000,Number(match[1]))):16667;
+      nodes.push({type:preset==='ellipse'?'ellipse':'rect',...common,radius:preset==='roundRect'?Math.min(box.w,box.h)*adjustment/100000:0});
     }
   }
   return {canvas:{width,height},nodes};

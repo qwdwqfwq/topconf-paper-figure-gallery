@@ -672,9 +672,10 @@ import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=2026
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261020-routes';
 import {ImageRoutes, safeImageFailover} from './image-routes.mjs?v=20261020';
 const imageRoutes=new ImageRoutes();
-import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=text-lines-20261017';
+import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=geometry-20261020';
 import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=baseline-09a60b5-text-v2-20261017';
-import {registerMissingObjects, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, tileDetailCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion, planReconstructionTiles, subdivideReconstructionTile} from './reconstruction-core.mjs?v=global-ids-20261018';
+import {registerMissingObjects, editableNodeBounds, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, tileDetailCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion, planReconstructionTiles, subdivideReconstructionTile} from './reconstruction-core.mjs?v=regional-completeness-20261019';
+import {planSemanticRegions,snapshotVersions,applyRegionPatch,fitSourceFills,calibrateShapeGeometry,expandStructuredNodes,regionObjectCatalog,rollbackRegionChanges,rejectUnsupportedLines,recoverDocumentInk,repairStructuralLayers} from './reconstruction-pipeline.mjs?v=geometry-20261020';
 import {calibrateEditableText} from './text-calibration.mjs?v=text-lines-20261017';
 import {figureCanvas,imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261016d';
 import {reconstructionHttpError,reconstructionRetryDelay,reconstructionFailureMessage} from './reconstruction-retry.mjs?v=20261020';
@@ -3456,15 +3457,16 @@ function buildPptx(scene){
       if(n.type==='text'){
         const fontUnits = n.fontSize || 16;
         const boxW = Math.max(IN(n.w) + 0.06, 0.1);
-        const boxH = Math.max(IN(fontUnits*1.45), 0.12);
+        const lineCount=String(n.text).split(/\r?\n/).length;
+        const boxH = Math.max(IN(lineCount>1 ? Math.max(Number(n.h)||0,fontUnits*(lineCount*1.14+.3)) : fontUnits*1.45), 0.12);
         let left;
         if(n.anchor==='middle') left = offX + IN(n.x) - boxW/2;
         else if(n.anchor==='end') left = offX + IN(n.x) - boxW;
         else left = offX + IN(n.x);
-        const top = offY + IN(n.y) - boxH/2;
+        const top = lineCount>1 ? offY+IN(n.y) : offY+IN(n.y)-boxH/2;
         slide.addText(String(n.text), {
           x:left, y:top, w:boxW, h:boxH,
-          align:'center', valign:'middle', margin:0,
+          align:'center', valign:lineCount>1?'top':'middle', margin:0,
           fontFace: n.fontFamily ? String(n.fontFamily).split(',')[0].replace(/["']/g,'') : 'Arial',
           fontSize: Math.max(4, fontUnits*PT_PER_UNIT),
           bold: !!n.bold, italic: !!n.italic,
@@ -3556,10 +3558,13 @@ function sceneToDrawio(scene){
       return;
     }
     if(n.type==='rect'){
-      const rounded = n.radius>0 ? 'rounded=1;arcSize='+Math.max(4, Math.min(50, Math.round(n.radius/Math.max(1,Math.min(n.w,n.h))*100)))+';' : '';
+      // mxRectangleShape uses arcSize / 2 as the radius in absolute mode.
+      // Preserve measured small/fractional corners instead of imposing a percentage floor.
+      const radius=Math.max(0,Math.min(Number(n.radius)||0,n.w/2,n.h/2));
+      const rounded = radius>0 ? 'rounded=1;absoluteArcSize=1;arcSize='+(radius*2)+';' : 'rounded=0;';
       const style = rounded+'whiteSpace=wrap;html=1;fillColor='+drawioColor(n.fill,'none')+';strokeColor='+drawioColor(n.stroke,'none')+';strokeWidth='+(n.strokeWidth||1)+';'+(scene.svgSource&&n.dash?'dashed=1;':'');
       cells.push('<mxCell id="'+id+'" style="'+style+'" vertex="1" parent="1">'+
-                 '<mxGeometry x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" width="'+Math.round(n.w)+'" height="'+Math.round(n.h)+'" as="geometry"/></mxCell>');
+                 '<mxGeometry x="'+n.x+'" y="'+n.y+'" width="'+n.w+'" height="'+n.h+'" as="geometry"/></mxCell>');
       return;
     }
     if(n.type==='path' || n.type==='polyline'){
@@ -3716,7 +3721,8 @@ function sceneToVsdxFiles(scene, font){
             '<Cell N="Width" V="'+inches(Math.max(n.w,1)).toFixed(4)+'"/><Cell N="Height" V="'+inches(Math.max(n.h,1)).toFixed(4)+'"/>'+
             '<Cell N="LocPinX" V="'+inches(Math.max(n.w,1)/2).toFixed(4)+'"/><Cell N="LocPinY" V="'+inches(Math.max(n.h,1)/2).toFixed(4)+'"/>'+
             fillCells(st)+
-            '<Cell N="Rounding" V="'+(n.radius? inches(n.radius).toFixed(4) : '0')+'"/>'+
+            // The geometry already contains the measured corners; do not round it twice.
+            '<Cell N="Rounding" V="0"/>'+
             '<Cell N="ShapeType" V="'+master+'"/>'+boxGeometry(n.type,n.radius,n.w,n.h)+
             '</Shape>';
     } else if(n.type==='line'){
@@ -4167,6 +4173,7 @@ function sceneToSvgString(scene){
   const W = Number(raw.width || raw.w || EXPORT_CANVAS.w), H = Number(raw.height || raw.h || EXPORT_CANVAS.h);
   const color = function(v, fallback){
     const s = String(v == null ? '' : v).trim();
+    if(/^[a-f0-9]{6}$/i.test(s)) return '#'+s;
     if(!s || s === 'none' || s === 'transparent') return s || (fallback || 'none');
     return (/^#|^rgb\(|^rgba\(|^hsl\(|^hsla\(|^[a-z]+$/i.test(s)) ? s : ('#' + s);
   };
@@ -4180,7 +4187,10 @@ function sceneToSvgString(scene){
     if(n.export === false) return;
     const id = escapeSvgAttr(n.id || ('n' + i));
     const x=num(n.x), y=num(n.y), w=Math.max(0,num(n.w)), h=Math.max(0,num(n.h));
-    const stroke = color(n.stroke, 'none'), fill = color(n.fill, 'none');
+    const stroke = color(n.stroke, 'none');let fill = color(n.fill, 'none');
+    if(n.gradient?.stops?.length>=2){const a=Number(n.gradient.angle||0)*Math.PI/180,dx=Math.cos(a)*50,dy=Math.sin(a)*50;
+      parts.push('<defs><linearGradient id="grad'+i+'" x1="'+(50-dx)+'%" y1="'+(50-dy)+'%" x2="'+(50+dx)+'%" y2="'+(50+dy)+'%">'+n.gradient.stops.map(s=>'<stop offset="'+Math.max(0,Math.min(1,Number(s.offset)))*100+'%" stop-color="'+escapeSvgAttr(s.color)+'"/>').join('')+'</linearGradient></defs>');fill='url(#grad'+i+')';}
+    if(n.arrow)parts.push('<defs><marker id="arrow'+i+'" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="'+stroke+'"/></marker></defs>');
     const sw = Math.max(0,num(n.strokeWidth,1));
     const dash = n.dash || n.dashed ? ' stroke-dasharray="8 6"' : '';
     if(n.type === 'image'){
@@ -4199,11 +4209,11 @@ function sceneToSvgString(scene){
     } else if(n.type === 'ellipse'){
       parts.push('<ellipse id="'+id+'" data-editable="true" cx="'+(x+w/2)+'" cy="'+(y+h/2)+'" rx="'+(w/2)+'" ry="'+(h/2)+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+dash+'/>');
     } else if(n.type === 'line'){
-      parts.push('<line id="'+id+'" data-editable="true" x1="'+x+'" y1="'+y+'" x2="'+num(n.x2,x+w)+'" y2="'+num(n.y2,y+h)+'" stroke="'+color(n.stroke,'#334155')+'" stroke-width="'+sw+'" fill="none"'+(n.arrow?' marker-end="url(#ff-arrow)"':'')+dash+'/>');
+      parts.push('<line id="'+id+'" data-editable="true" x1="'+x+'" y1="'+y+'" x2="'+num(n.x2,x+w)+'" y2="'+num(n.y2,y+h)+'" stroke="'+color(n.stroke,'#334155')+'" stroke-width="'+sw+'" fill="none"'+(n.arrow?' marker-end="url(#arrow'+i+')"':'')+dash+'/>');
     } else if(n.type === 'polyline'){
-      parts.push('<'+(n.closed?'polygon':'polyline')+' id="'+id+'" data-editable="true" points="'+escapeSvgAttr(n.points||'')+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+(scene.svgSource&&n.arrow?' marker-end="url(#ff-arrow)"':'')+dash+'/>');
+      parts.push('<'+(n.closed?'polygon':'polyline')+' id="'+id+'" data-editable="true" points="'+escapeSvgAttr(n.points||'')+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+(n.arrow?' marker-end="url(#arrow'+i+')"':'')+dash+'/>');
     } else if(n.type === 'path'){
-      parts.push('<path id="'+id+'" data-editable="true" d="'+escapeSvgAttr(n.d||'')+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+(scene.svgSource&&n.arrow?' marker-end="url(#ff-arrow)"':'')+dash+'/>');
+      parts.push('<path id="'+id+'" data-editable="true" d="'+escapeSvgAttr(n.d||'')+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+(n.arrow?' marker-end="url(#arrow'+i+')"':'')+dash+'/>');
     }
   });
   parts.push('</svg>');
@@ -4213,25 +4223,24 @@ function sceneToSvgString(scene){
 // Render the actual editable SVG before accepting it. This measures visible
 // error against the bitmap, not merely whether the JSON has valid geometry.
 async function compareEditableRender(sourceCanvas,scene,region){
-  const scale=Math.min(1,720/Math.max(sourceCanvas.width,sourceCanvas.height));
-  const renderW=Math.max(1,Math.round(sourceCanvas.width*scale));
-  const renderH=Math.max(1,Math.round(sourceCanvas.height*scale));
+  const view=region||{x:0,y:0,w:sourceCanvas.width,h:sourceCanvas.height};
+  const scale=Math.min(1,(region?1600:720)/Math.max(view.w,view.h));
+  const renderW=Math.max(1,Math.round(view.w*scale));
+  const renderH=Math.max(1,Math.round(view.h*scale));
   const ref=document.createElement('canvas'),out=document.createElement('canvas');
   ref.width=out.width=renderW; ref.height=out.height=renderH;
   const rc=ref.getContext('2d',{willReadFrequently:true});
   const oc=out.getContext('2d',{willReadFrequently:true});
   rc.fillStyle=oc.fillStyle='#ffffff';
   rc.fillRect(0,0,renderW,renderH); oc.fillRect(0,0,renderW,renderH);
-  rc.drawImage(sourceCanvas,0,0,renderW,renderH);
-  const url=URL.createObjectURL(new Blob([typeof scene==='string'?scene:sceneToSvgString(scene)],{type:'image/svg+xml'}));
-  try{oc.drawImage(await loadImage(url),0,0,renderW,renderH);}
-  finally{URL.revokeObjectURL(url);}
+  rc.drawImage(sourceCanvas,view.x,view.y,view.w,view.h,0,0,renderW,renderH);
+  const raster=typeof scene==='string'&&/^data:image\/(png|jpeg|webp);/i.test(scene);
+  const url=raster?scene:URL.createObjectURL(new Blob([typeof scene==='string'?scene:sceneToSvgString(scene)],{type:'image/svg+xml'}));
+  try{oc.drawImage(await loadImage(url),-view.x*scale,-view.y*scale,sourceCanvas.width*scale,sourceCanvas.height*scale);}
+  finally{if(!raster)URL.revokeObjectURL(url);}
   // Overlapping model crops are trimmed to their non-overlapping cores during
   // export. Score only that retained area when ranking repair candidates.
-  const x0=region?Math.max(0,Math.min(renderW-1,Math.floor(region.x*scale))):0;
-  const y0=region?Math.max(0,Math.min(renderH-1,Math.floor(region.y*scale))):0;
-  const x1=region?Math.max(x0+1,Math.min(renderW,Math.ceil((region.x+region.w)*scale))):renderW;
-  const y1=region?Math.max(y0+1,Math.min(renderH,Math.ceil((region.y+region.h)*scale))):renderH;
+  const x0=0,y0=0,x1=renderW,y1=renderH;
   const w=x1-x0,h=y1-y0;
   const a=rc.getImageData(x0,y0,w,h).data,b=oc.getImageData(x0,y0,w,h).data;
   const pixels=w*h,sourceMask=new Uint8Array(pixels),renderMask=new Uint8Array(pixels);
@@ -4300,8 +4309,8 @@ async function compareEditableRender(sourceCanvas,scene,region){
     if(cellSource[cell]>=Math.max(12,Math.round(pixels/(columns*rows)*.002))){
       const recall=cellMatched[cell]/cellSource[cell];
       cellRecalls.push(recall);
-      weakRegions.push({x:Math.round((x0+(cell%columns)*w/columns)/scale),
-        y:Math.round((y0+Math.floor(cell/columns)*h/rows)/scale),
+      weakRegions.push({x:Math.round(view.x+(cell%columns)*w/columns/scale),
+        y:Math.round(view.y+Math.floor(cell/columns)*h/rows/scale),
         w:Math.round(w/columns/scale),h:Math.round(h/rows/scale),
         recall:Math.round(recall*1000)/1000});
     }
@@ -4371,13 +4380,19 @@ function sceneNumber(v, fallback){
   return Number.isFinite(n) ? n : fallback;
 }
 function materializeEditableScene(raw,W,H){
-  const rawNodes=extractEditableNodes(raw);
+  const rawNodes=expandStructuredNodes(extractEditableNodes(raw));
   const clamp=(v,lo,hi)=>Math.max(lo,Math.min(hi,sceneNumber(v,lo)));
   const cleanColor=(v,fallback)=>{
+    if(v&&typeof v==='object')v=v.color??v.value??v.stops?.[0]?.color;
     const value=String(v==null?'':v).trim();
+    if(/^[a-f0-9]{6}$/i.test(value)) return '#'+value;
     if(!value || value==='none' || value==='transparent') return value||fallback;
-    if(/^#|^rgb|^rgba|^hsl|^hsla|^[a-z]+$/i.test(value)) return value;
-    return '#'+value;
+    if(CSS.supports('color',value)){
+      const c=document.createElement('canvas');c.width=c.height=1;
+      const ctx=c.getContext('2d');ctx.fillStyle=value;ctx.fillRect(0,0,1,1);
+      return '#'+Array.from(ctx.getImageData(0,0,1,1).data).slice(0,3).map(v=>v.toString(16).padStart(2,'0')).join('');
+    }
+    throw new Error('Invalid scene color: '+value.slice(0,80));
   };
   const pick=(o,keys,fallback)=>{
     for(const k of keys){
@@ -4433,10 +4448,13 @@ function materializeEditableScene(raw,W,H){
     const y=type==='text'?clamp(yRaw??0,-H,H):clamp(yRaw??0,0,H);
     const w=type==='text'?clamp(wRaw,1,2*W):clamp(wRaw,1,Math.max(1,W-x));
     const h=type==='text'?clamp(hRaw,1,2*H):clamp(hRaw,1,Math.max(1,H-y));
+    const rawFill=pick(n,['fill','fillColor','background'],'');
+    const rawGradient=n.gradient||(rawFill&&typeof rawFill==='object'&&Array.isArray(rawFill.stops)?rawFill:undefined);
+    const gradient=rawGradient?{...rawGradient,stops:(rawGradient.stops||[]).map(s=>({...s,color:cleanColor(s.color,'#ffffff')}))}:undefined;
     const base={
       id:String(n.id||('v'+i)),
-      x,y,w,h,
-      fill:cleanColor(pick(n,['fill','fillColor','background'],''),'none'),
+      x,y,w,h,version:Number(n.version)||0,parentId:n.parentId,owner:n.owner,gradient,cellBounds:n.cellBounds,
+      fill:cleanColor(rawFill,'none'),
       stroke:cleanColor(pick(n,['stroke','strokeColor','borderColor'],''),type==='line'?'#334155':'none'),
       strokeWidth:clamp(pick(n,['strokeWidth','lineWidth','borderWidth'],1),0,12)
     };
@@ -4463,11 +4481,11 @@ function materializeEditableScene(raw,W,H){
     else if(type==='polyline' && pick(n,['points','vertices'],'')){
       const vertices=pick(n,['points','vertices'],[]);
       const points=Array.isArray(vertices) ? vertices.map(p=>Array.isArray(p)?p.join(','):(p&&typeof p==='object'?p.x+','+p.y:String(p))).join(' ') : String(vertices);
-      out.push(Object.assign(base,{type:'polyline',points,closed:!!(n.closed||n.isClosed||String(n.type).toLowerCase()==='polygon'),dash:!!(n.dash||n.dashed)}));
+      out.push(Object.assign(base,{type:'polyline',points,arrow:!!n.arrow,closed:!!(n.closed||n.isClosed||String(n.type).toLowerCase()==='polygon'),dash:!!(n.dash||n.dashed)}));
     }
     else if(type==='path' && pick(n,['d','path'],'')){
       const d=String(pick(n,['d','path'],''));
-      if(parseEditablePath(d).length) out.push(Object.assign(base,{type:'path',d}));
+      if(parseEditablePath(d).length) out.push(Object.assign(base,{type:'path',d,arrow:!!n.arrow}));
     }
     else if(type==='text' && String(pick(n,['text','content','label','value'],'')).trim()){
       const label=String(pick(n,['text','content','label','value'],'')).replace(/\r\n?/g,'\n').trim().slice(0,300);
@@ -4494,7 +4512,7 @@ function materializeEditableScene(raw,W,H){
         fontFamily:pick(n,['fontFamily','font','family'],'Arial, Helvetica, sans-serif'),
         bold:!!(n.bold||n.fontWeight==='bold'||Number(n.fontWeight)>=600),
         italic:!!(n.italic||n.fontStyle==='italic'),
-        anchor:n.anchor==='middle'||n.anchor==='end'?n.anchor:'start',
+        anchor:['middle','center'].includes(n.anchor||n.textAlign)?'middle':['end','right'].includes(n.anchor||n.textAlign)?'end':'start',
         baseline:n.baseline||'auto',
         rotation:clamp(pick(n,['rotation','angle','rotate'],0),-360,360),
         textPath:(()=>{const v=n.textPath;if(!v)return undefined;const spec=typeof v==='string'?{d:v}:v;
@@ -4508,6 +4526,7 @@ function materializeEditableScene(raw,W,H){
   });
   return {
     schema:'figureforge.scene.v4',
+    regions:Array.isArray(raw.regions)?raw.regions:[],
     canvas:{width:W,height:H,w:W,h:H},
     nodes:out,
     counts:{
@@ -4623,11 +4642,11 @@ async function editableRevisionImages(sourceDataUri, revision, W, H){
 // Bitmap request pipeline verified against 0919a98 (2026-10-18 03:37 +08:00).
 // SVG export fixes from f96ff8b are retained. Release: bitmap-0919a98-svg-f96ff8b.
 async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
-  const cfgv=cfg(), relay=relayBase(), model=editableReconstructionModel();
+  const cfgv=cfg(), relay=relayBase(), model=tileAudit?.pinnedModel||editableReconstructionModel();
   if(!model) throw new Error(tt('analyze.needmodel'));
   const audit=tileAudit||{};
   Object.assign(audit,{state:'pending',startedAt:Date.now(),model,provider:cfgv.proto,endpoint:baseURL(),attempt:0});
-  const prompt=editableScenePrompt(W,H,$('#paper')?$('#paper').value:'');
+  const prompt=audit.structureOnly ? 'Analyze ONLY the structure of this figure. Return STRICT JSON {"canvas":{"width":'+W+',"height":'+H+'},"regions":[{"id":"panel_a","parentId":null,"kind":"panel","x":0,"y":0,"w":100,"h":100}],"nodes":[]}. Use global pixel coordinates and stable unique IDs. Regions cover all contents: prefer one region per complete semantic panel; keep related charts, tables, labels and icons together; subdivide only exceptionally dense panels when their details cannot fit in one response; cross-panel connectors belong to the global nodes catalog, never to a separate overlapping region. Include every cross-panel connector as a complete node now. Parent remainder regions are generated automatically; do not fragment them into strips. Nodes include ONLY panel backgrounds, main headings WITH their opaque colored rounded background strips, and complete cross-region connectors. Place heading backgrounds after panel frames and before heading text so the frame cannot cross the heading. Never replace a rounded panel with a square rectangle. Defer tiny labels, chart marks and internal details to regional workers. Do not invent unreadable text. Nodes use rect/ellipse/line/path/polyline/text, geometry in pixels, hex fill/stroke, strokeWidth, fontSize/fontFamily/bold for text. Text MUST include x,y,w,h for its tight enclosing text BOX: x,y are the TOP-LEFT of that box, never a center or baseline. anchor is alignment INSIDE the box (start/middle/end); it never changes the coordinate origin. fontSize is in native image pixels. Include fontFamily and bold, preserve each visible line break.  Prefer about 8-12 meaningful regions for a dense poster, following actual panel boundaries; group simple icon primitives together rather than one region per mark. Regions must cover every foreground object. Preserve layer order.' : editableScenePrompt(W,H,$('#paper')?$('#paper').value:'');
   // Feed the existing object graph back to the model. Photo data URLs are
   // replaced by crop coordinates; the source image is attached separately.
   const priorScene=revision&&revision.scene?JSON.stringify({
@@ -4639,6 +4658,9 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
     })
   }):'';
   const referenceImages=await editableRevisionImages(imageDataUri,revision,W,H);
+  if(audit.contextImage)referenceImages.push(audit.contextImage);
+  if(audit.retryRender)referenceImages.push(audit.retryRender);
+  if(audit.fullSourceImage)referenceImages.push(audit.fullSourceImage);
   const configuredTimeoutMs=Math.min(
     Math.max(1,Math.min(60,Number($('#reconTimeoutMinutes').value)||15))*60000,
     Number.isFinite(audit.timeoutMsOverride)?audit.timeoutMsOverride:Infinity);
@@ -4655,12 +4677,15 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
     audit.attempt=attempt;
     audit.attemptStartedAt=Date.now();
     try{
-      const attemptPrompt=audit.omissionCheck
+      const attemptPrompt=audit.regionPatch
+        ? 'Return STRICT JSON {"operations":[{"op":"add","node":{...}},{"op":"update","id":"existing_id","version":0,"node":{...}},{"op":"delete","id":"existing_id"},{"op":"split","id":"existing_id","nodes":[...]},{"op":"merge","ids":[...],"nodes":[...]}]}. Image 1 is a native-resolution detail crop; image 2 is contextual reference only. All output geometry uses image 1 pixels. Each replacement is a COMPLETE primitive. Text MUST include x,y,w,h for its tight enclosing text BOX: x,y are the TOP-LEFT of that box, never a center or baseline. anchor is alignment INSIDE the box (start/middle/end); it never changes the coordinate origin. fontSize is in native image pixels. Include fontFamily and bold, preserve each visible line break. Add missing details, correct text only when legible, adjust position/size/color, split table text into individual cells while preserving the grid. Never invent unreadable text: omit transcription, but preserve its visible miniature ink as editable short lines/paths sampled from the crop rather than leaving blank paper. Separate semantic uncertainty from visible stroke detail. Return uncertainties:[{x,y,w,h,reason}] instead. Enlargement cannot recover absent pixels. Keep untouched objects omitted. Own only objects in catalog.nodes and new objects centered within local ownership bounds AND outside catalog.excludeRects. catalog.readOnlyContext contains existing frames, headings and crossing objects: preserve these and NEVER recreate them. Excluded child rectangles belong to separate workers. Modify an existing owned object by update rather than adding its replacement. Do not redraw a panel frame when it already exists in readOnlyContext. Every replacement box must fit entirely inside image 1; ignore objects cut off at its boundary. Context pixels are never a request to redraw adjacent panels. Keep each chart and each table separate. Do not duplicate crossing objects. Preserve chart axes, ticks, series, heatmap cells, separate icon faces, arrow endpoints and layer order. Paper stacks must include visible interior print strokes even when words cannot be read. Do not draw a complete panel top border over an opaque heading: retain its occlusion, and add no line unless that same color and continuous segment are visible in the source. For gradients use gradient:{angle:0,stops:[{offset:0,color:"#aabbcc"},{offset:1,color:"#ddeeff"}]}. For dense content prefer add/split nodes with table{x,y,rows:[rowHeights],columns:[columnWidths],cells:[[ {text,fill,fontSize} ]],fontSize,borders:"grid|horizontal|none",rowLines:[visibleRowBoundaryIndices]}, heatmap{x,y,w,h,colors:[[hexColors]]}, bars{x,y,w,h,values:[numbers],max,colors:[hexColors]}; these expand deterministically to editable primitives. Match visible table rules: use horizontal with rowLines for horizontal-only tables; never invent vertical cell borders. Preserve chart tick values and their exact ordering/positions; do not reverse the vertical axis or infer new data. Nodes: rect{x,y,w,h,radius,fill,stroke,strokeWidth}, ellipse, line{x,y,x2,y2,arrow,arrowLength,arrowWidth}, path{d,arrow,arrowLength,arrowWidth}, polyline{points}, text{x,y,w,h,text,fontSize,fontFamily,bold,anchor}. Catalog: '+JSON.stringify(audit.detailCatalog)+' Ownership: '+JSON.stringify(audit.ownership)+' Context origin: '+JSON.stringify(audit.contextOrigin)+' Prior validation feedback: '+JSON.stringify(audit.feedback||null)+'. Image 3 is the current reconstruction of image 1, including on the first pass. Image 4 is the COMPLETE original figure for global structure and connections. Full-image coordinates of the crop: '+JSON.stringify(audit.sourceRegion)+'. Never use image 4 coordinates directly in a patch. Compare source and render element by element: opaque title plates, duplicate labels/frames, border occlusion, arrow continuity, text collisions, icon face colors, fine-print gray levels, chart marks and table cells. Preserve light ink rather than thickening it to black. Repair its visible residuals and the reported rejection/conflict; do not blindly repeat the previous patch.'
+        : audit.structureOnly ? prompt
+        : audit.omissionCheck
         ? 'WHOLE IMAGE completeness audit. Compare the entire original image with the registered objects below. Return STRICT JSON {"nodes":[]} if nothing is missing; otherwise nodes must contain ONLY genuinely missing editable objects using the same scene schema. Never duplicate existing text, arrows, borders or icons. Do not return replacements or changes to existing objects. Examine small labels, chart marks and internal icon details. Global coordinates in pixels. Existing catalog: '+JSON.stringify(audit.catalog)+'\n'+prompt
         : audit.objectRepair
-        ? 'Refine ONLY the supplied catalog IDs from this high-resolution crop. Return STRICT JSON {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. All geometry and font sizes use crop pixels. Return complete updated nodes with their original id and type. Never add objects, split objects, duplicate labels, change text content, or redraw contextual objects absent from the catalog. Omit unchanged nodes. Empty nodes is valid. Catalog in crop coordinates: '+JSON.stringify(audit.catalog)
+        ? 'Compare this high-resolution crop with the supplied editable catalog. Return STRICT JSON {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. All geometry and font sizes use crop pixels. For an existing object, keep its id and type; correct its geometry, style, and misread text when the pixels support the correction. Add genuinely missing editable details, including chart marks, thin lines, icons and labels, as separate nodes with no existing id. Do not duplicate catalog objects or redraw contextual objects crossing the crop boundary. Omit unchanged nodes; empty nodes is valid. Catalog in crop coordinates: '+JSON.stringify(audit.catalog)
         : audit.detailCatalog
-        ? 'Inspect this high-resolution crop and refine ONLY the supplied global catalog IDs. Return STRICT JSON {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. Give complete crop-relative geometry and visual details for each refined object. Preserve every id, type and text content. Never add, split or duplicate objects, including objects crossing a crop boundary. Contextual objects absent from the catalog are for visual reference only. Omit unchanged nodes; empty nodes is valid. Global catalog objects owned by this crop, in crop coordinates: '+JSON.stringify(audit.detailCatalog)
+        ? 'Inspect this high-resolution crop for missing details and incorrect catalog objects. Return STRICT JSON {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[...]}. Give complete crop-relative geometry and visual details. Keep the id and type of each refined existing object; correct text when the crop shows it was misread. Add genuinely missing editable chart details, fine lines, icons and labels as separate nodes without an existing id. Do not duplicate existing objects or recreate objects crossing a crop boundary. Omit unchanged nodes; empty nodes is valid, including when the supplied catalog is empty. Catalog objects owned by this crop, in crop coordinates: '+JSON.stringify(audit.detailCatalog)
         : revision
         ? 'Image 1 is the ORIGINAL tile and image 2 is its editable render. Following images are paired close-ups of the weakest regions: ORIGINAL then RENDER, in the order of these tile-local crop coordinates: '+JSON.stringify((revision.weakRegions||[]).slice(0,2))+'. Compare each pair carefully. Keep correct objects and their coordinates; fix missing, misplaced, wrong-colored or spurious objects, especially small text and lines visible in the close-ups. Return the COMPLETE corrected scene, not only a patch. Previous comparison score: '+revision.score.toFixed(3)+'. Prior editable scene JSON follows:\n'+priorScene+'\n'+prompt
         : attempt>1 && lastError && lastError.sceneFormatFailure
@@ -4706,7 +4731,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
             {role:'system',content:RECON_SYS},
             {role:'user',content:[
               {type:'text',text:attemptPrompt},
-              ...referenceImages.map(url=>({type:'image_url',image_url:{url}}))
+              ...referenceImages.map(url=>({type:'image_url',image_url:{url,detail:'high'}}))
             ]}
           ]
         };
@@ -4724,6 +4749,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         txt=r.text;
         if(!r.ok)throw reconstructionHttpError(r,'HTTP '+r.status+': '+friendlyHttp(r.status,txt));
         const d=JSON.parse(txt);
+        audit.responseModel=d.model||null;audit.usage=d.usage||null;
         txt=editableResponseText(d);
         const choice=d.choices&&d.choices[0]||{};
         responseDiagnostics='finish_reason='+String(choice.finish_reason||'unknown')+', content_chars='+txt.length+
@@ -4738,16 +4764,28 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
       }
       let scene;
       try{
-        if(audit.objectRepair||audit.detailCatalog){
-          const allowed=new Map((audit.catalog||audit.detailCatalog).nodes.map(n=>[n.id,n.type]));
-          const nodes=extractEditableNodes(extractJSON(txt)).filter(n=>typeof n.id==='string'&&allowed.get(n.id)===n.type);
+        if(audit.regionPatch){
+          const raw=extractJSON(txt);
+          if(!Array.isArray(raw.operations))throw new Error('Region response requires operations array');
+          scene={operations:raw.operations.map(op=>{
+            const sources=Array.isArray(op.nodes)?op.nodes:op.node?[op.node]:[];
+            const nodes=materializeEditableScene({nodes:sources},W,H).nodes;
+            return {...op,op:op.op==='update'&&nodes.length>1?'split':op.op,node:undefined,nodes};
+          }),uncertainties:raw.uncertainties||[],nodes:[]};
+        }else if(audit.objectRepair||audit.detailCatalog){
+          const nodes=extractEditableNodes(extractJSON(txt));
           scene=nodes.length?materializeEditableScene({nodes},W,H):{canvas:{width:W,height:H},nodes:[]};
         }else if(audit.omissionCheck){
           const nodes=extractEditableNodes(extractJSON(txt));
           scene=nodes.length?materializeEditableScene({nodes},W,H):{canvas:{width:W,height:H},nodes:[]};
         }else{
+          if(audit.structureOnly){
+            const raw=extractJSON(txt);
+            if(extractEditableNodes(raw).some(n=>n.type==='text'&&(!['x','y','w','h'].every(k=>Number.isFinite(n[k]))||n.w<=0||n.h<=0)))
+              throw new Error('Every structural text node requires an explicit top-left x,y,w,h bounding box');
+          }
           scene=parseEditableSceneResponse(txt,W,H);
-          if(!scene.nodes.length){
+          if(!scene.nodes.length&&!(audit.structureOnly&&scene.regions?.length)){
             const error=new Error('Vision model returned an empty editable scene');
             error.sceneFormatFailure=true;
             throw error;
@@ -4755,6 +4793,9 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         }
       }
       catch(err){
+        // Crop responses are parsed here too. Mark malformed JSON as a scene
+        // format failure so the tile splitter can retry a smaller region.
+        err.sceneFormatFailure=true;
         if(err.sceneFormatFailure || /editable nodes array|empty editable scene/.test(String(err.message))){
           previousResponse=txt;
           rememberFailedReconResponse(audit,txt,responseDiagnostics,err);
@@ -4854,112 +4895,162 @@ function isRecoverableReconstructionError(error){
   return !!(error?.sceneFormatFailure||error?.outputTruncated||error?.visionTimeout||
     /^HTTP 5\d\d\b/.test(String(error?.message||error)));
 }
-async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cachedScene,cachedOmissionChecked=false,measureScene=compareEditableRender){
+function filterUnsupportedLongLines(canvas,base,candidate){
+  return rejectUnsupportedLines(candidate,canvas);
+}
+async function acceptMissingDetailsByRender(canvas,scene,proposals,measureScene,audit){
   const W=canvas.width,H=canvas.height;
-  let wholeCatalog=cachedScene||null,wholeQuality=null;
+  const buckets=new Map();
+  for(const node of proposals.nodes||[]){
+    const b=editableNodeBounds(node);
+    if(!b||b.x<0||b.y<0||b.right>W||b.bottom>H)continue;
+    if(node.type==='image'&&b.right-b.x>W*.25&&b.bottom-b.y>H*.25)continue;
+    // Very long objects get their own comparison. A bad endpoint can otherwise
+    // be hidden by correctly recovered details in the same panel.
+    const wide=b.right-b.x>W*.28||b.bottom-b.y>H*.28;
+    const key=wide?'long-'+buckets.size:
+      Math.floor((b.x+b.right)/2/Math.max(1,W/4))+','+
+      Math.floor((b.y+b.bottom)/2/Math.max(1,H/3));
+    if(!buckets.has(key))buckets.set(key,[]);
+    buckets.get(key).push(node);
+  }
+  let checked=0,accepted=0;
+  for(const group of buckets.values()){
+    const candidate=filterUnsupportedLongLines(canvas,scene,registerMissingObjects(scene,{nodes:group}));
+    const added=candidate.nodes.slice(scene.nodes.length);
+    if(!added.length)continue;
+    const boxes=added.map(editableNodeBounds).filter(Boolean);
+    const x=Math.max(0,Math.floor(Math.min(...boxes.map(b=>b.x))-12));
+    const y=Math.max(0,Math.floor(Math.min(...boxes.map(b=>b.y))-12));
+    const right=Math.min(W,Math.ceil(Math.max(...boxes.map(b=>b.right))+12));
+    const bottom=Math.min(H,Math.ceil(Math.max(...boxes.map(b=>b.bottom))+12));
+    const region={x,y,w:right-x,h:bottom-y};
+    const before=await measureScene(canvas,scene,region);
+    const after=await measureScene(canvas,candidate,region);
+    checked++;
+    if(acceptReconstructionRepair(before,after)){
+      scene=candidate;accepted+=added.length;
+    }
+  }
+  audit.omissionRenderChecks=checked;
+  audit.omissionAccepted=accepted;
+  return scene;
+}
+function compactQuality(q){if(!q)return q;return Object.fromEntries(Object.entries(q).filter(([k,v])=>typeof v==='number'||typeof v==='boolean'));}
+async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cachedScene,cachedOmissionChecked=false,measureScene=compareEditableRender,onProgress=async()=>{},options={}){
+  const W=canvas.width,H=canvas.height;
   audit.phase='whole';
-  if(!wholeCatalog){
-    // The complete global object catalog is required before any crop pass.
-    const wholeAudit={wholeImage:true,maxAttempts:2,timeoutMsOverride:1500000,maxTotalMs:1500000};
-    audit.tiles.push(wholeAudit);
-    wholeCatalog=createWholeImageCatalog(await requestScene(src,W,H,wholeAudit));
-  }else audit.tiles.push({wholeImage:true,state:'cached',attempts:0});
-  audit.completedTiles=1;
-  if(!cachedOmissionChecked){
-    // Whole-image additions are registered before detail crops are allowed to run.
-    audit.phase='omission';
-    const catalog={canvas:wholeCatalog.canvas,nodes:wholeCatalog.nodes.map(n=>{const copy={...n};delete copy.href;return copy;})};
-    const omissionAudit={omissionCheck:true,catalog,maxAttempts:2,timeoutMsOverride:180000};
-    audit.omissionAudit=omissionAudit;
-    try{
-      const proposals=await requestScene(src,W,H,omissionAudit);
-      wholeCatalog=registerMissingObjects(wholeCatalog,proposals);
-      audit.registeredMissing=wholeCatalog.counts.registeredMissing;
-      audit.omissionChecked=true;
-    }catch(error){
-      audit.omissionError=String(error?.message||error);
-      throw new Error('整图查漏未完成，不能开始分区重建：'+audit.omissionError);
-    }
-  }else audit.omissionChecked=true;
-  try{
-    wholeQuality=await measureScene(canvas,wholeCatalog);
-    audit.wholeQuality={score:wholeQuality.score,darkRecall:wholeQuality.darkRecall,
-      localRecall:wholeQuality.localRecall};
-    if(cachedScene&&audit.cachedDetailComplete&&
-      reconstructionQualityDeficit(wholeQuality)===0){
-      audit.strategy='cached-catalog';
-      audit.tilePassComplete=true;
-      return wholeCatalog;
-    }
-  }catch(error){
-    audit.wholeQualityError=String(error?.message||error);
+  let scene=cachedScene?recoverDocumentInk(rejectUnsupportedLines(cachedScene,canvas),canvas):null;
+  if(!scene){
+    const task={wholeImage:true,structureOnly:true,maxAttempts:2,timeoutMsOverride:180000};
+    audit.tiles.push(task);
+    scene=createWholeImageCatalog(await requestScene(src,W,H,task));
   }
-  const initialTiles=planReconstructionTiles(W,H,700,40);
-  audit.phase='regions';
-  audit.strategy='whole-then-id-refinement';
-  audit.totalTiles=initialTiles.length+1;
-  const results=[],failedTiles=[];
-  audit.tilePassComplete=false;
-  async function reconstructTile(tile,depth){
-    const localCatalog=tileDetailCatalog(wholeCatalog,tile);
-    if(!localCatalog.nodes.length){audit.completedTiles++;return;}
-    const crop=document.createElement('canvas');
-    crop.width=tile.w;crop.height=tile.h;
-    crop.getContext('2d').drawImage(canvas,tile.x,tile.y,tile.w,tile.h,0,0,tile.w,tile.h);
-    // A stalled crop should split promptly instead of spending the full
-    // whole-image timeout twice. Smaller descendants have shorter budgets.
-    const tileAudit={tile:tile.index,depth,maxAttempts:1,
-      timeoutMsOverride:Math.max(90000,240000-depth*60000)};
-    tileAudit.detailCatalog=localCatalog;
-    audit.tiles.push(tileAudit);
-    try{
-      const scene=await requestScene(crop.toDataURL('image/png'),tile.w,tile.h,tileAudit);
-      results.push({tile,scene});
-      audit.completedTiles++;
-    }catch(error){
-      tileAudit.fallbackCause=error.visionTimeout?'timeout':
-        error.outputTruncated?'output-limit':error.sceneFormatFailure?'scene-format':
-        /^HTTP 5\d\d\b/.test(String(error?.message||error))?'provider-5xx':'request-error';
-      if(!isRecoverableReconstructionError(error) || depth>=2 || Math.max(tile.w,tile.h)<300){
-        failedTiles.push({tile:tile.index,depth,error:String(error?.message||error)});return;
+  scene=repairStructuralLayers(scene,canvas);
+  audit.strategy='semantic-parallel-patches';audit.omissionChecked=false;
+  const regions=planSemanticRegions(scene,W,H).filter(r=>!options.regionIds||options.regionIds.includes(r.id));
+  audit.regionStates={...(scene.regionStates||{})};
+  audit.totalTiles=regions.length+1;audit.completedTiles=1;audit.phase='regions';
+  await onProgress({...scene,regionStates:{...audit.regionStates}},false);
+  let commit=Promise.resolve();
+  const crop=r=>{const c=document.createElement('canvas');c.width=r.w;c.height=r.h;c.getContext('2d').drawImage(canvas,r.x,r.y,r.w,r.h,0,0,r.w,r.h);return c.toDataURL('image/png');};
+  const passed=q=>reconstructionQualityDeficit(q)<.001;
+  async function worker(region,startAttempt=0){
+    // Re-measure the current scene; cached 'passed' is not proof after shared edits.
+    const previous=audit.regionStates[region.id];
+    if(!options.actualRenderFeedback){
+      const quality=await measureScene(canvas,scene,region);
+      const unresolved=previous?.uncertainties?.length||previous?.conflicts?.length||previous?.rejected?.length;
+      if(passed(quality)&&!unresolved){
+        audit.regionStates[region.id]={state:'passed',quality:compactQuality(quality),reason:'measured-before-request',attempt:startAttempt};
+        audit.skippedRegions=(audit.skippedRegions||0)+1;
+        if(!startAttempt)audit.completedTiles++;
+        await onProgress({...scene,regionStates:{...audit.regionStates}},false);
+        return;
       }
-      const children=subdivideReconstructionTile(tile,450,20);
-      if(children.length<2){
-        failedTiles.push({tile:tile.index,depth,error:String(error?.message||error)});return;
-      }
-      audit.fallbackTiles++;
-      audit.totalTiles+=children.length-1;
-      const settled=await Promise.allSettled(children.map(child=>reconstructTile(child,depth+1)));
-      settled.forEach((result,i)=>{if(result.status==='rejected')failedTiles.push({tile:children[i].index,error:String(result.reason?.message||result.reason)});});
+      audit.regionStates[region.id]={...previous,state:'retry',quality:compactQuality(quality)};
     }
-  }
-  let refined=wholeCatalog;
-  try{
-    // Settle every branch before merging; one failed crop must not erase siblings.
-    const settled=await Promise.allSettled(initialTiles.map(tile=>reconstructTile(tile,0)));
-    settled.forEach((result,i)=>{if(result.status==='rejected')failedTiles.push({tile:initialTiles[i].index,error:String(result.reason?.message||result.reason)});});
-    audit.failedTiles=failedTiles;
-    if(failedTiles.length)audit.tiledDetailError=failedTiles.map(item=>item.error).join('; ');
-    audit.phase='merge';
-    audit.mergedTiles=results.length;
-    for(const {tile,scene} of results){
+    for(let attempt=startAttempt;attempt<startAttempt+1;attempt++){
+      const snapshot=scene,versions=snapshotVersions(snapshot);
+      const context={x:Math.max(0,region.x-80),y:Math.max(0,region.y-80)};
+      context.w=Math.min(W-context.x,region.w+160);context.h=Math.min(H-context.y,region.h+160);
+      const task={regionPatch:true,region:region.id,attempt,maxAttempts:1,timeoutMsOverride:180000,
+        detailCatalog:regionObjectCatalog(snapshot,region),contextImage:crop(context),contextOrigin:context,
+        fullSourceImage:src,sourceRegion:{x:region.x,y:region.y,w:region.w,h:region.h},
+        ownership:{x:region.coreX-region.x,y:region.coreY-region.y,w:region.coreRight-region.coreX,h:region.coreBottom-region.coreY}};
       try{
-        const candidate=replaceObjectRepairRegion(refined,tile,scene,1);
-        if(candidate.nodes.every((node,i)=>node===refined.nodes[i]))continue;
-        const before=await measureScene(canvas,refined,tile);
-        const after=await measureScene(canvas,candidate,tile);
-        if(acceptReconstructionRepair(before,after))refined=candidate;
-        else if(reconstructionQualityDeficit(before)>0)audit.rejectedTiles=(audit.rejectedTiles||0)+1;
-      }catch(error){audit.tileQualityError=String(error?.message||error);}
+      {
+        task.feedback={...audit.regionStates[region.id],quality:compactQuality(audit.regionStates[region.id]?.quality)};
+        const rendered=await loadImage(options.retryRenderSource||'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(sceneToSvgString(snapshot)));
+        const retryCanvas=document.createElement('canvas');retryCanvas.width=region.w;retryCanvas.height=region.h;
+        retryCanvas.getContext('2d').drawImage(rendered,region.x,region.y,region.w,region.h,0,0,region.w,region.h);
+        task.retryRender=retryCanvas.toDataURL('image/png');
+      }
+      audit.tiles.push(task);audit.regionStates[region.id]={state:'recognizing',attempt};
+        const patch=await requestScene(crop(region),region.w,region.h,task);
+        const done=commit.then(async()=>{
+          audit.regionStates[region.id]={state:'validating',attempt};
+          const applied=applyRegionPatch(scene,region,patch,versions);
+          task.conflicts=applied.conflicts;task.rejected=applied.rejected;task.ignored=applied.ignored;task.uncertainties=patch.uncertainties;
+          const changed=new Set(applied.scene.nodes.filter(n=>!scene.nodes.some(o=>o.id===n.id&&o.version===n.version)).map(n=>n.id));
+          let candidate=filterUnsupportedLongLines(canvas,scene,fitSourceFills(calibrateShapeGeometry(applied.scene,canvas,changed,region),canvas,changed));
+          candidate=repairStructuralLayers(recoverDocumentInk(candidate,canvas),canvas);
+          const local={...candidate,nodes:candidate.nodes.filter(n=>changed.has(n.id)).map(n=>({...n}))};
+          if(!options.actualRenderFeedback)calibrateEditableText(local,canvas,{maxLabels:64,region});
+          const calibrated=new Map(local.nodes.map(n=>[n.id,n]));
+          candidate={...candidate,nodes:candidate.nodes.map(n=>calibrated.get(n.id)||n)};
+          const before=await measureScene(canvas,scene,region),after=await measureScene(canvas,candidate,region);
+          // Office feedback can intentionally move a label away from its SVG
+          // position. Its bounded candidate is approved by the actual PPTX
+          // render below, so SVG must not veto or undo that correction.
+          const accepted=!applied.conflicts.length&&!applied.rejected.length&&
+            (options.actualRenderFeedback||acceptReconstructionRepair(before,after));
+          if(accepted)scene=candidate;
+          const quality=accepted?after:before;
+          const state=passed(quality)&&!applied.conflicts.length&&!applied.rejected.length&&!patch.uncertainties?.length?'passed':'retry';
+          audit.regionStates[region.id]={state,attempt,quality:compactQuality(quality),conflicts:applied.conflicts,rejected:applied.rejected,uncertainties:patch.uncertainties||[]};
+          task.accepted=accepted;task.quality={score:quality.score,localRecall:quality.localRecall};
+          await onProgress({...scene,regionStates:{...audit.regionStates}},false);
+        });
+        commit=done.catch(()=>{});await done;
+        if(audit.regionStates[region.id].state==='passed')break;
+      }catch(error){audit.regionStates[region.id]={state:'retry',attempt,error:String(error?.message||error)};
+        await onProgress({...scene,regionStates:{...audit.regionStates}},false);
+      }finally{delete task.contextImage;delete task.retryRender;delete task.fullSourceImage;}
     }
-    audit.tilePassComplete=!failedTiles.length&&!audit.tileQualityError&&!audit.rejectedTiles;
-    audit.tileUpdatedObjects=refined.nodes.filter((node,i)=>node!==wholeCatalog.nodes[i]).length;
-    return refined;
-  }catch(error){
-    audit.tiledDetailError=String(error?.message||error);
-    audit.tilePassComplete=false;
-    return refined;
+    if(!startAttempt)audit.completedTiles++;
   }
+  // Network work is concurrent; the shared request queue limits provider load.
+  // Validation/commit is serialized so overlapping replies cannot overwrite edits.
+  async function runRegions(jobs,attempt){
+    let nextRegion=0;
+    await Promise.allSettled(Array.from({length:Math.min(4,jobs.length)},async()=>{
+      while(nextRegion<jobs.length)await worker(jobs[nextRegion++],attempt);
+    }));await commit;
+  }
+  async function revalidateRegions(){
+    if(options.actualRenderFeedback)return;
+    for(const region of regions){
+      const state=audit.regionStates[region.id],quality=await measureScene(canvas,scene,region);
+      audit.regionStates[region.id]={...state,quality:compactQuality(quality),state:passed(quality)&&!state?.uncertainties?.length&&!state?.conflicts?.length&&!state?.rejected?.length?'passed':'retry'};
+    }
+  }
+  await runRegions(regions,0);
+  // Shared structural corrections can invalidate a previously accepted neighbor.
+  // Recheck the merged scene before selecting this round's refinement work.
+  await revalidateRegions();
+  // Finish coverage first. Spend the second-pass budget on the worst residuals
+  // instead of doubling every region's requests because of small glyph errors.
+  if((options.maxAttempts??2)>1){
+    const retryRegions=regions.filter(r=>audit.regionStates[r.id]?.state==='retry')
+      .sort((a,b)=>reconstructionQualityDeficit(audit.regionStates[b.id]?.quality)-reconstructionQualityDeficit(audit.regionStates[a.id]?.quality))
+      .slice(0,options.retryBudget??6);
+    audit.retryRegions=retryRegions.map(r=>r.id);
+    await runRegions(retryRegions,1);
+    if(retryRegions.length)await revalidateRegions();
+  }
+  audit.tilePassComplete=regions.every(r=>audit.regionStates[r.id]?.state==='passed');
+  return {...scene,regionStates:audit.regionStates};
 }
 function reconstructionProgressText(audit){
   const zh=GAL_I18N.lang==='zh',elapsed=Math.floor((Date.now()-audit.startedAt)/1000);
@@ -5013,7 +5104,7 @@ async function runReconstruction(){
     return false;
   }
   if(!src){ st.reconFailed = true; st.reconError = 'No bitmap source'; renderEditableExportCard(); say('recon.nobitmap'); return false; }
-  Object.assign(st,{svg:'',baseSvg:'',scene:null,vectorScene:null,fidelityScene:null,
+  Object.assign(st,{svg:'',baseSvg:'',scene:null,partialScene:null,vectorScene:null,fidelityScene:null,
     vectorSvg:'',fidelitySvg:'',exportMode:'vector',recon:null,reconFailed:false,reconError:''});
   window.__ffReconResponses=[];
   const responseButton=$('#downloadReconResponse');
@@ -5043,26 +5134,30 @@ async function runReconstruction(){
     // Keep the provider busy without allowing a slow crop to stall every
     // other crop. All Vision calls (including retries and object repairs)
     // share this limit so subdivision cannot flood the API.
-    const enqueue=visionQueue(3);
+    const pinnedModel=editableReconstructionModel();
+    const enqueue=visionQueue(4);
     const requestScene=(...args)=>{
-      if(args[3])args[3].state='queued';
+      if(args[3]){args[3].state='queued';args[3].pinnedModel=pinnedModel;}
       return enqueue(()=>requestEditableScene(...args));
     };
-    const cacheKey=await reconstructionCacheKey(src,{textLayoutVersion:2,catalogQualityVersion:5,model:editableReconstructionModel(),reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
+    const cacheKey=await reconstructionCacheKey(src,{textLayoutVersion:5,catalogQualityVersion:11,model:pinnedModel,reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
     const bypassCache=!!st.skipReconCacheOnce;
     st.skipReconCacheOnce=false;
     const cached=bypassCache?null:await readReconstructionCache(cacheKey);
     reconstructionAudit.cachedDetailComplete=!!cached?.detailComplete;
-    let scene=await reconstructCatalogWithFallback(canvas,src,requestScene,reconstructionAudit,cached?.scene,!!cached?.omissionChecked);
+    let scene=await reconstructCatalogWithFallback(canvas,src,requestScene,reconstructionAudit,cached?.scene,!!cached?.omissionChecked,compareEditableRender,(partial)=>{
+      st.partialScene=partial;
+      return writeReconstructionCache(cacheKey,{scene:partial,omissionChecked:false,detailComplete:false,completedIds:[]});
+    });
     reconstructionAudit.cacheHit=!!cached;
     let omissionChecked=!!reconstructionAudit.omissionChecked;
     const completedIds=new Set(cached?.completedIds||[]);
     const saveProgress=()=>writeReconstructionCache(cacheKey,{scene,omissionChecked,
-      detailComplete:!!reconstructionAudit.tilePassComplete,
+      detailComplete:!!reconstructionAudit.tilePassComplete&&!!reconstructionAudit.actualPptxRenderVerified,
       completedIds:[...completedIds]});
     await saveProgress();
     reconstructionAudit.catalog=scene.nodes.map(n=>({id:n.id,type:n.type,...(n.type==='text'?{text:n.text}:{})}));
-    reconstructionAudit.deduplicatedText=scene.counts.deduplicatedText;
+    reconstructionAudit.deduplicatedText=scene.counts?.deduplicatedText||0;
     reconstructionAudit.phase='quality';
     // Measure text against the actual bitmap before committing the refinement.
     // Reject it when the rendered scene becomes less similar overall.
@@ -5070,7 +5165,7 @@ async function runReconstruction(){
     try{
       const baseline=await compareEditableRender(canvas,scene);
       const calibrated={...scene,nodes:scene.nodes.map(node=>({...node}))};
-      const changed=calibrateEditableText(calibrated,canvas);
+      const changed=calibrateEditableText(calibrated,canvas,{regions:planSemanticRegions(scene,canvas.width,canvas.height)});
       if(changed){
         const refined=await compareEditableRender(canvas,calibrated);
         if(refined.score>baseline.score+0.001 &&
@@ -5088,11 +5183,13 @@ async function runReconstruction(){
     try{
       let pptxScene=await readNativePptxScene(await buildNativePptx(scene,zipStore),canvas.width,canvas.height);
       let pptxQa=await compareEditableRender(canvas,pptxScene);
+      reconstructionAudit.pptxRenderer='drawingml-roundtrip';
+      reconstructionAudit.actualPptxRenderVerified=false;
       reconstructionAudit.pptxQuality={score:pptxQa.score,localRecall:pptxQa.localRecall};
-      const jobs=planCatalogRepairs(scene,canvas.width,canvas.height);
+      const jobs=reconstructionAudit.strategy==='semantic-parallel-patches'?[]:planCatalogRepairs(scene,canvas.width,canvas.height);
       reconstructionAudit.phase='repair';
       const plannedIds=new Set(jobs.flatMap(job=>job.ids));
-      reconstructionAudit.unrefinedIds=scene.nodes.filter(n=>!plannedIds.has(n.id)&&!completedIds.has(n.id)).map(n=>n.id);
+      reconstructionAudit.unrefinedIds=reconstructionAudit.strategy==='semantic-parallel-patches'?[]:scene.nodes.filter(n=>!plannedIds.has(n.id)&&!completedIds.has(n.id)).map(n=>n.id);
       const refine=async(job,depth=0)=>{
         const {region,allowLarge=false}=job,ids=job.ids.filter(id=>!completedIds.has(id));
         if(!ids.length)return [];
@@ -5126,33 +5223,110 @@ async function runReconstruction(){
         }
       };
       const objectRepairRequests=jobs.map(job=>refine(job));
-      for(const requested of objectRepairRequests){
-        for(const {region,scale,local,ids,allowLarge} of await requested){
-        try{
-          const candidate=replaceObjectRepairRegion(scene,region,local,scale,allowLarge);
-          const candidatePptx=await buildNativePptx(candidate,zipStore);
-          const rendered=await readNativePptxScene(candidatePptx,canvas.width,canvas.height);
-          const before=await compareEditableRender(canvas,pptxScene,region);
-          const after=await compareEditableRender(canvas,rendered,region);
-          reconstructionAudit.repairCalls++;
-          if(auditExportLayout(candidate,rendered).issues.length<=auditExportLayout(scene,pptxScene).issues.length && acceptReconstructionRepair(before,after)){
-            scene=candidate;pptxScene=rendered;pptxQa=await compareEditableRender(canvas,rendered);
-            reconstructionAudit.objectRepairs=(reconstructionAudit.objectRepairs||0)+1;
-            measuredQuality=pptxQa;
-            ids.forEach(id=>completedIds.add(id));
-          }else if(reconstructionQualityDeficit(before)===0){
-            ids.forEach(id=>completedIds.add(id));
-          }else{
-            reconstructionAudit.rejectedDetailIds=[...(reconstructionAudit.rejectedDetailIds||[]),...ids];
-          }
-          await saveProgress();
-        }catch(error){reconstructionAudit.objectRepairError=String(error?.message||error);}
+      // Commit each completed crop promptly. Waiting for the first planned
+      // group can hold back every later result when that group subdivides.
+      const pendingRepairs=new Map(objectRepairRequests.map((request,i)=>
+        [i,request.then(value=>({i,value}))]));
+      while(pendingRepairs.size){
+        const {i,value}=await Promise.race(pendingRepairs.values());
+        pendingRepairs.delete(i);
+        for(const {region,scale,local,ids,allowLarge} of value){
+          try{
+            const candidate=filterUnsupportedLongLines(canvas,scene,
+              replaceObjectRepairRegion(scene,region,local,scale,allowLarge));
+            const candidatePptx=await buildNativePptx(candidate,zipStore);
+            const rendered=await readNativePptxScene(candidatePptx,canvas.width,canvas.height);
+            const before=await compareEditableRender(canvas,pptxScene,region);
+            const after=await compareEditableRender(canvas,rendered,region);
+            reconstructionAudit.repairCalls++;
+            if(auditExportLayout(candidate,rendered).issues.length<=auditExportLayout(scene,pptxScene).issues.length && acceptReconstructionRepair(before,after)){
+              scene=candidate;pptxScene=rendered;pptxQa=await compareEditableRender(canvas,rendered);
+              reconstructionAudit.objectRepairs=(reconstructionAudit.objectRepairs||0)+1;
+              measuredQuality=pptxQa;
+              ids.forEach(id=>completedIds.add(id));
+            }else if(reconstructionQualityDeficit(before)===0){
+              ids.forEach(id=>completedIds.add(id));
+            }else{
+              reconstructionAudit.rejectedDetailIds=[...(reconstructionAudit.rejectedDetailIds||[]),...ids];
+            }
+            await saveProgress();
+          }catch(error){reconstructionAudit.objectRepairError=String(error?.message||error);}
         }
       }
       measuredQuality=pptxQa;
       reconstructionAudit.pptxLayout=auditExportLayout(scene,pptxScene);
+      reconstructionAudit.pptxRenderer='drawingml-roundtrip';
+      reconstructionAudit.actualPptxRenderVerified=false;
       reconstructionAudit.pptxQuality={score:pptxQa.score,localRecall:pptxQa.localRecall};
     }catch(error){reconstructionAudit.pptxQaError=String(error?.message||error);}
+    // Optional trusted host renderer. Browser-only exports remain unverified
+    // until an Office/LibreOffice host returns the actual exported slide PNG.
+    if(typeof window.__ffRenderPptx==='function'){
+      try{
+        let png=await window.__ffRenderPptx(await buildNativePptx(scene,zipStore),{width:canvas.width,height:canvas.height});
+        if(typeof png!=='string'||!/^data:image\/png;base64,/.test(png))throw Error('PPTX renderer must return a PNG data URL');
+        const rendered=await loadImage(png);
+        if(rendered.naturalWidth!==canvas.width||rendered.naturalHeight!==canvas.height)throw Error('PPTX render dimensions mismatch');
+        let quality=await compareEditableRender(canvas,png);
+        reconstructionAudit.actualPptxQuality=quality;measuredQuality=quality;
+        reconstructionAudit.actualPptxRenderVerified=true;
+        reconstructionAudit.pptxRenderer='host-office';
+        for(const region of planSemanticRegions(scene,canvas.width,canvas.height)){
+          const q=await compareEditableRender(canvas,png,region);
+          const prior=reconstructionAudit.regionStates[region.id];
+          const unresolved=prior?.uncertainties?.length||prior?.conflicts?.length||prior?.rejected?.length;
+          const state=reconstructionQualityDeficit(q)<.001&&!unresolved?'passed':'retry';
+          reconstructionAudit.regionStates[region.id]={...reconstructionAudit.regionStates[region.id],state,officeQuality:compactQuality(q)};
+        }
+        // One bounded Office feedback round, focused on the worst failed areas.
+        // Compare the candidate's actual PPTX too; SVG agreement alone cannot
+        // approve an Office font/layout correction.
+        const failed=Object.entries(reconstructionAudit.regionStates).filter(([,r])=>r.state==='retry'&&r.officeQuality)
+          .sort((a,b)=>reconstructionQualityDeficit(b[1].officeQuality)-reconstructionQualityDeficit(a[1].officeQuality)).slice(0,6).map(([id])=>id);
+        if(failed.length){
+          const originalScene=scene,originalStates=structuredClone(reconstructionAudit.regionStates);
+          try{
+            let candidate=await reconstructCatalogWithFallback(canvas,src,requestScene,reconstructionAudit,
+              {...scene,regionStates:originalStates},true,compareEditableRender,async()=>{},
+              {regionIds:failed,maxAttempts:1,retryRenderSource:png,actualRenderFeedback:true});
+            let candidatePng=await window.__ffRenderPptx(await buildNativePptx(candidate,zipStore),{width:canvas.width,height:canvas.height});
+            if(typeof candidatePng!=='string'||!/^data:image\/png;base64,/.test(candidatePng))throw Error('Invalid retry PPTX render');
+            const candidateImage=await loadImage(candidatePng);
+            if(candidateImage.naturalWidth!==canvas.width||candidateImage.naturalHeight!==canvas.height)throw Error('Retry PPTX render dimensions mismatch');
+            let candidateQuality=await compareEditableRender(canvas,candidatePng);
+            const checkRegions=()=>Promise.all(planSemanticRegions(originalScene,canvas.width,canvas.height).map(async region=>{
+              const before=await compareEditableRender(canvas,png,region);
+              const after=await compareEditableRender(canvas,candidatePng,region);
+              const tolerances={score:.004,darkRecall:.002,localRecall:.002,edgeF1:.004,colorSimilarity:.004};
+              const accepted=Object.entries(tolerances).every(([key,tolerance])=>Number.isFinite(after[key])&&after[key]+tolerance>=before[key]);
+              return {id:region.id,accepted,before:compactQuality(before),after:compactQuality(after)};
+            }));
+            let localChecks=await checkRegions();
+            const rolledBackRegions=localChecks.filter(r=>!r.accepted).map(r=>r.id);
+            if(rolledBackRegions.length){
+              candidate=repairStructuralLayers(recoverDocumentInk(rollbackRegionChanges(originalScene,candidate,rolledBackRegions),canvas),canvas);
+              candidatePng=await window.__ffRenderPptx(await buildNativePptx(candidate,zipStore),{width:canvas.width,height:canvas.height});
+              const prunedImage=await loadImage(candidatePng);
+              if(prunedImage.naturalWidth!==canvas.width||prunedImage.naturalHeight!==canvas.height)throw Error('Pruned PPTX render dimensions mismatch');
+              candidateQuality=await compareEditableRender(canvas,candidatePng);
+              localChecks=await checkRegions();
+            }
+            const accepted=acceptReconstructionRepair(quality,candidateQuality)&&localChecks.every(r=>r.accepted);
+            reconstructionAudit.officeRetry={regions:failed,accepted,rolledBackRegions,localChecks,before:compactQuality(quality),after:compactQuality(candidateQuality)};
+            if(accepted){scene=candidate;png=candidatePng;quality=candidateQuality;}
+            else{scene=originalScene;reconstructionAudit.regionStates=originalStates;}
+          }catch(error){scene=originalScene;reconstructionAudit.regionStates=originalStates;reconstructionAudit.officeRetryError=String(error?.message||error);}
+          for(const region of planSemanticRegions(scene,canvas.width,canvas.height)){
+            const q=await compareEditableRender(canvas,png,region);
+            reconstructionAudit.regionStates[region.id]={...reconstructionAudit.regionStates[region.id],state:reconstructionQualityDeficit(q)<.001&&!['uncertainties','conflicts','rejected'].some(k=>reconstructionAudit.regionStates[region.id]?.[k]?.length)?'passed':'retry',officeQuality:compactQuality(q)};
+          }
+          reconstructionAudit.actualPptxQuality=quality;measuredQuality=quality;
+        }
+        scene={...scene,regionStates:reconstructionAudit.regionStates};
+        reconstructionAudit.tilePassComplete=Object.values(scene.regionStates).every(r=>r.state==='passed');
+        await saveProgress();
+      }catch(error){reconstructionAudit.actualPptxRenderError=String(error?.message||error);}
+    }
     const svg = sceneToSvgString(scene), audit = auditReconScene(scene);
     reconstructionAudit.phase='final';
     if(audit.dominantBitmap){
@@ -5171,7 +5345,7 @@ async function runReconstruction(){
     // A usable JSON scene is not evidence of a publication-ready redraw.
     // Keep the final export flagged until both fine strokes and the weakest
     // regions closely match the source image.
-    const qualityNeedsReview=!quality || quality.error || quality.score<.98 ||
+    const qualityNeedsReview=!reconstructionAudit.tilePassComplete || !reconstructionAudit.actualPptxRenderVerified || !quality || quality.error || quality.score<.98 ||
       quality.darkRecall<.98 || quality.localRecall<.97 ||
       quality.edgeF1<.97 || quality.colorSimilarity<.98 ||
       reconstructionAudit.fallbackTiles>0 || reconstructionAudit.pptxQaError ||
@@ -5205,8 +5379,8 @@ async function runReconstruction(){
         : '; filtered '+scene.counts.filteredArtifactLines+' invalid lines from crop boundaries.';
     }
     status.textContent += qualityNeedsReview
-      ? (GAL_I18N.lang==='zh'?' 尚未通过完整质量检查；当前结果可导出，但请先复核，或再次重建继续精修。':' Full quality checks have not passed. Review the current export or rebuild to continue refinement.')
-      : (GAL_I18N.lang==='zh'?' 重建成功，可导出原生可编辑图形。':' Reconstruction complete. Native editable export is ready.');
+      ? (GAL_I18N.lang==='zh'?' 已生成可编辑草稿，仍有区域未通过视觉验收。':' Editable draft ready; some regions still require visual review.')
+      : (GAL_I18N.lang==='zh'?' 重建已通过视觉验收，可导出原生可编辑图形。':' Reconstruction passed visual validation. Native editable export is ready.');
     return true;
   }catch(err){
     console.warn('reconstruction failed', err);
