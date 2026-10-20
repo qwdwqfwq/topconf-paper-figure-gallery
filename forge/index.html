@@ -48,8 +48,8 @@
   .status-line{display:flex;align-items:flex-start;gap:8px;font-size:12px;line-height:1.5;color:#475569;
     background:#fff;border:1px solid var(--line);border-radius:9px;padding:7px 10px;overflow-wrap:anywhere}
   .status-line::before{content:"";flex:0 0 7px;width:7px;height:7px;border-radius:50%;background:#94a3b8;margin-top:5px}
-  .status-line[data-state="loading"]{color:#3730a3;background:#f5f6ff;border-color:#dfe3ff}
-  .status-line[data-state="loading"]::before{background:var(--indigo);animation:parsePulse 1.4s ease-in-out infinite}
+  .status-line[data-state="loading"]{color:#065f46;background:#f0fdf7;border-color:#bbf7d0}
+  .status-line[data-state="loading"]::before{background:#10b981;animation:parsePulse 1.4s ease-in-out infinite}
   .status-line[data-state="success"]{color:#065f46;background:#f0fdf7;border-color:#bbf7d0}
   .status-line[data-state="success"]::before{background:#10b981}
   .status-line[data-state="error"]{color:#991b1b;background:#fef2f2;border-color:#fecaca}
@@ -667,7 +667,7 @@
 </div>
 
 <script src="./i18n.js"></script>
-<script src="./i18n_forge.js?v=20261020-image-recovery"></script>
+<script src="./i18n_forge.js?v=20261021-pdf-status"></script>
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 import {prepareQuery,buildIndex,rank} from './retrieval.mjs';
