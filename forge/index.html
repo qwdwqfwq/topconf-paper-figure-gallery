@@ -3524,10 +3524,13 @@ function sceneToDrawio(scene){
       return;
     }
     if(n.type==='rect'){
-      const rounded = n.radius>0 ? 'rounded=1;arcSize='+Math.max(4, Math.min(50, Math.round(n.radius/Math.max(1,Math.min(n.w,n.h))*100)))+';' : '';
+      // mxRectangleShape uses arcSize / 2 as the radius in absolute mode.
+      // Preserve measured small/fractional corners instead of imposing a percentage floor.
+      const radius=Math.max(0,Math.min(Number(n.radius)||0,n.w/2,n.h/2));
+      const rounded = radius>0 ? 'rounded=1;absoluteArcSize=1;arcSize='+(radius*2)+';' : 'rounded=0;';
       const style = rounded+'whiteSpace=wrap;html=1;fillColor='+drawioColor(n.fill,'none')+';strokeColor='+drawioColor(n.stroke,'none')+';strokeWidth='+(n.strokeWidth||1)+';'+(scene.svgSource&&n.dash?'dashed=1;':'');
       cells.push('<mxCell id="'+id+'" style="'+style+'" vertex="1" parent="1">'+
-                 '<mxGeometry x="'+Math.round(n.x)+'" y="'+Math.round(n.y)+'" width="'+Math.round(n.w)+'" height="'+Math.round(n.h)+'" as="geometry"/></mxCell>');
+                 '<mxGeometry x="'+n.x+'" y="'+n.y+'" width="'+n.w+'" height="'+n.h+'" as="geometry"/></mxCell>');
       return;
     }
     if(n.type==='path' || n.type==='polyline'){

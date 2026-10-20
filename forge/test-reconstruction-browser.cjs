@@ -79,7 +79,7 @@ const server = http.createServer((req,res)=>{
       const roundtrip=await readNativePptxScene(blob,500,400);
       const visioPage=window.__ffTestVsdx(fixed,'Arial').find(f=>f.name==='visio/pages/page1.xml');
       const visioXml=typeof visioPage.data==='string'?visioPage.data:new TextDecoder().decode(visioPage.data);
-      return {fixed,again,roundtrip,visioXml};
+      return {fixed,again,roundtrip,visioXml,drawio:window.__ffTestDrawio(fixed)};
     });
     assert.ok(Math.abs(containers.fixed.nodes[0].radius-12)<=2,'radius measured from source rather than panel height');
     assert.equal(containers.fixed.nodes[1].type,'path','header follows shared rounded container boundary');
@@ -87,6 +87,32 @@ const server = http.createServer((req,res)=>{
     assert.deepEqual(containers.again,containers.fixed,'container geometry repair is idempotent');
     assert.ok(Math.abs(containers.roundtrip.nodes[0].radius-containers.fixed.nodes[0].radius)<.01,'PPTX radius survives native export/readback');
     assert.ok(!/<Cell N="Rounding" V="(?!0")/.test(containers.visioXml),'Visio does not round explicit rounded geometry a second time');
+
+    const drawioCorners=await page.evaluate((containerXml)=>{
+      const sizes=[{w:400,h:350,radius:1},{w:800,h:40,radius:0.375},
+        {w:40,h:800,radius:12},{w:80,h:40,radius:100},{w:80,h:40,radius:0}];
+      const xml=window.__ffTestDrawio({canvas:{width:1000,height:1000},nodes:sizes.map(n=>({
+        type:'rect',x:20.25,y:20.5,fill:'#ffffff',stroke:'#111111',strokeWidth:1,...n}))});
+      const parse=xml=>new DOMParser().parseFromString(xml,'application/xml');
+      const cells=[...parse(xml).querySelectorAll('mxCell[vertex]')];
+      const radii=cells.map(cell=>{
+        const style=Object.fromEntries(cell.getAttribute('style').split(';').filter(Boolean).map(s=>s.split('=')));
+        const g=cell.querySelector('mxGeometry');
+        // Rendering contract from mxRectangleShape.paintBackground (absolute arc size).
+        return {absolute:style.absoluteArcSize,rounded:style.rounded,
+          radius:style.rounded==='1'?Math.min(+g.getAttribute('width')/2,+g.getAttribute('height')/2,+style.arcSize/2):0,
+          x:+g.getAttribute('x'),y:+g.getAttribute('y')};
+      });
+      const repaired=[...parse(containerXml).querySelectorAll('mxCell[vertex]')];
+      return {radii,headerStyle:repaired[1].getAttribute('style'),
+        headerX:+repaired[1].querySelector('mxGeometry').getAttribute('x')};
+    },containers.drawio);
+    assert.deepEqual(drawioCorners.radii.map(n=>n.radius),[1,.375,12,20,0],
+      'draw.io preserves small, fractional and tall-panel radii, clamping only to shape bounds');
+    assert.ok(drawioCorners.radii.slice(0,4).every(n=>n.absolute==='1'));
+    assert.ok(drawioCorners.radii.every(n=>n.x===20.25&&n.y===20.5),'fractional border insets survive export');
+    assert.match(drawioCorners.headerStyle,/shape=stencil\(/,'repaired header keeps its explicit outline');
+    assert.equal(drawioCorners.headerX,21,'draw.io header remains inside outer stroke');
 
     const svgCheck=await page.evaluate(async()=>{
       const svg='<svg xmlns="http://www.w3.org/2000/svg" width="500" height="300" viewBox="0 0 500 300"><style>.label{font:25px Arial;fill:#123456}.wire{fill:none;stroke:#345678;stroke-width:2;stroke-dasharray:5 3;marker-end:url(#tip)}</style><defs><marker id="tip" markerWidth="5" markerHeight="5" refX="5" refY="2"><path d="M0 0 L5 2 L0 4"/></marker></defs><rect x="0" y="0" width="500" height="300" fill="#FFFFFF"/><g transform="translate(20 10)"><text class="label" x="220" y="70" text-anchor="middle">FEATURE EXTRACTION</text><path class="wire" d="M 10 120 L 180 120"/><path class="wire" d="M 190 120 L 190 190"/><polygon points="220,110 260,110 240,145" fill="#abcdef"/><path d="M 270 120 C 300 80 340 170 370 120" fill="none" stroke="#345678"/></g></svg>';
