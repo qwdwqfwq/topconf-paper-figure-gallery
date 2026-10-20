@@ -667,6 +667,7 @@ import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeRecon
 import {registerMissingObjects, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, tileDetailCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion, planReconstructionTiles, subdivideReconstructionTile} from './reconstruction-core.mjs?v=global-ids-20261018';
 import {calibrateEditableText} from './text-calibration.mjs?v=text-lines-20261017';
 import {figureCanvas,imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261016d';
+import {reconstructionHttpError,reconstructionRetryDelay,reconstructionFailureMessage} from './reconstruction-retry.mjs?v=20261020';
 import {infistarAuditStatus} from './infistar-audit.mjs?v=20261016b';
 import {importDesktopScene} from './desktop-scene.mjs?v=20261014';
 
@@ -2241,7 +2242,7 @@ async function fetchTextWithTimeout(url, options={}, timeoutMs=780000){
   const to=setTimeout(()=>ac.abort(),timeoutMs);
   try{
     const r=await fetch(url,{...options,signal:ac.signal});
-    return {ok:r.ok,status:r.status,text:await r.text()};
+    return {ok:r.ok,status:r.status,retryAfter:r.headers.get('retry-after'),text:await r.text()};
   }catch(err){
     if(ac.signal.aborted){
       const timeout=new Error('Vision API timed out after '+Math.round(timeoutMs/1000)+' seconds');
@@ -4608,13 +4609,13 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
     })
   }):'';
   const referenceImages=await editableRevisionImages(imageDataUri,revision,W,H);
-  const isFatal=(err)=>/\b400\b|\b401\b|\b403\b|\b404\b|invalid\s+api\s*key|permission|quota|insufficient|billing/i.test(String(err&&err.message||err));
   const configuredTimeoutMs=Math.min(
     Math.max(1,Math.min(60,Number($('#reconTimeoutMinutes').value)||15))*60000,
     Number.isFinite(audit.timeoutMsOverride)?audit.timeoutMsOverride:Infinity);
   let lastError=null;
   let previousResponse='';
-  const maxAttempts=Math.max(1,Math.min(3,Number(audit.maxAttempts)||3));
+  const formatAttempts=Math.max(1,Math.min(3,Number(audit.maxAttempts)||3));
+  const maxAttempts=3;
   for(let attempt=1;attempt<=maxAttempts;attempt++){
     const remainingBudget=Number.isFinite(audit.maxTotalMs)
       ? audit.maxTotalMs-(Date.now()-audit.startedAt) : Infinity;
@@ -4655,7 +4656,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
           body:JSON.stringify(withReasoning(body,'visual'))
         },timeoutMs);
         txt=r.text;
-        if(!r.ok) throw new Error('HTTP '+r.status+': '+friendlyHttp(r.status,txt));
+        if(!r.ok)throw reconstructionHttpError(r,'HTTP '+r.status+': '+friendlyHttp(r.status,txt));
         const d=JSON.parse(txt);
         responseDiagnostics='stop_reason='+String(d.stop_reason||'unknown')+', output_chars='+txt.length;
         audit.responseDiagnostics=responseDiagnostics;
@@ -4691,7 +4692,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
           body:JSON.stringify(withReasoning(body,'visual'))
         },timeoutMs);
         txt=r.text;
-        if(!r.ok) throw new Error('HTTP '+r.status+': '+friendlyHttp(r.status,txt));
+        if(!r.ok)throw reconstructionHttpError(r,'HTTP '+r.status+': '+friendlyHttp(r.status,txt));
         const d=JSON.parse(txt);
         txt=editableResponseText(d);
         const choice=d.choices&&d.choices[0]||{};
@@ -4754,16 +4755,18 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
     }catch(err){
       lastError=err;
       audit.lastError=String(err&&err.message||err);
-      if(isFatal(err) || attempt===maxAttempts || err.visionTimeout ||
-        (Number.isFinite(audit.maxTotalMs)&&Date.now()-audit.startedAt>=audit.maxTotalMs-3000)) break;
+      const delay=reconstructionRetryDelay(err,attempt,formatAttempts);
+      if(delay===null || (Number.isFinite(audit.maxTotalMs)&&Date.now()-audit.startedAt+delay+1000>=audit.maxTotalMs)) break;
       audit.state='retrying';
-      await new Promise(resolve=>setTimeout(resolve,1000*2**(attempt-1)));
+      audit.retryDelayMs=delay;
+      await new Promise(resolve=>setTimeout(resolve,delay));
     }
   }
   audit.state='failed';
   audit.finishedAt=Date.now();
   audit.durationMs=audit.finishedAt-audit.startedAt;
   audit.attempts=audit.attempt||maxAttempts;
+  if(lastError)lastError.message=reconstructionFailureMessage(lastError,audit.attempts,GAL_I18N.lang==='zh')||lastError.message;
   audit.error=String(lastError&&lastError.message||lastError||tt('recon.badjson'));
   throw lastError||new Error(tt('recon.badjson'));
 }
