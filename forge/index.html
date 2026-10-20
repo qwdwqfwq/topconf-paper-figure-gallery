@@ -549,7 +549,13 @@
       <h4><span class="bi" aria-hidden="true">🎨</span><span data-i18n="box.model"></span><small data-i18n="settings.badge"></small></h4>
       <div class="srow" style="margin-top:0"><div class="tabs" id="modeTabs"><button data-mode="svg" class="on" data-i18n="mode.svg"></button><button data-mode="image" data-i18n="mode.image"></button></div></div>
       <div class="bfield" id="modelRow" style="margin-top:11px"><span class="blab" id="modelLabel" data-i18n="modelLabel"></span><select id="model"></select></div>
-      <div class="bfield" id="imageDimensionsRow" hidden style="margin-top:9px"><span class="blab" data-i18n="img.ratio"></span><select id="figureRatio"><option value="16:9" selected>16:9</option><option value="3:2">3:2</option><option value="4:3">4:3</option><option value="1:1">1:1</option></select><span class="blab" data-i18n="img.resolution"></span><select id="imageResolution"><option value="1K">1K</option><option value="2K" selected>2K</option><option value="4K">4K</option></select></div>
+      <div class="bfield" id="imageDimensionsRow" hidden style="margin-top:9px"><span class="blab" data-i18n="img.ratio"></span><select id="figureRatio"><option value="16:9" selected>16:9</option><option value="3:2">3:2</option><option value="4:3">4:3</option><option value="1:1">1:1</option></select><span class="blab" data-i18n="img.resolution"></span><select id="imageResolution"><option value="1K">1K</option><option value="2K" selected>2K</option><option value="4K">4K</option></select><label class="hint"><input type="checkbox" id="allowImageTextFallback"> <span data-i18n="img.allowTextFallback"></span></label></div>
+      <div class="hint" id="imageRouteControls" hidden>
+        <label><input type="checkbox" id="allowImageTrial"> 试用未验证组合（真实生成可能计费）</label>
+        <label><input type="checkbox" id="allowImageBackup"> 明确拒绝时切换已验证备用线路</label>
+        <div>验证仅在本次页面会话内保留 30 分钟，按账号、模型、比例、分辨率和参考图模式分别记录。首次使用需主动试用；参考图与 4K 不沿用纯文字或低分辨率验证结果。没有备用线路时保留输入并停止。</div>
+        <div id="imageVerifiedRoutes" aria-live="polite"></div>
+      </div>
       <p class="bnote warn-inline" id="imageRatioWarn" hidden></p>
       <p class="bnote warn-inline" id="modelWarn" hidden></p>
       <p class="bnote" id="pdfModelHint" data-i18n="hint.model"></p>
@@ -662,7 +668,10 @@
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 import {prepareQuery,buildIndex,rank} from './retrieval.mjs';
-import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261020-edits';
+import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=20261020-recovery';
+import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261020-routes';
+import {ImageRoutes, safeImageFailover} from './image-routes.mjs?v=20261020';
+const imageRoutes=new ImageRoutes();
 import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=text-lines-20261017';
 import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=baseline-09a60b5-text-v2-20261017';
 import {registerMissingObjects, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, tileDetailCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion, planReconstructionTiles, subdivideReconstructionTile} from './reconstruction-core.mjs?v=global-ids-20261018';
@@ -1362,7 +1371,16 @@ async function callPdfParser(mode, payload){
     }
   }
   const raw=await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,raw));
-  return extractJsonObject(parseResponseText(JSON.parse(raw)));
+  try{ return pdfResponseJSON(JSON.parse(raw)); }
+  catch(error){
+    if(!error.pdfFormatFailure || !body?.messages || c.proto==='anthropic') throw error;
+    // One format recovery; preserve the selected model, paper and references.
+    const repaired=pdfRepairBody(withReasoning(body,'parse'));
+    const retry=await postJSON(base,'/chat/completions',repaired,key);
+    const retryRaw=await retry.text();
+    if(!retry.ok) throw new Error(friendlyHttp(retry.status,retryRaw));
+    return pdfResponseJSON(JSON.parse(retryRaw));
+  }
 }
 function renderPdfSummary(data){
   const sections=Array.isArray(data.selectedSections)?data.selectedSections.filter(x=>x&&x.summary).slice(0,6):[];
@@ -1700,6 +1718,7 @@ document.querySelectorAll('#modeTabs button').forEach(b=>b.onclick=async ()=>{
   document.querySelectorAll('#modeTabs button').forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); mode=b.dataset.mode;
   $('#imageDimensionsRow').hidden=mode!=='image';
+  $('#imageRouteControls').hidden=mode!=='image';
   syncImageRatioSupport();
   $('#modelLabel').textContent = mode==='svg' ? tt('modelLabel.svg') : tt('modelLabel.image');
   await populateModels();
@@ -1719,6 +1738,7 @@ document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
   // written summary cannot, so a higher count is not a problem to warn about.
 });
 function syncImageRatioSupport(){
+  syncVerifiedImageRoutes();
   const warn=$('#imageRatioWarn');
   if(!warn) return;
   warn.hidden=true;warn.textContent='';warn.classList.remove('audit-ok');
@@ -1736,7 +1756,7 @@ function syncImageRatioSupport(){
     const status=infistarAuditStatus(model,$('#figureRatio').value,$('#imageResolution').value);
     const key={verified:'img.auditVerified',rejected:'img.auditRejected',unavailable:'img.auditUnavailable',limited:'img.auditLimited',wrongSize:'img.auditWrongSize',inconclusive:'img.auditInconclusive',untested:'img.auditUntested'}[status];
     warn.textContent=tt(key,{model,ratio:$('#figureRatio').value,resolution:$('#imageResolution').value});
-    warn.classList.toggle('audit-ok',status==='verified');
+    warn.classList.remove('audit-ok');
     warn.hidden=false;
   }
 }
@@ -1744,6 +1764,19 @@ $('#model').onchange = e=>{localStorage.setItem('ff_model_'+$('#provider').value
 $('#figureRatio').onchange=syncImageRatioSupport;
 $('#imageResolution').onchange=syncImageRatioSupport;
 $('#customModel').addEventListener('input',syncImageRatioSupport);
+$('#key').addEventListener('input',syncVerifiedImageRoutes);
+function syncVerifiedImageRoutes(){
+  const el=$('#imageVerifiedRoutes');
+  if(!el)return;
+  const rows=imageRoutes.records.filter(r=>r.base===baseURL() && r.key===$('#key').value.trim() && imageRoutes.status(r)==='verified');
+  el.textContent=rows.length
+    ? '当前账号近期成功组合：'+rows.map(r=>`${r.model} / ${r.ratio} / ${r.resolution} / ${r.references?'参考图':'纯文字'}`).join('；')
+    : '当前账号尚无近期成功记录。未验证组合默认不会发送生图请求。';
+}
+function recordImageRoute(route,state){
+  imageRoutes.record(route,state);
+  syncVerifiedImageRoutes();
+}
 
 /* ---------------- pass 1: analyze references ---------------- */
 const ANALYZE_SYS = 'You are an expert scientific-figure design analyst. You receive several top-conference figures of the SAME target visual type. Infer the shared visual grammar across all supplied figures: recurring panel divisions, density, element counts, borders, arrows, palette, typography and hierarchy. Do not treat any single figure as a layout master and do not copy a particular figure. Return STRICT JSON only.';
@@ -2205,8 +2238,9 @@ function friendlyHttp(status, txt){
   if(status===429) return tt('err.429')+apiContext();
   if($('#provider').value==='infistar' && status===422)
     return tt('err.infistar422',{t:body||txt.slice(0,200)})+apiContext();
-  if($('#provider').value==='infistar' && status===503 && /No available channel|model_not_found/i.test(body||txt))
-    return tt('err.infistar503')+apiContext();
+  if($('#provider').value==='infistar' && status===503 && /No available (?:compatible accounts|channel)|model_not_found/i.test(body||txt))
+    return tt('err.infistar503')+' '+(body||txt).slice(0,500)+apiContext();
+  if(status===504) return tt('err.gatewayTimeout',{t:(body||txt).slice(0,500)})+apiContext();
   if(status===403){
     // SiliconFlow answers 403 {"code":30003,"message":"Model disabled."} when a model
     // needs real-name verification or is switched off for the account; other providers
@@ -2219,7 +2253,7 @@ function friendlyHttp(status, txt){
   return tt('err.http',{s:status,t:txt.slice(0,200)})+apiContext();
 }
 function postJSON(base, path, body, key, extraHeaders, timeoutMs=900000){
-  return fetchWithTimeout(base+path,{method:'POST',
+  return (path==='/chat/completions'?requestChat:fetchWithTimeout)(base+path,{method:'POST',
     headers:{'Content-Type':'application/json',Authorization:'Bearer '+key,...extraHeaders},
     body:JSON.stringify(body)},timeoutMs);
 }
@@ -2311,7 +2345,10 @@ $('#genBtn').onclick = async ()=>{
     if(mode==='image' && kindOf(model)!=='image'){ showErr(tt('gen.needimage')); return; }
   }
   if(mode==='image'){
-    try{ imageRequestDimensions(p,model,$('#figureRatio').value,$('#imageResolution').value,usesInfistarGemini(base,model)); }
+    try{
+      imageRequestDimensions(p,model,$('#figureRatio').value,$('#imageResolution').value,usesInfistarGemini(base,model));
+      selectImageRoute({base,model,key,p,ratio:$('#figureRatio').value,resolution:$('#imageResolution').value,references:refs.size>0});
+    }
     catch(error){ showErr(error.message); return; }
   }
   const btn=$('#genBtn'); btn.disabled=true;
@@ -2366,10 +2403,7 @@ async function genOaiSVG(base,model,key,content,p,refIds,layoutGuide){
     throw new Error(diag || tt('svg.blocked'));
   }
   let txt = await r.text();
-  if(!r.ok && usedVision){
-    body.messages=[{role:'system',content:SVG_SYS},{role:'user',content:prompt}]; usedVision=false;
-    try{ r = await postJSON(base,'/chat/completions',body,key); txt=await r.text(); }catch(e){}
-  }
+  // Preserve references on provider failures; never silently switch to text-only.
   if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
   const d = JSON.parse(txt);
   const parsed = extractSvgCode(d.choices?.[0]?.message?.content||'', true);
@@ -5720,9 +5754,24 @@ function compactImageGuide(j){
       : '';
   return zones.length ? `Layout zones (${zones.length}; preserve every zone): ${zones.join(' | ')}.\n${palette?`Palette: ${palette}.\n`:''}` : '';
 }
-async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
+function selectImageRoute(route){
+  const status=imageRoutes.status(route);
+  if(status==='verified')return route;
+  const backup=$('#allowImageBackup').checked && imageRoutes.alternatives(route)[0];
+  if(status==='blocked' && backup)return backup;
+  if(status==='blocked')throw new Error('该生图线路刚刚明确拒绝请求，已暂停 60 秒。输入已保留；请选择其他线路，或稍后再试。');
+  if(!$('#allowImageTrial').checked)throw new Error('当前账号的模型、比例、分辨率及参考图组合尚未验证。请选择已成功的组合，或勾选“试用未验证组合”后发起一次真实生成（可能计费）。');
+  return route;
+}
+async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted=[]){
   const useIds = refIds||[...refs];
   const ratio=$('#figureRatio').value, resolution=$('#imageResolution').value;
+  const requested={base,model,key,p,ratio,resolution,references:useIds.length>0};
+  const route=selectImageRoute(requested);
+  if(attempted.length>=2 || attempted.some(r=>imageRoutes.same(r,route)))throw new Error('本次生图线路切换已停止，输入已保留。请检查服务商状态后再试。');
+  if(!imageRoutes.same(requested,route))
+    return genOaiImage(route.base,route.model,route.key,content,route.p,useIds,layoutGuide,[...attempted,requested]);
+  attempted=[...attempted,route];
   const nativeGemini=usesInfistarGemini(base,model);
   const dimensions=imageRequestDimensions(p,model,ratio,resolution,nativeGemini);
   const tg = TARGETS[$('#target').value] || TARGETS.overview;
@@ -5839,8 +5888,8 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   let r;
   try{
     r=await requestImageWithRecovery({url:base+endpoint,body,key,
-      usedReferences:usedRefs,allowReferenceFallback:false,
-      onRecovery:kind=>{ $('#genBtn').textContent=tt('img.recovery.'+kind); }});
+      usedReferences:usedRefs,allowReferenceFallback:!nativeGemini && $('#allowImageTextFallback').checked && (imageRoutes.status({...route,references:false})==='verified' || $('#allowImageTrial').checked),
+      onRecovery:kind=>{ if(kind==='reference')recordImageRoute(route,'blocked'); $('#genBtn').textContent=tt('img.recovery.'+kind); }});
   }catch(e){
     if(e.name==='TimeoutError') throw new Error(tt('img.timeout')+apiContext());
     throw new Error(tt('img.connection')+apiContext());
@@ -5848,6 +5897,11 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   usedRefs=r.usedReferences;
   const txt=r.text;
   if(!r.ok){
+    if(safeImageFailover(r.status,txt)){
+      recordImageRoute({...route,references:usedRefs},'blocked');
+      const backup=attempted.length<2 && $('#allowImageBackup').checked && imageRoutes.alternatives(route).find(candidate=>!attempted.some(previous=>imageRoutes.same(previous,candidate)));
+      if(backup)return genOaiImage(backup.base,backup.model,backup.key,content,backup.p,useIds,layoutGuide,attempted);
+    }
     if(r.status===404){
       // A hosted model manifest is only a suggestion: each user's provider
       // account may expose a different set of image models. Prefer the
@@ -5869,12 +5923,19 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide){
   const exportImgSrc = item.b64_json ? `data:${imageMime};base64,${item.b64_json}` : imgSrc;
   const actualImage=await loadImage(exportImgSrc);
   const actualWidth=actualImage.naturalWidth||actualImage.width, actualHeight=actualImage.naturalHeight||actualImage.height;
-  if(!verifyImageRatio(actualWidth,actualHeight,ratio)) throw new Error(tt('img.ratioMismatch',{ratio,width:actualWidth,height:actualHeight}));
-  if(!verifyImageResolution(actualWidth,actualHeight,resolution,dimensions.field==='size'?dimensions.value:null)) throw new Error(tt('img.resolutionMismatch',{resolution,width:actualWidth,height:actualHeight}));
+  if(!verifyImageRatio(actualWidth,actualHeight,ratio)){
+    recordImageRoute({...route,references:usedRefs},'blocked');
+    throw new Error(tt('img.ratioMismatch',{ratio,width:actualWidth,height:actualHeight}));
+  }
+  if(!verifyImageResolution(actualWidth,actualHeight,resolution,dimensions.field==='size'?dimensions.value:null)){
+    recordImageRoute({...route,references:usedRefs},'blocked');
+    throw new Error(tt('img.resolutionMismatch',{resolution,width:actualWidth,height:actualHeight}));
+  }
+  recordImageRoute({...route,references:usedRefs},'verified');
   $('#out').style.display='block';
   $('#out').innerHTML = `<img data-step3-output="true" src="${esc(imgSrc)}" alt="draft">
     <div class="dl"><button type="button" class="btn-primary" id="dlImg">${tt('img.download')}</button>
-    <span class="hint">${r.referenceFallback?tt('img.referenceFallback'):usedRefs?tt('img.hintRef',{n:useIds.length}):tt('img.hint')} · ${ratio} · ${actualWidth}×${actualHeight}px</span></div>`;
+    <span class="hint">${r.referenceFallback?tt('img.referenceFallback'):usedRefs?tt('img.hintRef',{n:useIds.length}):tt('img.hint')} · ${ratio} · ${actualWidth}×${actualHeight}px · ${esc(model)}${attempted.length>1?' · 已切换已验证备用线路':''}</span></div>`;
   // Bind the bitmap download as soon as Step 3 has its verified image. Step 4
   // can take minutes and must never gate or replace this button.
   $('#dlImg').onclick = async ()=>{

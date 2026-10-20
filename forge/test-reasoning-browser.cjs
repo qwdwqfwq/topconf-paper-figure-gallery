@@ -25,10 +25,14 @@ const server=http.createServer((req,res)=>{
   try{
     const page=await browser.newPage({serviceWorkers:'block'}),requests=[],errors=[];
     page.on('pageerror',e=>errors.push(e.message));
-    let reject=false;
+    let reject=false,truncateOnce=false;
     await page.route(/\/(chat\/completions|responses)$/,async route=>{
       requests.push(route.request().postDataJSON());
-      const content=JSON.stringify({nodes:[{id:'box',type:'rect',x:10,y:10,w:40,h:40,fill:'#ffffff'}],labels:['test']});
+      if(truncateOnce){
+        truncateOnce=false;
+        return route.fulfill({json:{choices:[{finish_reason:'length',message:{content:'',reasoning_content:'unfinished analysis'}}]}});
+      }
+      const content=JSON.stringify({selectedSections:[{section:'Method',summary:'Test paper method.'}],nodes:[{id:'box',type:'rect',x:10,y:10,w:40,h:40,fill:'#ffffff'}],labels:['test']});
       await route.fulfill({status:reject?400:200,contentType:'application/json',body:JSON.stringify(reject?{error:{message:'Unsupported reasoning_effort xhigh'}}:{choices:[{message:{content}}],output:[{type:'message',content:[{type:'output_text',text:content}]}]})});
     });
     await page.goto(`http://127.0.0.1:${server.address().port}/forge/`);
@@ -76,6 +80,17 @@ const server=http.createServer((req,res)=>{
         assert.equal(requests.at(-1).reasoning_effort,effort||undefined,stage);
       }
     }
+    truncateOnce=true;
+    const beforeRepair=requests.length;
+    const repaired=await page.evaluate(()=>window.__test.parse('text',{text:'PAPER_FIXTURE_MUST_SURVIVE',pages:1,total:1}));
+    assert.ok(repaired.selectedSections[0].summary);
+    assert.equal(requests.length,beforeRepair+2);
+    const first=requests[beforeRepair],second=requests[beforeRepair+1];
+    assert.equal(second.max_completion_tokens,12000);
+    assert.equal(second.reasoning_effort,first.reasoning_effort);
+    assert.equal(second.model,first.model);
+    assert.deepEqual(second.messages.slice(0,-1),first.messages);
+    assert.match(JSON.stringify(second.messages),/PAPER_FIXTURE_MUST_SURVIVE/);
     reject=true;
     const before=requests.length;
     const failure=await page.evaluate(async()=>{try{await window.__test.labels([],null);return '';}catch(e){return e.message;}});

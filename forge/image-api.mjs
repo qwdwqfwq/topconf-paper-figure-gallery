@@ -36,7 +36,7 @@ export async function requestImageWithRecovery({url,body,key,usedReferences=fals
   const deadline=new Promise((_,reject)=>{
     timer=setTimeout(()=>{controller.abort();reject(timeout);},timeoutMs);
   });
-  let payload=body, transientRetried=false, referenceFallback=false;
+  let payload=body, referenceFallback=false;
   try{
     for(;;){
       const result=await Promise.race([deadline,(async()=>{
@@ -47,15 +47,16 @@ export async function requestImageWithRecovery({url,body,key,usedReferences=fals
         return {ok:response.ok,status:response.status,text:await response.text()};
       })()]);
       const kind=result.ok?'':imageFailureKind(result.status,result.text);
-      if(kind==='reference' && usedReferences && allowReferenceFallback && !(payload instanceof FormData) && !referenceFallback){
-        payload={...payload};delete payload.image;
+      if(kind==='reference' && usedReferences && allowReferenceFallback && !referenceFallback){
+        if(payload instanceof FormData){
+          payload=Object.fromEntries([...payload.entries()].filter(([name,value])=>
+            name!=='image' && name!=='image[]' && typeof value==='string'));
+          url=url.replace(/\/images\/edits$/, '/images/generations');
+        }else{
+          payload={...payload};delete payload.image;
+        }
         usedReferences=false;referenceFallback=true;
         onRecovery('reference');
-        continue;
-      }
-      if(kind==='upstream' && !transientRetried){
-        transientRetried=true;onRecovery('upstream');
-        await Promise.race([deadline,sleep(1500)]);
         continue;
       }
       return {...result,usedReferences,referenceFallback};
