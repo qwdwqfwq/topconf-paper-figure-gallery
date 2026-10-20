@@ -81,7 +81,6 @@ const server = http.createServer((req,res)=>{
       imageRequests.push({url:req.url(),body:req.postDataJSON(),headers:req.headers()});
       return route.fulfill({json:{candidates:[{content:{parts:[{text:'Generated image'},{inlineData:{mimeType:'image/png',data:pixel}}]},finishReason:'STOP'}]}});
     });
-    await page.evaluate(()=>{document.querySelector('#allowImageTrial').checked=true;});
     await page.evaluate(()=>window.__testGenImage('https://infistar.cc/v1','gemini-3.1-flash-image','test-key','Draw a research diagram','infistar',[],''));
     assert.equal(imageRequests.length,1);
     assert.equal(imageRequests[0].url,'https://infistar.cc/v1beta/models/gemini-3.1-flash-image:generateContent');
@@ -110,74 +109,41 @@ const server = http.createServer((req,res)=>{
       gptRequest=route.request().postDataJSON();
       return route.fulfill({json:{data:[{b64_json:widePixel}]}});
     });
-    await page.evaluate(()=>{document.querySelector('#allowImageTrial').checked=true;});
     await page.evaluate(()=>window.__testGenImage('https://infistar.cc/v1','gpt-image-2.5-sunburst','test-key','Draw a research diagram','infistar',[],''));
     assert.equal(gptRequest.size,'2048x1152');
     assert.equal(await page.locator('#dlImg').isEnabled(),true);
     assert.equal(await page.locator('#out img').getAttribute('src'),'data:image/png;base64,'+widePixel);
     await page.unroute('https://infistar.cc/v1/images/generations');
-    // Real successful output is the only source of verification evidence.
-    await page.locator('#allowImageTrial').uncheck();
-    const blockedRequests=[];
-    await page.route('https://infistar.cc/v1/**',route=>{
-      blockedRequests.push(route.request().url());
-      return route.fulfill({status:500,json:upstreamErrorPlaceholder()});
-    });
-    function upstreamErrorPlaceholder(){return {error:{message:'unexpected request'}};}
-    for(const variant of ['key','4K','reference']){
-      if(variant==='4K')await page.locator('#imageResolution').selectOption('4K');
-      const error=await page.evaluate(async variant=>{
-        try{
-          const fn=variant==='reference'?window.__testGenImageRefs:window.__testGenImage;
-          await fn('https://infistar.cc/v1','gpt-image-2.5-sunburst',variant==='key'?'new-key':'test-key','Draw','infistar',variant==='reference'?['test-ref']:[],'');
-          return '';
-        }catch(e){return e.message;}
-      },variant);
-      assert.match(error,/尚未验证/,variant);
-      await page.locator('#imageResolution').selectOption('2K');
-    }
-    assert.equal(blockedRequests.length,0);
-    await page.unroute('https://infistar.cc/v1/**');
-    // Seed a backup with a successful generation, then reject the primary.
-    await page.locator('#allowImageTrial').check();
+    // Removed controls must not gate a first generation or enable model failover.
+    for(const id of ['allowImageTrial','allowImageBackup','allowImageTextFallback','imageRouteControls'])
+      assert.equal(await page.locator('#'+id).count(),0);
     await page.route('https://infistar.cc/v1/images/generations',route=>route.fulfill({json:{data:[{b64_json:widePixel}]}}));
-    await page.evaluate(()=>window.__testGenImage('https://infistar.cc/v1','gpt-image-2','test-key','Draw','infistar',[],''));
+    await page.evaluate(()=>window.__testGenImage('https://infistar.cc/v1','gpt-image-2','new-key','Draw','infistar',[],''));
     await page.unroute('https://infistar.cc/v1/images/generations');
-    await page.locator('#allowImageTrial').uncheck();
-    await page.locator('#allowImageBackup').check();
-    const failoverRequests=[];
+    const rejectedModels=[];
     await page.route('https://infistar.cc/v1/images/generations',route=>{
-      const model=route.request().postDataJSON().model;
-      failoverRequests.push(model);
-      return model==='gpt-image-2.5-sunburst'
-        ? route.fulfill({status:503,json:{error:{message:'no available compatible accounts'}}})
-        : route.fulfill({json:{data:[{b64_json:widePixel}]}});
+      rejectedModels.push(route.request().postDataJSON().model);
+      return route.fulfill({status:503,json:{error:{message:'no available compatible accounts'}}});
     });
-    await page.evaluate(()=>window.__testGenImage('https://infistar.cc/v1','gpt-image-2.5-sunburst','test-key','Draw','infistar',[],''));
-    assert.deepEqual(failoverRequests,['gpt-image-2.5-sunburst','gpt-image-2']);
-    assert.match(await page.locator('#out .hint').innerText(),/已切换已验证备用线路/);
-    await page.locator('#allowImageBackup').uncheck();
-    const paused=await page.evaluate(async()=>{
-      try{await window.__testGenImage('https://infistar.cc/v1','gpt-image-2.5-sunburst','test-key','Draw','infistar',[],'');return '';}
+    const rejected=await page.evaluate(async()=>{
+      try{await window.__testGenImage('https://infistar.cc/v1','gpt-image-2.5-sunburst','new-key','Draw','infistar',[],'');return '';}
       catch(e){return e.message;}
     });
-    assert.match(paused,/暂停/);
-    assert.equal(failoverRequests.length,2);
+    assert.ok(rejected);
+    assert.deepEqual(rejectedModels,['gpt-image-2.5-sunburst']);
     await page.unroute('https://infistar.cc/v1/images/generations');
-    await page.locator('#allowImageTrial').check();
-    console.log('PASS exact account/spec/reference verification, explicit rejection failover and blocked-route suppression');
+    console.log('PASS removed controls, first generation without trial checkbox and no automatic model switch');
     // Exercise recovery through the real Step 3 UI, including output disclosure.
     const upstreamError={error:{message:'context canceled',code:'read_response_body_failed'}};
     for(const scenario of ['success','reference','upstream','latest-error','unauthorized']){
       await page.evaluate(()=>window.__testImageRoutes.records=[]);
       const attempts=[];
-      await page.route('https://infistar.cc/v1/images/edits',async route=>{
+      await page.route('https://infistar.cc/v1/images/generations',async route=>{
         const req=route.request();
-        const form=await new Response(req.postDataBuffer(),{headers:{'Content-Type':req.headers()['content-type']}}).formData();
-        assert.equal(form.getAll('image[]').length,10);
-        assert.equal(form.get('image[]').type,'image/png');
-        assert.equal(form.get('image[]').size,1);
-        attempts.push({image:true,size:form.get('size'),prompt:form.get('prompt')});
+        const body=req.postDataJSON();
+        assert.equal(body.image.length,10);
+        assert.ok(body.image.every(uri=>uri==='data:image/png;base64,AA=='));
+        attempts.push({image:true,size:body.size,prompt:body.prompt});
         if(scenario==='unauthorized') return route.fulfill({status:401,json:{error:{message:'bad key'}}});
         if(scenario==='reference') return route.fulfill({status:422,json:{error:{message:'现在没有线路支持这次要求的生成方式（用参考图生成）'}}});
         if(scenario!=='success' && attempts.length===1) return route.fulfill({status:500,json:upstreamError});
@@ -188,7 +154,7 @@ const server = http.createServer((req,res)=>{
         try{await window.__testGenImageRefs('https://infistar.cc/v1','gpt-image-2.5-sunburst','test-key','Draw a research diagram','infistar',['test-ref'],'layout description');return '';}
         catch(e){return e.message;}
       });
-      assert.equal(attempts.length,1,scenario);
+      assert.equal(attempts.length,1,scenario+': '+error);
       assert.ok(attempts[0].image);
       if(attempts[1]){
         assert.equal(Boolean(attempts[1].image),true);
@@ -201,31 +167,9 @@ const server = http.createServer((req,res)=>{
         assert.equal(error,'');assert.equal(await page.locator('#dlImg').isEnabled(),true);
         assert.match(await page.locator('#out .hint').innerText(),/多图参考输入/);
       }
-      await page.unroute('https://infistar.cc/v1/images/edits');
+      await page.unroute('https://infistar.cc/v1/images/generations');
     }
-    console.log('PASS Step 3 multipart edits with 10 references, bounded recovery without dropping references, final errors and auth failures');
-    assert.equal(await page.locator('#allowImageTextFallback').isChecked(),false);
-    await page.locator('#allowImageTextFallback').check();
-    await page.evaluate(()=>window.__testImageRoutes.records=[]);
-    let fallbackCalls=0;
-    await page.route('https://infistar.cc/v1/images/edits',route=>route.fulfill({status:422,json:{error:{message:'现在没有线路支持这次要求的生成方式（用参考图生成）'}}}));
-    await page.route('https://infistar.cc/v1/images/generations',route=>{
-      fallbackCalls++;
-      const body=route.request().postDataJSON();
-      assert.equal(body.size,'2048x1152');
-      assert.equal(body.image,undefined);
-      assert.equal(body['image[]'],undefined);
-      assert.match(body.prompt,/layout description/);
-      return route.fulfill({json:{data:[{b64_json:widePixel}]}});
-    });
-    await page.evaluate(()=>{document.querySelector('#allowImageTrial').checked=true;});
-    await page.evaluate(()=>window.__testGenImageRefs('https://infistar.cc/v1','gpt-image-2.5-sunburst','test-key','Draw a research diagram','infistar',['test-ref'],'layout description'));
-    assert.equal(fallbackCalls,1);
-    assert.match(await page.locator('#out .hint').innerText(),/纯文字/);
-    await page.locator('#allowImageTextFallback').uncheck();
-    await page.unroute('https://infistar.cc/v1/images/edits');
-    await page.unroute('https://infistar.cc/v1/images/generations');
-    console.log('PASS explicit UI opt-in for text-only fallback, preserving size and layout prompt and disclosing fallback');
+    console.log('PASS Step 3 Infistar JSON generation with 10 references, bounded recovery without dropping references, final errors and auth failures');
     if(process.env.INFISTAR_IMAGE_TEST_KEY){
       await page.evaluate(async key=>window.__testGenImage('https://infistar.cc/v1','gemini-3.1-flash-image',key,'Draw two boxes labelled Input and Output, connected by an arrow.','infistar',[],''),process.env.INFISTAR_IMAGE_TEST_KEY);
       const result=await page.locator('#out img').evaluate(async img=>{await img.decode();return {width:img.naturalWidth,height:img.naturalHeight,srcLength:img.src.length}});

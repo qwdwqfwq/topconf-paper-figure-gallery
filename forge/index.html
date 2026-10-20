@@ -549,13 +549,7 @@
       <h4><span class="bi" aria-hidden="true">🎨</span><span data-i18n="box.model"></span><small data-i18n="settings.badge"></small></h4>
       <div class="srow" style="margin-top:0"><div class="tabs" id="modeTabs"><button data-mode="svg" class="on" data-i18n="mode.svg"></button><button data-mode="image" data-i18n="mode.image"></button></div></div>
       <div class="bfield" id="modelRow" style="margin-top:11px"><span class="blab" id="modelLabel" data-i18n="modelLabel"></span><select id="model"></select></div>
-      <div class="bfield" id="imageDimensionsRow" hidden style="margin-top:9px"><span class="blab" data-i18n="img.ratio"></span><select id="figureRatio"><option value="16:9" selected>16:9</option><option value="3:2">3:2</option><option value="4:3">4:3</option><option value="1:1">1:1</option></select><span class="blab" data-i18n="img.resolution"></span><select id="imageResolution"><option value="1K">1K</option><option value="2K" selected>2K</option><option value="4K">4K</option></select><label class="hint"><input type="checkbox" id="allowImageTextFallback"> <span data-i18n="img.allowTextFallback"></span></label></div>
-      <div class="hint" id="imageRouteControls" hidden>
-        <label><input type="checkbox" id="allowImageTrial"> 试用未验证组合（真实生成可能计费）</label>
-        <label><input type="checkbox" id="allowImageBackup"> 明确拒绝时切换已验证备用线路</label>
-        <div>验证仅在本次页面会话内保留 30 分钟，按账号、模型、比例、分辨率和参考图模式分别记录。首次使用需主动试用；参考图与 4K 不沿用纯文字或低分辨率验证结果。没有备用线路时保留输入并停止。</div>
-        <div id="imageVerifiedRoutes" aria-live="polite"></div>
-      </div>
+      <div class="bfield" id="imageDimensionsRow" hidden style="margin-top:9px"><span class="blab" data-i18n="img.ratio"></span><select id="figureRatio"><option value="16:9" selected>16:9</option><option value="3:2">3:2</option><option value="4:3">4:3</option><option value="1:1">1:1</option></select><span class="blab" data-i18n="img.resolution"></span><select id="imageResolution"><option value="1K">1K</option><option value="2K" selected>2K</option><option value="4K">4K</option></select></div>
       <p class="bnote warn-inline" id="imageRatioWarn" hidden></p>
       <p class="bnote warn-inline" id="modelWarn" hidden></p>
       <p class="bnote" id="pdfModelHint" data-i18n="hint.model"></p>
@@ -1729,7 +1723,6 @@ document.querySelectorAll('#modeTabs button').forEach(b=>b.onclick=async ()=>{
   document.querySelectorAll('#modeTabs button').forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); mode=b.dataset.mode;
   $('#imageDimensionsRow').hidden=mode!=='image';
-  $('#imageRouteControls').hidden=mode!=='image';
   syncImageRatioSupport();
   $('#modelLabel').textContent = mode==='svg' ? tt('modelLabel.svg') : tt('modelLabel.image');
   await populateModels();
@@ -1749,7 +1742,6 @@ document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
   // written summary cannot, so a higher count is not a problem to warn about.
 });
 function syncImageRatioSupport(){
-  syncVerifiedImageRoutes();
   const warn=$('#imageRatioWarn');
   if(!warn) return;
   warn.hidden=true;warn.textContent='';warn.classList.remove('audit-ok');
@@ -1775,18 +1767,8 @@ $('#model').onchange = e=>{localStorage.setItem('ff_model_'+$('#provider').value
 $('#figureRatio').onchange=syncImageRatioSupport;
 $('#imageResolution').onchange=syncImageRatioSupport;
 $('#customModel').addEventListener('input',syncImageRatioSupport);
-$('#key').addEventListener('input',syncVerifiedImageRoutes);
-function syncVerifiedImageRoutes(){
-  const el=$('#imageVerifiedRoutes');
-  if(!el)return;
-  const rows=imageRoutes.records.filter(r=>r.base===baseURL() && r.key===$('#key').value.trim() && imageRoutes.status(r)==='verified');
-  el.textContent=rows.length
-    ? '当前账号近期成功组合：'+rows.map(r=>`${r.model} / ${r.ratio} / ${r.resolution} / ${r.references?'参考图':'纯文字'}`).join('；')
-    : '当前账号尚无近期成功记录。未验证组合默认不会发送生图请求。';
-}
 function recordImageRoute(route,state){
   imageRoutes.record(route,state);
-  syncVerifiedImageRoutes();
 }
 
 /* ---------------- pass 1: analyze references ---------------- */
@@ -6009,10 +5991,7 @@ function compactImageGuide(j){
 function selectImageRoute(route){
   const status=imageRoutes.status(route);
   if(status==='verified')return route;
-  const backup=$('#allowImageBackup').checked && imageRoutes.alternatives(route)[0];
-  if(status==='blocked' && backup)return backup;
   if(status==='blocked')throw new Error('该生图线路刚刚明确拒绝请求，已暂停 60 秒。输入已保留；请选择其他线路，或稍后再试。');
-  if(!$('#allowImageTrial').checked)throw new Error('当前账号的模型、比例、分辨率及参考图组合尚未验证。请选择已成功的组合，或勾选“试用未验证组合”后发起一次真实生成（可能计费）。');
   return route;
 }
 async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted=[]){
@@ -6145,7 +6124,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
   let r;
   try{
     r=await requestImageWithRecovery({url:base+endpoint,body,key,
-      usedReferences:usedRefs,allowReferenceFallback:$('#allowImageTextFallback').checked && (imageRoutes.status({...route,references:false})==='verified' || $('#allowImageTrial').checked),
+      usedReferences:usedRefs,allowReferenceFallback:false,
       onRecovery:kind=>{ if(kind==='reference')recordImageRoute(route,'blocked'); $('#genBtn').textContent=tt('img.recovery.'+kind); }});
   }catch(e){
     if(e.name==='TimeoutError') throw new Error(tt('img.timeout')+apiContext());
@@ -6156,8 +6135,6 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
   if(!r.ok){
     if(safeImageFailover(r.status,txt)){
       recordImageRoute({...route,references:usedRefs},'blocked');
-      const backup=attempted.length<2 && $('#allowImageBackup').checked && imageRoutes.alternatives(route).find(candidate=>!attempted.some(previous=>imageRoutes.same(previous,candidate)));
-      if(backup)return genOaiImage(backup.base,backup.model,backup.key,content,backup.p,useIds,layoutGuide,attempted);
     }
     if(r.status===404){
       // A hosted model manifest is only a suggestion: each user's provider

@@ -218,7 +218,6 @@ const server = http.createServer((req,res)=>{
     // is still pending. Exercise the image generation path without a live API.
     const pending=await page.evaluate(async()=>{
       document.querySelector('#figureRatio').value='1:1';
-      document.querySelector('#allowImageTrial').checked=true;
       document.querySelector('#imageResolution').value='1K';
       document.querySelector('#provider').value='ark';
       document.querySelector('#key').value='browser-test-key';
