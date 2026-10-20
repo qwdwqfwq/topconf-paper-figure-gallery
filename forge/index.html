@@ -576,6 +576,14 @@
       <span class="step-note" data-i18n="s4.note"></span>
     </div>
     <div class="flow-note" data-i18n-html="export.intro"></div>
+    <div class="flow-note" style="display:block">
+      <label for="exportBitmapUpload" data-i18n="export.upload"></label>
+      <input id="exportBitmapUpload" type="file" accept="image/png,image/jpeg,image/webp" />
+      <button type="button" id="exportUseGenerated" data-i18n="export.useGenerated" hidden></button>
+      <p class="bnote" data-i18n="export.uploadHint"></p>
+      <p id="exportInputStatus" role="status" aria-live="polite"></p>
+      <img id="exportInputPreview" alt="" hidden style="max-width:100%;max-height:180px" />
+    </div>
     <section class="box b-slate">
       <h4><span class="bi" aria-hidden="true">✏️</span><span data-i18n="export.title"></span></h4>
       <div class="export-recon" id="exportRecon" hidden>
@@ -4851,7 +4859,11 @@ function isStep3BitmapSource(src){
 function ensureExportState(){
   return window.__ffExportState || (window.__ffExportState={});
 }
+// Input adapter only: reconstruction continues to consume syncStep3Bitmap().
+let uploadedExportBitmap = '';
+let exportUploadPending = false;
 function rememberStep3Bitmap(src){
+  if(src === uploadedExportBitmap) return;
   if(!isStep3BitmapSource(src)) return;
   window.__ffStep3Bitmap=src;
   window.__ffLastGeneratedImage=src;
@@ -4859,6 +4871,7 @@ function rememberStep3Bitmap(src){
 }
 function markStep3Output(src){
   if(!isStep3BitmapSource(src)) return '';
+  if(src !== uploadedExportBitmap) uploadedExportBitmap = '';
   const st=ensureExportState();
   rememberStep3Bitmap(src);
   st.source='bitmap';
@@ -4868,6 +4881,7 @@ function markStep3Output(src){
   return src;
 }
 function currentStep3Bitmap(){
+  if(uploadedExportBitmap) return uploadedExportBitmap;
   const st=window.__ffExportState||{};
   const candidates=[window.__ffLastGeneratedImage,window.__ffStep3Bitmap,st.reconBitmap,st.bitmap,st.generatedBitmap,st.generatedImage,st.image,st.outputImage];
   // Only the generated output is a valid fallback. Reference thumbnails must
@@ -5487,6 +5501,15 @@ function renderEditableExportCard(){
   const card=$('#card4'), state=ensureExportState();
   if(!card) return;
   const bitmapSource=syncStep3Bitmap();
+  const upload=$('#exportBitmapUpload'); if(upload) upload.disabled=!!state.reconPending || exportUploadPending;
+  const generated=$('#exportUseGenerated');
+  if(generated){
+    generated.hidden=!uploadedExportBitmap || !window.__ffLastGeneratedImage;
+    generated.disabled=!!state.reconPending || exportUploadPending;
+  }
+  const preview=$('#exportInputPreview');
+  if(preview){ preview.hidden=!uploadedExportBitmap; if(uploadedExportBitmap) preview.src=uploadedExportBitmap; else preview.removeAttribute('src'); }
+  if(!uploadedExportBitmap && !exportUploadPending){ const inputStatus=$('#exportInputStatus'); if(inputStatus) inputStatus.textContent=''; }
   const hasBitmap=!!bitmapSource;
   const locked = !state.svg || state.reconPending;
   // A failed rebuild still has a valid Step 3 bitmap. Keep the rebuild control
@@ -5832,6 +5855,51 @@ window.__ffRenderSVG = (...args) => renderSVG(...args);
 window.__ffReconstruct = () => runReconstruction();
 /* Kept alongside the other hooks so the card can be re-rendered from outside. */
 window.__ffRefreshExportCard = () => renderEditableExportCard();
+
+// Upload validates and selects an input; the existing rebuild button does all reconstruction.
+$('#exportBitmapUpload')?.addEventListener('change', async function(){
+  const file=this.files?.[0];
+  this.value='';
+  if(!file || ensureExportState().reconPending || exportUploadPending) return;
+  const status=$('#exportInputStatus');
+  exportUploadPending=true;
+  renderEditableExportCard();
+  try{
+    if(!['image/png','image/jpeg','image/webp'].includes(file.type)) throw new Error(tt('export.uploadType'));
+    if(file.size>20*1024*1024) throw new Error(tt('export.uploadSize'));
+    const data=await new Promise((resolve,reject)=>{
+      const reader=new FileReader(); reader.onload=()=>resolve(reader.result);
+      reader.onerror=()=>reject(new Error(tt('export.uploadInvalid'))); reader.readAsDataURL(file);
+    });
+    const image=await loadImage(data);
+    if(!image.naturalWidth || !image.naturalHeight || image.naturalWidth*image.naturalHeight>40000000) throw new Error(tt('export.uploadInvalid'));
+    // A Step 3 generation may have started while the local file was decoding.
+    if(ensureExportState().reconPending) throw new Error(tt('export.uploadBusy'));
+    uploadedExportBitmap=data;
+    window.__ffReconResponses=[];
+    showEditableExportStep({svg:'',source:'bitmap',bitmap:data,reconFailed:false,reconError:''});
+    ensureExportState().reconError='';
+    $('#reconStatus').textContent='';
+    status.textContent=tt('export.uploadReady',{name:file.name});
+  }catch(error){ status.textContent=error.message || tt('export.uploadInvalid'); }
+  finally{
+    exportUploadPending=false;
+    // Keep validation errors visible even with no selected input.
+    const message=status.textContent;
+    renderEditableExportCard();
+    status.textContent=message;
+  }
+});
+$('#exportUseGenerated')?.addEventListener('click', function(){
+  if(ensureExportState().reconPending || exportUploadPending) return;
+  const src=window.__ffLastGeneratedImage;
+  if(!src) return;
+  uploadedExportBitmap='';
+  window.__ffReconResponses=[];
+  showEditableExportStep({svg:'',source:'bitmap',bitmap:src,reconFailed:false,reconError:''});
+  ensureExportState().reconError='';
+  $('#reconStatus').textContent='';
+});
 
 /* Step 4 and its manual retry use the same vision reconstruction path. */
 $('#downloadReconResponse')?.addEventListener('click', function(){

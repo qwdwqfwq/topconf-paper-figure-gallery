@@ -42,6 +42,22 @@ const server = http.createServer((req,res)=>{
     page.on('requestfailed',r=>errors.push(`Request failed ${r.url()}: ${r.failure()?.errorText}`));
     await page.goto(`http://127.0.0.1:${server.address().port}/forge/`,{waitUntil:'domcontentloaded'});
     assert.equal(await page.evaluate(()=>typeof window.__ffReconstruct),'function',JSON.stringify(errors));
+    // A standalone upload works without any Step 3 result or generated-image cache.
+    const uploadFixture=await page.evaluate(()=>{
+      const c=document.createElement('canvas');c.width=80;c.height=40;
+      c.getContext('2d').fillRect(0,0,80,40);return c.toDataURL();
+    });
+    await page.locator('#exportBitmapUpload').setInputFiles({name:'standalone.png',mimeType:'image/png',buffer:Buffer.from(uploadFixture.split(',')[1],'base64')});
+    await page.waitForFunction(()=>document.querySelector('#exportInputStatus').textContent.includes('standalone.png'));
+    assert.equal(await page.locator('#reconBtn').isEnabled(),true);
+    assert.equal(await page.locator('#exportUseGenerated').isVisible(),false);
+    assert.equal(await page.evaluate(()=>window.__ffLastGeneratedImage || ''),'','upload must not overwrite generated-image cache');
+    await page.locator('#exportBitmapUpload').setInputFiles({name:'invalid.png',mimeType:'image/png',buffer:Buffer.from('invalid')});
+    await page.waitForFunction(()=>!document.querySelector('#exportBitmapUpload').disabled);
+    assert.equal(await page.evaluate(()=>window.__ffExportState.bitmap),uploadFixture,'invalid upload preserves selected input');
+    await page.evaluate(()=>{window.__ffExportState.reconPending=true;window.__ffRefreshExportCard();});
+    assert.equal(await page.locator('#exportBitmapUpload').isDisabled(),true);
+    await page.reload({waitUntil:'domcontentloaded'});
     const colors=await page.evaluate(()=>{
       const node={type:'rect',x:10,y:10,w:80,h:40};
       const scene=window.__ffTestMaterialize({nodes:[{...node,fill:{color:'#abcdef'}},{...node,fill:{type:'linear',angle:90,stops:[{offset:0,color:'#abcdee'},{offset:1,color:'#fedcba'}]}}]},100,100);
@@ -202,6 +218,7 @@ const server = http.createServer((req,res)=>{
     // is still pending. Exercise the image generation path without a live API.
     const pending=await page.evaluate(async()=>{
       document.querySelector('#figureRatio').value='1:1';
+      document.querySelector('#allowImageTrial').checked=true;
       document.querySelector('#imageResolution').value='1K';
       document.querySelector('#provider').value='ark';
       document.querySelector('#key').value='browser-test-key';
@@ -269,15 +286,33 @@ const server = http.createServer((req,res)=>{
     assert.equal(result.nodes.filter(n=>n.type==='rect'&&n.fill==='#123456').length,3,'regional additions survive concurrent commits');
     assert.equal(result.audit.actualPptxRenderVerified,false,'roundtrip XML is not an Office render');
     assert.equal(result.audit.state,'needs-review','actual renderer remains required');
-    const office=await page.evaluate(async()=>{
-      let renders=0;
+    // Select a distinct image through the real file input and existing rebuild button.
+    const generatedSource=await page.evaluate(()=>window.__ffLastGeneratedImage);
+    const manualSource=await page.evaluate(async(src)=>{
+      const img=new Image();img.src=src;await img.decode();
+      const c=document.createElement('canvas');c.width=img.width;c.height=img.height;
+      const ctx=c.getContext('2d');ctx.drawImage(img,0,0);ctx.fillStyle='#abcdef';ctx.fillRect(0,0,1,1);
+      return c.toDataURL();
+    },generatedSource);
+    assert.notEqual(manualSource,generatedSource);
+    await page.locator('#exportBitmapUpload').setInputFiles({name:'manual.png',mimeType:'image/png',buffer:Buffer.from(manualSource.split(',')[1],'base64')});
+    await page.waitForFunction(()=>document.querySelector('#exportInputStatus').textContent.includes('manual.png'));
+    assert.equal(await page.evaluate(()=>window.__ffExportState.svg),'','old export is cleared on input change');
+    assert.equal(await page.locator('#exportUseGenerated').isVisible(),true);
+    assert.equal(await page.evaluate(()=>window.__ffLastGeneratedImage),generatedSource);
+    await page.evaluate(()=>{
+      window.__testOfficeRenders=0;
       const blank=document.createElement('canvas');blank.width=300;blank.height=100;
       const ctx=blank.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,300,100);
-      window.__ffRenderPptx=async()=>++renders===1?blank.toDataURL():window.__ffLastGeneratedImage;
-      const ok=await window.__ffReconstruct();
-      delete window.__ffRenderPptx;
-      return {ok,renders,audit:window.__ffApiAudit.reconstruction};
+      window.__ffRenderPptx=async()=>++window.__testOfficeRenders===1?blank.toDataURL():window.__ffExportState.bitmap;
     });
+    await page.locator('#reconBtn').click();
+    await page.waitForFunction(()=>!window.__ffExportState.reconPending && !!window.__ffExportState.svg);
+    const office=await page.evaluate(()=>{
+      delete window.__ffRenderPptx;
+      return {ok:!window.__ffExportState.reconFailed,renders:window.__testOfficeRenders,audit:window.__ffApiAudit.reconstruction};
+    });
+    assert.equal(await page.evaluate(()=>window.__ffExportState.reconBitmap),manualSource,'reconstruction must use uploaded input');
     assert.equal(office.ok,true);
     assert.equal(office.renders,2,'failed Office regions trigger one bounded actual-render feedback round');
     assert.equal(office.audit.actualPptxRenderVerified,true);
@@ -290,6 +325,9 @@ const server = http.createServer((req,res)=>{
       const download=await promise;
       assert.ok(fs.statSync(await download.path()).size>100);
     }
+    await page.locator('#exportUseGenerated').click();
+    assert.equal(await page.locator('#exportInputPreview').isVisible(),false);
+    assert.equal(await page.evaluate(()=>window.__ffExportState.bitmap),generatedSource);
     await page.reload({waitUntil:'domcontentloaded'});
     const cached=await page.evaluate(async(src)=>{
       document.querySelector('#provider').value='ark';document.querySelector('#key').value='test';
