@@ -18,7 +18,7 @@ test('buffered analysis responses preserve error status, headers and JSON',async
   assert.deepEqual(await response.json(),{error:'upstream'});
 });
 
-test('GPT reference generation uploads all ten files on edits, preserving content across retry',async()=>{
+test('GPT reference generation uploads all ten files on edits and does not retry ambiguous 500',async()=>{
   const uploads=[];
   const server=createServer(async(req,res)=>{
     const chunks=[];
@@ -39,8 +39,8 @@ test('GPT reference generation uploads all ten files on edits, preserving conten
     const request=compatibleImageRequest(body);
     const result=await requestImageWithRecovery({url:`http://127.0.0.1:${server.address().port}/v1${request.endpoint}`,
       body:request.body,key:'test-key',usedReferences:true,sleep:async()=>{}});
-    assert.equal(result.ok,true);assert.equal(result.usedReferences,true);
-    assert.equal(uploads.length,2);assert.deepEqual(uploads[0],uploads[1]);
+    assert.equal(result.ok,false);assert.equal(result.status,500);assert.equal(result.usedReferences,true);
+    assert.equal(uploads.length,1);
     assert.equal(uploads[0].url,'/v1/images/edits');
     assert.equal(uploads[0].auth,'Bearer test-key');
     assert.equal(uploads[0].prompt,body.prompt);assert.equal(uploads[0].size,body.size);
@@ -61,6 +61,30 @@ test('text generation and provider-specific JSON reference protocols stay intact
 test('invalid GPT reference data fails locally rather than becoming text-only generation',()=>{
   for(const image of ['https://example.com/a.png','data:image/png;base64,','data:text/plain;base64,AA=='])
     assert.throws(()=>compatibleImageRequest({model:'gpt-image-2',image}));
+});
+test('Infistar reference requests preserve the historical JSON protocol and every reference',async()=>{
+  const body={model:'gpt-image-2.5-sunburst',prompt:'paper and two-stage layout',
+    size:'2048x1152',image:['data:image/png;base64,YQ==','data:image/jpeg;base64,Yg==']};
+  for(const base of ['https://infistar.cc/v1','https://infistar.ai/v1','https://www.infistar.cc/v1']){
+    const request=compatibleImageRequest(body,base);
+    assert.equal(request.endpoint,'/images/generations');
+    let calls=0;
+    const result=await requestImageWithRecovery({url:base+request.endpoint,body:request.body,
+      key:'test-key',usedReferences:true,fetchImpl:async(url,options)=>{
+        calls++;
+        assert.equal(url,base+'/images/generations');
+        assert.equal(options.headers['Content-Type'],'application/json');
+        assert.deepEqual(JSON.parse(options.body),body);
+        return new Response('没有线路支持用参考图生成',{status:422});
+      }});
+    assert.equal(calls,1);
+    assert.equal(result.usedReferences,true);
+    assert.equal(result.request.referenceCount,2);
+    assert.deepEqual(body.image,['data:image/png;base64,YQ==','data:image/jpeg;base64,Yg==']);
+  }
+  for(const base of ['https://api.openai.com/v1','https://infistar.cc.example.com/v1']){
+    assert.equal(compatibleImageRequest(body,base).endpoint,'/images/edits');
+  }
 });
 test('422 on multipart edits is returned without discarding references or submitting again',async()=>{
   let count=0;

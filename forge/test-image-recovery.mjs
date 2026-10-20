@@ -52,11 +52,53 @@ test('auth, quota, invalid size, moderation and unrelated server errors do not r
     assert.equal(h.requests.length,1);
   }
 });
-test('text-only and native Gemini requests cannot use OpenAI reference fallback',async()=>{
+test('text-only and opted-out requests do not fall back',async()=>{
   for(const options of [{usedReferences:false},{allowReferenceFallback:false}]){
     const h=harness([[422,referenceError]],options);
     assert.equal((await h.run()).status,422);assert.equal(h.requests.length,1);
   }
+});
+test('422 diagnostics identify actual multipart endpoint without leaking input or credentials',async()=>{
+  const request=compatibleImageRequest(body);
+  const r=await requestImageWithRecovery({
+    url:'https://example.invalid/v1'+request.endpoint+'?secret=private',
+    body:request.body,key:'private-key',usedReferences:true,
+    fetchImpl:async()=>new Response(referenceError,{status:422,headers:{'x-request-id':'trace-422'}})
+  });
+  assert.deepEqual(r.request,{endpoint:'/v1/images/edits',format:'multipart/form-data',
+    referenceCount:1,size:'3840x2160'});
+  assert.equal(r.requestId,'trace-422');
+  assert.equal(r.usedReferences,true);
+  assert.doesNotMatch(JSON.stringify(r.request),/private|paper and layout|AA==/);
+});
+test('fallback diagnostics describe final text request rather than the rejected reference request',async()=>{
+  const h=harness([[422,referenceError],[200,'{}']]);
+  const r=await h.run();
+  assert.equal(r.request.referenceCount,0);
+  assert.equal(r.request.endpoint,'/v1/images/generations');
+});
+test('native Gemini explicit reference rejection strips pixels and preserves the 4K request',async()=>{
+  const native={contents:[{role:'user',parts:[{text:'Draw a paper figure'},
+    {inlineData:{mimeType:'image/png',data:'AA=='}},{fileData:{fileUri:'https://example.invalid/ref'}}]}],
+    generationConfig:{responseModalities:['TEXT','IMAGE'],imageConfig:{aspectRatio:'16:9',imageSize:'4K'}}};
+  const h=harness([[422,referenceError],[200,'{}']],{body:native});
+  const result=await h.run();
+  assert.equal(result.referenceFallback,true);
+  assert.deepEqual(h.requests[1],{...native,contents:[{role:'user',parts:[{text:'Draw a paper figure'}]}]});
+  assert.equal(native.contents[0].parts.length,3);
+});
+test('HTTP 200 STOP without an image is never retried or treated as reference rejection',async()=>{
+  const text=JSON.stringify({candidates:[{finishReason:'STOP',content:{parts:[{text:referenceError}]}}]});
+  const h=harness([[200,text]]);
+  assert.equal((await h.run()).text,text);
+  assert.equal(h.requests.length,1);
+  assert.deepEqual(h.events,[]);
+});
+test('response request id is preserved for support without exposing authorization',async()=>{
+  const h=harness([],{fetchImpl:async()=>new Response('{}',{headers:{'x-request-id':'req-123'}})});
+  const result=await h.run();
+  assert.equal(result.requestId,'req-123');
+  assert.ok(!JSON.stringify(result).includes('test-key'));
 });
 test('deadline includes stalled response body after headers, using a real HTTP socket',async()=>{
   let received=false;

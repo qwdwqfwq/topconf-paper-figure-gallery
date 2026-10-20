@@ -25,6 +25,19 @@ export function imageFailureKind(status, text){
   return '';
 }
 
+// Allowlisted transport metadata only: never include credentials, prompts or pixels.
+export function imageRequestDiagnostics(url,payload){
+  const multipart=payload instanceof FormData;
+  const refs=multipart?[...payload.getAll('image'),...payload.getAll('image[]')]:
+    (Array.isArray(payload.image)?payload.image:payload.image?[payload.image]:[]);
+  const nativeRefs=Array.isArray(payload.contents)?payload.contents.flatMap(content=>
+    Array.isArray(content?.parts)?content.parts.filter(part=>
+      part?.inlineData||part?.inline_data||part?.fileData||part?.file_data):[]):[];
+  return {endpoint:new URL(url).pathname,format:multipart?'multipart/form-data':'application/json',
+    referenceCount:refs.length+nativeRefs.length,
+    size:multipart?payload.get('size'):payload.size||payload.generationConfig?.imageConfig?.imageSize||''};
+}
+
 // One shared deadline includes response bodies and recovery. Never retry an
 // ambiguous network failure: the upstream may already have billed that request.
 export async function requestImageWithRecovery({url,body,key,usedReferences=false,
@@ -44,7 +57,8 @@ export async function requestImageWithRecovery({url,body,key,usedReferences=fals
         const response=await fetchImpl(url,{method:'POST',
           headers:{...(multipart?{}:{'Content-Type':'application/json'}),Authorization:'Bearer '+key},
           body:multipart?payload:JSON.stringify(payload),signal:controller.signal});
-        return {ok:response.ok,status:response.status,text:await response.text()};
+        return {ok:response.ok,status:response.status,text:await response.text(),
+          requestId:response.headers.get('x-request-id')||response.headers.get('request-id')||''};
       })()]);
       const kind=result.ok?'':imageFailureKind(result.status,result.text);
       if(kind==='reference' && usedReferences && allowReferenceFallback && !referenceFallback){
@@ -54,12 +68,17 @@ export async function requestImageWithRecovery({url,body,key,usedReferences=fals
           url=url.replace(/\/images\/edits$/, '/images/generations');
         }else{
           payload={...payload};delete payload.image;
+          // Native Gemini carries reference pixels in contents, not `image`.
+          if(Array.isArray(payload.contents)) payload.contents=payload.contents.map(content=>({
+            ...content,parts:(Array.isArray(content?.parts)?content.parts:[]).filter(part=>part && !part.inlineData && !part.inline_data &&
+              !part.fileData && !part.file_data)
+          }));
         }
         usedReferences=false;referenceFallback=true;
         onRecovery('reference');
         continue;
       }
-      return {...result,usedReferences,referenceFallback};
+      return {...result,usedReferences,referenceFallback,request:imageRequestDiagnostics(url,payload)};
     }
   }catch(error){
     if(controller.signal.aborted) throw timeout;
@@ -67,11 +86,14 @@ export async function requestImageWithRecovery({url,body,key,usedReferences=fals
   }finally{clearTimeout(timer);}
 }
 
-// GPT image edits use multipart files, not the provider-specific JSON `image`
-// extension accepted by Seedream and some other generation APIs.
-export function compatibleImageRequest(body){
+// Preserve Infistar's historical JSON image extension. A GPT model name alone
+// does not establish which input protocol a relay accepts.
+// Direct OpenAI-compatible GPT edits continue to upload multipart files.
+export function compatibleImageRequest(body,base=''){
   const references=Array.isArray(body.image)?body.image:body.image?[body.image]:[];
-  if(!/^gpt-image-/i.test(body.model)||!references.length)
+  let infistar=false;
+  try{infistar=/^(?:www\.)?infistar\.(?:cc|ai)$/.test(new URL(base).hostname);}catch{}
+  if(infistar || !/^gpt-image-/i.test(body.model)||!references.length)
     return {endpoint:'/images/generations',body};
   const form=new FormData();
   for(const [key,value] of Object.entries(body)){
@@ -107,15 +129,28 @@ export function geminiImageRequest(base, model, prompt, references=[], options={
     }}};
 }
 
-export function geminiImageResult(data){
-  for(const candidate of data.candidates||[]){
-    for(const part of candidate.content?.parts||[]){
+export function geminiImageResult(data, {requestId='',locale='en'}={}){
+  const candidates=Array.isArray(data?.candidates)?data.candidates:[];
+  const partsOf=candidate=>Array.isArray(candidate?.content?.parts)?candidate.content.parts:[];
+  for(const candidate of candidates){
+    for(const part of partsOf(candidate)){
+      if(!part || typeof part!=='object') continue;
       if(part.thought) continue;
       const image=part.inlineData||part.inline_data;
       const mime=image?.mimeType||image?.mime_type||'image/png';
-      if(image?.data && /^image\//.test(mime)) return {b64_json:image.data,mimeType:mime};
+      if(typeof image?.data==='string' && image.data.trim() && /^image\//i.test(mime)) return {b64_json:image.data,mimeType:mime};
     }
   }
-  const reason=data.promptFeedback?.blockReason || data.candidates?.[0]?.finishReason || 'NO_IMAGE';
-  throw new Error('Gemini returned no image ('+reason+').');
+  const reason=data?.promptFeedback?.blockReason || candidates[0]?.finishReason || 'NO_IMAGE';
+  const detail=candidates.flatMap(candidate=>[
+    candidate?.finishMessage,...partsOf(candidate).filter(part=>!part?.thought).map(part=>part?.text)
+  ]).filter(value=>typeof value==='string' && value.trim()).join(' ').replace(/\s+/g,' ').slice(0,700);
+  const id=String(data?.responseId||requestId||'').slice(0,160);
+  const zh=locale==='zh';
+  const message=(zh?`Gemini 响应中没有可用图片（${reason}）。`:`Gemini returned no image (${reason}). `)
+    +(reason==='STOP'?(zh?'STOP 表示响应正常结束，不代表已生成图片。':'STOP means the response ended, not that an image was generated. '):'')
+    +(detail?(zh?' 模型说明：':' Model message: ')+detail:(zh?' 未返回模型文字说明。':' No model explanation returned.'))
+    +(id?' Request ID: '+id:'')
+    +(zh?' 未自动重试，以免重复计费。':' Not automatically retried to avoid duplicate charges.');
+  throw Object.assign(new Error(message),{code:'GEMINI_NO_IMAGE',reason,requestId:id});
 }

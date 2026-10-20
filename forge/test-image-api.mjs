@@ -79,4 +79,21 @@ assert.throws(()=>geminiImageRequest('https://infistar.cc','x','Draw',['https://
 assert.deepEqual(geminiImageResult({candidates:[{content:{parts:[{thought:true,inlineData:{data:'ignore'}},{text:'Image'},{inline_data:{mime_type:'image/jpeg',data:'Yg=='}}]}}]}),{b64_json:'Yg==',mimeType:'image/jpeg'});
 assert.throws(()=>geminiImageResult({promptFeedback:{blockReason:'SAFETY'}}),/SAFETY/);
 assert.throws(()=>geminiImageResult({candidates:[{finishReason:'STOP',content:{parts:[{text:'No image'}]}}]}),/no image/);
+assert.throws(()=>geminiImageResult({responseId:'gemini-123',candidates:[{
+  finishReason:'STOP',content:{parts:[{thought:true,text:'private reasoning'},{text:'Unable to render this request.'}]}
+}]},{locale:'zh',requestId:'relay-456'}),error=>{
+  assert.equal(error.code,'GEMINI_NO_IMAGE');
+  assert.match(error.message,/STOP 表示响应正常结束/);
+  assert.match(error.message,/Unable to render this request/);
+  assert.match(error.message,/gemini-123/);
+  assert.doesNotMatch(error.message,/private reasoning/);
+  return true;
+});
+for(const data of [null,{}, {candidates:{}},{candidates:[null,{content:{parts:{}}}]}]){
+  assert.throws(()=>geminiImageResult(data,{requestId:'relay-123'}),error=>{
+    assert.equal(error.code,'GEMINI_NO_IMAGE');assert.match(error.message,/relay-123/);return true;
+  });
+}
+assert.deepEqual(geminiImageResult({candidates:[{finishReason:'STOP',content:{parts:[
+  null,{text:'Done'},{inlineData:{mimeType:'image/png',data:'YQ=='}}]}}]}),{b64_json:'YQ==',mimeType:'image/png'});
 console.log('PASS Gemini image routing, references, response parsing and error handling');

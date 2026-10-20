@@ -677,7 +677,7 @@
 import * as T from './vendor/transformers.min.js';
 import {prepareQuery,buildIndex,rank} from './retrieval.mjs';
 import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=20261020-recovery';
-import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261020-routes';
+import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261020-provider-image-protocol';
 import {ImageRoutes, safeImageFailover} from './image-routes.mjs?v=20261020';
 const imageRoutes=new ImageRoutes();
 import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=geometry-20261020';
@@ -1724,6 +1724,7 @@ $('#relayPreset').onchange=async e=>{
 };
 $('#refreshModels').onclick = ()=>Promise.all([populateModels(),populateParserModels()]);
 document.querySelectorAll('#modeTabs button').forEach(b=>b.onclick=async ()=>{
+  $('#genErr').hidden=true;
   document.querySelectorAll('#modeTabs button').forEach(x=>x.classList.remove('on'));
   b.classList.add('on'); mode=b.dataset.mode;
   $('#imageDimensionsRow').hidden=mode!=='image';
@@ -6124,13 +6125,13 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
     const request=geminiImageRequest(base,model,imgPrompt,body.image||[],dimensions);
     base=request.base; endpoint=request.endpoint; body=request.body;
   }else{
-    const request=compatibleImageRequest(body);
+    const request=compatibleImageRequest(body,base);
     endpoint=request.endpoint;body=request.body;
   }
   let r;
   try{
     r=await requestImageWithRecovery({url:base+endpoint,body,key,
-      usedReferences:usedRefs,allowReferenceFallback:!nativeGemini && $('#allowImageTextFallback').checked && (imageRoutes.status({...route,references:false})==='verified' || $('#allowImageTrial').checked),
+      usedReferences:usedRefs,allowReferenceFallback:$('#allowImageTextFallback').checked && (imageRoutes.status({...route,references:false})==='verified' || $('#allowImageTrial').checked),
       onRecovery:kind=>{ if(kind==='reference')recordImageRoute(route,'blocked'); $('#genBtn').textContent=tt('img.recovery.'+kind); }});
   }catch(e){
     if(e.name==='TimeoutError') throw new Error(tt('img.timeout')+apiContext());
@@ -6154,10 +6155,25 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
       if(diag && !diag.startsWith(tt('diag.generic'))) throw new Error(diag);
       throw new Error(tt('img.notfound',{m:model}));
     }
-    throw new Error(friendlyHttp(r.status,txt));
+    const transport=r.request;
+    const zh=window.GAL_I18N?.lang==='zh';
+    const diagnostic=transport?` ${zh?'本次请求':'Request'}: POST ${transport.endpoint}; ${transport.format}; ${zh?'参考图':'references'}=${transport.referenceCount}; size=${transport.size||'default'}.`:'';
+    const referenceHint=imageFailureKind(r.status,txt)==='reference'
+      ?(zh?' 此响应只说明本次请求方式被拒绝，不能据此判断模型不支持参考图；需核对成功客户端的接口路径和上传格式。':' This rejects the submitted request mode; it does not establish that the model lacks reference-image support. Compare the endpoint and upload format with a working client.'):'';
+    const message=friendlyHttp(r.status,txt)+diagnostic+referenceHint+(r.requestId?' Request ID: '+r.requestId:'');
+    throw new Error((key?message.split(key).join('[redacted]'):message).replace(/Bearer\s+\S+/gi,'Bearer [redacted]'));
   }
-  const d = JSON.parse(txt);
-  const item = nativeGemini ? geminiImageResult(d) : (d.data?.[0] || d.images?.[0]);
+  let d,item;
+  try{
+    try{ d=JSON.parse(txt); }
+    catch{ throw new Error(tt('img.abnormal',{t:'HTTP '+r.status+'; response is not JSON; Request ID: '+(r.requestId||'unavailable')})); }
+    item=nativeGemini ? geminiImageResult(d,{requestId:r.requestId,locale:window.GAL_I18N?.lang}) : (d?.data?.[0] || d?.images?.[0]);
+  }catch(error){
+    // A prior success must not keep advertising this combination as healthy.
+    recordImageRoute({...route,references:usedRefs},'blocked');
+    error.message=(key?String(error.message).split(key).join('[redacted]'):String(error.message)).replace(/Bearer\s+\S+/gi,'Bearer [redacted]');
+    throw error;
+  }
   if(!item) throw new Error(tt('img.abnormal',{t:txt.slice(0,200)}));
   const st = ensureExportState();
   const imageMime=item.mimeType||'image/png';
