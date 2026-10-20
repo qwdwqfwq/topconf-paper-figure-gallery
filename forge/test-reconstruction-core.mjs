@@ -1,6 +1,16 @@
 import assert from 'node:assert/strict';
-import {registerMissingObjects,planCatalogRepairs,tileDetailCatalog,createWholeImageCatalog,objectRepairCatalog,auditExportLayout,extractEditableNodes,planReconstructionTiles,subdivideReconstructionTile,mergeReconstructionTiles,reconstructionQualityDeficit,acceptReconstructionRepair,planObjectRepairRegion,replaceObjectRepairRegion} from './reconstruction-core.mjs';
+import {normalizeRotatedTextBounds} from './editable-native.mjs';
+import {scaleRegionCatalog,scaleRegionPatch,scaleStructureScene,registerMissingObjects,planCatalogRepairs,tileDetailCatalog,createWholeImageCatalog,objectRepairCatalog,auditExportLayout,extractEditableNodes,planReconstructionTiles,subdivideReconstructionTile,mergeReconstructionTiles,reconstructionQualityDeficit,acceptReconstructionRepair,planObjectRepairRegion,replaceObjectRepairRegion} from './reconstruction-core.mjs';
 
+const verticalLabel={type:'text',text:'Central process',x:72,y:1180,w:86,h:630,rotation:-90};
+const layoutLabel=normalizeRotatedTextBounds(verticalLabel);
+assert.equal(layoutLabel.x+layoutLabel.w/2,verticalLabel.x+verticalLabel.w/2);
+assert.equal(layoutLabel.y+layoutLabel.h/2,verticalLabel.y+verticalLabel.h/2);
+assert.equal(layoutLabel.w,630);
+assert.equal(layoutLabel.h,86);
+assert.deepEqual(normalizeRotatedTextBounds(layoutLabel),layoutLabel);
+assert.equal(verticalLabel.x,72,'rendering must not mutate catalog ownership coordinates');
+assert.equal(normalizeRotatedTextBounds({...verticalLabel,rotation:0}).w,86);
 assert.equal(reconstructionQualityDeficit({score:.98,darkRecall:.98,localRecall:.97,edgeF1:.97,colorSimilarity:.98}),0);
 assert.ok(reconstructionQualityDeficit({score:.9,darkRecall:.9,localRecall:.9,edgeF1:.9,colorSimilarity:.9})>0,
   'a merely usable redraw still needs publication-quality refinement');
@@ -277,3 +287,23 @@ const crossPatched=replaceObjectRepairRegion(crossRegion,crossJob.region,crossLo
 assert.equal(crossPatched.nodes.length,crossRegion.nodes.length,
   'a regional repair rejects objects crossing its boundary');
 assert.equal(crossPatched.nodes[0].y,252);
+
+const scaledStructure=scaleStructureScene({canvas:{width:100,height:50},regions:[{id:'panel',x:10,y:5,w:80,h:40}],nodes:[{type:'rect',x:10,y:5,w:80,h:40,strokeWidth:1},{type:'text',x:12,y:8,w:40,h:10,fontSize:8}]},400,200);
+assert.deepEqual(scaledStructure.regions,[{id:'panel',x:40,y:20,w:320,h:160}]);
+assert.equal(scaledStructure.nodes[0].strokeWidth,4);
+assert.equal(scaledStructure.nodes[1].fontSize,32);
+
+const nativeCatalog={canvas:{width:4000,height:1000},nodes:[{id:'arrow',version:3,type:'line',x:100,y:200,x2:2000,y2:200,strokeWidth:4,arrowLength:20,arrowWidth:12}],readOnlyContext:[{id:'frame',type:'rect',x:0,y:0,w:4000,h:1000}],excludeRects:[{x:1000,y:200,w:800,h:600}]};
+const inputCatalog=scaleRegionCatalog(nativeCatalog,.4);
+assert.deepEqual(inputCatalog.canvas,{width:1600,height:400});
+assert.equal(inputCatalog.readOnlyContext[0].w,1600);
+assert.equal(inputCatalog.excludeRects[0].x,400);
+assert.equal(inputCatalog.nodes[0].arrowLength,8);
+const restoredPatch=scaleRegionPatch({operations:[{op:'update',id:'arrow',version:3,nodes:inputCatalog.nodes}],uncertainties:[{x:400,y:80,w:320,h:240,reason:'small'}]},2.5);
+for(const [key,value] of Object.entries(nativeCatalog.nodes[0])){
+  const actual=restoredPatch.operations[0].nodes[0][key];
+  if(typeof value==='number')assert.ok(Math.abs(actual-value)<1e-9,key);else assert.equal(actual,value);
+}
+assert.equal(restoredPatch.operations[0].version,3);
+assert.deepEqual(restoredPatch.uncertainties[0],{x:1000,y:200,w:800,h:600,reason:'small'});
+assert.equal(nativeCatalog.nodes[0].x2,2000,'input catalog remains immutable');

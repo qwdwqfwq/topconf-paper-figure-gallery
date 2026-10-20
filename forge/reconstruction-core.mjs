@@ -153,9 +153,28 @@ function transformCatalogNode(source,s,dx,dy){
     for(const k of ['y','y2'])if(Number.isFinite(Number(n[k])))n[k]=Number(n[k])*s+dy;
     for(const k of ['w','h'])if(Number.isFinite(Number(n[k])))n[k]=Number(n[k])*s;
   }
-  for(const k of ['fontSize','strokeWidth','radius'])if(Number.isFinite(Number(n[k])))n[k]=Number(n[k])*s;
+  for(const k of ['fontSize','strokeWidth','radius','arrowLength','arrowWidth'])if(Number.isFinite(Number(n[k])))n[k]=Number(n[k])*s;
   if(n.textPath?.d)n.textPath={...n.textPath,d:transformEditablePath(n.textPath.d,s,s,dx,dy)};
   return n;
+}
+export function scaleStructureScene(scene,width,height){
+  const scale=width/scene.canvas.width;
+  return {...scene,canvas:{width,height,w:width,h:height},
+    nodes:(scene.nodes||[]).map(n=>transformCatalogNode(n,scale,0,0)),
+    regions:(scene.regions||[]).map(r=>({...r,x:r.x*scale,y:r.y*scale,w:r.w*scale,h:r.h*scale}))};
+}
+export function scaleRegionCatalog(catalog,scale){
+  const box=r=>({...r,x:r.x*scale,y:r.y*scale,w:r.w*scale,h:r.h*scale});
+  return {...catalog,canvas:{width:Math.round(catalog.canvas.width*scale),height:Math.round(catalog.canvas.height*scale)},
+    nodes:catalog.nodes.map(n=>transformCatalogNode(n,scale,0,0)),
+    readOnlyContext:(catalog.readOnlyContext||[]).map(n=>transformCatalogNode(n,scale,0,0)),
+    excludeRects:(catalog.excludeRects||[]).map(box)};
+}
+export function scaleRegionPatch(patch,scale){
+  return {...patch,operations:(patch.operations||[]).map(op=>({...op,
+    ...(op.node?{node:transformCatalogNode(op.node,scale,0,0)}:{}),
+    ...(op.nodes?{nodes:op.nodes.map(n=>transformCatalogNode(n,scale,0,0))}:{})})),
+    uncertainties:(patch.uncertainties||[]).map(r=>({...r,x:r.x*scale,y:r.y*scale,w:r.w*scale,h:r.h*scale}))};
 }
 export function objectRepairCatalog(scene,region,scale,allowLarge=false){
   return {canvas:{width:Math.round(region.w*scale),height:Math.round(region.h*scale)},

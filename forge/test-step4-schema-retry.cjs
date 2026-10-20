@@ -83,6 +83,29 @@ const server = http.createServer((req, res) => {
     assert.equal(timeouts.omission,180000);
     assert.equal(timeouts.region,240000);
     assert.deepEqual(timeouts.states,['succeeded','succeeded','succeeded']);
+    await page.unroute('**/chat/completions');
+    await page.route('**/chat/completions', async route => {
+      assert.match(route.request().postDataJSON().messages[1].content[0].text,/Real photographic regions/);
+      await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+        choices:[{finish_reason:'stop',message:{content:JSON.stringify({operations:[
+          {op:'add',node:{type:'image',x:10,y:5,w:20,h:10}}
+        ]})}}]
+      })});
+    });
+    const photo=await page.evaluate(async()=>{
+      const source=document.createElement('canvas');source.width=80;source.height=40;
+      const ctx=source.getContext('2d');ctx.fillStyle='#ff0000';ctx.fillRect(0,0,80,40);
+      ctx.fillStyle='#00ff00';ctx.fillRect(20,10,40,20);
+      const audit={regionPatch:true,detailCatalog:{nodes:[]},ownership:{},maxAttempts:1};
+      const result=await window.__testRequestEditableScene(source.toDataURL(),40,20,audit);
+      const node=result.operations[0].nodes[0],im=new Image();im.src=node.href;await im.decode();
+      const crop=document.createElement('canvas');crop.width=im.width;crop.height=im.height;
+      crop.getContext('2d').drawImage(im,0,0);
+      return {width:im.width,height:im.height,pixel:Array.from(crop.getContext('2d').getImageData(10,5,1,1).data),
+        crop:node.crop,nodeCount:audit.nodeCount};
+    });
+    assert.deepEqual(photo,{width:20,height:10,pixel:[0,255,0,255],
+      crop:{x:.25,y:.25,w:.5,h:.5},nodeCount:1});
     console.log(JSON.stringify(result));
   } finally {
     await browser.close();

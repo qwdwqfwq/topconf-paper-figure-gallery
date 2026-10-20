@@ -34,6 +34,14 @@ for(let y=0;y<100;y+=5)for(let x=0;x<200;x+=5)
   assert.equal(regions.filter(r=>x>=r.coreX&&x<r.coreRight&&y>=r.coreY&&y<r.coreBottom&&!(r.excludeRects||[]).some(b=>x>=b.x&&x<b.x+b.w&&y>=b.y&&y<b.y+b.h)).length,1,'region ownership including child exclusions does not overlap');
 const edge={id:'edge',type:'text',x:10,y:10,w:100,h:20,text:'boundary',fontSize:12};
 assert.equal(regionObjectCatalog({nodes:[edge]},region).nodes.length,1,'text ownership uses declared box, not audit padding');
+const verticalScene={nodes:[{...text,x:20,y:20,w:15,h:70,rotation:-90}]};
+const verticalPatch=applyRegionPatch(verticalScene,region,{operations:[
+  {op:'update',id:'label',version:2,node:{...text,x:-17.5,y:37.5,w:70,h:15,rotation:-90}},
+  {op:'add',node:{type:'rect',x:60,y:10,w:20,h:20}}
+]},snapshotVersions(verticalScene));
+assert.equal(verticalPatch.rejected.length,0,'rotated layout box stays within crop after rotation');
+assert.equal(verticalPatch.scene.nodes.length,2,'a valid vertical label must not roll back other chart objects');
+assert.equal(regionObjectCatalog(verticalPatch.scene,region).nodes.length,2);
 const additions={operations:[{op:'add',node:{type:'line',x:5,y:5,x2:80,y2:5,stroke:'#000000'}},{op:'add',node:{type:'line',x:5,y:7,x2:80,y2:7,stroke:'#000000'}},{op:'add',node:{type:'rect',x:99,y:99,w:40,h:40}}]};
 const added=applyRegionPatch({nodes:[]},region,additions,{});
 assert.equal(added.scene.nodes.length,2,'nearby grid lines must remain distinct');assert.equal(added.ignored.length,1);
@@ -44,6 +52,13 @@ assert.equal(regionObjectCatalog(scene,otherCore).nodes.length,0,'context does n
 const canvas={width:100,height:100,getContext:()=>({getImageData:(x,y)=>({data:[180+x*.2,200+x*.2,220+x*.2,255]})})};
 const fitted=fitSourceFills({nodes:[{id:'g',type:'rect',x:0,y:0,w:100,h:100,fill:'#bed2e6'}]},canvas);
 assert.equal(fitted.nodes[0].gradient.angle,0);assert.equal(fitted.nodes[0].gradient.stops.length,2);
+const insetCanvas={width:100,height:100,getContext:()=>({getImageData:(x,y)=>({data:x>=15&&x<=85&&y>=15&&y<=85?[230,230,230,255]:[250,220,225,255]})})};
+const panelFills=fitSourceFills({nodes:[
+  {id:'panel',type:'rect',x:0,y:0,w:100,h:100,fill:'#efecec'},
+  {id:'chart',type:'rect',x:15,y:15,w:70,h:70,fill:'#e6e6e6'}
+]},insetCanvas,new Set(['panel']));
+assert.equal(panelFills.nodes[0].fill,'#fadce1','nested gray chart must not recolor the pink panel');
+assert.equal(panelFills.nodes[1].fill,'#e6e6e6','unselected chart remains unchanged');
 console.log('Semantic patches: atomicity, ownership, conflicts, split/merge and dense primitives OK');
 
 const excludedRegion={...region,excludeRects:[{x:10,y:10,w:70,h:50}]};
@@ -53,18 +68,26 @@ assert.equal(applyRegionPatch(scene,excludedRegion,{operations:[{op:'delete',id:
 const headingPixels=new Uint8ClampedArray(400*400*4).fill(255);
 for(let y=30;y<60;y++)for(let x=50;x<350;x++){const i=(y*400+x)*4;headingPixels.set([180,210,230,255],i);}
 const headingCanvas={width:400,height:400,getContext:()=>({getImageData:(x,y,w,h)=>({data:w===1&&h===1?headingPixels.slice((y*400+x)*4,(y*400+x)*4+4):headingPixels})})};
-const headingScene={nodes:[{id:'title',type:'text',x:80,y:30,w:240,h:30,fontSize:25,text:'Title'},{id:'frame',type:'rect',x:5,y:40,w:390,h:150},{id:'duplicate',type:'rect',x:6,y:41,w:389,h:149}]};
+const headingScene={nodes:[{id:'title',type:'text',x:80,y:30,w:240,h:30,fontSize:25,bold:true,text:'Title'},{id:'frame',type:'rect',x:5,y:40,w:390,h:150},{id:'duplicate',type:'rect',x:6,y:41,w:389,h:149}]};
 const layered=repairStructuralLayers(headingScene,headingCanvas);
 assert.equal(layered.nodes.filter(n=>n.sourceDetail==='heading-strip').length,1);
 assert.equal(layered.nodes.filter(n=>n.id==='duplicate').length,0);
 assert.equal(layered.nodes.at(-1).id,'title');
 assert.equal(layered.nodes.at(-2).sourceDetail,'heading-strip');
 assert.deepEqual(repairStructuralLayers(layered,headingCanvas),layered,'structural recovery is idempotent');
+assert.equal(repairStructuralLayers({nodes:[{...headingScene.nodes[0],bold:false}]},headingCanvas).nodes.filter(n=>n.sourceDetail==='heading-strip').length,0,'ordinary labels must not become opaque heading plates');
+assert.equal(repairStructuralLayers({nodes:[{...headingScene.nodes[0],rotation:-90}]},headingCanvas).nodes.filter(n=>n.sourceDetail==='heading-strip').length,0,'vertical labels must not become horizontal heading plates');
 const distinctLayers=repairStructuralLayers({nodes:[
   {id:'ownership',type:'rect',x:5,y:40,w:390,h:150,fill:'none',stroke:'none'},
   {id:'visible-frame',type:'rect',x:5,y:40,w:390,h:150,fill:'none',stroke:'#000000'}
 ]},headingCanvas);
 assert.ok(distinctLayers.nodes.some(n=>n.id==='visible-frame'),'an invisible ownership rectangle must not remove a visible border');
+const boundedHeading=repairStructuralLayers({nodes:[
+  {...headingScene.nodes[0],x:80,w:160},
+  {id:'own-panel',type:'rect',x:50,y:25,w:210,h:200,fill:'#b4d2e6',stroke:'none'},
+  {id:'neighbor',type:'rect',x:265,y:25,w:100,h:200,fill:'#ffe2bc',stroke:'none'}
+]},headingCanvas).nodes.find(n=>n.sourceDetail==='heading-strip');
+assert.ok(boundedHeading&&boundedHeading.x+boundedHeading.w<=260,'a title plate must not bridge into its neighboring panel');
 
 const exactArrow=expandStructuredNodes([{type:'line',x:0,y:0,x2:100,y2:0,arrow:true,arrowLength:10,arrowWidth:8,stroke:'#123456'}]);
 assert.equal(exactArrow.length,2);assert.equal(exactArrow[0].arrow,false);assert.equal(exactArrow[1].d,'M100 0L90 4L90 -4Z');
@@ -119,7 +142,12 @@ const panelOnly=planSemanticRegions({regions:[
   {id:'panel',kind:'panel',x:0,y:0,w:100,h:100},
   {id:'links',kind:'connectors',x:0,y:0,w:200,h:200}
 ]},200,200);
-assert.deepEqual(panelOnly.map(r=>r.id),['panel'],'cross-panel connector bounds must not spawn overlapping content workers');
+assert.deepEqual(panelOnly.filter(r=>r.kind!=='uncovered').map(r=>r.id),['panel'],'cross-panel connector bounds must not spawn overlapping content workers');
+assert.ok(panelOnly.filter(r=>r.kind==='uncovered').every(r=>r.coreX>=100||r.coreY>=100),'gap workers do not own existing panel pixels');
+const chartWithSidebar=planSemanticRegions({regions:[{id:'chart',x:100,y:0,w:900,h:600}]},1000,600);
+assert.ok(chartWithSidebar.some(r=>r.kind==='uncovered'&&r.coreX===0&&r.coreRight===100&&r.coreBottom===600),'vertical captions outside model regions remain eligible for reconstruction');
+const narrowGutter=planSemanticRegions({regions:[{id:'chart',x:10,y:0,w:990,h:600}]},1000,600);
+assert.equal(narrowGutter.length,1,'tiny page gutters need no separate API call');
 
 const fakePrint={id:'fake-print',type:'text',x:110,y:115,w:50,h:105,fontSize:6,text:'----------------------\n----------------------',fill:'#333333'};
 const restoredPrint=recoverDocumentInk({nodes:[paper,fakePrint]},sourceCanvas);
@@ -147,3 +175,22 @@ assert.ok(applyRegionPatch(parentScene,detail,{operations:[{op:'delete',id:'fram
 assert.ok(applyRegionPatch(parentScene,detail,{operations:[{op:'delete',id:'foreign'}]},snapshotVersions(parentScene)).rejected.length);
 for(const other of posterDetails.slice(1))assert.equal(regionObjectCatalog(refined.scene,other).nodes.some(n=>n.id==='label'),false);
 console.log('Native-resolution detail coverage and inherited ownership tests passed');
+
+// Recover a missing pastel body box only when all four source borders exist.
+{
+  const W=400,H=200,data=new Uint8ClampedArray(W*H*4).fill(255);
+  for(let y=60;y<=110;y++)for(let x=80;x<=280;x++){
+    const border=x===80||x===280||y===60||y===110;
+    data.set(border?[30,30,30,255]:[255,236,190,255],(y*W+x)*4);
+  }
+  const canvas={width:W,height:H,getContext:()=>({getImageData:()=>({data})})};
+  const label={id:'body-label',type:'text',x:100,y:70,w:140,h:20,text:'Memory',fontSize:18};
+  const {recoverSourceBoxes}=await import('./reconstruction-pipeline.mjs');
+  const fixed=recoverSourceBoxes({nodes:[label]},canvas);
+  assert.equal(fixed.nodes.length,2);
+  assert.equal(fixed.nodes[0].sourceDetail,'source-box');
+  assert.equal(fixed.nodes[0].type,'rect');
+  assert.equal(recoverSourceBoxes(fixed,canvas).nodes.length,2,'repeat repair must not duplicate source boxes');
+  for(let y=60;y<=110;y++)data.set([255,255,255,255],(y*W+80)*4);
+  assert.equal(recoverSourceBoxes({nodes:[label]},canvas).nodes.length,1,'an open color region is not a missing framed box');
+}

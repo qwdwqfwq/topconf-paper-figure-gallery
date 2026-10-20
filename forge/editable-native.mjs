@@ -133,10 +133,21 @@ export function geometrySegments(n) {
 
 // PowerPoint cannot edit SVG textPath directly. Place each glyph in its own
 // native text shape, tangent to the measured curve, so labels remain editable.
+export function normalizeRotatedTextBounds(n) {
+  // OCR describes the visible, rotated rectangle. Export formats instead
+  // rotate a horizontal text box about its centre. Keep catalog coordinates
+  // intact for crop ownership and convert only at the rendering boundary.
+  const angle=((Number(n.rotation)||0)%360+360)%360;
+  if(n.type!=='text'||n.textPath||n.rotationBounds==='layout'||
+    (Math.abs(angle-90)>.01&&Math.abs(angle-270)>.01)||!(n.h>n.w*1.5))return n;
+  return {...n,x:n.x+(n.w-n.h)/2,y:n.y+(n.h-n.w)/2,
+    w:n.h,h:n.w,anchor:'middle',verticalAlign:'middle',rotationBounds:'layout'};
+}
+
 export function expandEditableTextPaths(scene) {
   const nodes=[];
   for(const n of scene.nodes||[]){
-    if(n.type!=='text'||!n.textPath){nodes.push(n);continue;}
+    if(n.type!=='text'||!n.textPath){nodes.push(normalizeRotatedTextBounds(n));continue;}
     const spec=typeof n.textPath==='string'?{d:n.textPath}:n.textPath;
     const samples=geometrySegments({type:'path',d:spec?.d||''}).flatMap(p=>p.points);
     if(samples.length<2){nodes.push({...n,textPath:undefined});continue;}

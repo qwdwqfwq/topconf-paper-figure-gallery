@@ -1,12 +1,71 @@
 import {repairContainerGeometry} from './container-geometry.mjs';
 import {editableNodeBounds,planReconstructionTiles,registerMissingObjects} from './reconstruction-core.mjs';
 
+// Recover omitted pastel boxes only when a connected source fill is enclosed
+// by four dark edges. The output is a native rectangle, never a bitmap overlay.
+export function recoverSourceBoxes(scene,canvas){
+  const W=canvas.width,H=canvas.height,step=Math.max(1,Math.floor(Math.max(W,H)/1800));
+  const gw=Math.ceil(W/step),gh=Math.ceil(H/step),visited=new Uint8Array(gw*gh);
+  const pixels=canvas.getContext('2d',{willReadFrequently:true}).getImageData(0,0,W,H).data;
+  const color=(x,y)=>{const at=(Math.min(H-1,y)*W+Math.min(W-1,x))*4;return [pixels[at],pixels[at+1],pixels[at+2]];};
+  const pastel=c=>Math.min(...c)>155&&Math.max(...c)-Math.min(...c)>22;
+  const recovered=[];
+  for(const label of scene.nodes){
+    if(label.type!=='text'||label.rotation||!label.w||!label.h)continue;
+    let seed=null;
+    for(const fy of [.2,.5,.8])for(const fx of [.1,.3,.5,.7,.9]){
+      const x=Math.floor((label.x+label.w*fx)/step),y=Math.floor((label.y+label.h*fy)/step);
+      if(x<0||y<0||x>=gw||y>=gh||visited[y*gw+x])continue;
+      const c=color(x*step,y*step);if(pastel(c)&&!seed)seed={x,y,c};
+    }
+    if(!seed)continue;
+    const queue=[seed.y*gw+seed.x];visited[queue[0]]=1;
+    let l=seed.x,r=l,t=seed.y,b=t;
+    for(let q=0;q<queue.length;q++){
+      const at=queue[q],x=at%gw,y=Math.floor(at/gw);
+      l=Math.min(l,x);r=Math.max(r,x);t=Math.min(t,y);b=Math.max(b,y);
+      for(const [nx,ny] of [[x-1,y],[x+1,y],[x,y-1],[x,y+1]]){
+        if(nx<0||ny<0||nx>=gw||ny>=gh)continue;
+        const ni=ny*gw+nx;if(visited[ni])continue;
+        const c=color(nx*step,ny*step);
+        if(Math.max(...c.map((v,k)=>Math.abs(v-seed.c[k])))>14)continue;
+        visited[ni]=1;queue.push(ni);
+      }
+    }
+    const x=l*step,y=t*step,w=(r-l)*step,h=(b-t)*step;
+    if(w<60||h<20||w*h>W*H*.12||w/h<1.5||queue.length/Math.max(1,(r-l+1)*(b-t+1))<.65)continue;
+    if([...scene.nodes,...recovered].some(n=>n.type==='rect'&&
+      Math.max(0,Math.min(x+w,n.x+n.w)-Math.max(x,n.x))*Math.max(0,Math.min(y+h,n.y+n.h)-Math.max(y,n.y))/
+      Math.max(1,Math.max(w*h,n.w*n.h))>.75))continue;
+    const edge=(vertical,position,start,length)=>{
+      let hits=0,total=0;
+      for(let f=.2;f<=.8;f+=.025){total++;let hit=false;
+        for(let d=-step*3;d<=step*3;d++){
+          const px=Math.round(vertical?position+d:start+length*f),py=Math.round(vertical?start+length*f:position+d);
+          if(px>=0&&py>=0&&px<W&&py<H&&Math.max(...color(px,py))<140){hit=true;break;}
+        }if(hit)hits++;
+      }return hits/total;
+    };
+    if([edge(true,x,y,h),edge(true,x+w,y,h),edge(false,y,x,w),edge(false,y+h,x,w)].some(v=>v<.65))continue;
+    recovered.push({id:`source_box_${label.id}`,owner:label.owner,version:0,type:'rect',x,y,w,h,
+      fill:'#'+seed.c.map(v=>v.toString(16).padStart(2,'0')).join(''),stroke:'#222222',strokeWidth:Math.max(1,step),
+      radius:0,sourceDetail:'source-box'});
+  }
+  const nodes=[...scene.nodes];
+  for(const box of recovered){
+    const at=nodes.findIndex(n=>n.type!=='rect'&&n.x>=box.x&&n.y>=box.y&&n.x+n.w<=box.x+box.w&&n.y+n.h<=box.y+box.h);
+    if(at>=0)nodes.splice(at,0,box);
+  }
+  return {...scene,nodes};
+}
+
 // Recover broad, opaque heading strips from source color evidence. This is
 // deliberately independent of the vision model's object inventory: a missing
 // strip otherwise exposes the panel border through its title in PowerPoint.
 // Source evidence is anchored to prominent model headings, so colored body
 // boxes cannot accidentally become topmost opaque title plates.
 export function repairStructuralLayers(scene,canvas){
+  scene=recoverSourceBoxes(scene,canvas);
   const W=canvas.width,H=canvas.height,ctx=canvas.getContext('2d',{willReadFrequently:true});
   const pixels=ctx.getImageData(0,0,W,H).data;
   const rgb=(x,y)=>{const i=(Math.round(y)*W+Math.round(x))*4;return [pixels[i],pixels[i+1],pixels[i+2]];};
@@ -58,10 +117,19 @@ export function repairStructuralLayers(scene,canvas){
     return support.filter(v=>v<.2).length>=3?{...n,stroke:'none',strokeWidth:0}:n;
   });
   const overlays=[];
-  const headings=nodes.filter(n=>n.type==='text'&&n.fontSize>=Math.max(22,H*.024));
+  const headings=nodes.filter(n=>n.type==='text'&&n.bold&&!(Math.abs(Number(n.rotation)||0)%180)&&n.fontSize>=Math.max(22,H*.024));
   headings.forEach((heading,i)=>{
     const fs=heading.fontSize,margin=Math.max(24,fs*1.5,heading.w*.35),rows=[];
-    const left=Math.max(0,Math.floor(heading.x-margin)),right=Math.min(W,Math.ceil(heading.x+heading.w+margin));
+    // Adjacent pastel panels can look like one uninterrupted colored run.
+    // Bound the search to a visible enclosing panel, never an ownership box.
+    const panel=nodes.filter(n=>n.type==='rect'&&
+      ((n.fill&&n.fill!=='none'&&n.fill!=='transparent')||(n.stroke&&n.stroke!=='none'))&&
+      n.x<=heading.x&&n.x+n.w>=heading.x+heading.w&&
+      n.y<=heading.y+fs*.4&&n.y>=heading.y-fs*2&&
+      n.y+n.h>=heading.y+heading.h+fs)
+      .sort((a,b)=>a.w*a.h-b.w*b.h)[0];
+    const left=Math.max(0,Math.floor(heading.x-margin),panel?Math.ceil(panel.x):0);
+    const right=Math.min(W,Math.ceil(heading.x+heading.w+margin),panel?Math.floor(panel.x+panel.w):W);
     for(let y=Math.max(0,Math.floor(heading.y-fs*.65));y<Math.min(H,heading.y+Math.max(heading.h,fs)+fs*.4);y++){
       let start=-1,last=-1,gap=0;
       const save=()=>{if(start>=0&&last-start>=heading.w*.72&&start<=heading.x+heading.w*.25&&last>=heading.x+heading.w*.75)rows.push({x:start,right:last+1,y});};
@@ -81,8 +149,13 @@ export function repairStructuralLayers(scene,canvas){
     const median=values=>values.sort((a,b)=>a-b)[Math.floor(values.length/2)];
     const x=median(middle.map(r=>r.x)),end=median(middle.map(r=>r.right)),y=group[0].y,h=group.at(-1).y-y+1;
     if(end-x<W*.17||(end-x)/h<4)return;
-    const c=rgb(x+(end-x)*.15,y+h*.2);
-    const plate={id:`source_heading_${i}`,type:'rect',x,y,w:end-x,h,radius:h/2,fill:'#'+c.map(v=>v.toString(16).padStart(2,'0')).join(''),stroke:'none',strokeWidth:0,sourceDetail:'heading-strip',owner:'__structure',version:0};
+    // Sample the background, not a single pixel that may fall on a glyph.
+    const samples=[];
+    for(let sy=y;sy<y+h;sy+=Math.max(1,h/12))for(let sx=x;sx<end;sx+=Math.max(1,(end-x)/40))
+      if(colored(sx,sy))samples.push(rgb(sx,sy));
+    if(!samples.length)return;
+    const c=[0,1,2].map(k=>median(samples.map(s=>s[k])));
+    const plate={id:`source_heading_${i}`,type:'rect',x,y,w:end-x,h,radius:0,fill:'#'+c.map(v=>v.toString(16).padStart(2,'0')).join(''),stroke:'none',strokeWidth:0,sourceDetail:'heading-strip',owner:'__structure',version:0};
     // Replace the model's old plate; otherwise offset, duplicated plates survive.
     nodes=nodes.filter(n=>{
       if(n.id===heading.id)return false;
@@ -92,7 +165,8 @@ export function repairStructuralLayers(scene,canvas){
     });
     overlays.push(plate,heading);
   });
-  return repairContainerGeometry(fitSourceFills({...scene,nodes:[...nodes,...overlays]},canvas,new Set(overlays.filter(n=>n.type==='rect').map(n=>n.id))),canvas);
+  const fillIds=new Set([...overlays.filter(n=>n.type==='rect'),...nodes.filter(n=>n.type==='rect'&&n.w*n.h>W*H*.08)].map(n=>n.id));
+  return repairContainerGeometry(fitSourceFills({...scene,nodes:[...nodes,...overlays]},canvas,fillIds),canvas);
 }
 
 // A nearby glyph is not evidence for a connector. Match its actual ink color
@@ -217,7 +291,21 @@ export function planSemanticRegions(scene,width,height){
     });
     if(pieces.length)residuals.push({...parent,id:`${parent.id}_remaining`,parentId:parent.id,excludeRects:children.map(({x,y,w,h})=>({x,y,w,h}))});
   }
-  const tiles=leaves.length?[...leaves,...residuals]:planReconstructionTiles(width,height,650,32);
+  // Vision sometimes crops a semantic panel to its chart and leaves the
+  // adjacent vertical caption outside every region. Inspect substantial
+  // uncovered areas too; padding alone does not grant ownership of them.
+  let uncovered=leaves.length?[{x:0,y:0,w:width,h:height}]:[];
+  for(const region of regions)uncovered=uncovered.flatMap(p=>{
+    const l=Math.max(p.x,region.x),t=Math.max(p.y,region.y);
+    const r=Math.min(p.x+p.w,region.x+region.w),b=Math.min(p.y+p.h,region.y+region.h);
+    if(l>=r||t>=b)return [p];
+    return [{x:p.x,y:p.y,w:p.w,h:t-p.y},{x:p.x,y:b,w:p.w,h:p.y+p.h-b},
+      {x:p.x,y:t,w:l-p.x,h:b-t},{x:r,y:t,w:p.x+p.w-r,h:b-t}].filter(v=>v.w>0&&v.h>0);
+  });
+  const minSide=Math.max(32,Math.min(width,height)*.02);
+  const gaps=uncovered.filter(p=>p.w>=minSide&&p.h>=minSide&&p.w*p.h>=width*height*.0005)
+    .map((p,i)=>({...p,id:`uncovered_${i}`,kind:'uncovered'}));
+  const tiles=leaves.length?[...leaves,...residuals,...gaps]:planReconstructionTiles(width,height,650,32);
   return tiles.map((r,i)=>{
     const x=Math.max(0,Math.floor(r.x)),y=Math.max(0,Math.floor(r.y));
     const right=Math.min(width,Math.ceil(r.x+r.w)),bottom=Math.min(height,Math.ceil(r.y+r.h));
@@ -271,7 +359,17 @@ export function rollbackRegionChanges(original,candidate,regionIds){
   return {...candidate,nodes};
 }
 // Ownership uses declared geometry, not the conservative text audit padding.
-function patchBounds(n){return editableNodeBounds(n?.type==='text'?{...n,type:'rect',textPath:null}:n);}
+function patchBounds(n){
+  if(n?.type!=='text')return editableNodeBounds(n);
+  // Vision may return either a visible vertical box or a horizontal layout
+  // box rotated around its centre. Ownership must use the visible footprint;
+  // the latter can legitimately start outside the crop before rotation.
+  const angle=((Number(n.rotation)||0)%360+360)%360;
+  const quarterTurn=Math.abs(angle-90)<.01||Math.abs(angle-270)<.01;
+  const box=quarterTurn&&(n.rotationBounds==='layout'||n.w>n.h*1.5)
+    ?{...n,x:n.x+(n.w-n.h)/2,y:n.y+(n.h-n.w)/2,w:n.h,h:n.w}:n;
+  return editableNodeBounds({...box,type:'rect',textPath:null});
+}
 function patchCatalog(scene,region){
   return scene.nodes.filter(n=>{const b=patchBounds(n);return b&&b.x>=region.x-1&&b.y>=region.y-1&&b.right<=region.x+region.w+1&&b.bottom<=region.y+region.h+1;});
 }
@@ -357,10 +455,18 @@ export function fitSourceFills(scene,canvas,changedIds){
     if(changedIds&&!changedIds.has(n.id))return n;
     if(!['rect','ellipse'].includes(n.type)||!/^#[\da-f]{6}$/i.test(n.fill||''))return n;
     if(n.w<12||n.h<12)return n;
+    // Nested charts, images and labels are foreground, not panel color evidence.
+    // Include the exposed margins so a large inset chart cannot dominate the
+    // median and turn a pastel panel gray.
+    const panel=n.type==='rect'&&n.w*n.h>canvas.width*canvas.height*.08;
+    const occluders=panel?scene.nodes.filter(o=>o!==n&&o.w>0&&o.h>0&&o.w*o.h<n.w*n.h*.95&&
+      (o.type==='text'||o.type==='image'||(o.fill&&o.fill!=='none'&&o.fill!=='transparent'))):[];
+    const steps=panel?16:6,inset=panel?.04:.15,span=1-inset*2;
     const colors=[[],[],[]],samples=[];
-    for(let iy=0;iy<=6;iy++)for(let ix=0;ix<=6;ix++){
-      const x=Math.round(n.x+n.w*(.15+ix*.7/6)),y=Math.round(n.y+n.h*(.15+iy*.7/6));
+    for(let iy=0;iy<=steps;iy++)for(let ix=0;ix<=steps;ix++){
+      const x=Math.round(n.x+n.w*(inset+ix*span/steps)),y=Math.round(n.y+n.h*(inset+iy*span/steps));
       if(x<0||y<0||x>=canvas.width||y>=canvas.height)continue;
+      if(occluders.some(o=>x>=o.x-2&&x<=o.x+o.w+2&&y>=o.y-2&&y<=o.y+o.h+2))continue;
       const p=ctx.getImageData(x,y,1,1).data;
       if(Math.max(...p.slice(0,3))-Math.min(...p.slice(0,3))<15&&p[0]<120)continue;
       samples.push({u:(x-n.x)/n.w,v:(y-n.y)/n.h,color:Array.from(p.slice(0,3))});

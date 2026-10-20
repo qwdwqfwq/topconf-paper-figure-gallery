@@ -47,7 +47,7 @@ const server=http.createServer((req,res)=>{
         .replace('const cached=bypassCache?null:await readReconstructionCache(cacheKey);','const cached=window.__liveResumeScene?{scene:window.__liveResumeScene,detailComplete:false,omissionChecked:false}:bypassCache?null:await readReconstructionCache(cacheKey);')
         .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
         .replace('window.__ffReconstruct = () => runReconstruction();',
-          'window.__ffReconstruct = () => runReconstruction(); window.__ffTestPptx=buildNativePptx; window.__ffTestSvg=sceneToSvgString; window.__ffTestZip=zipStore;')
+          'window.__ffReconstruct = () => runReconstruction(); window.__ffTestPptx=buildNativePptx; window.__ffTestSvg=sceneToSvgString; window.__ffTestZip=zipStore; window.__ffStructureTest=async src=>{const im=await loadImage(src),c=document.createElement("canvas");c.width=im.naturalWidth;c.height=im.naturalHeight;c.getContext("2d").drawImage(im,0,0);const audit={tiles:[]};const scene=await reconstructCatalogWithFallback(c,src,requestEditableScene,audit,null,false,async()=>({score:0}),async()=>{},{regionIds:[]});window.__ffExportState.scene=scene;return true;};')
         .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});",
           "MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});");
       if(finalizeOnly)html=html.replace('completedIds:[]});\n    });','completedIds:[]});\n    },{regionIds:[]});');
@@ -68,7 +68,7 @@ const server=http.createServer((req,res)=>{
     page.on('pageerror',error=>console.error('Page error:',error.message));
     await page.goto('http://127.0.0.1:'+server.address().port+'/forge/',{waitUntil:'domcontentloaded'});
     const data='data:image/png;base64,'+fs.readFileSync(input).toString('base64');
-    await page.evaluate(({data,port,resume})=>{
+    await page.evaluate(({data,port,resume,structureOnly})=>{
       window.__liveResumeScene=resume?.scene||null;
       document.querySelector('#provider').value='infistar';
       document.querySelector('#useRelay').checked=true;
@@ -77,12 +77,12 @@ const server=http.createServer((req,res)=>{
       const select=document.querySelector('#analyzeModel');
       select.add(new Option('gpt-6.1-sol','gpt-6.1-sol'));select.value='gpt-6.1-sol';
       document.querySelector('#visualReasoningEffort').value='medium';
-      document.querySelector('#reconTimeoutMinutes').value='15';
+      document.querySelector('#reconTimeoutMinutes').value='25';
       window.__ffLastGeneratedImage=data;
       window.__ffRenderPptx=async blob=>{const response=await fetch('/render-pptx',{method:'POST',body:blob});const result=await response.json();if(!response.ok)throw Error(result.error);return result.image;};
       window.__liveDone=false;
-      window.__livePromise=window.__ffReconstruct().then(ok=>{window.__liveResult=ok;window.__liveDone=true;}).catch(e=>{window.__liveError=String(e);window.__liveDone=true;});
-    },{data,port:server.address().port,resume});
+      window.__livePromise=(structureOnly?window.__ffStructureTest(data):window.__ffReconstruct()).then(ok=>{window.__liveResult=ok;window.__liveDone=true;}).catch(e=>{window.__liveError=String(e);window.__liveDone=true;});
+    },{data,port:server.address().port,resume:resume?{scene:resume.scene}:null,structureOnly:process.env.FF_STRUCTURE_ONLY==='1'});
     let previous='';
     while(true){
       const state=await page.evaluate(()=>{const a=window.__ffApiAudit?.reconstruction||{};return {done:window.__liveDone,result:window.__liveResult,error:window.__liveError,phase:a.phase,completed:a.completedTiles,total:a.totalTiles,repairs:a.repairCalls,revisionRequests:a.revisions?.length,revisionFinished:a.revisions?.filter(r=>['succeeded','failed','subdivided'].includes(r.state)).length,model:a.model,status:a.state};});
@@ -101,7 +101,7 @@ const server=http.createServer((req,res)=>{
       const pptx=scene?await window.__ffTestPptx(scene,window.__ffTestZip):null;
       return {audit,scene,svg:scene?window.__ffTestSvg(scene):null,pptx:pptx?Array.from(new Uint8Array(await pptx.arrayBuffer())):null};
     });
-    fs.writeFileSync(path.join(output,'audit.json'),JSON.stringify(result.audit,null,2));
+    fs.writeFileSync(path.join(output,'audit.json'),JSON.stringify(result.audit||{},null,2));
     if(result.scene)fs.writeFileSync(path.join(output,'scene.json'),JSON.stringify(result.scene));
     if(result.svg)fs.writeFileSync(path.join(output,'reconstructed.svg'),result.svg);
     if(result.pptx){
