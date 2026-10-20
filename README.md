@@ -9,7 +9,7 @@
 
 ### ✨ FigureForge 生图成品 · Generated examples
 
-以下是画廊 FigureForge 的实际生图示例。**导出可编辑所有细节**。
+以下是画廊 FigureForge 的实际生图示例。<img src="docs/figureforge-examples/editable-details.svg" alt="导出可编辑所有细节。" width="208" height="32" align="middle">
 
 <table>
   <tr>
