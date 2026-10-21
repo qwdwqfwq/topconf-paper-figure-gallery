@@ -2396,7 +2396,7 @@ $('#genBtn').onclick = async ()=>{
 async function genOaiSVG(base,model,key,content,p,refIds,layoutGuide){
   const useIds = refIds||[...refs];
   const prompt = buildPrompt(content,layoutGuide,useIds);
-  let body = {model,temperature:0.3,max_tokens:8192}, usedVision=false;
+  let body = {model,temperature:0.3,max_tokens:96000}, usedVision=false;
   if(p==='ark' && !relayBase()) body.thinking={type:'disabled'};
   if(useIds.length && p!=='ds'){
     const uris = await refDataURIs(useIds);
@@ -2439,7 +2439,7 @@ async function genAnthropicSVG(base,model,key,content,refIds,layoutGuide){
     usedVision = blocks.length>0;
   }
   blocks.push({type:'text',text:prompt});
-  let body = {model,max_tokens:8192,temperature:0.3,system:SVG_SYS,messages:[{role:'user',content:blocks}]};
+  let body = {model,max_tokens:96000,temperature:0.3,system:SVG_SYS,messages:[{role:'user',content:blocks}]};
   let r;
   try{
     r = await fetchWithTimeout(base.replace(/\/+$/,'')+'/v1/messages',{method:'POST',
@@ -2612,7 +2612,7 @@ ${list}
 Return the complete corrected SVG only, no explanation, no code fences. Start with <svg and end with </svg>.`;
   const {base, model, key, provider} = req;
   if(req.anthropic){
-    const body = {model, max_tokens:8192, temperature:0.1, system:SVG_SYS,
+    const body = {model, max_tokens:96000, temperature:0.1, system:SVG_SYS,
       messages:[{role:'user',content:[{type:'text',text:svgText},{type:'text',text:instruction}]}]};
     const r = await fetchWithTimeout(base.replace(/\/+$/,'')+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(body)});
     const txt = await r.text();
@@ -2620,7 +2620,7 @@ Return the complete corrected SVG only, no explanation, no code fences. Start wi
     const d = JSON.parse(txt);
     return (d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
   }
-  const body = {model, temperature:0.1, max_tokens:8192,
+  const body = {model, temperature:0.1, max_tokens:96000,
     messages:[{role:'system',content:SVG_SYS},{role:'user',content:svgText+'\n\n'+instruction}]};
   if(provider==='ark') body.thinking={type:'disabled'};
   const r = await postJSON(base,'/chat/completions',body,key);
