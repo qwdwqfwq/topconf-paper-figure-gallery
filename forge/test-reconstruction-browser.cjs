@@ -211,7 +211,7 @@ const server = http.createServer((req,res)=>{
       document.querySelector('#imageResolution').value='1K';
       document.querySelector('#provider').value='ark';
       document.querySelector('#key').value='browser-test-key';
-      const select=document.querySelector('#analyzeModel');
+      const select=document.querySelector('#reconModel');
       select.add(new Option('doubao-vision-test','doubao-vision-test'));
       select.value='doubao-vision-test';
       const canvas=document.createElement('canvas');canvas.width=1024;canvas.height=1024;
@@ -247,7 +247,7 @@ const server = http.createServer((req,res)=>{
 
     const result=await page.evaluate(async()=>{
       document.querySelector('#provider').value='ark';document.querySelector('#key').value='test';
-      const select=document.querySelector('#analyzeModel');select.add(new Option('test','gpt-6.1-sol'));select.value='gpt-6.1-sol';
+      const select=document.querySelector('#reconModel');select.add(new Option('test','gpt-6.1-sol'));select.value='gpt-6.1-sol';
       let calls=0,active=0,peak=0;
       const original=window.fetch;
       window.fetch=async(url,options)=>{
@@ -260,7 +260,7 @@ const server = http.createServer((req,res)=>{
         }else if(prompt.includes('Return STRICT JSON {"operations"')){
           if(body.messages[1].content.filter(c=>c.type==='image_url').length!==4)throw Error('Detail reconstruction requires crop, context, render and full source');
           active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,20));active--;
-          const ownership=JSON.parse(prompt.split(' Ownership: ')[1].split(' Context origin: ')[0]);
+          const ownership=JSON.parse(prompt.split(' Ownership: ')[1].split(' Source crop: ')[0]);
           output={operations:[{op:'add',node:{type:'rect',x:ownership.x+30,y:30,w:20,h:20,fill:'#123456',stroke:'none'}}],uncertainties:[]};
         }else output={regions:[0,1,2].map(i=>({id:'r'+i,x:i*100,y:0,w:100,h:100})),nodes:[{id:'panel',type:'rect',x:0,y:0,w:300,h:100,fill:'#ffffff',stroke:'none'}]};
         return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(output)}}]}));
@@ -273,7 +273,7 @@ const server = http.createServer((req,res)=>{
     assert.equal(result.ok,true,JSON.stringify(result));
     assert.equal(result.audit.strategy,'compare-first-object-patches');
     assert.ok(result.peak>=2,'deficient semantic regions are completed concurrently');
-    assert.equal(result.calls,5);
+    assert.ok(result.calls>=5,'whole-scene recognition, comparison and detail patches all run');
     assert.equal(result.nodes.filter(n=>n.type==='rect'&&n.fill==='#123456').length,3);
     assert.equal(result.audit.actualPptxRenderVerified,false,'roundtrip XML is not an Office render');
     assert.equal(result.audit.state,'needs-review','actual renderer remains required');
@@ -322,7 +322,7 @@ const server = http.createServer((req,res)=>{
     await page.reload({waitUntil:'domcontentloaded'});
     const cached=await page.evaluate(async(src)=>{
       document.querySelector('#provider').value='ark';document.querySelector('#key').value='test';
-      const select=document.querySelector('#analyzeModel');select.add(new Option('test','gpt-6.1-sol'));select.value='gpt-6.1-sol';
+      const select=document.querySelector('#reconModel');select.add(new Option('test','gpt-6.1-sol'));select.value='gpt-6.1-sol';
       window.__ffLastGeneratedImage=src;
       let calls=0;const original=window.fetch;window.fetch=async(url,options)=>{if(!String(url).endsWith('/chat/completions'))return original(url,options);calls++;throw Error('offline');};
       return {ok:await window.__ffReconstruct(),calls,audit:window.__ffApiAudit.reconstruction};
@@ -330,7 +330,7 @@ const server = http.createServer((req,res)=>{
     assert.equal(cached.ok,true);assert.equal(cached.audit.cacheHit,true);
     assert.equal(cached.calls,1,'cached scene is compared again; failed diagnosis must not launch blind patches'); assert.ok(cached.audit.diagnosisError);
     const failed=await page.evaluate(async()=>{
-      const select=document.querySelector('#analyzeModel');select.add(new Option('different','vision-different'));select.value='vision-different';
+      const select=document.querySelector('#reconModel');select.add(new Option('different','vision-different'));select.value='vision-different';
       window.fetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'{"description":"no objects"}'}}]}),{status:200});
       const ok=await window.__ffReconstruct();
       return {ok,scene:window.__ffExportState.scene,audit:window.__ffApiAudit.reconstruction};

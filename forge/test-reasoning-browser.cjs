@@ -42,7 +42,7 @@ const server=http.createServer((req,res)=>{
       document.querySelector('#key').value='test-key';
       document.querySelector('#useRelay').checked=true;
       document.querySelector('#baseOverride').value='https://test.invalid/v1';
-      for(const id of ['parseModel','analyzeModel','model']){const el=document.getElementById(id);el.add(new Option('gpt-6.1-sol','gpt-6.1-sol'));el.value='gpt-6.1-sol';}
+      for(const id of ['parseModel','analyzeModel','model','reconModel']){const el=document.getElementById(id);if(![...el.options].some(o=>o.value==='gpt-6.1-sol'))el.add(new Option('gpt-6.1-sol','gpt-6.1-sol'));el.value='gpt-6.1-sol';}
       window.__test.seed();
     });
     for(const endpoint of ['https://test.invalid/v1','https://api.openai.com/v1']){
@@ -70,6 +70,7 @@ const server=http.createServer((req,res)=>{
     await page.selectOption('#parseReasoningEffort','medium');
     for(const effort of ['','medium','high','xhigh']){
       await page.selectOption('#visualReasoningEffort',effort);
+      await page.evaluate(value=>{const select=document.querySelector('#reconReasoningEffort');select.value=value;select.dispatchEvent(new Event('change'));},effort==='xhigh'?'medium':'xhigh');
       for(const stage of ['refs','scene','labels']){
         await page.evaluate(async stage=>{
           if(stage==='refs') return window.__test.refs();
@@ -77,7 +78,7 @@ const server=http.createServer((req,res)=>{
           const c=document.createElement('canvas');c.width=100;c.height=100;
           return window.__test.scene(c.toDataURL(),100,100,{objectRepair:true,catalog:{canvas:{width:100,height:100},nodes:[{id:'box',type:'rect',x:10,y:10,w:40,h:40}]}});
         },stage);
-        assert.equal(requests.at(-1).reasoning_effort,effort||undefined,stage);
+        assert.equal(requests.at(-1).reasoning_effort,stage==='refs'?(effort||undefined):(effort==='xhigh'?'medium':'xhigh'),stage);
       }
     }
     truncateOnce=true;
@@ -96,10 +97,11 @@ const server=http.createServer((req,res)=>{
     const failure=await page.evaluate(async()=>{try{await window.__test.labels([],null);return '';}catch(e){return e.message;}});
     assert.match(failure,/Unsupported reasoning_effort/);
     assert.equal(requests.length,before+1,'no downgrade request after rejection');
-    assert.equal(requests.at(-1).reasoning_effort,'xhigh');
+    assert.equal(requests.at(-1).reasoning_effort,'medium');
     await page.reload();
     assert.equal(await page.locator('#parseReasoningEffort').inputValue(),'medium');
     assert.equal(await page.locator('#visualReasoningEffort').inputValue(),'xhigh');
+    assert.equal(await page.locator('#reconReasoningEffort').inputValue(),'medium');
     assert.deepEqual(errors,[]);
     console.log(`PASS: ${requests.length} actual browser API requests; parsing text/image/PDF, Responses, visual analysis/reconstruction/labels, independent persisted choices and explicit rejection.`);
   }finally{await browser.close();await new Promise(r=>server.close(r));}

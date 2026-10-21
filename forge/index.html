@@ -340,10 +340,10 @@
     .export-progress-fill{height:100%;width:0;border-radius:999px;background:linear-gradient(90deg,#6366f1,#4f46e5);transition:width .16s ease}
     @media(max-width:760px){.export-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
 /* Keep model and canvas controls visually consistent. */
-#parseReasoningEffort,#visualReasoningEffort,#figureRatio,#imageResolution,#analyzeModel{border:1px solid #d9d5ed;border-radius:10px;padding:10px 14px;background:#fff;color:#1f2937;min-height:42px;box-shadow:0 1px 2px #312e8108}
+#parseReasoningEffort,#visualReasoningEffort,#reconReasoningEffort,#reconModel,#figureRatio,#imageResolution,#analyzeModel{border:1px solid #d9d5ed;border-radius:10px;padding:10px 14px;background:#fff;color:#1f2937;min-height:42px;box-shadow:0 1px 2px #312e8108}
 #figureRatio,#imageResolution{min-width:110px}
 #analyzeModel{flex:1;max-width:none;min-width:0}
-#figureRatio:focus-visible,#imageResolution:focus-visible,#analyzeModel:focus-visible{outline:3px solid #c4b5fd;outline-offset:2px;border-color:#7c3aed}
+#figureRatio:focus-visible,#imageResolution:focus-visible,#analyzeModel:focus-visible,#reconModel:focus-visible,#reconReasoningEffort:focus-visible{outline:3px solid #c4b5fd;outline-offset:2px;border-color:#7c3aed}
 </style>
 </head>
 <body>
@@ -554,10 +554,10 @@
       <p class="bnote warn-inline" id="modelWarn" hidden></p>
       <p class="bnote" id="pdfModelHint" data-i18n="hint.model"></p>
       <small style="display:block;margin-top:9px">步骤一至四不设模型等待时限；极高推理可能需要更久。 / Steps 1–4 have no model waiting limit; extra-high reasoning may take longer.</small>
-      <small id="reconRelease">重建版本 / Reconstruction version: 20261021-targeted-6</small>
+      <small id="reconRelease">重建版本 / Reconstruction version: 20261021-targeted-7</small>
       <div class="bfield" id="analyzeModelRow" hidden style="margin-top:9px"><span class="blab" data-i18n="analyzemodel"></span><select id="analyzeModel"></select></div>
       <div class="bfield" style="margin-top:9px"><span class="blab">视觉推理强度</span><select id="visualReasoningEffort" aria-label="视觉推理强度"><option value="">服务商默认</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">极高</option></select></div>
-      <p class="bnote">用于参考图归纳及步骤四重建、修正。需模型及服务商支持；默认不指定强度。</p>
+      <p class="bnote">用于参考图归纳。需模型及服务商支持；默认不指定强度。</p>
     </section>
 
     <div id="genErr" class="errlist" hidden></div>
@@ -582,6 +582,9 @@
     <section class="box b-slate">
       <h4><span class="bi" aria-hidden="true">✏️</span><span data-i18n="export.title"></span></h4>
       <div class="export-recon" id="exportRecon" hidden>
+        <div class="bfield" style="margin-bottom:9px"><label class="blab" for="reconModel">步骤四整图识别模型</label><select id="reconModel" aria-label="步骤四整图识别模型"></select></div>
+        <div class="bfield" style="margin-bottom:9px"><label class="blab" for="reconReasoningEffort">步骤四推理强度</label><select id="reconReasoningEffort"><option value="">服务商默认</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">极高</option></select></div>
+        <p class="bnote">点击重建会用所选模型重新识别已导入原图，不复用旧草稿。</p>
         <div class="recon-row">
           <button type="button" class="btn-primary" id="reconBtn" data-i18n="recon.btn"></button>
           <button type="button" id="refineReconBtn" hidden>按需精修缺失区域</button>
@@ -1295,7 +1298,7 @@ function anthropicHeaders(key){
    'img' locally rendered page images (vision models) */
 // Apply at each request boundary; image generation and connection probes stay independent.
 function reasoningEffort(scope){
-  return $(scope==='parse'?'#parseReasoningEffort':'#visualReasoningEffort').value;
+  return $(scope==='parse'?'#parseReasoningEffort':scope==='recon'?'#reconReasoningEffort':'#visualReasoningEffort').value;
 }
 function withReasoning(body,scope){
   const effort=reasoningEffort(scope);
@@ -1319,6 +1322,7 @@ for(const [id,key] of [['parseReasoningEffort','ff_parse_reasoning_effort'],['vi
   select.value=['medium','high','xhigh'].includes(saved)?saved:'';
   select.onchange=()=>localStorage.setItem(key,select.value);
 }
+$('#reconReasoningEffort').onchange=e=>localStorage.setItem('ff_recon_reasoning_effort_'+$('#provider').value,e.target.value);
 
 async function callPdfParser(mode, payload){
   const c=cfg(), base=baseURL(), key=cleanKey($('#key').value), model=parserModel();
@@ -1604,7 +1608,18 @@ async function populateModels(){
   checkModelEnabled('#model','#modelWarn',liveModels.model);
   syncImageRatioSupport();
   if(mode==='image') await populateAnalyzeModels();
+  populateReconstructionModels(res);
 }
+function populateReconstructionModels(res={list:[]}){
+  const p=$('#provider').value, c=cfg(), s=$('#reconModel');
+  const current=s.value;
+  const models=[...(p==='infistar'?['gpt-6.1-sol']:[]),...(c.vision||[]),...res.list.filter(m=>isVisualChatModel(m,c.vision||[]))];
+  s.replaceChildren(...[...new Set(models)].map(option));
+  const saved=localStorage.getItem('ff_recon_model_'+p);
+  if(saved && [...s.options].some(o=>o.value===saved))s.value=saved;
+  else if(current && [...s.options].some(o=>o.value===current))s.value=current;
+}
+$('#reconModel').onchange=e=>localStorage.setItem('ff_recon_model_'+$('#provider').value,e.target.value);
 async function populateParserModels(){
   const p=$('#provider').value, c=cfg(), s=$('#parseModel'); s.innerHTML='';
   if(p==='custom'){
@@ -1661,6 +1676,8 @@ function initProviders(){
   populateParserModels();
 }
 function restoreProviderState(p){
+  const reconEffort=localStorage.getItem('ff_recon_reasoning_effort_'+p);
+  $('#reconReasoningEffort').value=['','medium','high','xhigh'].includes(reconEffort)?reconEffort:(p==='infistar'?'medium':'');
   $('#infistarSignup').hidden = p!=='infistar';
   $('#key').value = localStorage.getItem('ff_key_'+p)||'';
   $('#baseOverride').value = localStorage.getItem('ff_base_'+p)||'';
@@ -1676,6 +1693,7 @@ function restoreProviderState(p){
   if(c.cors===false) $('#corsNote').innerHTML = tt('cors.note');
   syncRelayPreset();
   syncBaseHint();
+  populateReconstructionModels();
 }
 $('#provider').onchange = async e=>{
   localStorage.setItem('ff_provider', e.target.value);
@@ -4556,14 +4574,7 @@ function parseEditableSceneResponse(txt,W,H){
   throw err;
 }
 function editableReconstructionModel(){
-  const cfgv=cfg();
-  const vision=Array.isArray(cfgv.vision) ? cfgv.vision : [];
-  const selectedAnalyze=$('#analyzeModel') && $('#analyzeModel').value;
-  const selectedMain=$('#model') && $('#model').value;
-  const isVision=m=>isVisualChatModel(m,vision);
-  if(isVision(selectedAnalyze)) return selectedAnalyze;
-  if(isVision(selectedMain)) return selectedMain;
-  return vision.find(isVision) || '';
+  return $('#reconModel').value;
 }
 
 function editableResponseText(d){
@@ -4703,7 +4714,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         const r=await fetchTextWithTimeout(baseURL()+'/v1/messages',{
           method:'POST',signal:audit.signal,
           headers:anthropicHeaders(cleanKey($('#key').value)),
-          body:JSON.stringify(withReasoning(body,'visual'))
+          body:JSON.stringify(withReasoning(body,'recon'))
         },timeoutMs);
         txt=r.text;
         if(!r.ok)throw reconstructionHttpError(r,'HTTP '+r.status+': '+friendlyHttp(r.status,txt));
@@ -4739,7 +4750,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         const r=await fetchTextWithTimeout(baseURL()+'/chat/completions',{
           method:'POST',signal:audit.signal,
           headers:{'Content-Type':'application/json',Authorization:'Bearer '+cleanKey($('#key').value)},
-          body:JSON.stringify(withReasoning(body,'visual'))
+          body:JSON.stringify(withReasoning(body,'recon'))
         },timeoutMs);
         txt=r.text;
         if(!r.ok)throw reconstructionHttpError(r,'HTTP '+r.status+': '+friendlyHttp(r.status,txt));
@@ -5198,6 +5209,8 @@ async function runReconstruction(options={}){
     // other crop. All Vision calls (including retries and object repairs)
     // share this limit so subdivision cannot flood the API.
     const pinnedModel=editableReconstructionModel();
+    if(!pinnedModel)throw Error('请先选择步骤四整图识别模型');
+    Object.assign(reconstructionAudit,{pinnedModel,reasoningEffort:reasoningEffort('recon'),sourceWidth:canvas.width,sourceHeight:canvas.height});
     const enqueue=visionQueue(4);
     const requestScene=(...args)=>{
       if(args[3]){args[3].state='queued';args[3].pinnedModel=pinnedModel;}
@@ -5207,10 +5220,11 @@ async function runReconstruction(options={}){
         return requestEditableScene(...args);
       });
     };
-    const cacheKey=await reconstructionCacheKey(src,{textLayoutVersion:5,catalogQualityVersion:17,model:pinnedModel,reasoningEffort:reasoningEffort('visual'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
+    const cacheKey=await reconstructionCacheKey(src,{textLayoutVersion:5,catalogQualityVersion:17,model:pinnedModel,reasoningEffort:reasoningEffort('recon'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
     const bypassCache=!!st.skipReconCacheOnce;
     st.skipReconCacheOnce=false;
     const cached=options.refine&&st.scene?{scene:st.scene}:bypassCache?null:await readReconstructionCache(cacheKey);
+    reconstructionAudit.cacheHit=!!cached;
     reconstructionAudit.cachedDetailComplete=!!cached?.detailComplete;
     let scene=await reconstructCatalogWithFallback(canvas,src,requestScene,reconstructionAudit,cached?.scene,!!cached?.omissionChecked,compareEditableRender,(partial)=>{
       st.partialScene=partial;
@@ -5220,7 +5234,6 @@ async function runReconstruction(options={}){
       return writeReconstructionCache(cacheKey,{scene:partial,omissionChecked:false,detailComplete:false,completedIds:[]});
     },{...options,signal:controller.signal,deadline,maxAttempts:2,retryBudget:3});
     if(controller.signal.aborted)throw new DOMException("Refinement stopped","AbortError");
-    reconstructionAudit.cacheHit=!!cached;
     let omissionChecked=!!reconstructionAudit.omissionChecked;
     const completedIds=new Set(cached?.completedIds||[]);
     const saveProgress=()=>writeReconstructionCache(cacheKey,{scene,omissionChecked,
@@ -5368,7 +5381,7 @@ async function requestRegionLabels(regions, canvas){
     const body = { model:model, max_tokens:1200, system:ANALYZE_SYS,
                    messages:[{ role:'user', content:[{ type:'text', text:prompt }] }] };
     const r = await fetch(baseURL() + '/v1/messages',
-      { method:'POST', headers:anthropicHeaders(cleanKey($('#key').value)), body:JSON.stringify(withReasoning(body,'visual')) });
+      { method:'POST', headers:anthropicHeaders(cleanKey($('#key').value)), body:JSON.stringify(withReasoning(body,'recon')) });
     txt = await r.text();
     if(!r.ok) throw new Error(friendlyHttp(r.status, txt));
     const d = JSON.parse(txt);
@@ -5378,7 +5391,7 @@ async function requestRegionLabels(regions, canvas){
                    messages:[{ role:'system', content:ANALYZE_SYS },
                              { role:'user', content:prompt }] };
     if($('#provider').value === 'ark' && !relayBase()) body.thinking = { type:'disabled' };
-    const r = await postJSON(baseURL(), '/chat/completions', withReasoning(body,'visual'), cleanKey($('#key').value));
+    const r = await postJSON(baseURL(), '/chat/completions', withReasoning(body,'recon'), cleanKey($('#key').value));
     txt = await r.text();
     if(!r.ok) throw new Error(friendlyHttp(r.status, txt));
     const d = JSON.parse(txt);
@@ -5482,6 +5495,7 @@ function renderEditableExportCard(){
   const refine=$('#refineReconBtn');if(refine){refine.hidden=!state.scene;refine.disabled=!!state.reconPending;}
   const stop=$('#stopReconBtn');if(stop)stop.hidden=!state.reconPending;
   const reconBtn=$('#reconBtn'); if(reconBtn) reconBtn.disabled = !hasBitmap || state.reconPending;
+  for(const id of ['reconModel','reconReasoningEffort'])$('#'+id).disabled=!!state.reconPending;
   const responseButton=$('#downloadReconResponse');
   if(responseButton) responseButton.hidden=!(window.__ffReconResponses&&window.__ffReconResponses.length);
   const confirm=$('#exportConfirm'); if(confirm) confirm.disabled = locked || !state.target;
@@ -5855,6 +5869,7 @@ $('#refineReconBtn')?.addEventListener('click',async()=>{
 $('#reconBtn')?.addEventListener('click', async function(){
   const btn = $('#reconBtn');
   const st = window.__ffExportState;
+  st.skipReconCacheOnce = true;
   st.reconPending = true;
   renderEditableExportCard();
   let ok = false;

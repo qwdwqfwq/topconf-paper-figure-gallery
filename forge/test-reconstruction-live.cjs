@@ -38,7 +38,6 @@ const server=http.createServer((req,res)=>{
  if(!filename.startsWith(root+path.sep)){res.writeHead(403);res.end();return;}
  readAsset(relative,filename,(err,bytes)=>{if(err){res.writeHead(404);res.end();return;}
   if(relative==='/forge/index.html')bytes=Buffer.from(bytes.toString('utf8').replace(/\r\n/g,'\n').replace("import * as T from './vendor/transformers.min.js';",'const T={};').replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});","MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});"));
-  if(relative==='/forge/index.html' && process.env.FF_MODEL)bytes=Buffer.from(bytes.toString('utf8').replace('function editableReconstructionModel(){', 'function editableReconstructionModel(){ return '+JSON.stringify(process.env.FF_MODEL)+';'));
   if(relative==='/forge/index.html')bytes=Buffer.from(bytes.toString('utf8').replace('async function runReconstruction(options={}){','window.__ffTestResume=async(scene,regionIds,exportOnly)=>{const st=ensureExportState();st.scene=scene;if(exportOnly){const im=await loadImage(st.bitmap),c=document.createElement(\'canvas\');c.width=im.naturalWidth;c.height=im.naturalHeight;c.getContext(\'2d\').drawImage(im,0,0);scene=repairStructuralLayers(recoverDocumentInk(scene,c),c);const svg=sceneToSvgString(scene);Object.assign(st,{scene,vectorScene:scene,svg,baseSvg:svg,vectorSvg:svg,exportMode:\'vector\',source:\'bitmap\',recon:{mode:\'vector\',nodes:scene.nodes.length}});renderEditableExportCard();return;}st.reconPending=true;try{await runReconstruction({refine:true,regionIds});}finally{st.reconPending=false;renderEditableExportCard();}};\nasync function runReconstruction(options={}){'));
   res.writeHead(200,{'Content-Type':({'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.json':'application/json','.css':'text/css'})[path.extname(filename)]||'application/octet-stream'});res.end(bytes);
  });
@@ -52,8 +51,8 @@ const server=http.createServer((req,res)=>{
   await page.evaluate(({port,model})=>{
    document.querySelector('#provider').value='infistar';document.querySelector('#useRelay').checked=true;
    document.querySelector('#baseOverride').value='http://127.0.0.1:'+port+'/relay';document.querySelector('#key').value='local-proxy';
-   const s=document.querySelector('#analyzeModel');s.add(new Option(model,model));s.value=model;
-   document.querySelector('#visualReasoningEffort').value='medium';
+   const s=document.querySelector('#reconModel');if(![...s.options].some(o=>o.value===model))s.add(new Option(model,model));s.value=model;
+   document.querySelector('#reconReasoningEffort').value='medium';
    window.__ffRenderPptx=async(blob,{width,height})=>{const r=await fetch('/render-pptx?width='+width+'&height='+height,{method:'POST',body:blob});const j=await r.json();if(!r.ok)throw Error(j.error);return j.image;};
   },{port:server.address().port,model:process.env.FF_MODEL||'gpt-6.1-sol'});
   await page.locator('#exportBitmapUpload').setInputFiles(input);
