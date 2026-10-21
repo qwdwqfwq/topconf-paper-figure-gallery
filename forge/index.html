@@ -3115,13 +3115,44 @@ function parseSvgScene(svg){
     return points.join(' ');
   }
 
-  function walk(el, matrix){
+  function walk(el, matrix, useStack=new Set()){
     const tag = (el.tagName||'').toLowerCase();
     const own = parseTransformList(el.getAttribute('transform'));
     const m = own.length ? multiplyMatrix(matrix, opsToMatrix(own)) : matrix;
     const st = styleOf(el);
 
     if(tag==='defs' || tag==='style' || tag==='title' || tag==='desc' || tag==='metadata') return;
+    if(tag==='use'){
+      const href=el.getAttribute('href')||el.getAttribute('xlink:href')||el.getAttributeNS('http://www.w3.org/1999/xlink','href')||'';
+      const match=href.match(/^#([^\s]+)$/);
+      if(!match){warnings.push('external or missing <use> reference was skipped');return;}
+      let refId; try{refId=decodeURIComponent(match[1]);}catch(_){refId=match[1];}
+      if(useStack.has(refId)){warnings.push('cyclic <use> reference was skipped: '+refId);return;}
+      const target=[...live.querySelectorAll('[id]')].find(node=>node.id===refId);
+      if(!target){warnings.push('unresolved <use> reference was skipped: '+refId);return;}
+      const num=(name,fallback)=>{const v=parseFloat(el.getAttribute(name));return Number.isFinite(v)?v:fallback;};
+      let instanceMatrix=multiplyMatrix(m,[1,0,0,1,num('x',0),num('y',0)]);
+      const nextStack=new Set(useStack);nextStack.add(refId);
+      const instance=document.createElementNS('http://www.w3.org/2000/svg','g');
+      ['color','fill','stroke','stroke-width','opacity','fill-opacity','stroke-opacity','font-family','font-size','font-weight','font-style','text-anchor','dominant-baseline'].forEach(name=>{const value=el.getAttribute(name);if(value!=null)instance.setAttribute(name,value);});
+      if(el.getAttribute('style'))instance.setAttribute('style',el.getAttribute('style'));
+      const clone=target.cloneNode(true);instance.appendChild(clone);live.appendChild(instance);
+      try{
+        const targetTag=(target.tagName||'').toLowerCase();
+        if(targetTag==='symbol'||targetTag==='svg'){
+          const view=(target.getAttribute('viewBox')||'').trim().split(/[\s,]+/).map(Number);
+          const width=num('width',view.length===4?view[2]:0),height=num('height',view.length===4?view[3]:0);
+          if(view.length===4&&view.every(Number.isFinite)&&view[2]>0&&view[3]>0&&width>0&&height>0){
+            const par=(target.getAttribute('preserveAspectRatio')||'xMidYMid meet').trim().split(/\s+/),mode=par[0]==='defer'?par[1]:par[0];
+            let sx=width/view[2],sy=height/view[3],ox=0,oy=0;
+            if(mode!=='none'){const scale=(par.includes('slice')?Math.max:Math.min)(sx,sy);sx=sy=scale;const align=mode||'xMidYMid';ox=align.includes('xMax')?width-view[2]*sx:align.includes('xMid')?(width-view[2]*sx)/2:0;oy=align.includes('YMax')?height-view[3]*sy:align.includes('YMid')?(height-view[3]*sy)/2:0;}
+            instanceMatrix=multiplyMatrix(instanceMatrix,[sx,0,0,sy,ox-view[0]*sx,oy-view[1]*sy]);
+          }else if(targetTag==='symbol')warnings.push('symbol without a valid viewBox was skipped: '+refId);
+        }
+        if(targetTag==='symbol'||targetTag==='svg')[...clone.children].forEach(child=>walk(child,instanceMatrix,nextStack));else walk(clone,instanceMatrix,nextStack);
+      }finally{instance.remove();}
+      return;
+    }
 
     if(tag==='g' || tag==='svg'){
       [...el.children].forEach(child=>walk(child, m));
