@@ -19,7 +19,7 @@ const context=vm.createContext({...core,...pipeline,
 vm.runInContext(source,context);
 const run=(canvas,src,request,audit,cached,checked,measure,progress,options)=>context.reconstructCatalogWithFallback(canvas,src,async(s,w,h,a,...rest)=>{
  if(a.wholeCorrection)return cached||scene;
- if(a.defectDiagnosis)return {complete:false,defects:[{x:0,y:0,w:1400,h:700,reason:'missing ink'}]};
+ if(a.defectDiagnosis)return {wholeImageAcceptable:true,summary:"Only isolated residual defects",coverage:[{region:"all",missingGroups:[]}],complete:false,defects:[{x:0,y:0,w:1400,h:700,reason:'missing ink'}]};
  return request(s,w,h,a,...rest);
 },audit,cached,checked,measure,progress,options);
 const canvas={width:1400,height:700};
@@ -49,7 +49,7 @@ await run(canvas,'src',async(s,w,h,a)=>{calls++;return refined(a);},retry,cached
 assert.equal(calls,2,'stale passed cache must be remeasured and refined');assert.equal(retry.tilePassComplete,true);
 const high=audit();
 await run(canvas,'src',async()=>{throw Error('must not call');},high,complete,true,quality,undefined,once);
-assert.equal(high.tiles.length,1);assert.equal(high.tilePassComplete,true);
+assert.equal(high.tiles.length,3);assert.equal(high.tilePassComplete,true);
 const rejected=audit();
 const unchanged=await run(canvas,'src',async(s,w,h,a)=>refined(a),rejected,cached,true,()=>({score:.5,darkRecall:.5,localRecall:.5,edgeF1:.5,colorSimilarity:.5}),undefined,once);
 assert.equal(rejected.tilePassComplete,false);assert.ok(unchanged.nodes.every(n=>n.fill==='#ffffff'));
@@ -74,6 +74,18 @@ console.log('PASS: one whole catalog, early publication, no exhaustive detail cr
 
 // A clean diagnosis must skip all regional calls even with conservative pixel scores.
 const clean=audit(),stages=[];
-await context.reconstructCatalogWithFallback(canvas,'src',async(s,w,h,a)=>{stages.push(a.wholeImage?'whole':a.wholeCorrection?'correction':a.defectDiagnosis?'diagnosis':'region');if(a.defectDiagnosis)return {complete:true,defects:[]};return scene;},clean,null,false,quality);
-assert.deepEqual(stages,['whole','diagnosis']);assert.equal(clean.repairRegions.length,0);assert.equal(clean.tilePassComplete,true);
+await context.reconstructCatalogWithFallback(canvas,'src',async(s,w,h,a)=>{stages.push(a.wholeImage?'whole':a.wholeCorrection?'correction':a.defectDiagnosis?'diagnosis':'region');if(a.defectDiagnosis)return {wholeImageAcceptable:true,summary:"Complete",coverage:[{region:"all",missingGroups:[]}],complete:true,defects:[]};return scene;},clean,null,false,quality);
+assert.deepEqual(stages,['whole','diagnosis','diagnosis','diagnosis']);assert.equal(clean.repairRegions.length,0);assert.equal(clean.tilePassComplete,true);
 console.log('PASS: fresh diagnosis precedes targeted repairs without whole rewriting; clean render skips all regions');
+
+// A deficient first pass must never invoke regional diagnosis or reconstruction.
+for(const verdict of [false,undefined]){
+ const log=[],a=audit();let evidence;
+ await assert.rejects(()=>context.reconstructCatalogWithFallback({width:5504,height:3072},'native-source',async(src,w,h,task)=>{
+  log.push(task);assert.equal(src,'native-source');assert.equal(w,5504);assert.equal(h,3072);
+  if(task.wholeImage)return {...scene,recognitionCounts:{raw:2,expanded:2,parsed:2}};
+  assert.ok(task.wholeImageAssessment);return {wholeImageAcceptable:verdict,summary:'Missing panel interiors',coverage:[{region:'panel',missingGroups:['interiors']}],complete:false,defects:[]};
+ },a,null,false,quality,undefined,{onWholeImage:r=>{evidence=r;}}),/整图首轮未通过/);
+ assert.equal(log.length,2);assert.equal(evidence.validation.state,'failed');assert.equal(evidence.nodeCounts.raw,2);assert.equal(evidence.nodeCounts.deduplicated,2);
+}
+console.log('PASS: native-resolution whole input, count evidence and failed acceptance stop all regional work');

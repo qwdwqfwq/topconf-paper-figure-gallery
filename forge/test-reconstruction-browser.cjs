@@ -245,6 +245,44 @@ const server = http.createServer((req,res)=>{
     assert.ok(fs.statSync(await bitmap.path()).size>100);
     await page.reload({waitUntil:'domcontentloaded'});
 
+    const wholeContract=await page.evaluate(async()=>{
+      document.querySelector('#provider').value='ark';document.querySelector('#key').value='test';
+      const select=document.querySelector('#reconModel');select.add(new Option('test','gpt-6.1-sol'));select.value='gpt-6.1-sol';
+      const c=document.createElement('canvas');c.width=5504;c.height=3072;const src=c.toDataURL();
+      const nodes=Array.from({length:520},(_,i)=>({id:'n'+i,type:'rect',x:(i%40)*100,y:Math.floor(i/40)*100,w:20,h:20,fill:'#123456'}));
+      let calls=0,mode='ok';const bodies=[],original=window.fetch;
+      window.fetch=async(url,options)=>{
+        if(!String(url).endsWith('/chat/completions'))return original(url,options);
+        calls++;bodies.push(JSON.parse(options.body));
+        if(mode==='rejected')return new Response('unsupported detail original',{status:400});
+        return new Response(JSON.stringify({model:'gpt-6.1-sol',usage:{completion_tokens:65000},choices:[{finish_reason:mode==='truncated'?'length':'stop',message:{content:JSON.stringify({nodes})}}]}));
+      };
+      const runs=[];
+      try{
+        for(const effort of ['high','medium']){
+          document.querySelector('#reconReasoningEffort').value=effort;
+          const audit={wholeImage:true,maxAttempts:1};const scene=await window.__ffTestRequestScene(src,5504,3072,audit);
+          runs.push({audit,count:scene.nodes.length});
+        }
+        const failures=[];
+        for(const failure of ['rejected','truncated']){
+          mode=failure;const audit={wholeImage:true,maxAttempts:1};let error='';
+          try{await window.__ffTestRequestScene(src,5504,3072,audit);}catch(e){error=e.message;}
+          failures.push({audit,error});
+        }
+        return {runs,failures,calls,bodies:bodies.map(b=>({budget:b.max_completion_tokens,legacy:b.max_tokens,effort:b.reasoning_effort,images:b.messages[1].content.filter(c=>c.type==='image_url').map(c=>({detail:c.image_url.detail,unchanged:c.image_url.url===src}))}))};
+      }finally{window.fetch=original;}
+    });
+    assert.equal(wholeContract.calls,4,'unsupported and truncated responses must not silently downgrade/retry');
+    for(const run of wholeContract.runs){assert.equal(run.count,520);assert.equal(run.audit.nodeCounts.raw,520);assert.equal(run.audit.nodeCounts.parsed,520);assert.equal(run.audit.usage.completion_tokens,65000);}
+    for(const body of wholeContract.bodies){assert.equal(body.budget,128000);assert.equal(body.legacy,undefined);assert.deepEqual(body.images,[{detail:'original',unchanged:true}]);}
+    assert.deepEqual(wholeContract.bodies.slice(0,2).map(b=>b.effort),['high','medium']);
+    assert.equal(wholeContract.failures[0].audit.parameterSupport,'rejected');
+    assert.ok(wholeContract.failures.every(f=>f.error));
+    assert.equal(wholeContract.failures[1].audit.usage.completion_tokens,65000);
+    console.log('PASS: whole-image 128000/original native input, high/medium, 520-node parsing, usage and explicit rejection/truncation');
+    await page.reload({waitUntil:'domcontentloaded'});
+
     const result=await page.evaluate(async()=>{
       document.querySelector('#provider').value='ark';document.querySelector('#key').value='test';
       const select=document.querySelector('#reconModel');select.add(new Option('test','gpt-6.1-sol'));select.value='gpt-6.1-sol';
@@ -256,7 +294,7 @@ const server = http.createServer((req,res)=>{
         const prompt=body.messages[1].content[0].text;calls++;
         let output;
         if(prompt.includes('Diagnose ONLY clearly visible residual')){
-          output={complete:false,defects:[0,1,2].map(i=>({x:i*100,y:0,w:90,h:100,reason:'Missing colored square',kind:'shape',objectIds:[]}))};
+          output={wholeImageAcceptable:true,summary:'Only isolated residual defects',coverage:[{region:'all',missingGroups:[]}],complete:false,defects:[0,1,2].map(i=>({x:i*100,y:0,w:90,h:100,reason:'Missing colored square',kind:'shape',objectIds:[]}))};
         }else if(prompt.includes('Return STRICT JSON {"operations"')){
           if(body.messages[1].content.filter(c=>c.type==='image_url').length!==4)throw Error('Detail reconstruction requires crop, context, render and full source');
           active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,20));active--;
@@ -327,8 +365,8 @@ const server = http.createServer((req,res)=>{
       let calls=0;const original=window.fetch;window.fetch=async(url,options)=>{if(!String(url).endsWith('/chat/completions'))return original(url,options);calls++;throw Error('offline');};
       return {ok:await window.__ffReconstruct(),calls,audit:window.__ffApiAudit.reconstruction};
     },await page.evaluate(()=>localStorage.getItem('test-bitmap')));
-    assert.equal(cached.ok,true);assert.equal(cached.audit.cacheHit,true);
-    assert.equal(cached.calls,1,'cached scene is compared again; failed diagnosis must not launch blind patches'); assert.ok(cached.audit.diagnosisError);
+    assert.equal(cached.ok,false);assert.equal(cached.audit.cacheBypassed,true);
+    assert.equal(cached.calls,1,'fresh whole-image request must bypass cached scene even when offline');
     const failed=await page.evaluate(async()=>{
       const select=document.querySelector('#reconModel');select.add(new Option('different','vision-different'));select.value='vision-different';
       window.fetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'{"description":"no objects"}'}}]}),{status:200});

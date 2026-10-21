@@ -200,6 +200,16 @@ console.log('Native-resolution detail coverage and inherited ownership tests pas
   assert.deepEqual(regions[0].editableOwners,['whole']);
   assert.equal(regions[0].reasons.length,2);
   assert.ok(regions.every(r=>r.x>=0&&r.y>=0&&r.x+r.w<=800&&r.y+r.h<=600));
+  const tiles=Array.from({length:12},(_,i)=>({x:(i%4)*1376,y:Math.floor(i/4)*1024,w:1376,h:1024}));
+  const chain=tiles.map((t,i)=>({x:t.x+10,y:t.y+10,w:1360,h:1008,reason:`defect ${i}`,kind:'text'}));
+  const bounded=planDefectRegions(scene,chain,5504,3072,tiles);
+  assert.equal(bounded.length,12,'overlapping defects remain independent inspection tiles');
+  assert.ok(bounded.every(r=>r.w===1376&&r.h===1024));
+  assert.equal(planDefectRegions(scene,[chain[0]],5504,3072,tiles).length,1,'clean tiles are skipped');
+  const tight=planDefectRegions(scene,[{x:200,y:300,w:20,h:15,reason:'misplaced label',kind:'text'}],5504,3072,tiles);
+  assert.equal(tight.length,1);
+  assert.deepEqual([tight[0].x,tight[0].y,tight[0].w,tight[0].h],[152,252,116,111],'only the diagnosed area plus padding is rebuilt');
+  assert.deepEqual([tight[0].coreX,tight[0].coreY,tight[0].coreRight,tight[0].coreBottom],[200,300,220,315]);
   const children=planDetailRegions([{...regions[0],x:0,y:0,w:2200,h:1600,coreX:0,coreY:0,coreRight:2200,coreBottom:1600}],2200,1600);
   assert.ok(children.length>0);
   assert.ok(children.every(r=>r.editableOwners.includes('whole')));

@@ -36,7 +36,7 @@ export function recoverSourceBoxes(scene,canvas){
     if(w<60||h<20||w*h>W*H*.12||w/h<1.5||queue.length/Math.max(1,(r-l+1)*(b-t+1))<.65)continue;
     if([...scene.nodes,...recovered].some(n=>n.type==='rect'&&
       Math.max(0,Math.min(x+w,n.x+n.w)-Math.max(x,n.x))*Math.max(0,Math.min(y+h,n.y+n.h)-Math.max(y,n.y))/
-      Math.max(1,Math.max(w*h,n.w*n.h))>.75))continue;
+      Math.max(1,Math.min(w*h,n.w*n.h))>.75&&Math.min(w*h,n.w*n.h)/Math.max(w*h,n.w*n.h)>.65))continue;
     // A table cell may already be bounded by shared grid lines rather than
     // a rectangle. Do not inset another frame inside those existing edges.
     const tolerance=Math.max(step*4,Math.min(w,h)*.08);
@@ -77,8 +77,10 @@ export function recoverSourceBoxes(scene,canvas){
   }
   const nodes=[...scene.nodes];
   for(const box of recovered){
-    const at=nodes.findIndex(n=>n.type!=='rect'&&n.x>=box.x&&n.y>=box.y&&n.x+n.w<=box.x+box.w&&n.y+n.h<=box.y+box.h);
-    if(at>=0)nodes.splice(at,0,box);
+    // Any intersecting foreground ink must remain above the recovered fill,
+    // including icons and labels that cross the detected box boundary.
+    const at=nodes.findIndex(n=>n.type!=='rect'&&(()=>{const b=editableNodeBounds(n);return b&&b.x<box.x+box.w&&b.right>box.x&&b.y<box.y+box.h&&b.bottom>box.y;})());
+    nodes.splice(at<0?0:at,0,box);
   }
   return {...scene,nodes};
 }
@@ -497,7 +499,7 @@ export function applyRegionPatch(scene,region,patch,versions){
       continue;
     }
     // Targeted correction cannot erase recognized detail. Missing objects may be added.
-    if(region.targetIds&&['delete','split','merge'].includes(op.op)){rejected.push({op,reason:'destructive-targeted-repair'});continue;}
+    if((region.targeted||region.targetIds)&&['delete','split','merge'].includes(op.op)){rejected.push({op,reason:'destructive-targeted-repair'});continue;}
     if(!['add','update','delete','split','merge'].includes(op.op)){rejected.push({op,reason:'operation'});continue;}
     if(op.op==='add'&&ids.length || ['update','delete','split'].includes(op.op)&&ids.length!==1 || op.op==='merge'&&ids.length<2){rejected.push({op,reason:'arity'});continue;}
     const sources=op.op==='delete'?[]:Array.isArray(op.nodes)?op.nodes:[op.node];
@@ -506,7 +508,7 @@ export function applyRegionPatch(scene,region,patch,versions){
       const independent=op.op==='add'&&(patch.operations||[]).every(o=>o.op==='add');
       (independent?ignored:rejected).push({op,reason:'bounds-or-arity'});continue;
     }
-    if(region.targetIds&&op.op==='update'){
+    if((region.targeted||region.targetIds)&&op.op==='update'){
       const original=originals[0],replacement=replacements[0];
       if(original.type!==replacement.type||original.type==='text'&&original.text!==replacement.text){rejected.push({op,reason:'preserve-recognized-content'});continue;}
       replacements[0]={...original,...replacement};
@@ -526,7 +528,10 @@ export function applyRegionPatch(scene,region,patch,versions){
     });
     nodes.splice(insertion,0,...additions);
   }
-  return {scene:{...scene,nodes:conflicts.length||rejected.length?scene.nodes:nodes,revision:(scene.revision||0)+1},conflicts,rejected,ignored};
+  // A targeted repair can contain independent safe edits alongside an invalid
+  // suggestion. Let the caller render-validate the safe subset as one candidate.
+  const retainSafe=!!patch.allowPartial&&!!region.targeted;
+  return {scene:{...scene,nodes:!retainSafe&&(conflicts.length||rejected.length)?scene.nodes:nodes,revision:(scene.revision||0)+1},conflicts,rejected,ignored};
 }
 function isDuplicate(nodes,n){
   if(['line','path','polyline'].includes(n.type)){
@@ -536,7 +541,7 @@ function isDuplicate(nodes,n){
   return registerMissingObjects({nodes},{nodes:[n]}).nodes.length===nodes.length;
 }
 import {transformEditablePath,parseEditablePath} from './editable-native.mjs';
-function translateNode(n,dx,dy){
+export function translateNode(n,dx,dy){
   const out={...n};
   for(const k of ['x','x2'])if(Number.isFinite(n[k]))out[k]+=dx;
   for(const k of ['y','y2'])if(Number.isFinite(n[k]))out[k]+=dy;
@@ -692,7 +697,7 @@ export function expandStructuredNodes(nodes){
 }
 
 // Regions are a consequence of visible defects, never a prerequisite to comparison.
-export function planDefectRegions(scene,defects,width,height){
+export function planDefectRegions(scene,defects,width,height,inspectionTiles=[]){
   const boxes=[];
   for(const d of defects||[]){
     if(![d.x,d.y,d.w,d.h].every(Number.isFinite)||d.w<=0||d.h<=0)continue;
@@ -702,6 +707,23 @@ export function planDefectRegions(scene,defects,width,height){
     for(const n of targets){const b=patchBounds(n);if(b){x=Math.max(0,Math.min(x,b.x));y=Math.max(0,Math.min(y,b.y));right=Math.min(width,Math.max(right,b.right));bottom=Math.min(height,Math.max(bottom,b.bottom));}}
     boxes.push({x,y,right,bottom,reasons:[d.reason],targetIds:targets.map(n=>n.id),kind:d.kind||'defect'});
   }
+  const owners=[...new Set((scene.nodes||[]).map(n=>n.owner).filter(Boolean))];
+  if(inspectionTiles.length){
+    // Each inspected tile owns its own patch. A broad diagnosis may select
+    // several tiles, but neighboring defects must never grow into a full-page edit.
+    return inspectionTiles.flatMap((tile,index)=>{
+      const right=tile.x+tile.w,bottom=tile.y+tile.h;
+      const hits=boxes.filter(b=>b.x<right&&b.right>tile.x&&b.y<bottom&&b.bottom>tile.y);
+      if(!hits.length)return [];
+      const targetIds=[...new Set(hits.flatMap(h=>h.targetIds))];
+      const coreX=Math.max(tile.x,Math.floor(Math.min(...hits.map(h=>h.x))));
+      const coreY=Math.max(tile.y,Math.floor(Math.min(...hits.map(h=>h.y))));
+      const coreRight=Math.min(right,Math.ceil(Math.max(...hits.map(h=>h.right))));
+      const coreBottom=Math.min(bottom,Math.ceil(Math.max(...hits.map(h=>h.bottom))));
+      const x=Math.max(tile.x,coreX-48),y=Math.max(tile.y,coreY-48);
+      return [{id:`defect_${index}`,index,targeted:true,kind:hits.every(h=>h.kind===hits[0].kind)?hits[0].kind:'defect',reasons:[...new Set(hits.flatMap(h=>h.reasons))],...(targetIds.length?{targetIds}:{}),editableOwners:owners,x,y,w:Math.min(right,coreRight+48)-x,h:Math.min(bottom,coreBottom+48)-y,coreX,coreY,coreRight,coreBottom}];
+    });
+  }
   // Merge intersecting repairs so concurrent workers never own the same object.
   for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){
     const a=boxes[i],b=boxes[j];
@@ -710,6 +732,5 @@ export function planDefectRegions(scene,defects,width,height){
       boxes.splice(j,1);i=-1;break;
     }
   }
-  const owners=[...new Set((scene.nodes||[]).map(n=>n.owner).filter(Boolean))];
-  return boxes.map((b,i)=>{const x=Math.max(0,Math.floor(b.x)-48),y=Math.max(0,Math.floor(b.y)-48);return {id:`defect_${i}`,index:i,kind:b.kind,reasons:b.reasons,targetIds:b.targetIds,editableOwners:owners,x,y,w:Math.min(width,Math.ceil(b.right)+48)-x,h:Math.min(height,Math.ceil(b.bottom)+48)-y,coreX:b.x,coreY:b.y,coreRight:b.right,coreBottom:b.bottom};});
+  return boxes.map((b,i)=>{const x=Math.max(0,Math.floor(b.x)-48),y=Math.max(0,Math.floor(b.y)-48);return {id:`defect_${i}`,index:i,targeted:true,kind:b.kind,reasons:b.reasons,...(b.targetIds.length?{targetIds:b.targetIds}:{}),editableOwners:owners,x,y,w:Math.min(width,Math.ceil(b.right)+48)-x,h:Math.min(height,Math.ceil(b.bottom)+48)-y,coreX:b.x,coreY:b.y,coreRight:b.right,coreBottom:b.bottom};});
 }

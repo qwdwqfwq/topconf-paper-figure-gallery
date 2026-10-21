@@ -17,8 +17,8 @@ export function reconstructionQualityDeficit(qa){
 export function acceptReconstructionRepair(before,after){
   if(!before||!after) return false;
   // A higher average can conceal damage to small labels or thin strokes.
-  const maximumLoss={score:.004,darkRecall:.002,localRecall:.002,
-    edgeF1:.004,colorSimilarity:.004};
+  const maximumLoss={score:.001,darkRecall:0,localRecall:0,
+    edgeF1:.001,colorSimilarity:.001};
   for(const key of Object.keys(QUALITY_TARGETS)){
     if(!Number.isFinite(Number(after[key])) ||
       Number(after[key])+maximumLoss[key]<Number(before[key])) return false;
