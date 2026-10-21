@@ -83,6 +83,18 @@ assert.ok(vsdx.size > 10000, 'VSDX package should contain native parts');
 assert.equal((drawio.match(/<mxCell id="ff\d+"/g) || []).length, expandEditableTextPaths(scene).nodes.length);
 assert.match(drawio,/rotation=34/,'draw.io rotated text must keep its angle');
 const vsdxBytes=Buffer.from(await vsdx.arrayBuffer());
+const bitmapDashedScene={canvas:scene.canvas,nodes:[
+  {type:'line',x:10,y:10,x2:100,y2:10,stroke:'#222222',strokeWidth:2,dash:true},
+  {type:'path',d:'M 10 30 C 30 20 70 40 100 30',fill:'none',stroke:'#222222',strokeWidth:2,dash:true},
+]};
+assert.equal((sceneToDrawio(bitmapDashedScene).match(/dashed=1;/g)||[]).length,2,
+  'bitmap-origin lines and curves retain dashes in draw.io');
+const dashedVisio=Buffer.from(await zipStore(sceneToVsdxFiles(bitmapDashedScene,'Arial')).arrayBuffer()).toString('utf8');
+assert.equal((dashedVisio.match(/<Cell N="LinePattern" V="2"\/>/g)||[]).length,2,
+  'bitmap-origin lines and curves retain dashes in Visio');
+const dashedPptx=Buffer.from(await (await buildNativePptx(bitmapDashedScene,zipStore)).arrayBuffer()).toString('utf8');
+assert.equal((dashedPptx.match(/<a:prstDash val="dash"\/>/g)||[]).length,2,
+  'bitmap-origin lines and curves retain dashes in PowerPoint');
 assert.match(vsdxBytes.toString('utf8'), /Memory state\ninitialization/, 'VSDX keeps explicit line breaks');
 assert.match(vsdxBytes.toString('utf8'),/<Cell N="Angle"/,'Visio text rotation must remain editable');
 assert.equal((drawio.match(/shape=stencil\(/g) || []).length, 5, 'cube faces and curved paths must be editable stencils');

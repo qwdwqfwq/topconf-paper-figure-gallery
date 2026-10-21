@@ -172,6 +172,7 @@ export function scaleRegionCatalog(catalog,scale){
 }
 export function scaleRegionPatch(patch,scale){
   return {...patch,operations:(patch.operations||[]).map(op=>({...op,
+    ...(op.changes?{changes:Object.fromEntries(Object.entries(op.changes).map(([k,v])=>[k,["fontSize","strokeWidth"].includes(k)&&typeof v==="number"?v*scale:Array.isArray(v)&&k==="dash"?v.map(x=>x*scale):v]))}:{}),
     ...(op.node?{node:transformCatalogNode(op.node,scale,0,0)}:{}),
     ...(op.nodes?{nodes:op.nodes.map(n=>transformCatalogNode(n,scale,0,0))}:{})})),
     uncertainties:(patch.uncertainties||[]).map(r=>({...r,x:r.x*scale,y:r.y*scale,w:r.w*scale,h:r.h*scale}))};

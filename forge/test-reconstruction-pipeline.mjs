@@ -231,3 +231,38 @@ console.log('Native-resolution detail coverage and inherited ownership tests pas
   for(let y=60;y<=110;y++)data.set([255,255,255,255],(y*W+80)*4);
   assert.equal(recoverSourceBoxes({nodes:[label]},canvas).nodes.length,1,'an open color region is not a missing framed box');
 }
+// Targeted fixes preserve detail and can combine line-style and layer repairs.
+{
+  const original={nodes:[
+    {id:'curve',type:'line',x:20,y:20,x2:60,y2:40,stroke:'#123456',strokeWidth:2,version:0},
+    {id:'fineprint',type:'text',x:20,y:50,w:60,h:20,text:'All original fine print\nSecond line',fontSize:8,version:0},
+    {id:'plate',type:'rect',x:10,y:10,w:90,h:90,fill:'#eeeeee',version:0}
+  ]};
+  const target={...region,targetIds:['curve','fineprint']};
+  const v=snapshotVersions(original);
+  const fixed=applyRegionPatch(original,target,{operations:[
+    {op:'style',id:'curve',version:0,changes:{dash:true}},
+    {op:'reorder',id:'curve',version:0,position:'front'}
+  ]},v);
+  assert.deepEqual(fixed.rejected,[]);
+  assert.deepEqual(fixed.conflicts,[]);
+  assert.equal(fixed.scene.nodes.at(-1).id,'curve');
+  assert.equal(fixed.scene.nodes.at(-1).dash,true);
+  assert.equal(fixed.scene.nodes.at(-1).stroke,'#123456');
+  assert.deepEqual(fixed.scene.nodes.find(n=>n.id==='fineprint'),original.nodes[1]);
+  for(const operation of [
+    {op:'delete',id:'fineprint'},
+    {op:'update',id:'fineprint',node:{...original.nodes[1],x:10,y:40,text:''}},
+    {op:'style',id:'plate',changes:{fill:'#ffffff'}}
+  ]){
+    const rejected=applyRegionPatch(original,target,{operations:[operation]},v);
+    assert.ok(rejected.rejected.length);
+    assert.deepEqual(rejected.scene.nodes,original.nodes);
+  }
+  assert.equal(applyRegionPatch(fixed.scene,target,{operations:[{op:'style',id:'curve',changes:{dash:false}}]},v).conflicts.length,1);
+  assert.deepEqual(regionObjectCatalog(original,target).nodes.map(n=>n.id),['curve','fineprint']);
+  const cells=expandStructuredNodes([{type:'table',x:0,y:0,rows:[20,20],columns:[60,40],cells:[['A','B'],['1','2']]}]);
+  assert.equal(cells.filter(n=>n.type==='line').length,6,'each shared grid boundary is drawn once');
+  assert.ok(cells.filter(n=>n.type==='rect').every(n=>n.stroke==='none'&&n.strokeWidth===0));
+}
+console.log('Targeted content preservation, paint order, dash style and shared grid tests passed');

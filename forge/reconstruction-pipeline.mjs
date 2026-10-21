@@ -451,7 +451,7 @@ function patchCatalog(scene,region){
 }
 const excluded=(r,x,y)=>(r.excludeRects||[]).some(b=>x>=b.x&&y>=b.y&&x<b.x+b.w&&y<b.y+b.h);
 export function regionObjectCatalog(scene,region){
-  const owned=patchCatalog(scene,region).filter(n=>{const b=patchBounds(n),cx=(b.x+b.right)/2,cy=(b.y+b.bottom)/2;return !excluded(region,cx,cy)&&ownsRegionNode(region,n)&&cx>=(region.coreX??region.x)&&cy>=(region.coreY??region.y)&&cx<(region.coreRight??region.x+region.w)&&cy<(region.coreBottom??region.y+region.h);});
+  const owned=patchCatalog(scene,region).filter(n=>{const b=patchBounds(n),cx=(b.x+b.right)/2,cy=(b.y+b.bottom)/2;return (!region.targetIds||region.targetIds.includes(n.id))&&!excluded(region,cx,cy)&&ownsRegionNode(region,n)&&cx>=(region.coreX??region.x)&&cy>=(region.coreY??region.y)&&cx<(region.coreRight??region.x+region.w)&&cy<(region.coreBottom??region.y+region.h);});
   const ids=new Set(owned.map(n=>n.id));
   return {canvas:{width:region.w,height:region.h},nodes:owned.map(n=>translateNode(n,-region.x,-region.y)),readOnlyContext:scene.nodes.filter(n=>{const b=patchBounds(n);return !ids.has(n.id)&&b&&b.x<region.x+region.w&&b.right>region.x&&b.y<region.y+region.h&&b.bottom>region.y;}).map(n=>translateNode(n,-region.x,-region.y)),excludeRects:(region.excludeRects||[]).map(b=>({...b,x:b.x-region.x,y:b.y-region.y}))};
 }
@@ -462,7 +462,7 @@ export function applyRegionPatch(scene,region,patch,versions){
   let nodes=scene.nodes.slice();const conflicts=[],rejected=[],ignored=[];
   const owns=n=>{const b=patchBounds(n);if(!b)return false;const cx=(b.x+b.right)/2,cy=(b.y+b.bottom)/2;
     return !excluded(region,cx,cy)&&ownsRegionNode(region,n)&&cx>=(region.coreX??region.x)&&cy>=(region.coreY??region.y)&&cx<(region.coreRight??region.x+region.w)&&cy<(region.coreBottom??region.y+region.h);};
-  const allowed=new Set(patchCatalog(scene,region).filter(owns).map(n=>n.id));
+  const allowed=new Set(patchCatalog(scene,region).filter(n=>owns(n)&&(!region.targetIds||region.targetIds.includes(n.id))).map(n=>n.id));
   const inside=n=>{const b=patchBounds(n);return b&&b.x>=region.x-1&&b.y>=region.y-1&&b.right<=region.x+region.w+1&&b.bottom<=region.y+region.h+1;};
   const global=n=>{
     if(!patchBounds(n))return null;
@@ -476,9 +476,28 @@ export function applyRegionPatch(scene,region,patch,versions){
     if(!Array.isArray(ids)||ids.some(id=>typeof id!=='string')||new Set(ids).size!==ids.length){rejected.push({reason:'ids'});continue;}
     const originals=ids.map(id=>nodes.find(n=>n.id===id));
     if(ids.some((id,i)=>!allowed.has(id)||!originals[i])){rejected.push({op,reason:'ownership'});continue;}
-    if(ids.some((id,i)=>versions[id]!==objectVersion(originals[i]) || (op.version!=null&&op.version!==objectVersion(originals[i])))){
+    if(ids.some((id,i)=>versions[id]!==objectVersion(scene.nodes.find(n=>n.id===id)) || (op.version!=null&&op.version!==versions[id]))){
       conflicts.push({ids,reason:'stale-version'});continue;
     }
+    // Attribute and paint-order repairs never regenerate geometry or content.
+    if(op.op==='style'||op.op==='reorder'){
+      if(ids.length!==1){rejected.push({op,reason:'arity'});continue;}
+      const original=originals[0];
+      if(op.op==='style'){
+        const keys=['dash','dashed','stroke','strokeWidth','fill','fontSize','bold','italic','align'];
+        if(!op.changes||Object.keys(op.changes).some(k=>!keys.includes(k))){rejected.push({op,reason:'style-fields'});continue;}
+        nodes=nodes.map(n=>n.id===original.id?{...n,...op.changes,version:objectVersion(n)+1}:n);
+      }else{
+        const anchor=op.beforeId||op.afterId;
+        if(anchor===original.id||anchor&&!nodes.some(n=>n.id===anchor)||!anchor&&!['front','back'].includes(op.position)){rejected.push({op,reason:'layer-anchor'});continue;}
+        nodes=nodes.filter(n=>n.id!==original.id);
+        const at=anchor?nodes.findIndex(n=>n.id===anchor)+(op.afterId?1:0):op.position==='front'?nodes.length:0;
+        nodes.splice(at,0,{...original,version:objectVersion(original)+1});
+      }
+      continue;
+    }
+    // Targeted correction cannot erase recognized detail. Missing objects may be added.
+    if(region.targetIds&&['delete','split','merge'].includes(op.op)){rejected.push({op,reason:'destructive-targeted-repair'});continue;}
     if(!['add','update','delete','split','merge'].includes(op.op)){rejected.push({op,reason:'operation'});continue;}
     if(op.op==='add'&&ids.length || ['update','delete','split'].includes(op.op)&&ids.length!==1 || op.op==='merge'&&ids.length<2){rejected.push({op,reason:'arity'});continue;}
     const sources=op.op==='delete'?[]:Array.isArray(op.nodes)?op.nodes:[op.node];
@@ -486,6 +505,11 @@ export function applyRegionPatch(scene,region,patch,versions){
     if((op.op!=='delete'&&!replacements.length)||(op.op==='update'&&replacements.length!==1)||(op.op==='split'&&replacements.length<2)||(op.op==='merge'&&replacements.length!==1)||replacements.some(n=>!n||!inside(n)||!owns({...n,owner:region.id}))){
       const independent=op.op==='add'&&(patch.operations||[]).every(o=>o.op==='add');
       (independent?ignored:rejected).push({op,reason:'bounds-or-arity'});continue;
+    }
+    if(region.targetIds&&op.op==='update'){
+      const original=originals[0],replacement=replacements[0];
+      if(original.type!==replacement.type||original.type==='text'&&original.text!==replacement.text){rejected.push({op,reason:'preserve-recognized-content'});continue;}
+      replacements[0]={...original,...replacement};
     }
     const insertion=ids.length?Math.min(...ids.map(id=>nodes.findIndex(n=>n.id===id))):nodes.length;
     if(op.op==='add'){
@@ -642,14 +666,15 @@ export function expandStructuredNodes(nodes){
       const sparseBorders=n.borders==='horizontal'||n.borders==='none';
       for(let r=0;r<n.rows.length;r++)for(let c=0;c<n.columns.length;c++){
         const cell=n.cells?.[r]?.[c],v=cell&&typeof cell==='object'?cell:{text:String(cell??'')};
-        out.push({type:'rect',x:xs[c],y:ys[r],w:n.columns[c],h:n.rows[r],fill:v.fill||n.fill||'none',stroke:sparseBorders?'none':n.stroke||'#333333',strokeWidth:sparseBorders?0:n.strokeWidth??1});
+        out.push({type:'rect',x:xs[c],y:ys[r],w:n.columns[c],h:n.rows[r],fill:v.fill||n.fill||'none',stroke:'none',strokeWidth:0});
         if(v.text)out.push({type:'text',x:xs[c]+3,y:ys[r]+2,w:Math.max(1,n.columns[c]-6),h:Math.max(1,n.rows[r]-4),text:String(v.text),fontSize:v.fontSize||n.fontSize||12,fontFamily:v.fontFamily||n.fontFamily||'Arial',bold:!!v.bold,fill:v.color||'#000000',cellBounds:{x:xs[c],y:ys[r],w:n.columns[c],h:n.rows[r]}});
       }
-      if(n.borders==='horizontal'){
+      if(n.borders!=='none'){
         const boundaries=Array.isArray(n.rowLines)?n.rowLines:ys.map((_,i)=>i);
         for(const r of new Set(boundaries))if(Number.isInteger(r)&&r>=0&&r<ys.length)
           out.push({type:'line',x:xs[0],y:ys[r],x2:xs.at(-1),y2:ys[r],stroke:n.stroke||'#333333',strokeWidth:n.strokeWidth??1});
       }
+      if(!sparseBorders)for(const x of xs)out.push({type:'line',x,y:ys[0],x2:x,y2:ys.at(-1),stroke:n.stroke||'#333333',strokeWidth:n.strokeWidth??1});
       return out;
     }
     if(n.type==='heatmap'&&Array.isArray(n.colors)&&n.colors.length){
@@ -675,16 +700,16 @@ export function planDefectRegions(scene,defects,width,height){
     if(right<=x||bottom<=y)continue;
     const targets=(scene.nodes||[]).filter(n=>(d.objectIds||[]).includes(n.id));
     for(const n of targets){const b=patchBounds(n);if(b){x=Math.max(0,Math.min(x,b.x));y=Math.max(0,Math.min(y,b.y));right=Math.min(width,Math.max(right,b.right));bottom=Math.min(height,Math.max(bottom,b.bottom));}}
-    boxes.push({x,y,right,bottom,reasons:[d.reason],kind:d.kind||'defect'});
+    boxes.push({x,y,right,bottom,reasons:[d.reason],targetIds:targets.map(n=>n.id),kind:d.kind||'defect'});
   }
   // Merge intersecting repairs so concurrent workers never own the same object.
   for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){
     const a=boxes[i],b=boxes[j];
     if(a.x<=b.right&&b.x<=a.right&&a.y<=b.bottom&&b.y<=a.bottom){
-      boxes[i]={x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),right:Math.max(a.right,b.right),bottom:Math.max(a.bottom,b.bottom),reasons:[...a.reasons,...b.reasons],kind:a.kind===b.kind?a.kind:'defect'};
+      boxes[i]={x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),right:Math.max(a.right,b.right),bottom:Math.max(a.bottom,b.bottom),reasons:[...a.reasons,...b.reasons],targetIds:[...new Set([...a.targetIds,...b.targetIds])],kind:a.kind===b.kind?a.kind:'defect'};
       boxes.splice(j,1);i=-1;break;
     }
   }
   const owners=[...new Set((scene.nodes||[]).map(n=>n.owner).filter(Boolean))];
-  return boxes.map((b,i)=>{const x=Math.max(0,Math.floor(b.x)-48),y=Math.max(0,Math.floor(b.y)-48);return {id:`defect_${i}`,index:i,kind:b.kind,reasons:b.reasons,editableOwners:owners,x,y,w:Math.min(width,Math.ceil(b.right)+48)-x,h:Math.min(height,Math.ceil(b.bottom)+48)-y,coreX:b.x,coreY:b.y,coreRight:b.right,coreBottom:b.bottom};});
+  return boxes.map((b,i)=>{const x=Math.max(0,Math.floor(b.x)-48),y=Math.max(0,Math.floor(b.y)-48);return {id:`defect_${i}`,index:i,kind:b.kind,reasons:b.reasons,targetIds:b.targetIds,editableOwners:owners,x,y,w:Math.min(width,Math.ceil(b.right)+48)-x,h:Math.min(height,Math.ceil(b.bottom)+48)-y,coreX:b.x,coreY:b.y,coreRight:b.right,coreBottom:b.bottom};});
 }
