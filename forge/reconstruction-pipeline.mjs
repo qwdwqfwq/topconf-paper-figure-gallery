@@ -88,8 +88,41 @@ export function recoverSourceBoxes(scene,canvas){
 // strip otherwise exposes the panel border through its title in PowerPoint.
 // Source evidence is anchored to prominent model headings, so colored body
 // boxes cannot accidentally become topmost opaque title plates.
+export function orderSourceBackdrops(scene,canvas){
+  const W=canvas.width,H=canvas.height;
+  const pixels=canvas.getContext('2d',{willReadFrequently:true}).getImageData(0,0,W,H).data;
+  const nodes=[...scene.nodes];
+  for(const box of [...nodes]){
+    if(box.type!=='rect'||box.gradient||!/^#[\da-f]{6}$/i.test(box.fill||'')||(box.stroke&&box.stroke!=='none'&&box.strokeWidth>0))continue;
+    const at=nodes.indexOf(box);
+    const first=nodes.findIndex((n,i)=>{
+      // Source-derived document ink is foreground over inset highlight fills.
+      if(i<at&&n.owner===box.owner&&n.sourceDetail==='untranscribed-ink'&&box.x>=n.x&&box.y>=n.y&&box.x+box.w<=n.x+n.w&&box.y+box.h<=n.y+n.h)return true;
+      if(i>=at||n.owner!==box.owner||!['text','line'].includes(n.type))return false;
+      const b=n.type==='line'?{x:Math.min(n.x,n.x2),y:Math.min(n.y,n.y2),w:Math.abs(n.x2-n.x),h:Math.abs(n.y2-n.y)}:n;
+      if(b.x<box.x||b.y<box.y||b.x+b.w>box.x+box.w||b.y+b.h>box.y+box.h)return false;
+      // Require visible source ink: ownership alone is not evidence that an
+      // intentional opaque cover should move behind an old object.
+      const ink=n.type==='line'?n.stroke:(n.fill||'#222222');
+      if(!/^#[\da-f]{6}$/i.test(ink||''))return false;
+      const color=ink.slice(1).match(/../g).map(v=>parseInt(v,16));
+      let hits=0,total=0;
+      for(let a=1;a<20;a++)for(let d=-2;d<=2;d++){
+        const x=Math.round(n.type==='line'?n.x+(n.x2-n.x)*a/20+d:b.x+b.w*a/20);
+        const y=Math.round(n.type==='line'?n.y+(n.y2-n.y)*a/20:b.y+b.h*(d+3)/6);
+        if(x<0||y<0||x>=W||y>=H)continue;
+        const p=(y*W+x)*4;total++;
+        if(color.every((v,k)=>Math.abs(v-pixels[p+k])<65))hits++;
+      }
+      return hits/Math.max(1,total)>(n.type==='line'?.45:.06);
+    });
+    if(first>=0){nodes.splice(at,1);nodes.splice(first,0,box);}
+  }
+  return {...scene,nodes};
+}
+
 export function repairStructuralLayers(scene,canvas){
-  scene=recoverSourceBoxes(scene,canvas);
+  scene=orderSourceBackdrops(recoverSourceBoxes(scene,canvas),canvas);
   const W=canvas.width,H=canvas.height,ctx=canvas.getContext('2d',{willReadFrequently:true});
   const pixels=ctx.getImageData(0,0,W,H).data;
   const rgb=(x,y)=>{const i=(Math.round(y)*W+Math.round(x))*4;return [pixels[i],pixels[i+1],pixels[i+2]];};
@@ -187,7 +220,11 @@ export function repairStructuralLayers(scene,canvas){
       const intersection=Math.max(0,Math.min(n.x+n.w,end)-Math.max(n.x,x))*Math.max(0,Math.min(n.y+n.h,y+h)-Math.max(n.y,y));
       return intersection/Math.max(1,Math.min(n.w*n.h,plate.w*plate.h))<.65;
     });
-    overlays.push(plate,heading);
+    // A recovered background must never paint over foreground icons, even
+    // when they overlap the heading strip only partially.
+    const panelIndex=panel?nodes.findIndex(n=>n.id===panel.id):-1;
+    nodes.splice(panelIndex+1,0,plate);
+    overlays.push(heading);
   });
   const fillIds=new Set([...overlays.filter(n=>n.type==='rect'),...nodes.filter(n=>n.type==='rect'&&n.w*n.h>W*H*.08)].map(n=>n.id));
   return repairContainerGeometry(fitSourceFills({...scene,nodes:[...nodes,...overlays]},canvas,fillIds),canvas);
@@ -263,6 +300,7 @@ export function recoverDocumentInk(scene,canvas){
     const miniatureIds=new Set(miniature.map(v=>v.id));
     const blockers=scene.nodes.map((v,i)=>({v,b:boxes[i],i})).filter(({v,b,i})=>i>index&&b&&
       !miniatureIds.has(v.id)&&
+      !(v.type==='rect'&&v.owner===n.owner&&(!v.stroke||v.stroke==='none')&&/^#[\da-f]{6}$/i.test(v.fill||'')&&Math.min(...v.fill.slice(1).match(/../g).map(c=>parseInt(c,16)))>180&&b.x>=x0&&b.y>=y0&&b.right<=x1&&b.bottom<=y1)&&
       b.x<x1&&b.right>x0&&b.y<y1&&b.bottom>y0&&
       ((v.fill&&v.fill!=='none')||['text','line','path','polyline'].includes(v.type)));
     const runs=[];let rows=0,ink=0,visible=0;
@@ -297,7 +335,18 @@ export function recoverDocumentInk(scene,canvas){
 export function planSemanticRegions(scene,width,height){
   // Cross-panel connectors belong to the global structure catalog. Their large
   // bounding box must never become a worker that reconstructs overlapping panels.
-  const regions=(scene.regions||[]).filter(r=>!/^connectors?$/i.test(String(r.kind||''))&&Number.isFinite(r.x)&&Number.isFinite(r.y)&&r.w>0&&r.h>0);
+  const regions=(scene.regions||[]).filter(r=>!/^connectors?$/i.test(String(r.kind||''))&&Number.isFinite(r.x)&&Number.isFinite(r.y)&&r.w>0&&r.h>0).map(r=>{
+    // Keep nearby owned captions in the same semantic unit. Do not enlarge a
+    // panel to absorb remote objects with an erroneous owner or global lines.
+    const margin=Math.min(width,height)*.06;
+    let left=r.x,top=r.y,right=r.x+r.w,bottom=r.y+r.h;
+    for(const n of scene.nodes||[]){
+      if(n.owner!==r.id||!['text','rect','image'].includes(n.type))continue;
+      const b=patchBounds(n);if(!b||b.x<r.x-margin||b.y<r.y-margin||b.right>r.x+r.w+margin||b.bottom>r.y+r.h+margin)continue;
+      left=Math.min(left,b.x);top=Math.min(top,b.y);right=Math.max(right,b.right);bottom=Math.max(bottom,b.bottom);
+    }
+    return {...r,x:Math.max(0,left),y:Math.max(0,top),w:Math.min(width,right)-Math.max(0,left),h:Math.min(height,bottom)-Math.max(0,top)};
+  });
   const leaves=regions.filter(r=>!regions.some(c=>c.parentId===r.id));
   // A child covers only its own rectangle. Preserve the rest of its parent so
   // a chart subdivision cannot silently discard the panel's labels or arrows.
@@ -328,8 +377,11 @@ export function planSemanticRegions(scene,width,height){
   });
   const minSide=Math.max(32,Math.min(width,height)*.02);
   const gaps=uncovered.filter(p=>p.w>=minSide&&p.h>=minSide&&p.w*p.h>=width*height*.0005)
+    // A geometrical gap alone is not evidence of a missing detail. Only send
+    // catalogued, unowned objects which this worker is actually allowed to edit.
+    .filter(p=>(scene.nodes||[]).some(n=>{const b=patchBounds(n);return !n.owner&&b&&b.x>=p.x&&b.y>=p.y&&b.right<=p.x+p.w&&b.bottom<=p.y+p.h;}))
     .map((p,i)=>({...p,id:`uncovered_${i}`,kind:'uncovered'}));
-  const tiles=leaves.length?[...leaves,...residuals,...gaps]:planReconstructionTiles(width,height,650,32);
+  const tiles=leaves.length?[...leaves,...residuals,...gaps]:[{id:'whole_content',kind:'panel',x:0,y:0,w:width,h:height}];
   return tiles.map((r,i)=>{
     const x=Math.max(0,Math.floor(r.x)),y=Math.max(0,Math.floor(r.y));
     const right=Math.min(width,Math.ceil(r.x+r.w)),bottom=Math.min(height,Math.ceil(r.y+r.h));
@@ -351,7 +403,7 @@ export function planDetailRegions(regions,width,height,maxCore=900,padding=128){
       const coreX=Math.floor(left+(right-left)*col/cols),coreY=Math.floor(top+(bottom-top)*row/rows);
       const coreRight=Math.floor(left+(right-left)*(col+1)/cols),coreBottom=Math.floor(top+(bottom-top)*(row+1)/rows);
       const x=Math.max(0,coreX-padding),y=Math.max(0,coreY-padding);
-      result.push({...r,id:`${r.id}_detail_${row}_${col}`,parentRegionId:r.id,editableOwners:[r.id],detailPass:true,
+      result.push({...r,id:`${r.id}_detail_${row}_${col}`,parentRegionId:r.id,editableOwners:[r.id,...(r.editableOwners||[])],detailPass:true,
         index:result.length,x,y,w:Math.min(width,coreRight+padding)-x,h:Math.min(height,coreBottom+padding)-y,
         coreX,coreY,coreRight,coreBottom});
     }
@@ -612,4 +664,27 @@ export function expandStructuredNodes(nodes){
     }
     return [n];
   });
+}
+
+// Regions are a consequence of visible defects, never a prerequisite to comparison.
+export function planDefectRegions(scene,defects,width,height){
+  const boxes=[];
+  for(const d of defects||[]){
+    if(![d.x,d.y,d.w,d.h].every(Number.isFinite)||d.w<=0||d.h<=0)continue;
+    let x=Math.max(0,d.x),y=Math.max(0,d.y),right=Math.min(width,d.x+d.w),bottom=Math.min(height,d.y+d.h);
+    if(right<=x||bottom<=y)continue;
+    const targets=(scene.nodes||[]).filter(n=>(d.objectIds||[]).includes(n.id));
+    for(const n of targets){const b=patchBounds(n);if(b){x=Math.max(0,Math.min(x,b.x));y=Math.max(0,Math.min(y,b.y));right=Math.min(width,Math.max(right,b.right));bottom=Math.min(height,Math.max(bottom,b.bottom));}}
+    boxes.push({x,y,right,bottom,reasons:[d.reason],kind:d.kind||'defect'});
+  }
+  // Merge intersecting repairs so concurrent workers never own the same object.
+  for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){
+    const a=boxes[i],b=boxes[j];
+    if(a.x<=b.right&&b.x<=a.right&&a.y<=b.bottom&&b.y<=a.bottom){
+      boxes[i]={x:Math.min(a.x,b.x),y:Math.min(a.y,b.y),right:Math.max(a.right,b.right),bottom:Math.max(a.bottom,b.bottom),reasons:[...a.reasons,...b.reasons],kind:a.kind===b.kind?a.kind:'defect'};
+      boxes.splice(j,1);i=-1;break;
+    }
+  }
+  const owners=[...new Set((scene.nodes||[]).map(n=>n.owner).filter(Boolean))];
+  return boxes.map((b,i)=>{const x=Math.max(0,Math.floor(b.x)-48),y=Math.max(0,Math.floor(b.y)-48);return {id:`defect_${i}`,index:i,kind:b.kind,reasons:b.reasons,editableOwners:owners,x,y,w:Math.min(width,Math.ceil(b.right)+48)-x,h:Math.min(height,Math.ceil(b.bottom)+48)-y,coreX:b.x,coreY:b.y,coreRight:b.right,coreBottom:b.bottom};});
 }

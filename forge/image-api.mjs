@@ -1,10 +1,10 @@
 // Buffer API responses under one deadline: fetch alone resolves at headers.
-export async function fetchBufferedWithTimeout(url,options={},timeoutMs=900000,fetchImpl=fetch){
+export async function fetchBufferedWithTimeout(url,options={},timeoutMs=Infinity,fetchImpl=fetch){
   const controller=new AbortController();
   const timeout=new DOMException('timeout','TimeoutError');
   let timer;
   const deadline=new Promise((_,reject)=>{
-    timer=setTimeout(()=>{controller.abort(timeout);reject(timeout);},timeoutMs);
+    if(Number.isFinite(timeoutMs)) timer=setTimeout(()=>{controller.abort(timeout);reject(timeout);},timeoutMs);
   });
   try{
     return await Promise.race([deadline,(async()=>{
@@ -41,13 +41,13 @@ export function imageRequestDiagnostics(url,payload){
 // One shared deadline includes response bodies and recovery. Never retry an
 // ambiguous network failure: the upstream may already have billed that request.
 export async function requestImageWithRecovery({url,body,key,usedReferences=false,
-  allowReferenceFallback=false,timeoutMs=1200000,fetchImpl=fetch,
+  allowReferenceFallback=false,timeoutMs=Infinity,fetchImpl=fetch,
   sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms)),onRecovery=()=>{}}){
   const controller=new AbortController();
   const timeout=Object.assign(new Error('Image generation deadline exceeded'),{name:'TimeoutError'});
   let timer;
   const deadline=new Promise((_,reject)=>{
-    timer=setTimeout(()=>{controller.abort();reject(timeout);},timeoutMs);
+    if(Number.isFinite(timeoutMs)) timer=setTimeout(()=>{controller.abort();reject(timeout);},timeoutMs);
   });
   let payload=body, referenceFallback=false;
   try{

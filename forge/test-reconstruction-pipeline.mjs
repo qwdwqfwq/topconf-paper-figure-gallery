@@ -69,11 +69,13 @@ const headingPixels=new Uint8ClampedArray(400*400*4).fill(255);
 for(let y=30;y<60;y++)for(let x=50;x<350;x++){const i=(y*400+x)*4;headingPixels.set([180,210,230,255],i);}
 const headingCanvas={width:400,height:400,getContext:()=>({getImageData:(x,y,w,h)=>({data:w===1&&h===1?headingPixels.slice((y*400+x)*4,(y*400+x)*4+4):headingPixels})})};
 const headingScene={nodes:[{id:'title',type:'text',x:80,y:30,w:240,h:30,fontSize:25,bold:true,text:'Title'},{id:'frame',type:'rect',x:5,y:40,w:390,h:150},{id:'duplicate',type:'rect',x:6,y:41,w:389,h:149}]};
+headingScene.nodes.push({id:'foreground-icon',type:'path',x:300,y:50,w:20,h:25,d:'M300 50L320 75',stroke:'#000000'});
 const layered=repairStructuralLayers(headingScene,headingCanvas);
+assert.ok(layered.nodes.findIndex(n=>n.sourceDetail==='heading-strip')<layered.nodes.findIndex(n=>n.id==='foreground-icon'),'partially overlapping icons stay above heading background');
 assert.equal(layered.nodes.filter(n=>n.sourceDetail==='heading-strip').length,1);
 assert.equal(layered.nodes.filter(n=>n.id==='duplicate').length,0);
 assert.equal(layered.nodes.at(-1).id,'title');
-assert.equal(layered.nodes.at(-2).sourceDetail,'heading-strip');
+assert.ok(layered.nodes.findIndex(n=>n.sourceDetail==='heading-strip')<layered.nodes.findIndex(n=>n.id==='title'));
 assert.deepEqual(repairStructuralLayers(layered,headingCanvas),layered,'structural recovery is idempotent');
 assert.equal(repairStructuralLayers({nodes:[{...headingScene.nodes[0],bold:false}]},headingCanvas).nodes.filter(n=>n.sourceDetail==='heading-strip').length,0,'ordinary labels must not become opaque heading plates');
 assert.equal(repairStructuralLayers({nodes:[{...headingScene.nodes[0],rotation:-90}]},headingCanvas).nodes.filter(n=>n.sourceDetail==='heading-strip').length,0,'vertical labels must not become horizontal heading plates');
@@ -144,10 +146,16 @@ const panelOnly=planSemanticRegions({regions:[
 ]},200,200);
 assert.deepEqual(panelOnly.filter(r=>r.kind!=='uncovered').map(r=>r.id),['panel'],'cross-panel connector bounds must not spawn overlapping content workers');
 assert.ok(panelOnly.filter(r=>r.kind==='uncovered').every(r=>r.coreX>=100||r.coreY>=100),'gap workers do not own existing panel pixels');
-const chartWithSidebar=planSemanticRegions({regions:[{id:'chart',x:100,y:0,w:900,h:600}]},1000,600);
+const chartWithSidebar=planSemanticRegions({regions:[{id:'chart',x:100,y:0,w:900,h:600}],nodes:[{id:'sidebar',type:'text',text:'Caption',x:10,y:100,w:50,h:200}]},1000,600);
 assert.ok(chartWithSidebar.some(r=>r.kind==='uncovered'&&r.coreX===0&&r.coreRight===100&&r.coreBottom===600),'vertical captions outside model regions remain eligible for reconstruction');
 const narrowGutter=planSemanticRegions({regions:[{id:'chart',x:10,y:0,w:990,h:600}]},1000,600);
 assert.equal(narrowGutter.length,1,'tiny page gutters need no separate API call');
+assert.equal(planSemanticRegions({regions:[{id:'chart',x:100,y:0,w:900,h:600}],nodes:[]},1000,600).length,1,'blank gaps must not create vision calls');
+const ownedSidebar={id:'sidebar',owner:'chart',type:'text',text:'Caption',x:75,y:100,w:20,h:200};
+const sidebarScene={regions:[{id:'chart',x:100,y:0,w:900,h:600}],nodes:[ownedSidebar]};
+const sidebarRegions=planSemanticRegions(sidebarScene,1000,600);
+assert.equal(sidebarRegions.length,1);
+assert.ok(regionObjectCatalog(sidebarScene,sidebarRegions[0]).nodes.some(n=>n.id==='sidebar'),'nearby owned captions remain editable by their semantic worker');
 
 const fakePrint={id:'fake-print',type:'text',x:110,y:115,w:50,h:105,fontSize:6,text:'----------------------\n----------------------',fill:'#333333'};
 const restoredPrint=recoverDocumentInk({nodes:[paper,fakePrint]},sourceCanvas);
@@ -175,6 +183,27 @@ assert.ok(applyRegionPatch(parentScene,detail,{operations:[{op:'delete',id:'fram
 assert.ok(applyRegionPatch(parentScene,detail,{operations:[{op:'delete',id:'foreign'}]},snapshotVersions(parentScene)).rejected.length);
 for(const other of posterDetails.slice(1))assert.equal(regionObjectCatalog(refined.scene,other).nodes.some(n=>n.id==='label'),false);
 console.log('Native-resolution detail coverage and inherited ownership tests passed');
+
+// Only diagnosed defects create regions; overlapping repairs share one owner.
+{
+  const {planDefectRegions}=await import('./reconstruction-pipeline.mjs');
+  const scene={nodes:[{id:'chart',owner:'whole',type:'rect',x:100,y:100,w:300,h:200}]};
+  assert.deepEqual(planDefectRegions(scene,[],800,600),[]);
+  const regions=planDefectRegions(scene,[
+    {x:120,y:120,w:20,h:20,reason:'missing label',objectIds:['chart'],kind:'chart'},
+    {x:390,y:280,w:40,h:40,reason:'missing axis',kind:'chart'},
+    {x:650,y:450,w:20,h:20,reason:'missing icon',kind:'shape'}
+  ],800,600);
+  assert.equal(regions.length,2);
+  assert.equal(regions[0].coreX,100);
+  assert.equal(regions[0].coreRight,430);
+  assert.deepEqual(regions[0].editableOwners,['whole']);
+  assert.equal(regions[0].reasons.length,2);
+  assert.ok(regions.every(r=>r.x>=0&&r.y>=0&&r.x+r.w<=800&&r.y+r.h<=600));
+  const children=planDetailRegions([{...regions[0],x:0,y:0,w:2200,h:1600,coreX:0,coreY:0,coreRight:2200,coreBottom:1600}],2200,1600);
+  assert.ok(children.length>0);
+  assert.ok(children.every(r=>r.editableOwners.includes('whole')));
+}
 
 // Recover a missing pastel body box only when all four source borders exist.
 {

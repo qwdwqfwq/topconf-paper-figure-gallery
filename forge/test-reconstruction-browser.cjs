@@ -204,16 +204,6 @@ const server = http.createServer((req,res)=>{
     assert.equal(textCheck.nodes[3].fontSize,22,'three lines retain recognized size');
     assert.equal(textCheck.unchanged,true,'single-line calibrator must leave multiline labels and geometry alone');
 
-    assert.equal(await page.inputValue('#reconTimeoutMinutes'),'25');
-    await page.evaluate(()=>{
-      localStorage.setItem('ff_recon_timeout_minutes','15');
-      localStorage.removeItem('ff_recon_timeout_extension_v1');
-    });
-    await page.reload({waitUntil:'domcontentloaded'});
-    assert.equal(await page.inputValue('#reconTimeoutMinutes'),'25','saved timeout gains ten minutes');
-    await page.reload({waitUntil:'domcontentloaded'});
-    assert.equal(await page.inputValue('#reconTimeoutMinutes'),'25','migration runs only once');
-
     // Step 3 must offer a real bitmap download while Step 4's vision request
     // is still pending. Exercise the image generation path without a live API.
     const pending=await page.evaluate(async()=>{
@@ -265,7 +255,9 @@ const server = http.createServer((req,res)=>{
         const body=JSON.parse(options.body);if(body.model!=='gpt-6.1-sol')throw Error('Wrong selected vision model: '+body.model);
         const prompt=body.messages[1].content[0].text;calls++;
         let output;
-        if(prompt.includes('Return STRICT JSON {"operations"')){
+        if(prompt.includes('Diagnose ONLY clearly visible residual')){
+          output={complete:false,defects:[0,1,2].map(i=>({x:i*100,y:0,w:90,h:100,reason:'Missing colored square',kind:'shape',objectIds:[]}))};
+        }else if(prompt.includes('Return STRICT JSON {"operations"')){
           if(body.messages[1].content.filter(c=>c.type==='image_url').length!==4)throw Error('Detail reconstruction requires crop, context, render and full source');
           active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,20));active--;
           const ownership=JSON.parse(prompt.split(' Ownership: ')[1].split(' Context origin: ')[0]);
@@ -279,10 +271,10 @@ const server = http.createServer((req,res)=>{
       const ok=await window.__ffReconstruct();return {ok,calls,peak,nodes:window.__ffExportState.scene?.nodes,audit:window.__ffApiAudit.reconstruction};
     });
     assert.equal(result.ok,true,JSON.stringify(result));
-    assert.equal(result.audit.strategy,'semantic-parallel-patches');
-    assert.equal(result.peak,3,'three concurrent native detail requests');
-    assert.ok(result.calls>=4);
-    assert.equal(result.nodes.filter(n=>n.type==='rect'&&n.fill==='#123456').length,3,'regional additions survive concurrent commits');
+    assert.equal(result.audit.strategy,'compare-first-object-patches');
+    assert.ok(result.peak>=2,'deficient semantic regions are completed concurrently');
+    assert.equal(result.calls,5);
+    assert.equal(result.nodes.filter(n=>n.type==='rect'&&n.fill==='#123456').length,3);
     assert.equal(result.audit.actualPptxRenderVerified,false,'roundtrip XML is not an Office render');
     assert.equal(result.audit.state,'needs-review','actual renderer remains required');
     // Select a distinct image through the real file input and existing rebuild button.
@@ -313,10 +305,10 @@ const server = http.createServer((req,res)=>{
     });
     assert.equal(await page.evaluate(()=>window.__ffExportState.reconBitmap),manualSource,'reconstruction must use uploaded input');
     assert.equal(office.ok,true);
-    assert.equal(office.renders,2,'failed Office regions trigger one bounded actual-render feedback round');
+    assert.equal(office.renders,1,'Office QA must not trigger automatic reconstruction');
     assert.equal(office.audit.actualPptxRenderVerified,true);
-    assert.equal(office.audit.officeRetry.accepted,true);
-    assert.ok(Object.values(office.audit.regionStates).every(r=>r.state==='passed'));
+    assert.equal(office.audit.officeRetry,undefined);
+    assert.equal(office.audit.state,'needs-review');
     for(const format of ['svg','pptx','vsdx','drawio']){
       await page.locator(`#exportActions [data-export="${format}"]`).click();
       const promise=page.waitForEvent('download',{timeout:30000});
@@ -336,7 +328,7 @@ const server = http.createServer((req,res)=>{
       return {ok:await window.__ffReconstruct(),calls,audit:window.__ffApiAudit.reconstruction};
     },await page.evaluate(()=>localStorage.getItem('test-bitmap')));
     assert.equal(cached.ok,true);assert.equal(cached.audit.cacheHit,true);
-    assert.equal(cached.calls,0,'measured accurate regions make no refinement requests');
+    assert.equal(cached.calls,1,'cached scene is compared again; failed diagnosis must not launch blind patches'); assert.ok(cached.audit.diagnosisError);
     const failed=await page.evaluate(async()=>{
       const select=document.querySelector('#analyzeModel');select.add(new Option('different','vision-different'));select.value='vision-different';
       window.fetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'{"description":"no objects"}'}}]}),{status:200});

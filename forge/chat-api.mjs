@@ -2,7 +2,7 @@ import {fetchBufferedWithTimeout} from './image-api.mjs';
 
 // Retry only explicit transient HTTP failures, preserving images and settings.
 // One wall-clock budget includes both responses and backoff.
-export async function requestChat(url, options, timeoutMs=900000, fetchImpl=fetch){
+export async function requestChat(url, options, timeoutMs=Infinity, fetchImpl=fetch){
   const end=Date.now()+timeoutMs;
   let response;
   for(let attempt=0;attempt<2;attempt++){

@@ -90,63 +90,8 @@ const server = http.createServer((req,res)=>{
     assert.equal(compatibility.calls,0);
     console.log('PASS Infistar direct-mode model selection and invalid-model preflight');
 
-    // Accelerated clock: a successful response at virtual 200 seconds must
-    // survive the former 180-second cutoff, including body consumption.
-    const source=fs.readFileSync(path.join(__dirname,'index.html'),'utf8');
-    assert.doesNotMatch(source,/const task=\{wholeImage:[^\n]*timeoutMsOverride/);
-    assert.doesNotMatch(source,/const task=\{regionPatch:[^\n]*timeoutMsOverride/);
-    for(const probe of [
-      {minutes:'25',flags:{wholeImage:true},expected:1500000},
-      {minutes:'7',flags:{regionPatch:true,region:'panel-1'},expected:420000},
-      {minutes:'70',flags:{wholeImage:true},expected:4200000},
-      {minutes:'',flags:{wholeImage:true},expected:1500000},
-      {minutes:'1',flags:{wholeImage:true},expected:60000,fail:true},
-      {minutes:'1',flags:{regionPatch:true,region:'panel-1'},expected:60000,fail:true},
-      {minutes:'25',flags:{objectRepair:true,timeoutMsOverride:90000},expected:90000,fail:true}
-    ]){
-      const result=await page.evaluate(async probe=>{
-        document.querySelector('#provider').value='ark';
-        document.querySelector('#key').value='test-key';
-        const select=document.querySelector('#analyzeModel');
-        select.add(new Option('vision-test','vision-test'));select.value='vision-test';
-        document.querySelector('#reconTimeoutMinutes').value=probe.minutes;
-        const originalFetch=window.fetch,originalTimer=window.setTimeout;
-        let calls=0;const timers=[];
-        window.setTimeout=(fn,ms,...args)=>{timers.push(ms);return originalTimer(fn,ms/1000,...args);};
-        window.fetch=async(url,init)=>{
-          calls++;
-          return {ok:true,status:200,headers:new Headers(),text:()=>new Promise((resolve,reject)=>{
-            const timer=originalTimer(()=>resolve(JSON.stringify({choices:[{message:{content:JSON.stringify({operations:[],nodes:[{type:'rect',x:0,y:0,w:5,h:5,fill:'#fff'}]})}}]})),200);
-            init.signal.addEventListener('abort',()=>{clearTimeout(timer);reject(new DOMException('Aborted','AbortError'));},{once:true});
-          })};
-        };
-        const canvas=document.createElement('canvas');canvas.width=10;canvas.height=10;
-        const audit={maxAttempts:1,...probe.flags};
-        try{await window.__ffTestRequestScene(canvas.toDataURL(),10,10,audit);return {ok:true,calls,timers,audit};}
-        catch(e){return {ok:false,calls,timers,audit,message:e.message};}
-        finally{window.fetch=originalFetch;window.setTimeout=originalTimer;}
-      },probe);
-      assert.equal(result.ok,!probe.fail,JSON.stringify(result));
-      assert.equal(result.audit.timeoutMs,probe.expected);
-      if(probe.minutes==='25'&&probe.flags.wholeImage){
-        const progress=await page.evaluate(audit=>{
-          const now=Date.now();
-          return window.__ffTestProgress({phase:'whole',startedAt:now-51000,
-            tiles:[{...audit,state:'pending',attemptStartedAt:now-51000}]});
-        },result.audit);
-        assert.match(progress,/25 (?:分钟|min)/);
-        assert.match(progress,/24:09/);
-      }
-      assert.equal(result.calls,1);
-      assert.ok(result.timers.includes(probe.expected));
-      if(probe.fail){
-        assert.match(result.message,/原图仍保留|original image is preserved/);
-        assert.match(result.message,probe.flags.wholeImage?/整图结构识别|Whole-image/:probe.flags.regionPatch?/panel-1/:/局部细节修复|Detail repair/);
-      }
-    }
-    await page.evaluate(()=>{document.querySelector('#reconTimeoutMinutes').value='25';});
-    console.log('PASS slow response body, configured timeout limits, and stage-specific timeout errors');
-
+    // Timeout-free waiting and manual cancellation have dedicated coverage in
+    // test-unlimited-wait.mjs; keep retry and finite caller-budget coverage here.
     for(const scenario of ['recover','persistent','unauthorized','format','budget']){
       const result=await page.evaluate(async(scenario)=>{
         document.querySelector('#provider').value='ark';
@@ -164,7 +109,7 @@ const server = http.createServer((req,res)=>{
             {choices:[{message:{content:scenario==='format'?'{}':JSON.stringify({nodes:[{type:'rect',x:0,y:0,w:50,h:50,fill:'#ffffff'}]})}}]};
           return new Response(JSON.stringify(data),{status,headers:scenario==='recover'?{'Retry-After':'3'}:{}});
         };
-        const audit={maxAttempts:1,...(scenario==='budget'?{maxTotalMs:1500}:{})};
+        const audit={maxAttempts:scenario==='recover'||scenario==='persistent'?3:1,...(scenario==='budget'?{maxTotalMs:1500}:{})};
         try{const scene=await window.__ffTestRequestScene(canvas.toDataURL(),100,100,audit);return {calls,waits,nodes:scene.nodes.length,audit};}
         catch(error){return {calls,waits,message:error.message,status:error.status,audit};}
         finally{window.fetch=originalFetch;window.setTimeout=originalTimer;}

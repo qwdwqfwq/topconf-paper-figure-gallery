@@ -6,7 +6,6 @@ const path = require('node:path');
 const {chromium} = require(process.env.PLAYWRIGHT_CORE_PATH || 'playwright-core');
 
 const root=path.resolve(__dirname,'..');
-const image=process.env.STEP4_TEST_IMAGE || 'C:/Users/黎枭/Downloads/figure-forge-draft (3).png';
 const mime={'.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.json':'application/json'};
 const server=http.createServer((req,res)=>{
   let pathname=decodeURIComponent(new URL(req.url,'http://localhost').pathname);
@@ -35,153 +34,25 @@ const server=http.createServer((req,res)=>{
   try{
     const page=await browser.newPage({serviceWorkers:'block'});
     await page.goto(`http://127.0.0.1:${server.address().port}/forge/`,{waitUntil:'domcontentloaded'});
-    const source='data:image/png;base64,'+fs.readFileSync(image).toString('base64');
-    const result=await page.evaluate(async src=>{
-      const im=new Image();im.src=src;await im.decode();
-      const canvas=document.createElement('canvas');canvas.width=im.width;canvas.height=im.height;
-      canvas.getContext('2d').drawImage(im,0,0);
-      const audit={tiles:[],completedTiles:0,totalTiles:1,fallbackTiles:0};
-      let calls=0;
-      const request=async (_image,w,h)=>{
-        calls++;
-        if(w===canvas.width && h===canvas.height){
-          const error=new Error('Vision model returned JSON without an editable nodes array');
-          error.sceneFormatFailure=true;throw error;
-        }
-        return {canvas:{width:w,height:h},nodes:[
-          {id:'background',type:'rect',x:20,y:20,w:Math.min(w-40,200),h:100,fill:'#ffffff'},
-          {id:'label',type:'text',x:40,y:40,w:100,h:30,text:'Editable label',fontSize:18}
-        ]};
-      };
-      const scene=await window.__testReconstructCatalogWithFallback(canvas,src,request,audit);
-      return {calls,strategy:audit.strategy,wholeAudit:audit.tiles[0],mergedTiles:audit.mergedTiles,completedTiles:audit.completedTiles,
-        nodes:scene.nodes.length,types:scene.nodes.map(n=>n.type),ids:scene.nodes.map(n=>n.id)};
-    },source);
-    assert.equal(result.strategy,'tiled-fallback');
-    assert.equal(result.mergedTiles,4);
-    assert.equal(result.completedTiles,4);
-    assert.equal(result.calls,5);
-    assert.equal(result.wholeAudit.maxAttempts,2);
-    assert.equal(result.wholeAudit.timeoutMsOverride,240000);
-    assert.equal(result.wholeAudit.maxTotalMs,240000);
-    assert(result.nodes>0);
-    assert(result.types.includes('rect'));
-    assert(result.types.includes('text'));
-    assert.equal(new Set(result.ids).size,result.ids.length);
-    const providerFailure=await page.evaluate(async src=>{
-      const im=new Image();im.src=src;await im.decode();
-      const canvas=document.createElement('canvas');canvas.width=im.width;canvas.height=im.height;
-      canvas.getContext('2d').drawImage(im,0,0);
-      const audit={tiles:[],completedTiles:0,totalTiles:1,fallbackTiles:0};
-      const request=async (_image,w,h,detail)=>{
-        if(detail.wholeImage || detail.tile===1&&detail.depth===0)
-          throw new Error('HTTP 500: upstream error: do request failed');
-        return {canvas:{width:w,height:h},nodes:[
-          {id:'label',type:'text',x:40,y:40,w:100,h:30,text:'Editable label',fontSize:18}]};
-      };
-      const scene=await window.__testReconstructCatalogWithFallback(canvas,src,request,audit);
-      return {strategy:audit.strategy,wholeError:audit.wholeImageError,
-        fallbackTiles:audit.fallbackTiles,completedTiles:audit.completedTiles,
-        totalTiles:audit.totalTiles,nodes:scene.nodes.length,
-        causes:audit.tiles.map(tile=>tile.fallbackCause).filter(Boolean)};
-    },source);
-    assert.equal(providerFailure.strategy,'tiled-fallback');
-    assert.match(providerFailure.wholeError,/HTTP 500/);
-    assert(providerFailure.fallbackTiles>=1);
-    assert(providerFailure.causes.includes('provider-5xx'));
-    assert.equal(providerFailure.completedTiles,providerFailure.totalTiles);
-    assert(providerFailure.nodes>0);
-    const progress=await page.evaluate(()=>{
-      const now=Date.now();
-      return window.__testReconstructionProgressText({phase:'regions',startedAt:now-62000,
-        completedTiles:1,totalTiles:5,fallbackTiles:1,revisions:[],tiles:[
-          {wholeImage:true,state:'succeeded'},
-          {state:'pending',timeoutMs:240000,attemptStartedAt:now-60000},
-          {state:'queued'}]});
+    const result=await page.evaluate(async()=>{
+      const canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;
+      const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,320,180);
+      const src=canvas.toDataURL(),audit={tiles:[]};let calls=0,published=false,measured=false;
+      const request=async(_src,_w,_h,task)=>{calls++;if(task?.regionPatch)return {operations:[],uncertainties:[]};return {canvas:{width:320,height:180},nodes:[{id:'label',type:'text',x:20,y:20,w:150,h:30,text:'Editable',fontSize:18}]};};
+      const measure=async()=>{if(!published)throw Error('Quality check blocked first result');measured=true;return {score:.6,darkRecall:.5,localRecall:.5,edgeF1:.5,colorSimilarity:.8};};
+      const scene=await window.__testReconstructCatalogWithFallback(canvas,src,request,audit,null,false,measure,async()=>{published=true;});
+      const firstCalls=calls;
+      await window.__testReconstructCatalogWithFallback(canvas,src,request,{tiles:[]},scene,false,measure);
+      let failedCalls=0,error='';
+      try{await window.__testReconstructCatalogWithFallback(canvas,src,async()=>{failedCalls++;throw Error('Invalid scene');},{tiles:[]});}catch(e){error=e.message;}
+      const progress=window.__testReconstructionProgressText({phase:'regions',startedAt:Date.now()-62000,completedTiles:2,totalTiles:4,tiles:[]});
+      return {firstCalls,calls,published,measured,failedCalls,error,progress,details:audit.detailRegions,nodes:scene.nodes.length};
     });
-    assert.match(progress,/0\/4/);
-    assert.match(progress,/1:0[12]/);
-    assert(!progress.includes('NaN'));
-    console.log(JSON.stringify(result));
-    const sparse=await page.evaluate(async src=>{
-      const im=new Image();im.src=src;await im.decode();
-      const canvas=document.createElement('canvas');canvas.width=im.width;canvas.height=im.height;
-      canvas.getContext('2d').drawImage(im,0,0);
-      const audit={tiles:[],completedTiles:0,totalTiles:1,fallbackTiles:0};
-      let calls=0;
-      const request=async (_image,w,h)=>{
-        calls++;
-        return {canvas:{width:w,height:h},nodes:Array.from({length:w===canvas.width?1:4},(_,i)=>
-          ({id:'node-'+i,type:'rect',x:30+i*45,y:30,w:30,h:30,fill:'#ffffff'}))};
-      };
-      const measure=async (_canvas,scene)=>({score:scene.nodes.length>4?.85:.65,
-        darkRecall:scene.nodes.length>4?.86:.6,localRecall:scene.nodes.length>4?.75:.5,
-        edgeF1:scene.nodes.length>4?.8:.6,colorSimilarity:.9});
-      const scene=await window.__testReconstructCatalogWithFallback(canvas,src,request,audit,null,measure);
-      return {calls,strategy:audit.strategy,selected:audit.selectedTiledDetail,nodes:scene.nodes.length};
-    },source);
-    assert.equal(sparse.strategy,'whole-then-tiled');
-    assert.equal(sparse.selected,true);
-    assert(sparse.nodes>1);
-    assert.equal(sparse.calls,5);
-    console.log(JSON.stringify(sparse));
-    const stalled=await page.evaluate(async src=>{
-      const im=new Image();im.src=src;await im.decode();
-      const canvas=document.createElement('canvas');canvas.width=im.width;canvas.height=im.height;
-      canvas.getContext('2d').drawImage(im,0,0);
-      const audit={tiles:[],completedTiles:0,totalTiles:1,fallbackTiles:0};
-      const calls=[];
-      const request=async (_image,w,h,detail)=>{
-        calls.push({w,h,depth:detail.depth,timeout:detail.timeoutMsOverride,
-          context:!!detail.detailCatalog});
-        if(detail.tile===1&&detail.depth===0){
-          const error=new Error('Vision request timed out');error.visionTimeout=true;throw error;
-        }
-        return {canvas:{width:w,height:h},nodes:[
-          {id:'shape',type:'rect',x:20,y:20,w:50,h:50,fill:'#000000'}]};
-      };
-      const measure=async (_canvas,scene)=>({score:scene.nodes.length>1?.82:.70,
-        darkRecall:scene.nodes.length>1?.82:.70,
-        localRecall:scene.nodes.length>1?.75:.60,
-        edgeF1:scene.nodes.length>1?.8:.7,colorSimilarity:.9});
-      const scene=await window.__testReconstructCatalogWithFallback(canvas,src,request,audit,null,measure);
-      return {calls,mergedTiles:audit.mergedTiles,totalTiles:audit.totalTiles,
-        completedTiles:audit.completedTiles,fallbackTiles:audit.fallbackTiles,
-        strategy:audit.strategy,nodes:scene.nodes.length,tilePassComplete:audit.tilePassComplete};
-    },source);
-    assert.equal(stalled.strategy,'whole-then-tiled');
-    assert(stalled.fallbackTiles>=1);
-    assert(stalled.calls.some(call=>call.depth===1&&call.w<stalled.calls[1].w));
-    assert(stalled.calls.filter(call=>call.depth===0).every(call=>call.timeout===240000));
-    assert(stalled.calls.filter(call=>call.depth===1).every(call=>call.timeout===180000));
-    assert(stalled.calls.slice(1).some(call=>call.context));
-    assert.equal(stalled.completedTiles,stalled.totalTiles);
-    assert.equal(stalled.tilePassComplete,true);
-    assert(stalled.nodes>0);
-    console.log(JSON.stringify(stalled));
-    const cached=await page.evaluate(async src=>{
-      const im=new Image();im.src=src;await im.decode();
-      const canvas=document.createElement('canvas');canvas.width=im.width;canvas.height=im.height;
-      canvas.getContext('2d').drawImage(im,0,0);
-      const audit={tiles:[],completedTiles:0,totalTiles:1,fallbackTiles:0};
-      const old={canvas:{width:im.width,height:im.height},nodes:[
-        {id:'old',type:'rect',x:10,y:10,w:50,h:50,fill:'#ffffff'}]};
-      let calls=0;
-      const request=async (_image,w,h)=>{
-        calls++;
-        return {canvas:{width:w,height:h},nodes:[
-          {id:'weak',type:'rect',x:10,y:10,w:10,h:10,fill:'#ffffff'}]};
-      };
-      const measure=async (_canvas,scene)=>({score:scene.nodes[0]?.id==='old' ? .70 : .55,
-        darkRecall:scene.nodes[0]?.id==='old' ? .70 : .55,
-        localRecall:scene.nodes[0]?.id==='old' ? .60 : .45,
-        edgeF1:scene.nodes[0]?.id==='old' ? .70 : .55,colorSimilarity:.9});
-      const scene=await window.__testReconstructCatalogWithFallback(canvas,src,request,audit,old,measure);
-      return {calls,strategy:audit.strategy,nodes:scene.nodes.length,kept:scene.nodes[0]?.id};
-    },source);
-    assert.equal(cached.calls,4);
-    assert.equal(cached.strategy,'cached-catalog');
-    assert.equal(cached.kept,'old');
-    console.log(JSON.stringify(cached));
+    assert.equal(result.firstCalls,2);assert.equal(result.calls,3);
+    assert.equal(result.published,true);assert.equal(result.measured,true);
+    assert.equal(result.failedCalls,1);assert.match(result.error,/Invalid scene/);
+    assert.deepEqual(result.details,[]);assert(result.nodes>0);
+    assert.match(result.progress,/1\/3/);assert(!result.progress.includes('NaN'));
+    console.log('PASS whole-image first result, no exhaustive fallback, cached result and truthful progress');
   }finally{await browser.close();server.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;server.close();});
