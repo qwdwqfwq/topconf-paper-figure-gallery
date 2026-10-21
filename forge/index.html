@@ -153,7 +153,7 @@
   .tabs button.on{background:#fff;color:var(--indigo);box-shadow:0 1px 3px rgba(0,0,0,.1)}
   #out{margin-top:15px;border:1px solid var(--line);border-radius:13px;padding:14px;min-height:80px;
        background:#fbfbfd;display:none}
-  #out iframe{width:100%;min-height:560px;border:0;border-radius:8px;background:#fff}
+  #out iframe{display:block;width:100%;height:70vh;height:70dvh;min-height:0;border:0;border-radius:8px;background:#fff}
   #out img{max-width:100%;border-radius:8px;display:block;margin:0 auto}
   .dl{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
   .err{color:var(--red);font-weight:600}
@@ -3339,7 +3339,7 @@ function applyExportFont(font){
   renderEditableExportCard();
   if(window.__ffExportPreviewUrl) URL.revokeObjectURL(window.__ffExportPreviewUrl);
   window.__ffExportPreviewUrl=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
-  const frame=$('#out iframe'); if(frame) frame.srcdoc=svg;
+  const frame=$('#out iframe'); if(frame) frame.srcdoc=svgPreviewDocument(svg);
 }
 function setExportMode(mode){
   const st=ensureExportState();
@@ -5968,17 +5968,31 @@ $('#reconBtn')?.addEventListener('click', async function(){
   }
 });
 
+function svgPreviewDocument(svg){
+  // Resize a preview copy only; downloads and editable exports keep the source.
+  const doc=new DOMParser().parseFromString(svg,'image/svg+xml');
+  const root=doc.documentElement;
+  if(root.localName!=='svg' || doc.querySelector('parsererror')) return svg;
+  const box=readViewBox(root);
+  if(box) root.setAttribute('viewBox',`${box.x} ${box.y} ${box.w} ${box.h}`);
+  root.setAttribute('preserveAspectRatio','xMidYMid meet');
+  for(const [name,value] of Object.entries({width:'100%',height:'100%','min-width':'0','min-height':'0','max-width':'100%','max-height':'100%',margin:'0',display:'block'})){
+    root.style.setProperty(name,value,'important');
+  }
+  return `<!doctype html><html><head><meta name="viewport" content="width=device-width,initial-scale=1"><style>html,body{margin:0;width:100%;height:100%;overflow:hidden}</style></head><body>${new XMLSerializer().serializeToString(root)}</body></html>`;
+}
+
 function renderSVG(svg, usedVision, useIds, truncated, auditRes){
   const blob = new Blob([svg],{type:'image/svg+xml'});
   const url = URL.createObjectURL(blob);
   const n = (useIds||[...refs]).length;
   const auditNote = auditRes ? auditSummaryText(auditRes) : '';
   $('#out').style.display='block';
-  $('#out').innerHTML = `<iframe sandbox></iframe>
+  $('#out').innerHTML = `<iframe sandbox title="SVG preview"></iframe>
     <div class="dl"><a class="btn-primary" href="${url}" download="figure-forge-draft.svg">${tt('svg.download')}</a>
     <span class="hint">${usedVision?tt('svg.hint1',{n:n}):tt('svg.hint2')}${truncated?tt('svg.trunc'):''}${auditNote}</span></div>`;
   const frame=$('#out iframe');
-  if(frame) frame.srcdoc=svg;
+  if(frame) frame.srcdoc=svgPreviewDocument(svg);
   showEditableExportStep(svg);
 }
 
