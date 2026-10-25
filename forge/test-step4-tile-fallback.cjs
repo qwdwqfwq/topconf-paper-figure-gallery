@@ -38,7 +38,13 @@ const server=http.createServer((req,res)=>{
       const canvas=document.createElement('canvas');canvas.width=320;canvas.height=180;
       const ctx=canvas.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,320,180);
       const src=canvas.toDataURL(),audit={tiles:[]};let calls=0,published=false,measured=false;
-      const request=async(_src,_w,_h,task)=>{calls++;if(task?.regionPatch)return {operations:[],uncertainties:[]};return {canvas:{width:320,height:180},nodes:[{id:'label',type:'text',x:20,y:20,w:150,h:30,text:'Editable',fontSize:18}]};};
+      const request=async(_src,_w,_h,task)=>{
+        calls++;if(task.maxAttempts!==1)throw Error('Unexpected retry');
+        if(task.sourceInventory)return {items:[{id:'i',kind:'text',description:'label',x:20,y:20,w:150,h:30,text:'Editable',colors:[{role:'text',value:'#000000'}]}],layers:[],connections:[],uncertainties:[]};
+        if(task.wholeImageAssessment)return {complete:true,wholeImageAcceptable:true,inventoryComplete:true,unlistedSourceItems:[],uncertainties:[],evidence:[{itemId:'i',status:'passed',nodeIds:['label'],reason:'Compared source and render'}],defects:[]};
+        if(!task.wholeImage)throw Error('Unexpected repair');
+        return {canvas:{width:320,height:180},nodes:[{id:'label',type:'text',x:20,y:20,w:150,h:30,text:'Editable',fill:'#000000',fontSize:18}]};
+      };
       const measure=async()=>{if(!published)throw Error('Quality check blocked first result');measured=true;return {score:.6,darkRecall:.5,localRecall:.5,edgeF1:.5,colorSimilarity:.8};};
       const scene=await window.__testReconstructCatalogWithFallback(canvas,src,request,audit,null,false,measure,async()=>{published=true;});
       const firstCalls=calls;
@@ -46,13 +52,14 @@ const server=http.createServer((req,res)=>{
       let failedCalls=0,error='';
       try{await window.__testReconstructCatalogWithFallback(canvas,src,async()=>{failedCalls++;throw Error('Invalid scene');},{tiles:[]});}catch(e){error=e.message;}
       const progress=window.__testReconstructionProgressText({phase:'regions',startedAt:Date.now()-62000,completedTiles:2,totalTiles:4,tiles:[]});
-      return {firstCalls,calls,published,measured,failedCalls,error,progress,details:audit.detailRegions,nodes:scene.nodes.length};
+      return {firstCalls,calls,published,measured,failedCalls,error,progress,details:audit.repairRegions,validation:audit.finalValidation.state,rounds:audit.repairRounds,nodes:scene.nodes.length};
     });
-    assert.equal(result.firstCalls,2);assert.equal(result.calls,3);
+    assert.equal(result.firstCalls,3);assert.equal(result.calls,6);
     assert.equal(result.published,true);assert.equal(result.measured,true);
     assert.equal(result.failedCalls,1);assert.match(result.error,/Invalid scene/);
     assert.deepEqual(result.details,[]);assert(result.nodes>0);
+    assert.equal(result.validation,'passed');assert.equal(result.rounds,0);
     assert.match(result.progress,/1\/3/);assert(!result.progress.includes('NaN'));
-    console.log('PASS whole-image first result, no exhaustive fallback, cached result and truthful progress');
+    console.log('PASS browser source inventory, one whole-image result, evidence QA, no cached validation bypass, early draft and truthful progress');
   }finally{await browser.close();server.close();}
 })().catch(error=>{console.error(error);process.exitCode=1;server.close();});

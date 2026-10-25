@@ -683,6 +683,7 @@ import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleIma
 import {ImageRoutes, safeImageFailover} from './image-routes.mjs?v=20261020';
 const imageRoutes=new ImageRoutes();
 import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=whole-image-20261021-1';
+import {inventoryPrompt,validateInventory,evidencePrompt,patchPrompt,reconstructWithEvidence} from './bitmap-evidence.mjs';
 import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=whole-image-20261021-1';
 import {scaleRegionCatalog, scaleRegionPatch, scaleStructureScene,registerMissingObjects, editableNodeBounds, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, tileDetailCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion, planReconstructionTiles, subdivideReconstructionTile} from './reconstruction-core.mjs?v=whole-image-20261021-1';
 import {planDefectRegions,planDetailRegions,planSemanticRegions,snapshotVersions,applyRegionPatch,fitSourceFills,calibrateShapeGeometry,expandStructuredNodes,regionObjectCatalog,rollbackRegionChanges,rejectUnsupportedLines,recoverDocumentInk,repairStructuralLayers} from './reconstruction-pipeline.mjs?v=whole-image-20261021-1';
@@ -4403,7 +4404,7 @@ async function ensureBitmapDataUrl(src){
 }
 
 function editableScenePrompt(W,H,paper){
-  return 'Reconstruct this scientific figure as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"regions":[{"id":"panel_1","kind":"chart|table|flow|panel|photo","x":0,"y":0,"w":100,"h":100}],"nodes":[...]}. First inspect the entire source at its exact pixel dimensions and locate every panel boundary. Systematically inspect the image from top to bottom, left to right, then revisit dense charts, tables, legends, icons and small labels. Measure all coordinates against the FULL supplied canvas, never against a mentally resized preview. Verify each panel boundary and every object center against the original image before emitting JSON. Preserve the measured panel proportions, whitespace and alignment; never redesign the layout. In this SAME response provide a COMPLETE object catalog and semantic regions. Choose the region count from the actual content: 12-16 is only a reference for complex figures, never a quota. Keep each entire chart (axes, ticks, legend, data and title), table, or connected local flow in ONE region. Prefer flat non-overlapping regions covering all content, including captions. Assign node owner to its region id; global connectors may remain unowned. Do not spend a separate API call planning regions. This is the WHOLE IMAGE object catalog. Give every object a unique string id; retain each cross-region arrow, icon and text label exactly once as a complete object. Every node MUST have a string "type" field, for example {"type":"rect","x":1,"y":2,"w":3,"h":4}; never nest it as {"rect":{...}}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Transcribe each visible text line exactly, preserving capitalization, punctuation, mathematical symbols and line breaks. Use ONE text node for each complete continuous label or line; never split a word or label into several text nodes at a crop edge, duplicate its overlapping characters, or combine unrelated nearby labels. Estimate fontSize from visible glyph height, not the surrounding box. Give the line a tight x,y,w,h bounding box that does not overlap other labels. If text content cannot be read, do not invent characters. Preserve all independently visible surrounding boxes, marks, connectors and geometry; uncertainty about text never permits omitting the object or its region. Text must be OCR transcription, not a description. Inspect dense modules for short connectors, dashed returns, repeated tiny boxes and axis ticks before returning JSON. Keep adjacent boxes, graph nodes and arrows as separate objects. For curved arrows and rings use path d with SVG M/L/C/Q/A/Z commands; preserve true arcs and curves rather than polygonal approximations. For rotated text set rotation in degrees. For 90/270-degree labels, x,y,w,h MUST describe the visible box AFTER rotation (a vertical label has a narrow w and tall h), not a horizontal layout box; retain the visible box center. For text following a ring or arc use a text node with textPath:{d:"M ... A ...",startOffset:0.5}; keep the text transcribed as editable characters. Treat each small icon, chart, and dense module as a collection of distinct primitives. Assign each outline, interior mark, text label, and connector its own unique ID; preserve the full geometry of every object across crop boundaries. This global catalog establishes stable object IDs; later patches may add genuinely missed objects. Do not reduce this first pass to a layout skeleton. Inspect every region and include small internal lines and shapes now; do not defer missing objects to later crop requests. For 3D-looking bars, cubes, prisms, or beveled objects, draw the front, top, and side faces as separate closed polygons with their own fill colors and edges; never flatten them to a rectangle. Preserve geometry and layer order. Do not return a single full-canvas bitmap as a substitute. For every line or arrow, both endpoints must coincide with visible endpoints in this crop. Never use (0,0), a crop corner, or a crop edge as a placeholder endpoint. Do not invent unseen line geometry; retain all confirmed visible segments and adjacent shapes even when a connection is uncertain. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,closed,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor,rotation,textPath}, and image {x,y,w,h,href}. Use image only for photographic/illustrative content that cannot be decomposed, and include a crop object when possible. For EACH region check in order: outer frames and backgrounds; text; icon outlines and internal lines; connectors and arrowheads; axes and every tick; legends; every repeated small square; every face of 3D objects. Enumerate repeated instances individually, never substitute a representative or summary. Before submitting, revisit every region and category against the original and add omissions. Keep z-order from background to foreground. Use compact JSON with no commentary or repeated descriptions. Omit optional properties only when their default preserves appearance; retain geometry, IDs, owners, text, necessary styles and paint order. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
+  return 'Reconstruct this scientific figure as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"regions":[{"id":"panel_1","kind":"chart|table|flow|panel|photo","x":0,"y":0,"w":100,"h":100}],"nodes":[...]}. First inspect the entire source at its exact pixel dimensions and locate every panel boundary. Systematically inspect the image from top to bottom, left to right, then revisit dense charts, tables, legends, icons and small labels. Measure all coordinates against the FULL supplied canvas, never against a mentally resized preview. Verify each panel boundary and every object center against the original image before emitting JSON. Preserve the measured panel proportions, whitespace and alignment; never redesign the layout. Use the independently collected source checklist to provide the COMPLETE object catalog and semantic regions. Choose the region count from actual content, without a quota. Keep each entire chart (axes, ticks, legend, data and title), table, or connected local flow in ONE region. Prefer flat non-overlapping regions covering all content, including captions. Assign node owner to its region id; global connectors may remain unowned. This is the WHOLE IMAGE object catalog. Give every object a unique string id; retain each cross-region arrow, icon and text label exactly once as a complete object. Every node MUST have a string "type" field, for example {"type":"rect","x":1,"y":2,"w":3,"h":4}; never nest it as {"rect":{...}}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Transcribe each visible text line exactly, preserving capitalization, punctuation, mathematical symbols and line breaks. Use ONE text node for each complete continuous label or line; never split a word or label into several text nodes at a crop edge, duplicate its overlapping characters, or combine unrelated nearby labels. Estimate fontSize from visible glyph height, not the surrounding box. Give the line a tight x,y,w,h bounding box that does not overlap other labels. If text content cannot be read, do not invent characters. Preserve all independently visible surrounding boxes, marks, connectors and geometry; uncertainty about text never permits omitting the object or its region. Text must be OCR transcription, not a description. Inspect dense modules for short connectors, dashed returns, repeated tiny boxes and axis ticks before returning JSON. Keep adjacent boxes, graph nodes and arrows as separate objects. For curved arrows and rings use path d with SVG M/L/C/Q/A/Z commands; preserve true arcs and curves rather than polygonal approximations. For rotated text set rotation in degrees. For 90/270-degree labels, x,y,w,h MUST describe the visible box AFTER rotation (a vertical label has a narrow w and tall h), not a horizontal layout box; retain the visible box center. For text following a ring or arc use a text node with textPath:{d:"M ... A ...",startOffset:0.5}; keep the text transcribed as editable characters. Treat each small icon, chart, and dense module as a collection of distinct primitives. Assign each outline, interior mark, text label, and connector its own unique ID; preserve the full geometry of every object across crop boundaries. This global catalog establishes stable object IDs; later patches may add genuinely missed objects. Do not reduce this first pass to a layout skeleton. Inspect every region and include small internal lines and shapes now; do not defer missing objects to later crop requests. For 3D-looking bars, cubes, prisms, or beveled objects, draw the front, top, and side faces as separate closed polygons with their own fill colors and edges; never flatten them to a rectangle. Preserve geometry and layer order. Do not return a single full-canvas bitmap as a substitute. For every line or arrow, both endpoints must coincide with visible endpoints in the supplied source. Never use (0,0), a crop corner, or a crop edge as a placeholder endpoint. Do not invent unseen line geometry; retain all confirmed visible segments and adjacent shapes even when a connection is uncertain. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,closed,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor,rotation,textPath}, and image {x,y,w,h,href}. Use image only for photographic/illustrative content that cannot be decomposed, and include a crop object when possible. For EACH region check in order: outer frames and backgrounds; text; icon outlines and internal lines; connectors and arrowheads; axes and every tick; legends; every repeated small square; every face of 3D objects. Enumerate repeated instances individually, never substitute a representative or summary. Before submitting, revisit every region and category against the original and add omissions. Keep z-order from background to foreground. Use compact JSON with no commentary or repeated descriptions. Omit optional properties only when their default preserves appearance; retain geometry, IDs, owners, text, necessary styles and paint order. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
 }
 function editableSceneRetryPrompt(W,H){
   return 'The previous answer could not be used. Inspect the attached image crop and return ONLY a JSON object with this exact outer shape: {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[{"type":"rect","x":0,"y":0,"w":10,"h":10,"fill":"#ffffff"}]}. Replace the example node with the actual visible, separately editable rectangles, lines, arrows, text, polygons and photographic regions. Coordinates are pixels within this crop. Every node needs a type. For text use {"type":"text","x":0,"y":0,"w":100,"h":20,"text":"actual words","fontSize":14,"fill":"#000000"}. For a completely blank white crop, nodes may be empty. No descriptions, analysis, Markdown, or other keys are needed.';
@@ -4696,7 +4697,8 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
     return JSON.stringify(sent);
   };
   Object.assign(audit,{state:'pending',startedAt:Date.now(),model,provider:cfgv.proto,endpoint:baseURL(),attempt:0});
-  const prompt=audit.structureOnly ? 'Analyze ONLY the structure of this figure. Return STRICT JSON {"canvas":{"width":'+W+',"height":'+H+'},"regions":[{"id":"panel_a","parentId":null,"kind":"panel","x":0,"y":0,"w":100,"h":100}],"nodes":[]}. Use global pixel coordinates and stable unique IDs. Regions cover all contents: prefer one region per complete semantic panel; keep related charts, tables, labels and icons together; subdivide only exceptionally dense panels when their details cannot fit in one response; cross-panel connectors belong to the global nodes catalog, never to a separate overlapping region. Include every cross-panel connector as a complete node now. Parent remainder regions are generated automatically; do not fragment them into strips. Nodes include ONLY panel backgrounds, main headings WITH their opaque colored rounded background strips, and complete cross-region connectors. Place heading backgrounds after panel frames and before heading text so the frame cannot cross the heading. Never replace a rounded panel with a square rectangle. Defer tiny labels, chart marks and internal details to regional workers. Do not invent unreadable text. Nodes use rect/ellipse/line/path/polyline/text, geometry in pixels, hex fill/stroke, strokeWidth, fontSize/fontFamily/bold for text. Text MUST include x,y,w,h for its tight enclosing text BOX: x,y are the TOP-LEFT of that box, never a center or baseline. anchor is alignment INSIDE the box (start/middle/end); it never changes the coordinate origin. fontSize is in image 1 pixels. For rotated text include rotation in degrees; x,y,w,h describe the visible box AFTER rotation (vertical text has narrow w and tall h), never an unrotated layout box. Include fontFamily and bold, preserve each visible line break.  Prefer about 8-12 meaningful regions for a dense poster, following actual panel boundaries; group simple icon primitives together rather than one region per mark. Regions must cover every foreground object. Preserve layer order.' : editableScenePrompt(W,H,$('#paper')?$('#paper').value:'');
+  const sourcePrompt=audit.sourceChecklist?'\nFrozen source inventory: '+JSON.stringify(audit.sourceChecklist)+'. Reconstruct every item, repeated instance, color, connection and back-to-front layer relation; do not defer details.':'';
+  const prompt=audit.structureOnly ? 'Analyze ONLY the structure of this figure. Return STRICT JSON {"canvas":{"width":'+W+',"height":'+H+'},"regions":[{"id":"panel_a","parentId":null,"kind":"panel","x":0,"y":0,"w":100,"h":100}],"nodes":[]}. Use global pixel coordinates and stable unique IDs. Regions cover all contents: prefer one region per complete semantic panel; keep related charts, tables, labels and icons together; subdivide only exceptionally dense panels when their details cannot fit in one response; cross-panel connectors belong to the global nodes catalog, never to a separate overlapping region. Include every cross-panel connector as a complete node now. Parent remainder regions are generated automatically; do not fragment them into strips. Nodes include ONLY panel backgrounds, main headings WITH their opaque colored rounded background strips, and complete cross-region connectors. Place heading backgrounds after panel frames and before heading text so the frame cannot cross the heading. Never replace a rounded panel with a square rectangle. Defer tiny labels, chart marks and internal details to regional workers. Do not invent unreadable text. Nodes use rect/ellipse/line/path/polyline/text, geometry in pixels, hex fill/stroke, strokeWidth, fontSize/fontFamily/bold for text. Text MUST include x,y,w,h for its tight enclosing text BOX: x,y are the TOP-LEFT of that box, never a center or baseline. anchor is alignment INSIDE the box (start/middle/end); it never changes the coordinate origin. fontSize is in image 1 pixels. For rotated text include rotation in degrees; x,y,w,h describe the visible box AFTER rotation (vertical text has narrow w and tall h), never an unrotated layout box. Include fontFamily and bold, preserve each visible line break.  Prefer about 8-12 meaningful regions for a dense poster, following actual panel boundaries; group simple icon primitives together rather than one region per mark. Regions must cover every foreground object. Preserve layer order.' : editableScenePrompt(W,H,$('#paper')?$('#paper').value:'')+sourcePrompt;
   // Feed the existing object graph back to the model. Photo data URLs are
   // replaced by crop coordinates; the source image is attached separately.
   const priorScene=revision&&revision.scene?JSON.stringify({
@@ -4726,10 +4728,10 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
     audit.attemptStartedAt=Date.now();
     try{
       const assessmentInstructions=audit.wholeImageAssessment?'INDEPENDENT WHOLE-IMAGE ACCEPTANCE GATE. Also return wholeImageAcceptable:boolean, summary:string, coverage:[{region:string,missingGroups:string[]}]. Check EVERY source region and element class, including dense interiors, repeated small marks, text, connectors and 3D faces. Set wholeImageAcceptable=false if any entire group, panel internals, or widespread small elements are missing or materially misplaced. Local residual errors may be repairable, but a skeleton is unacceptable. Never use total node count alone as acceptance. Report missingGroups for every region and tightly bounded defects for all significant errors. ':'';
-      const attemptPrompt=audit.defectDiagnosis
-        ? assessmentInstructions+'Compare image 1 ORIGINAL with image 2 CURRENT editable rendering. Diagnose ONLY clearly visible residual reconstruction errors in the first reconstruction. Return STRICT JSON {"complete":true,"defects":[]} when no significant errors remain, otherwise {"complete":false,"defects":[{"x":0,"y":0,"w":100,"h":100,"reason":"specific visible discrepancy","kind":"text|layer|chart|table|shape|photo","objectIds":["existing_id"]}]}. Coordinates are '+(audit.localInspection?'CROP-RELATIVE':'GLOBAL source')+' pixels, canvas '+W+' x '+H+'. Inspect missing objects, text hidden behind colored boxes, incorrect stacking/occlusion, duplicated text or lines, chart marks, table cells, fine print and photo crops. Check dashed versus solid strokes (including curved arrows), clipped icons behind title backgrounds, text crossing cell borders, out-of-cell numbers and doubled grid lines. Never accept missing fine print merely because the overall layout matches. Each defect box must tightly enclose the actual erroneous objects, with correct context excluded. Keep a chart/table together only when its structure needs repair. Minor antialiasing differences are not defects. Use source evidence; do not invent unreadable text. Inspect the entire '+(audit.localInspection?'crop':'image including margins')+'. Existing catalog: '+serializeVisionCatalog(audit.catalog)
+      const attemptPrompt=audit.sourceInventory ? inventoryPrompt(W,H) : audit.defectDiagnosis
+        ? assessmentInstructions+(audit.wholeImageAssessment&&audit.sourceChecklist?evidencePrompt(audit.sourceChecklist):'')+'Compare image 1 ORIGINAL with image 2 CURRENT editable rendering. Diagnose ONLY clearly visible residual reconstruction errors in the first reconstruction. Return STRICT JSON {"complete":true,"defects":[]} when no significant errors remain, otherwise {"complete":false,"defects":[{"x":0,"y":0,"w":100,"h":100,"reason":"specific visible discrepancy","kind":"text|layer|chart|table|shape|photo","objectIds":["existing_id"]}]}. Coordinates are '+(audit.localInspection?'CROP-RELATIVE':'GLOBAL source')+' pixels, canvas '+W+' x '+H+'. Inspect missing objects, text hidden behind colored boxes, incorrect stacking/occlusion, duplicated text or lines, chart marks, table cells, fine print and photo crops. Check dashed versus solid strokes (including curved arrows), clipped icons behind title backgrounds, text crossing cell borders, out-of-cell numbers and doubled grid lines. Never accept missing fine print merely because the overall layout matches. Each defect box must tightly enclose the actual erroneous objects, with correct context excluded. Keep a chart/table together only when its structure needs repair. Minor antialiasing differences are not defects. Use source evidence; do not invent unreadable text. Inspect the entire '+(audit.localInspection?'crop':'image including margins')+'. Existing catalog: '+serializeVisionCatalog(audit.catalog)
         : audit.regionPatch
-        ? 'Return STRICT JSON {"operations":[],"uncertainties":[]}. Compare image 1 original crop with image 3 current rendering. Image 2 and the complete original image are context. Repair ONLY diagnosed objects in catalog.nodes; catalog.readOnlyContext is immutable context. Do not redraw panels or regenerate correct objects. Available operations: {op:"style",id,version,changes:{dash:true,strokeWidth:1,fontSize:12}}, {op:"reorder",id,version,position:"front"}, {op:"reorder",id,version,afterId:"background_id"}, {op:"update",id,version,node:{...complete existing primitive with corrected geometry...}}, {op:"add",node:{...missing primitive...}}. Use style for dashed/solid lines and font size; use reorder to place occluded icons/text above backgrounds without rewriting their shapes. Preserve text content EXACTLY, including all tiny print and line breaks. Never delete, split, merge or replace text with blank areas. An update must retain the existing type, text and all unrelated properties. Keep all numbers within their original table cells, clear of rules. Do not add duplicate grid lines. Preserve source dashed curves, arrowheads and icons. Coordinate system is image 1 crop pixels, dimensions '+W+' x '+H+'. Text x,y is box top-left; preserve w,h,fontSize,fontFamily,anchor and rotation. New objects must be inside ownership bounds and outside excludeRects. Add only genuinely missing details after checking both catalogs. Missing photographic textures use image{x,y,w,h}; never cover text/charts with image crops. Unreadable new fine print may use short editable ink paths, never invented text. Empty operations is valid. Catalog: '+serializeVisionCatalog(audit.detailCatalog)+' Ownership: '+JSON.stringify(audit.ownership)+' Source crop: '+JSON.stringify(audit.sourceRegion)+' Validation feedback: '+JSON.stringify(audit.feedback||null)
+        ? patchPrompt(W,H,audit,serializeVisionCatalog)
         : audit.structureOnly ? prompt
         : audit.omissionCheck
         ? 'WHOLE IMAGE completeness audit. Compare the entire original image with the registered objects below. Return STRICT JSON {"nodes":[]} if nothing is missing; otherwise nodes must contain ONLY genuinely missing editable objects using the same scene schema. Never duplicate existing text, arrows, borders or icons. Do not return replacements or changes to existing objects. Examine small labels, chart marks and internal icon details. Global coordinates in pixels. Existing catalog: '+serializeVisionCatalog(audit.catalog)+'\n'+prompt
@@ -4819,15 +4821,17 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
       }
       if(wholeRequest){
         window.__ffReconResponses=window.__ffReconResponses||[];
-        window.__ffReconResponses.push({stage:'whole-image',content:txt,request:audit.requestParameters,usage:audit.usage,responseModel:audit.responseModel,diagnostics:responseDiagnostics});
+        window.__ffReconResponses.push({stage:audit.sourceInventory?'source-inventory':'whole-image',content:txt,request:audit.requestParameters,usage:audit.usage,responseModel:audit.responseModel,diagnostics:responseDiagnostics});
       }
       let scene;
       try{
-        if(audit.defectDiagnosis){
+        if(audit.sourceInventory){
+          scene={...validateInventory(extractJSON(txt),W,H),nodes:[]};
+        }else if(audit.defectDiagnosis){
           const raw=extractJSON(txt);
-          if(typeof raw.complete!=='boolean'||!Array.isArray(raw.defects)||(!raw.complete&&!raw.defects.length)||raw.defects.some(d=>![d.x,d.y,d.w,d.h].every(Number.isFinite)||d.w<=0||d.h<=0||!d.reason))throw new Error('Invalid residual defect diagnosis');
+          if(typeof raw.complete!=='boolean'||!Array.isArray(raw.defects)||raw.defects.some(d=>![d.x,d.y,d.w,d.h].every(Number.isFinite)||d.w<=0||d.h<=0||!d.reason))throw new Error('Invalid residual defect diagnosis');
           if(audit.wholeImageAssessment&&(typeof raw.wholeImageAcceptable!=='boolean'||!Array.isArray(raw.coverage)||!raw.coverage.length||raw.coverage.some(r=>typeof r.region!=='string'||!Array.isArray(r.missingGroups))||typeof raw.summary!=='string'))throw new Error('Missing whole-image acceptance evidence');
-          scene={nodes:[],complete:raw.complete&&raw.defects.length===0,defects:raw.defects,wholeImageAcceptable:raw.wholeImageAcceptable,coverage:raw.coverage,summary:raw.summary};
+          scene={nodes:[],complete:raw.complete&&raw.defects.length===0,defects:raw.defects,wholeImageAcceptable:raw.wholeImageAcceptable,coverage:raw.coverage,summary:raw.summary,inventoryComplete:raw.inventoryComplete,unlistedSourceItems:raw.unlistedSourceItems,uncertainties:raw.uncertainties,evidence:raw.evidence};
         }else if(audit.regionPatch){
           const raw=extractJSON(txt);
           if(!Array.isArray(raw.operations))throw new Error('Region response requires operations array');
@@ -4835,7 +4839,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
             const sources=Array.isArray(op.nodes)?op.nodes:op.node?[op.node]:[];
             const nodes=materializeEditableScene({nodes:sources},W,H).nodes;
             return {...op,op:op.op==='update'&&nodes.length>1?'split':op.op,node:undefined,nodes};
-          }),uncertainties:raw.uncertainties||[],nodes:[]};
+          }),uncertainties:raw.uncertainties,nodes:[]};
         }else if(audit.objectRepair||audit.detailCatalog){
           const nodes=extractEditableNodes(extractJSON(txt));
           scene=nodes.length?materializeEditableScene({nodes},W,H):{canvas:{width:W,height:H},nodes:[]};
@@ -5010,219 +5014,19 @@ async function acceptMissingDetailsByRender(canvas,scene,proposals,measureScene,
 }
 function compactQuality(q){if(!q)return q;return Object.fromEntries(Object.entries(q).filter(([k,v])=>typeof v==='number'||typeof v==='boolean'));}
 async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cachedScene,cachedOmissionChecked=false,measureScene=compareEditableRender,onProgress=async()=>{},options={}){
-  const W=canvas.width,H=canvas.height;
-  const checkStopped=()=>{if(options.signal?.aborted||(options.deadline&&Date.now()>=options.deadline))throw new DOMException('Stopped or total budget exhausted','AbortError');};
-  checkStopped();
-  audit.phase='whole';
-  let scene=cachedScene?structuredClone(cachedScene):null;
-  if(!scene){
-    const task={wholeImage:true,structureOnly:false,maxAttempts:1};
-    audit.tiles.push(task);
-    task.inputWidth=W;task.inputHeight=H;
-    const structure=await requestScene(src,W,H,task);
-    scene=createWholeImageCatalog(structure);
-    task.nodeCounts={...structure.recognitionCounts,parsed:structure.nodes.length,deduplicated:scene.nodes.length,removedByDeduplication:structure.nodes.length-scene.nodes.length};
-    audit.wholeImageNodeCounts={...task.nodeCounts};
-  }
-  audit.strategy='compare-first-object-patches';audit.omissionChecked=false;
-  await onProgress(scene,false);
-  const wholeBounds={x:0,y:0,w:W,h:H};
-  checkStopped();
-  audit.phase='quality';
-  let compared=await measureScene(canvas,scene,wholeBounds);
-  const crop=(r,scale=1)=>{const c=document.createElement('canvas');c.width=Math.round(r.w*scale);c.height=Math.round(r.h*scale);c.getContext('2d').drawImage(canvas,r.x,r.y,r.w,r.h,0,0,c.width,c.height);return c.toDataURL('image/png');};
-  // The full-resolution PNG can be tens of megabytes. Regional repairs already
-  // receive a lossless source crop, so send only a compact whole-image context.
-  const contextOverview=document.createElement('canvas');
-  const overviewScale=Math.min(1,1400/Math.max(W,H));
-  contextOverview.width=Math.round(W*overviewScale);
-  contextOverview.height=Math.round(H*overviewScale);
-  contextOverview.getContext('2d').drawImage(canvas,0,0,contextOverview.width,contextOverview.height);
-  const fullSourceContext=contextOverview.toDataURL('image/jpeg',.78);
-  let defects=[];
-  const largeSource=W*H>4e6;
-  const firstPass={scene:structuredClone(scene),svg:sceneToSvgString(scene),quality:compactQuality(compared),nodeCounts:audit.wholeImageNodeCounts||scene.recognitionCounts,source:{width:W,height:H},validation:{state:'pending'}};
-  await options.onWholeImage?.(firstPass);
-  const diagnosis={defectDiagnosis:true,wholeImageAssessment:true,catalog:scene,maxAttempts:1,contextImage:compared.preview};audit.tiles.push(diagnosis);
-  try{
-    const result=await requestScene(src,W,H,diagnosis);
-    const acceptable=result.wholeImageAcceptable===true&&Array.isArray(result.coverage)&&result.coverage.length>0&&result.coverage.every(r=>Array.isArray(r.missingGroups)&&r.missingGroups.length===0);
-    firstPass.validation={state:acceptable?'passed':'failed',summary:result.summary,coverage:result.coverage,defects:result.defects};
-    if(!acceptable)throw new Error('整图首轮未通过完整性验收，已停止分区修正。'+(result.summary||'缺少整组结构或验收证据。'));
-    defects=result.defects;audit.omissionChecked=true;audit.defectDiagnosis={complete:result.complete,defects};
-  }catch(error){
-    if(firstPass.validation.state==='pending')firstPass.validation={state:'unverified',error:String(error?.message||error)};
-    error.wholeImageValidationFailure=true;throw error;
-  }finally{
-    audit.wholeImageValidation=firstPass.validation;
-    delete diagnosis.contextImage;
-    await options.onWholeImage?.(firstPass);
-  }
-  scene=repairStructuralLayers(scene,canvas);
-  // High-resolution inspection only: the crops diagnose residual defects and
-  // never rebuild areas that already match the source.
-  audit.phase='inspection';
-  const inspectionTiles=[];
-  const inspectionCols=Math.min(4,Math.ceil(W/1200));
-  const inspectionRows=Math.min(3,Math.ceil(H/1100));
-  for(let row=0;inspectionCols*inspectionRows>1&&row<inspectionRows;row++)for(let col=0;col<inspectionCols;col++){
-    const x=Math.floor(col*W/inspectionCols),y=Math.floor(row*H/inspectionRows);
-    inspectionTiles.push({x,y,w:Math.floor((col+1)*W/inspectionCols)-x,h:Math.floor((row+1)*H/inspectionRows)-y});
-  }
-  audit.inspection={total:inspectionTiles.length,complete:0,failed:0,defects:0};
-  const rendered=inspectionTiles.length?await loadImage('data:image/svg+xml;charset=utf-8,'+encodeURIComponent(sceneToSvgString(scene))):null;
-  let nextInspection=0;
-  await Promise.all(Array.from({length:Math.min(4,inspectionTiles.length)},async()=>{
-    while(nextInspection<inspectionTiles.length){
-      checkStopped();
-      const tile=inspectionTiles[nextInspection++];
-      const current=document.createElement('canvas');current.width=tile.w;current.height=tile.h;
-      current.getContext('2d').drawImage(rendered,tile.x,tile.y,tile.w,tile.h,0,0,tile.w,tile.h);
-      const task={defectDiagnosis:true,localInspection:true,maxAttempts:1,catalog:regionObjectCatalog(scene,tile),contextImage:current.toDataURL('image/png'),region:tile};
-      audit.tiles.push(task);
+  return reconstructWithEvidence(canvas,src,requestScene,audit,measureScene,onProgress,options,{
+    createWholeImageCatalog,sceneToSvgString,compactQuality,planDefectRegions,regionObjectCatalog,snapshotVersions,
+    applyRegionPatch,acceptReconstructionRepair,reconstructionQualityDeficit,editableNodeBounds,
+    renderCrop:async(scene,region)=>{
+      const url=URL.createObjectURL(new Blob([sceneToSvgString(scene)],{type:'image/svg+xml'}));
       try{
-        const result=await requestScene(crop(tile),tile.w,tile.h,task);
-        defects.push(...result.defects.map(d=>({...d,x:d.x+tile.x,y:d.y+tile.y,inspectionTile:{x:tile.x,y:tile.y}})));
-        audit.inspection.complete++;
-        audit.inspection.defects+=result.defects.length;
-      }catch(error){if(options.signal?.aborted)throw error;audit.inspection.failed++;task.error=String(error?.message||error);}
-      finally{delete task.contextImage;}
+        const image=await loadImage(url),crop=document.createElement('canvas');crop.width=region.w;crop.height=region.h;
+        const ctx=crop.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,crop.width,crop.height);
+        ctx.drawImage(image,region.x,region.y,region.w,region.h,0,0,crop.width,crop.height);
+        return crop.toDataURL('image/png');
+      }finally{URL.revokeObjectURL(url);}
     }
-  }));
-  if(largeSource){
-    audit.omissionChecked=audit.inspection.failed===0&&audit.inspection.complete===audit.inspection.total;
-    audit.defectDiagnosis={complete:audit.omissionChecked&&defects.length===0,defects};
-  }
-  audit.defects=defects;
-  const regions=planDefectRegions(scene,defects,W,H,inspectionTiles).filter(r=>!options.regionIds||options.regionIds.includes(r.id));
-  audit.repairRegions=regions;
-
-  // Whole-image catalog already includes details; never append exhaustive crops.
-  const detailRegions=[];
-  audit.detailRegions=detailRegions.map(r=>r.id);
-  audit.regionStates={...(scene.regionStates||{})};
-  audit.totalTiles=1;audit.completedTiles=1;audit.phase='quality';
-  await onProgress({...scene,regionStates:{...audit.regionStates}},false);
-  let commit=Promise.resolve();
-  const passed=q=>reconstructionQualityDeficit(q)<.001;
-  async function worker(region,startAttempt=0){
-    // Re-measure the current scene; cached 'passed' is not proof after shared edits.
-    const previous=audit.regionStates[region.id];
-    if(!options.actualRenderFeedback){
-      const quality=await measureScene(canvas,scene,region);
-      const unresolved=previous?.uncertainties?.length||previous?.conflicts?.length||previous?.rejected?.length;
-      if(previous?.accepted&&passed(quality)&&!unresolved){
-        audit.regionStates[region.id]={...previous,state:'passed',quality:compactQuality(quality),reason:'measured-before-request',attempt:startAttempt};
-        audit.skippedRegions=(audit.skippedRegions||0)+1;
-        if(!startAttempt)audit.completedTiles++;
-        await onProgress({...scene,regionStates:{...audit.regionStates}},false);
-        return;
-      }
-      audit.regionStates[region.id]={...previous,state:'retry',quality:compactQuality(quality)};
-    }
-    for(let attempt=startAttempt;attempt<startAttempt+1;attempt++){
-      const snapshot=scene,versions=snapshotVersions(snapshot);
-      const inputScale=Math.min(1,1600/Math.max(region.w,region.h));
-      const inputWidth=Math.round(region.w*inputScale),inputHeight=Math.round(region.h*inputScale);
-      const context={x:Math.max(0,region.x-80),y:Math.max(0,region.y-80)};
-      context.w=Math.min(W-context.x,region.w+160);context.h=Math.min(H-context.y,region.h+160);
-      const task={regionPatch:true,region:region.id,attempt,maxAttempts:1,
-        detailCatalog:scaleRegionCatalog(regionObjectCatalog(snapshot,region),inputScale),contextImage:crop(context,Math.min(1,1600/Math.max(context.w,context.h))),contextOrigin:context,
-        fullSourceImage:fullSourceContext,sourceRegion:{x:region.x,y:region.y,w:region.w,h:region.h},
-        inputWidth,inputHeight,inputScale,
-        ownership:{x:(region.coreX-region.x)*inputScale,y:(region.coreY-region.y)*inputScale,w:(region.coreRight-region.coreX)*inputScale,h:(region.coreBottom-region.coreY)*inputScale}};
-      try{
-      { // Compare each region against the current editable rendering from its first pass.
-        task.feedback={defects:region.defects||defects.filter(d=>d.x<region.x+region.w&&d.x+d.w>region.x&&d.y<region.y+region.h&&d.y+d.h>region.y),...audit.regionStates[region.id],quality:compactQuality(audit.regionStates[region.id]?.quality)};
-        const rendered=await loadImage(options.retryRenderSource||'data:image/svg+xml;charset=utf-8,'+encodeURIComponent(sceneToSvgString(snapshot)));
-        const retryCanvas=document.createElement('canvas');retryCanvas.width=inputWidth;retryCanvas.height=inputHeight;
-        retryCanvas.getContext('2d').drawImage(rendered,region.x,region.y,region.w,region.h,0,0,inputWidth,inputHeight);
-        task.retryRender=retryCanvas.toDataURL('image/png');
-      }
-      audit.tiles.push(task);audit.regionStates[region.id]={state:'recognizing',attempt};
-        const patch=scaleRegionPatch(await requestScene(crop(region,inputScale),inputWidth,inputHeight,task),1/inputScale);
-        patch.allowPartial=true;
-        const done=commit.then(async()=>{
-          audit.regionStates[region.id]={state:'validating',attempt};
-          const applied=applyRegionPatch(scene,region,patch,versions);
-          task.conflicts=applied.conflicts;task.rejected=applied.rejected;task.ignored=applied.ignored;task.uncertainties=patch.uncertainties;
-          // Retain every untouched object and apply only the diagnosed patch.
-          const candidate=applied.scene;
-          const before=await measureScene(canvas,scene,region),after=await measureScene(canvas,candidate,region);
-          const changed=JSON.stringify(candidate.nodes)!==JSON.stringify(scene.nodes);
-          const accepted=changed&&acceptReconstructionRepair(before,after);
-          if(accepted)scene=candidate;
-          const quality=accepted?after:before;
-          const state=accepted&&passed(quality)&&!applied.conflicts.length&&!applied.rejected.length&&!patch.uncertainties?.length?'passed':'retry';
-          audit.regionStates[region.id]={state,accepted,attempt,quality:compactQuality(quality),conflicts:applied.conflicts,rejected:applied.rejected,uncertainties:patch.uncertainties||[]};
-          task.accepted=accepted;task.quality={score:quality.score,localRecall:quality.localRecall};
-          await onProgress({...scene,regionStates:{...audit.regionStates}},false);
-        });
-        commit=done.catch(()=>{});await done;
-        if(audit.regionStates[region.id].state==='passed')break;
-      }catch(error){audit.regionStates[region.id]={state:'retry',attempt,error:String(error?.message||error)};
-        await onProgress({...scene,regionStates:{...audit.regionStates}},false);
-      }finally{delete task.contextImage;delete task.retryRender;delete task.fullSourceImage;}
-    }
-    if(!startAttempt)audit.completedTiles++;
-  }
-  // Network work is concurrent; the shared request queue limits provider load.
-  // Validation/commit is serialized so overlapping replies cannot overwrite edits.
-  async function runRegions(jobs,attempt){
-    let nextRegion=0;
-    await Promise.allSettled(Array.from({length:Math.min(4,jobs.length)},async()=>{
-      while(nextRegion<jobs.length && !options.signal?.aborted && (!options.deadline || Date.now()<options.deadline))await worker(jobs[nextRegion++],attempt);
-    }));await commit;
-  }
-  async function revalidateRegions(){
-    if(options.actualRenderFeedback)return;
-    for(const region of regions){
-      if(options.signal?.aborted || (options.deadline && Date.now()>=options.deadline))throw new DOMException('Stopped or total budget exhausted','AbortError');
-      const state=audit.regionStates[region.id],quality=await measureScene(canvas,scene,region);
-      audit.regionStates[region.id]={...state,quality:compactQuality(quality),state:state?.accepted&&passed(quality)&&!state?.error&&!state?.uncertainties?.length&&!state?.conflicts?.length&&!state?.rejected?.length?'passed':'retry'};
-    }
-  }
-  // Only diagnosed defects enter regional reconstruction.
-  await revalidateRegions();
-  const missing=regions.filter(r=>options.actualRenderFeedback || audit.regionStates[r.id]?.state!=='passed');
-  audit.totalTiles=missing.length+1;
-  audit.phase='regions';
-  await runRegions(missing,0);
-  await revalidateRegions();
-  // Only measured residual defects can trigger additional detail work.
-  // Charts/tables remain atomic; failed network requests retry the same region.
-  if((options.maxAttempts??1)>1){
-    const residuals=missing.filter(r=>audit.regionStates[r.id]?.state==='retry')
-      .sort((a,b)=>reconstructionQualityDeficit(audit.regionStates[b.id]?.quality)-reconstructionQualityDeficit(audit.regionStates[a.id]?.quality));
-    const retryRegions=[];
-    const budget=Math.max(0,options.retryBudget??3);
-    for(const region of residuals){
-      if(retryRegions.length>=budget)break;
-      const state=audit.regionStates[region.id];
-      const atomic=/chart|table|plot|flow/i.test(region.kind||'')||state?.error;
-      const crops=(region.targetIds?.length||atomic)?[]:planDetailRegions([region],W,H);
-      if(!crops.length){retryRegions.push(region);continue;}
-      const weak=[];
-      for(const detail of crops){
-        if(options.signal?.aborted || (options.deadline&&Date.now()>=options.deadline))break;
-        const quality=await measureScene(canvas,scene,detail);
-        if(!passed(quality))weak.push({detail,quality});
-      }
-      weak.sort((a,b)=>reconstructionQualityDeficit(b.quality)-reconstructionQualityDeficit(a.quality));
-      for(const {detail,quality} of weak.slice(0,budget-retryRegions.length)){
-        audit.regionStates[detail.id]={state:'retry',quality:compactQuality(quality)};
-        detailRegions.push(detail);retryRegions.push(detail);
-      }
-    }
-    audit.detailRegions=detailRegions.map(r=>r.id);
-    audit.retryRegions=retryRegions.map(r=>r.id);audit.phase=detailRegions.length?'details':'retry';
-    audit.totalTiles+=retryRegions.length;
-    await runRegions(retryRegions,1);
-    audit.completedTiles+=retryRegions.length;
-    if(retryRegions.length)await revalidateRegions();
-  }
-  audit.tilePassComplete=!!audit.defectDiagnosis&&!audit.diagnosisError&&audit.inspection.failed===0&&audit.inspection.complete===audit.inspection.total&&regions.every(r=>audit.regionStates[r.id]?.state==='passed');
-  return {...scene,regionStates:audit.regionStates};
+  });
 }
 function reconstructionProgressText(audit){
   const zh=GAL_I18N.lang==='zh',elapsed=Math.floor((Date.now()-audit.startedAt)/1000);
@@ -5232,8 +5036,8 @@ function reconstructionProgressText(audit){
   const queued=calls.filter(call=>call.state==='queued').length;
   const phase=audit.phase||'prepare';
   let stage;
-  if(zh) stage={prepare:'准备图像',whole:'完整整图识别',inspection:'原分辨率逐区对照',retry:'局部重试',regions:'定点修复缺陷',details:'原分辨率细节精修',merge:'合并分区',omission:'整图查漏',quality:'首轮已完成，验收中',repair:'局部精修',final:'生成导出'}[phase]||'重建中';
-  else stage={prepare:'Preparing image',whole:'Complete whole-image recognition',inspection:'Comparing full-resolution crops',retry:'Retrying selected region',regions:'Repairing diagnosed defects',details:'Native-resolution detail refinement',merge:'Merging regions',omission:'Whole-image completeness check',quality:'Quality check',repair:'Object refinement',final:'Preparing export'}[phase]||'Reconstructing';
+  if(zh) stage={prepare:'准备图像',inventory:'建立原图检查清单',whole:'完整整图识别',inspection:'原分辨率逐区对照',retry:'局部重试',regions:'定点修复缺陷',details:'原分辨率细节精修',merge:'合并分区',omission:'整图查漏',quality:'首轮已完成，验收中',repair:'局部精修',final:'生成导出'}[phase]||'重建中';
+  else stage={prepare:'Preparing image',inventory:'Inventorying original image',whole:'Complete whole-image recognition',inspection:'Comparing full-resolution crops',retry:'Retrying selected region',regions:'Repairing diagnosed defects',details:'Native-resolution detail refinement',merge:'Merging regions',omission:'Whole-image completeness check',quality:'Quality check',repair:'Object refinement',final:'Preparing export'}[phase]||'Reconstructing';
   const parts=[stage,zh?'已用 '+clock:'elapsed '+clock];
   if(phase==='regions'||phase==='details'){
     const wholeDone=audit.completedTiles>0&&audit.strategy!=='tiled-fallback'?1:0;
@@ -5268,6 +5072,7 @@ function reconstructionProgressText(audit){
 let reconstructionController=null;
 async function runReconstruction(options={}){
   const st = ensureExportState();
+  if(options.refine&&st.source==='bitmap')return false;
   const status = $('#reconStatus');
   const say = function(k, vars){ if(status) status.textContent = tt(k, vars); };
   let progressTimer=null;
@@ -5311,9 +5116,8 @@ async function runReconstruction(options={}){
     progressTimer=setInterval(updateProgress,1000);
     updateProgress();
 
-    // Keep the provider busy without allowing a slow crop to stall every
-    // other crop. All Vision calls (including retries and object repairs)
-    // share this limit so subdivision cannot flood the API.
+    // Keep the existing request queue; the evidence pipeline awaits each call
+    // and permits only one fixed round of local repairs.
     const pinnedModel=editableReconstructionModel();
     if(!pinnedModel)throw Error('请先选择步骤四整图识别模型');
     Object.assign(reconstructionAudit,{pinnedModel,reasoningEffort:reasoningEffort('recon'),sourceWidth:canvas.width,sourceHeight:canvas.height});
@@ -5337,10 +5141,10 @@ async function runReconstruction(options={}){
     let scene=await reconstructCatalogWithFallback(canvas,src,requestScene,reconstructionAudit,cached?.scene,!!cached?.omissionChecked,compareEditableRender,(partial)=>{
       st.partialScene=partial;
       const svg=sceneToSvgString(partial);
-      Object.assign(st,{scene:partial,vectorScene:partial,svg,baseSvg:svg,vectorSvg:svg,reconFailed:false});
+      Object.assign(st,{scene:partial,vectorScene:partial,svg,baseSvg:svg,vectorSvg:svg,source:'bitmap',recon:{...st.recon,qualityState:'needs-review'},reconFailed:false});
       renderEditableExportCard();
       return writeReconstructionCache(cacheKey,{scene:partial,omissionChecked:false,detailComplete:false,completedIds:[]});
-    },{...options,onWholeImage:result=>{if(!options.refine||!st.wholeImageResult){result.request=reconstructionAudit.tiles.find(t=>t.wholeImage);st.wholeImageResult=result;}renderEditableExportCard();},signal:controller.signal,deadline,maxAttempts:2,retryBudget:3});
+    },{...options,onWholeImage:result=>{if(!options.refine||!st.wholeImageResult){result.request=reconstructionAudit.tiles.find(t=>t.wholeImage&&!t.sourceInventory);st.wholeImageResult=result;}renderEditableExportCard();},signal:controller.signal,deadline,maxAttempts:1,retryBudget:0});
     if(controller.signal.aborted)throw new DOMException("Refinement stopped","AbortError");
     let omissionChecked=!!reconstructionAudit.omissionChecked;
     const completedIds=new Set(cached?.completedIds||[]);
@@ -5384,11 +5188,11 @@ async function runReconstruction(options={}){
           const q=await compareEditableRender(canvas,png,region);
           const prior=reconstructionAudit.regionStates[region.id];
           const unresolved=prior?.uncertainties?.length||prior?.conflicts?.length||prior?.rejected?.length;
-          const state=prior?.accepted===true&&!prior.error&&reconstructionQualityDeficit(q)<.001&&!unresolved?'passed':'retry';
+          const state=prior?.accepted===true&&!prior.error&&reconstructionQualityDeficit(q)<.001&&!unresolved?'passed':'failed';
           reconstructionAudit.regionStates[region.id]={...reconstructionAudit.regionStates[region.id],state,officeQuality:compactQuality(q)};
         }
         scene={...scene,regionStates:reconstructionAudit.regionStates};
-        reconstructionAudit.tilePassComplete=!!reconstructionAudit.defectDiagnosis&&!reconstructionAudit.diagnosisError&&reconstructionAudit.inspection?.failed===0&&reconstructionAudit.inspection?.complete===reconstructionAudit.inspection?.total&&Object.values(scene.regionStates).every(r=>r.state==='passed');
+        reconstructionAudit.tilePassComplete=reconstructionAudit.finalValidation?.state==='passed'&&!!reconstructionAudit.defectDiagnosis&&!reconstructionAudit.diagnosisError&&reconstructionAudit.inspection?.failed===0&&reconstructionAudit.inspection?.complete===reconstructionAudit.inspection?.total&&Object.values(scene.regionStates).every(r=>r.state==='passed');
         await saveProgress();
       }catch(error){reconstructionAudit.actualPptxRenderError=String(error?.message||error);}
     }
@@ -5411,7 +5215,7 @@ async function runReconstruction(options={}){
     // A usable JSON scene is not evidence of a publication-ready redraw.
     // Keep the final export flagged until both fine strokes and the weakest
     // regions closely match the source image.
-    const qualityNeedsReview=!reconstructionAudit.tilePassComplete || !reconstructionAudit.actualPptxRenderVerified || !quality || quality.error || quality.score<.98 ||
+    const qualityNeedsReview=reconstructionAudit.finalValidation?.state!=='passed' || !reconstructionAudit.tilePassComplete || !reconstructionAudit.actualPptxRenderVerified || !quality || quality.error || quality.score<.98 ||
       quality.darkRecall<.98 || quality.localRecall<.97 ||
       quality.edgeF1<.97 || quality.colorSimilarity<.98 ||
       reconstructionAudit.fallbackTiles>0 || reconstructionAudit.pptxQaError ||
@@ -5434,7 +5238,7 @@ async function runReconstruction(options={}){
         ? '已生成 '+scene.nodes.length+' 个可编辑对象；'+reconstructionAudit.fallbackTiles+' 个区域已细分重建（其中 '+timedOutTiles+' 个因视觉 API 超时）。请检查这些区域的文字和细节。'
         : 'Generated '+scene.nodes.length+' editable objects; '+reconstructionAudit.fallbackTiles+' regions were subdivided for reconstruction ('+timedOutTiles+' after a vision API timeout). Check text and fine details in those regions.';
     }else say(audit.defects.length ? 'recon.audit' : 'recon.done',{n:scene.nodes.length,d:audit.defects.length});
-    if(reconstructionAudit.objectRepairError||reconstructionAudit.omissionError||reconstructionAudit.tiledDetailError||reconstructionAudit.tileQualityError)status.textContent+=GAL_I18N.lang==='zh'?' 部分检查或精修失败，已保留并缓存结果；再次重建可继续。':' Some checks or refinements failed; results are cached. Rebuild to resume.';
+    if(reconstructionAudit.objectRepairError||reconstructionAudit.omissionError||reconstructionAudit.tiledDetailError||reconstructionAudit.tileQualityError)status.textContent+=GAL_I18N.lang==='zh'?' 部分检查或精修失败，已保留并缓存结果；本轮未达标，已保留草稿。':' Some checks or refinements failed; results are cached. This round did not pass; the draft is retained.';
     const layoutIssues=reconstructionAudit.pptxLayout?.issues||[];
     if(layoutIssues.length)status.textContent+=GAL_I18N.lang==='zh'
       ? ' PPTX 排版检查发现 '+layoutIssues.length+' 项文字重叠、缺失或字号偏差，请复核。'
@@ -5593,22 +5397,22 @@ function renderEditableExportCard(){
   } else if(locked){
     setExportStatus(status, tt(hasBitmap ? 'export.reconRequired' : 'export.waiting'));
   } else {
-    const needsReview=state.source==='bitmap' && state.recon?.qualityState==='needs-review';
+    const needsReview=state.source==='bitmap' && state.recon?.qualityState!=='succeeded';
     setExportStatus(status, needsReview
       ? (GAL_I18N.lang==='zh'
         ? '可编辑草稿：尚未通过视觉验收。'
         : 'Editable draft: visual validation has not passed.')
       : ((state.source === 'bitmap' && !state.recon) ? tt('export.needRecon') : tt('export.ready')));
   }
-  document.querySelectorAll('#exportActions [data-export]').forEach(btn=>btn.disabled = locked);
-  const refine=$('#refineReconBtn');if(refine){refine.hidden=!state.scene;refine.disabled=!!state.reconPending;}
+  document.querySelectorAll('#exportActions [data-export]').forEach(btn=>btn.disabled = locked || !!state.reconPending);
+  const refine=$('#refineReconBtn');if(refine){refine.hidden=!state.scene||state.source==='bitmap';refine.disabled=!!state.reconPending;}
   const stop=$('#stopReconBtn');if(stop)stop.hidden=!state.reconPending;
   const reconBtn=$('#reconBtn'); if(reconBtn) reconBtn.disabled = !hasBitmap || state.reconPending;
   for(const id of ['reconModel','reconReasoningEffort'])$('#'+id).disabled=!!state.reconPending;
   const firstPassButton=$('#downloadWholeImage');if(firstPassButton)firstPassButton.hidden=!state.wholeImageResult;
   const responseButton=$('#downloadReconResponse');
   if(responseButton) responseButton.hidden=!(window.__ffReconResponses&&window.__ffReconResponses.length);
-  const confirm=$('#exportConfirm'); if(confirm) confirm.disabled = locked || !state.target;
+  const confirm=$('#exportConfirm'); if(confirm) confirm.disabled = locked || !!state.reconPending || !state.target;
   if(!locked) syncExportSelection();
 }
 function syncExportSelection(){
@@ -5619,7 +5423,7 @@ function syncExportSelection(){
     btn.setAttribute('aria-pressed',String(selected));
   });
   const confirm=$('#exportConfirm');
-  if(confirm) confirm.disabled=!state.svg || !state.target;
+  if(confirm) confirm.disabled=!!state.reconPending || !state.svg || !state.target;
 }
 /* Accepts either a bare SVG string (the SVG path) or
    { svg, source, bitmap } (the bitmap path). Both call sites exist, and a mismatch here
@@ -5845,6 +5649,7 @@ function initEditableExport(){
   });
   $('#exportConfirm')?.addEventListener('click', async ()=>{
     const st=window.__ffExportState;
+    if(st.reconPending)return;
     const bitmapSource=syncStep3Bitmap();
     if(!st.svg || !st.target){
       const s2=$('#exportStatus');
@@ -5880,7 +5685,7 @@ function initEditableExport(){
       { at:0.88, label:'· ' + tt('export.stage.pack') },
     ];
     try{
-      let dlName = 'figure-forge-editable.' + (target==='drawio' ? 'drawio' : target);
+      let dlName = (st.source==='bitmap'&&st.recon?.qualityState!=='succeeded'?'figure-forge-draft-unverified.':'figure-forge-editable.') + (target==='drawio' ? 'drawio' : target);
       let dlData = null, dlMime = '';
       if(target==='svg'){
         dlData = st.svg; dlMime = 'image/svg+xml;charset=utf-8';
@@ -5994,7 +5799,7 @@ $('#reconBtn')?.addEventListener('click', async function(){
     return ok;
   }finally{
     st.reconPending = false;
-    if(!ok) st.reconFailed = true;
+    if(!ok&&!st.scene) st.reconFailed = true;
     renderEditableExportCard();
   }
 });

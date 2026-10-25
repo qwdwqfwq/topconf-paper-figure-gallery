@@ -286,20 +286,27 @@ const server = http.createServer((req,res)=>{
     const result=await page.evaluate(async()=>{
       document.querySelector('#provider').value='ark';document.querySelector('#key').value='test';
       const select=document.querySelector('#reconModel');select.add(new Option('test','gpt-6.1-sol'));select.value='gpt-6.1-sol';
-      let calls=0,active=0,peak=0;
+      let calls=0,active=0,peak=0,qa=0;
+      const items=[0,1,2].map(i=>({id:'i'+i,kind:'shape',description:'Colored square '+i,x:i*100+30,y:30,w:20,h:20,text:null,expectedCount:null,colors:[{role:'fill',value:'#123456'}]}));
       const original=window.fetch;
       window.fetch=async(url,options)=>{
         if(!String(url).endsWith('/chat/completions'))return original(url,options);
         const body=JSON.parse(options.body);if(body.model!=='gpt-6.1-sol')throw Error('Wrong selected vision model: '+body.model);
         const prompt=body.messages[1].content[0].text;calls++;
         let output;
-        if(prompt.includes('Diagnose ONLY clearly visible residual')){
-          output={wholeImageAcceptable:true,summary:'Only isolated residual defects',coverage:[{region:'all',missingGroups:[]}],complete:false,defects:[0,1,2].map(i=>({x:i*100,y:0,w:90,h:100,reason:'Missing colored square',kind:'shape',objectIds:[]}))};
+        if(prompt.startsWith('Inspect ONLY the original')){
+          qa=0;output={items,layers:[],connections:[],uncertainties:[]};
+        }else if(prompt.includes('INDEPENDENT WHOLE-IMAGE ACCEPTANCE GATE')){
+          const passed=++qa>1;
+          const catalog=JSON.parse(prompt.split(' Existing catalog: ')[1]);
+          output={wholeImageAcceptable:passed,summary:passed?'All squares match':'Missing squares',coverage:[{region:'all',missingGroups:passed?[]:['squares']}],complete:passed,inventoryComplete:true,unlistedSourceItems:[],uncertainties:[],evidence:items.map(item=>({itemId:item.id,status:passed?'passed':'failed',nodeIds:passed?[catalog.nodes.find(n=>n.fill==='#123456'&&Math.abs(n.x-item.x)<1).id]:[],reason:'Compared original and rendered squares'})),defects:passed?[]:[{x:25,y:25,w:230,h:30,reason:'Missing colored squares',kind:'shape',objectIds:[]}]};
+        }else if(prompt.includes('Diagnose ONLY clearly visible residual')){
+          output={complete:true,defects:[]};
         }else if(prompt.includes('Return STRICT JSON {"operations"')){
           if(body.messages[1].content.filter(c=>c.type==='image_url').length!==4)throw Error('Detail reconstruction requires crop, context, render and full source');
           active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,20));active--;
-          const ownership=JSON.parse(prompt.split(' Ownership: ')[1].split(' Source crop: ')[0]);
-          output={operations:[{op:'add',node:{type:'rect',x:ownership.x+30,y:30,w:20,h:20,fill:'#123456',stroke:'none'}}],uncertainties:[]};
+          const region=JSON.parse(prompt.split(' sourceRegion: ')[1].split(' defects: ')[0]);
+          output={operations:items.map(item=>({op:'add',node:{type:'rect',x:item.x-region.x,y:item.y-region.y,w:20,h:20,fill:'#123456',stroke:'none'}})),uncertainties:[]};
         }else output={regions:[0,1,2].map(i=>({id:'r'+i,x:i*100,y:0,w:100,h:100})),nodes:[{id:'panel',type:'rect',x:0,y:0,w:300,h:100,fill:'#ffffff',stroke:'none'}]};
         return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(output)}}]}));
       };
@@ -309,9 +316,11 @@ const server = http.createServer((req,res)=>{
       const ok=await window.__ffReconstruct();return {ok,calls,peak,nodes:window.__ffExportState.scene?.nodes,audit:window.__ffApiAudit.reconstruction};
     });
     assert.equal(result.ok,true,JSON.stringify(result));
-    assert.equal(result.audit.strategy,'compare-first-object-patches');
-    assert.ok(result.peak>=2,'deficient semantic regions are completed concurrently');
-    assert.ok(result.calls>=5,'whole-scene recognition, comparison and detail patches all run');
+    assert.equal(result.audit.strategy,'source-inventory-one-repair-round');
+    assert.equal(result.peak,1,'the fixed repair round never retries or restarts');
+    assert.equal(result.calls,6,'inventory, reconstruction, two whole QA, one patch and local QA');
+    assert.equal(result.audit.repairRounds,1);
+    assert.equal(result.audit.finalValidation.state,'passed');
     assert.equal(result.nodes.filter(n=>n.type==='rect'&&n.fill==='#123456').length,3);
     assert.equal(result.audit.actualPptxRenderVerified,false,'roundtrip XML is not an Office render');
     assert.equal(result.audit.state,'needs-review','actual renderer remains required');
@@ -352,8 +361,24 @@ const server = http.createServer((req,res)=>{
       const promise=page.waitForEvent('download',{timeout:30000});
       await page.locator('#exportConfirm').click();
       const download=await promise;
+      assert.equal(download.suggestedFilename(),'figure-forge-draft-unverified.'+format);
       assert.ok(fs.statSync(await download.path()).size>100);
     }
+    // A faithful host render plus complete evidence promotes the result to formal.
+    const formal=await page.evaluate(async()=>{
+      window.__ffRenderPptx=async()=>window.__ffExportState.bitmap;
+      const ok=await window.__ffReconstruct();
+      delete window.__ffRenderPptx;
+      return {ok,audit:window.__ffApiAudit.reconstruction,qualityState:window.__ffExportState.recon.qualityState};
+    });
+    assert.equal(formal.ok,true);
+    assert.equal(formal.audit.finalValidation.state,'passed');
+    assert.equal(formal.audit.state,'succeeded',JSON.stringify(formal.audit));
+    assert.equal(formal.qualityState,'succeeded');
+    await page.locator('#exportActions [data-export="svg"]').click();
+    const formalDownload=page.waitForEvent('download',{timeout:30000});
+    await page.locator('#exportConfirm').click();
+    assert.equal((await formalDownload).suggestedFilename(),'figure-forge-editable.svg');
     await page.locator('#exportUseGenerated').click();
     assert.equal(await page.locator('#exportInputPreview').isVisible(),false);
     assert.equal(await page.evaluate(()=>window.__ffExportState.bitmap),generatedSource);
@@ -377,6 +402,6 @@ const server = http.createServer((req,res)=>{
     assert.equal(failed.scene,null);
     assert.equal(failed.audit.state,'failed');
     assert.deepEqual(errors,[]);
-    console.log('Browser semantic regions, concurrent patches and four exports: OK');
+    console.log('Browser inventory, one repair round, draft state and four exports: OK');
   }finally{await browser.close();}
 })().catch(err=>{console.error(err);process.exitCode=1;}).finally(()=>server.close());
