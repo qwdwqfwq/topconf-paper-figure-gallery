@@ -4683,18 +4683,88 @@ async function editableRevisionImages(sourceDataUri, revision, W, H){
 function serializeVisionCatalog(catalog){
   return JSON.stringify(catalog,(key,value)=>typeof value==='string'&&value.startsWith('data:image/')?undefined:value);
 }
+// Transport copies only: the uploaded bitmap, source canvas and export pixels stay intact.
+// Count the base64 representation too, leaving room below either interpretation of 10 MB.
+const ARK_VISION_IMAGE_BYTES=9500000;
+const ARK_VISION_REQUEST_BYTES=60000000;
+function visionImageSize(uri){
+  const match=/^data:image\/[^;,]+;base64,([\s\S]*)$/.exec(uri);
+  if(!match) throw new Error('图片发送检查失败：需要有效的 Base64 图片。');
+  const data=match[1];
+  return {bytes:data.length*3/4-(data.endsWith('==')?2:data.endsWith('=')?1:0),base64Bytes:data.length};
+}
+function checkVisionRequestSize(body,limited){
+  const serialized=JSON.stringify(body);
+  if(limited && new TextEncoder().encode(serialized).byteLength>=ARK_VISION_REQUEST_BYTES){
+    const error=new Error('图片请求总大小超过安全上限（60 MB）；已在发送前停止，未缩小原图，也未重新生成整图。');
+    error.imageTransportFailure=true;
+    throw error;
+  }
+  return serialized;
+}
+async function prepareVisionImages(images,limited,signal){
+  if(!limited)return {images,transport:[]};
+  const results=new Map(),transport=[],prepared=[];
+  const checkAbort=()=>{if(signal?.aborted)throw new DOMException('已取消','AbortError');};
+  const fits=uri=>{const n=visionImageSize(uri);return n.bytes<ARK_VISION_IMAGE_BYTES&&n.base64Bytes<ARK_VISION_IMAGE_BYTES;};
+  for(const [index,source] of images.entries()){
+    checkAbort();
+    let result=results.get(source);
+    if(!result){
+      const before=visionImageSize(source);
+      result={uri:source,encoding:'original',lossy:false,before};
+      if(!fits(source)){
+        const image=await loadImage(source);
+        checkAbort();
+        const canvas=document.createElement('canvas');
+        canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;
+        if(!canvas.width||!canvas.height)throw new Error('图片发送检查失败：无法读取原始像素尺寸。');
+        const ctx=canvas.getContext('2d');
+        if(!ctx)throw new Error('图片发送检查失败：浏览器无法建立原始尺寸画布。');
+        try{
+          ctx.drawImage(image,0,0);
+          const png=canvas.toDataURL('image/png');
+          if(fits(png))result={...result,uri:png,encoding:'png',lossy:false};
+          else{
+            // JPEG has no alpha; match the white figure background when flattening.
+            ctx.save();ctx.globalCompositeOperation='destination-over';ctx.fillStyle='#fff';
+            ctx.fillRect(0,0,canvas.width,canvas.height);ctx.restore();
+            let accepted=false;
+            for(const quality of [0.98,0.95,0.92,0.90]){
+              checkAbort();
+              const jpeg=canvas.toDataURL('image/jpeg',quality);
+              if(jpeg.startsWith('data:image/jpeg;')&&fits(jpeg)){
+                result={...result,uri:jpeg,encoding:'jpeg',quality,lossy:true};accepted=true;break;
+              }
+            }
+            if(!accepted)throw new Error('图片 '+(index+1)+' 在保持原始像素尺寸、JPEG 质量不低于 90% 时仍超过服务商上限。已在发送前停止；未缩图或降低模型参数。');
+          }
+          result.width=canvas.width;result.height=canvas.height;
+        }finally{canvas.width=0;canvas.height=0;}
+      }
+      result.after=visionImageSize(result.uri);
+      results.set(source,result);
+    }
+    prepared.push(result.uri);
+    const {uri,...record}=result;
+    transport.push({index,...record});
+  }
+  checkAbort();
+  return {images:prepared,transport};
+}
 async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   const cfgv=cfg(), relay=relayBase(), model=tileAudit?.pinnedModel||editableReconstructionModel();
   if(!model) throw new Error(tt('analyze.needmodel'));
   const audit=tileAudit||{};
   const wholeRequest=!!audit.wholeImage;
+  const limitedImages=$('#provider').value==='ark'||/^doubao-/i.test(model)||/^https:\/\/ark\.[^/]*volces\.com(?:\/|$)/i.test(baseURL());
   const detail=(wholeRequest||audit.wholeImageAssessment)&&/^gpt-6\.1-sol(?:$|-)/i.test(model)?'original':'high';
   const prepareBody=body=>{
     const sent=withReasoning(body,'recon');
     if(wholeRequest && /^gpt-/i.test(model) && sent.max_tokens){sent.max_completion_tokens=sent.max_tokens;delete sent.max_tokens;}
-    audit.requestParameters={model:sent.model,endpoint:baseURL(),max_tokens:sent.max_tokens,max_completion_tokens:sent.max_completion_tokens,reasoning_effort:sent.reasoning_effort,reasoning:sent.reasoning,images:referenceImages.map((_,index)=>({index,detail:cfgv.proto==='anthropic'&&!relay?'provider-native':detail,...(index===0?{width:W,height:H}:{})}))};
+    audit.requestParameters={model:sent.model,endpoint:baseURL(),max_tokens:sent.max_tokens,max_completion_tokens:sent.max_completion_tokens,reasoning_effort:sent.reasoning_effort,reasoning:sent.reasoning,imageTransport:audit.imageTransport,images:referenceImages.map((_,index)=>({index,detail:cfgv.proto==='anthropic'&&!relay?'provider-native':detail,...(index===0?{width:W,height:H}:{})}))};
     audit.parameterSupport='awaiting-response';
-    return JSON.stringify(sent);
+    return checkVisionRequestSize(sent,limitedImages);
   };
   Object.assign(audit,{state:'pending',startedAt:Date.now(),model,provider:cfgv.proto,endpoint:baseURL(),attempt:0});
   const sourcePrompt=audit.sourceChecklist?'\nFrozen source inventory: '+JSON.stringify(audit.sourceChecklist)+'. Reconstruct every item, repeated instance, color, connection and back-to-front layer relation; do not defer details.':'';
@@ -4713,6 +4783,16 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   if(audit.contextImage)referenceImages.push(audit.contextImage);
   if(audit.retryRender)referenceImages.push(audit.retryRender);
   if(audit.fullSourceImage)referenceImages.push(audit.fullSourceImage);
+  // One gate for inventory, reconstruction, whole/local acceptance and repair images.
+  let preparedImages;
+  try{preparedImages=await prepareVisionImages(referenceImages,limitedImages,audit.signal);}
+  catch(error){
+    Object.assign(audit,{state:'failed',finishedAt:Date.now(),attempts:0,error:String(error.message||error)});
+    audit.durationMs=audit.finishedAt-audit.startedAt;
+    throw error;
+  }
+  referenceImages.splice(0,referenceImages.length,...preparedImages.images);
+  audit.imageTransport=preparedImages.transport;
   const configuredTimeoutMs=Infinity;
   let lastError=null;
   let previousResponse='';
@@ -4896,7 +4976,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
     }catch(err){
       lastError=err;
       audit.lastError=String(err&&err.message||err);
-      const delay=reconstructionRetryDelay(err,attempt,formatAttempts);
+      const delay=err.imageTransportFailure?null:reconstructionRetryDelay(err,attempt,formatAttempts);
       if(attempt>=maxAttempts || audit.signal?.aborted || delay===null || (Number.isFinite(audit.maxTotalMs)&&Date.now()-audit.startedAt+delay+1000>=audit.maxTotalMs)) break;
       audit.state='retrying';
       audit.retryDelayMs=delay;
