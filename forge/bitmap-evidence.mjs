@@ -96,14 +96,19 @@ export function validateEvidence(inventory,scene,result,bounds){
 // Every non-add mutation needs both a diagnosed ID and region ownership.
 export function guardPatch(patch,diagnosedIds,mutableIds){
   const allowed=new Set(diagnosedIds.filter(id=>mutableIds.includes(id)));
-  if(!Array.isArray(patch?.operations)||!Array.isArray(patch?.uncertainties)||patch.uncertainties.length)throw Error('修补包含未解决的不确定项');
-  for(const op of patch.operations){
+  if(!Array.isArray(patch?.operations)||!Array.isArray(patch?.uncertainties))throw Error('修补结构无效');
+  const recovery=patch.recovery||{schema:'patch',repaired:[],rejected:[]},operations=[];
+  for(const [index,op] of patch.operations.entries())try{
     if(!['add','update','style','reorder','delete'].includes(op.op))throw Error('不支持的修补操作');
     const ids=op.ids|| (op.id?[op.id]:[]);
     if(op.op==='add'){if(ids.length)throw Error('新增操作不能替换既有对象');}
     else if(ids.length!==1||!allowed.has(ids[0]))throw Error('修补试图改动未诊断或只读对象');
+    operations.push(op);
+  }catch(error){
+    recovery.rejected.push({field:'operations',index,reason:String(error.message)});
   }
-  return {...patch,allowPartial:false};
+  if(patch.operations.length&&!operations.length)throw Error('没有合法修补操作：'+recovery.rejected.map(r=>r.reason).join('；'));
+  return {...patch,operations,recovery,allowPartial:false};
 }
 
 export async function reconstructWithEvidence(canvas,src,request,audit,measure,onProgress,options,api){

@@ -21,7 +21,7 @@ const server = http.createServer((req,res)=>{
       const html=data.toString('utf8').replace(/\r\n/g,'\n')
         .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
         .replace('window.__ffReconstruct = () => runReconstruction();',
-          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestLongLines = filterUnsupportedLongLines; window.__ffTestMaterialize = materializeEditableScene; window.__ffTestCalibrate = calibrateEditableText; window.__ffTestGenerateBitmap = genOaiImage; window.__ffTestZip = zipStore; window.__ffTestRequestScene = requestEditableScene; window.__ffTestParseSvg = parseSvgScene; window.__ffTestParseBitmap = parseBitmapSvgScene; window.__ffTestDrawio = sceneToDrawio; window.__ffTestVsdx = sceneToVsdxFiles; window.__ffTestPptx = buildNativePptx; window.__ffTestSvgString = sceneToSvgString;')
+          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestParseScene = parseEditableSceneResponse; window.__ffTestRecover = recoverBitmapResponse; window.__ffTestVisible = visibleEditableContent; window.__ffTestLongLines = filterUnsupportedLongLines; window.__ffTestMaterialize = materializeEditableScene; window.__ffTestCalibrate = calibrateEditableText; window.__ffTestGenerateBitmap = genOaiImage; window.__ffTestZip = zipStore; window.__ffTestRequestScene = requestEditableScene; window.__ffTestParseSvg = parseSvgScene; window.__ffTestParseBitmap = parseBitmapSvgScene; window.__ffTestDrawio = sceneToDrawio; window.__ffTestVsdx = sceneToVsdxFiles; window.__ffTestPptx = buildNativePptx; window.__ffTestSvgString = sceneToSvgString;')
         .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});",
           "MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});");
       data=Buffer.from(html);
@@ -418,6 +418,42 @@ const server = http.createServer((req,res)=>{
     assert.equal(failed.ok,false,'invalid whole image must not invent tile fallback objects');
     assert.equal(failed.scene,null);
     assert.equal(failed.audit.state,'failed');
+    const blank=await page.evaluate(async()=>{
+      let calls=0;
+      window.fetch=async()=>{calls++;return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify(calls===1?{items:[],layers:[],connections:[],uncertainties:[]}:calls===2?{nodes:[{id:'transparent',type:'rect',x:0,y:0,w:80,h:40,fill:'none',stroke:'none'}]}:{complete:false,defects:[],uncertainties:[]})}}]}));};
+      return {ok:await window.__ffReconstruct(),calls,scene:window.__ffExportState.scene,status:document.querySelector('#reconStatus').textContent};
+    });
+    assert.equal(blank.ok,false);assert.equal(blank.scene,null);assert.match(blank.status,/未生成可用内容/);
+    const mixedPatch=await page.evaluate(async()=>{
+      window.fetch=async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify({operations:[{op:'add',nodes:[{id:'valid',type:'text',x:1,y:1,w:30,h:20,text:'kept',fill:'#000000'},{id:'bad',type:'unsupported'}]}],uncertainties:[]})}}]}));
+      const c=document.createElement('canvas');c.width=80;c.height=40;
+      const patch=await window.__ffTestRequestScene(c.toDataURL(),80,40,{regionPatch:true,maxAttempts:1,detailCatalog:{nodes:[]},diagnosedIds:[]});
+      return {nodes:patch.operations[0]?.nodes.map(n=>n.id),rejected:patch.recovery.rejected.length};
+    });
+    assert.deepEqual(mixedPatch.nodes,['valid']);assert.equal(mixedPatch.rejected,1);
+    if(process.env.FF_REPLAY_RESPONSE){
+      const responses=JSON.parse(fs.readFileSync(process.env.FF_REPLAY_RESPONSE,'utf8')).responses.map(r=>r.content);
+      const replay=await page.evaluate(async ({responses,template})=>{
+        const inventory=window.__ffTestRecover(responses[0],'inventory');
+        const source=document.createElement('canvas');source.width=5504;source.height=3072;
+        document.querySelector('#provider').value='ark';document.querySelector('#key').value='test';
+        window.fetch=async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:responses[1]}}]}));
+        const scene=await window.__ffTestRequestScene(source.toDataURL(),5504,3072,{wholeImage:true,maxAttempts:1});
+        window.fetch=async()=>new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:responses[2]}}]}));
+        const patch=await window.__ffTestRequestScene(source.toDataURL(),5504,3072,{regionPatch:true,maxAttempts:1,detailCatalog:{nodes:[]},diagnosedIds:[]});
+        const svg=window.__ffTestSvgString(scene);
+        const image=await new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);});
+        const c=document.createElement('canvas');c.width=5504;c.height=3072;const ctx=c.getContext('2d');ctx.drawImage(image,0,0);
+        const pixels=ctx.getImageData(0,0,c.width,c.height).data;let ink=0;
+        for(let i=0;i<pixels.length;i+=4)if(pixels[i+3]>0&&Math.min(...pixels.slice(i,i+3))<230)ink++;
+        window.fetch=async()=>new Response(JSON.stringify(template));
+        const blob=await window.__ffTestPptx(scene,window.__ffTestZip);
+        return {inventory:inventory.items.length,nodes:scene.nodes.length,text:scene.nodes.filter(n=>n.type==='text').length,visible:window.__ffTestVisible(scene).length,operations:patch.operations.length,rejected:scene.recovery.rejected,ink,pptxBytes:blob.size};
+      },{responses,template:JSON.parse(fs.readFileSync(path.join(root,'forge/pptx-template.json'),'utf8'))});
+      assert.equal(replay.inventory,114);assert.equal(replay.nodes,233);assert.equal(replay.operations,141);
+      assert.ok(replay.text>50);assert.ok(replay.visible>150);assert.ok(replay.ink>100000);assert.ok(replay.pptxBytes>20000);
+      assert.equal(replay.rejected.length,4);console.log('Actual raw response replay:',JSON.stringify(replay));
+    }
     assert.deepEqual(errors,[]);
     console.log('Browser inventory, one repair round, draft state and four exports: OK');
   }finally{await browser.close();}

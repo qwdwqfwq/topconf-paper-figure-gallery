@@ -1,0 +1,28 @@
+import assert from 'node:assert/strict';
+import {recoverBitmapResponse,visibleEditableContent} from './bitmap-response.mjs';
+import {extractEditableNodes} from './reconstruction-core.mjs';
+import {guardPatch,normalizeInventory} from './bitmap-evidence.mjs';
+
+const node={id:'ok',type:'text',x:10,y:10,w:100,h:30,text:'Visible',fill:'#000000'};
+assert.equal(recoverBitmapResponse(JSON.stringify([node]),'scene').nodes.length,1);
+const damaged='{"regions":[{"type":"rect","x":0,"y":0,"w":200,"h":100}],"nodes":['+JSON.stringify(node)+',{"id":"bad","type":"rect","rx":fill},{"id":"last","type":"rect","x":123,"y":1,"w":5,"h":5,"fill":"#000"}]}';
+const scene=recoverBitmapResponse(damaged,'scene');
+assert.deepEqual(scene.nodes.map(n=>n.id),['ok','last']);
+assert.equal(scene.nodes[1].x,123);
+assert.equal(scene.recovery.rejected.length,1);
+assert.throws(()=>extractEditableNodes({regions:[{type:'rect',x:0,y:0,w:200,h:100}]}),/without an editable nodes array/);
+const item={id:'a',kind:'text',description:'label',x:0,y:0,w:10,h:10,colors:[]};
+const inventory=recoverBitmapResponse('{"items":['+JSON.stringify(item).slice(0,-1)+',"panelId="central"}],"layers":[],"connections":[],"uncertainties":[]}','inventory');
+assert.equal(inventory.items.length,1);assert.equal(inventory.items[0].panelId,'central');
+assert.equal(inventory.recovery.repaired.length,1);
+assert.equal(normalizeInventory({...inventory,items:[...inventory.items,{id:'broken'}]},200,100).items.length,1);
+const patch=recoverBitmapResponse('{"operations":[{"op":"add","node":{"type":"polyline","points":[[0,0],[1,1]]","closed":true}},{"op":"delete","id":"foreign"}],"uncertainties":[]}','patch');
+assert.equal(patch.operations.length,2);assert.equal(patch.recovery.repaired.length,1);
+const guarded=guardPatch(patch,[],[]);
+assert.equal(guarded.operations.length,1);assert.equal(guarded.recovery.rejected.length,1);
+const canvas={width:200,height:100};
+const transparent={type:'rect',x:0,y:0,w:200,h:100,fill:'none',stroke:'none'};
+assert.equal(visibleEditableContent({canvas,nodes:[transparent,{...transparent,fill:'rgba(0,0,0,0)'},{...transparent,fill:'#ffffff'},{...node,opacity:0},{...node,x:300}]}).length,0);
+assert.equal(visibleEditableContent({canvas,nodes:[node,{...transparent,fill:'#ff0000',w:10}]}).length,2);
+assert.throws(()=>recoverBitmapResponse('{"regions":[{}], bad}','scene'),/regions are metadata/);
+console.log('Bitmap schema recovery, malformed siblings, metadata exclusion, patch isolation and visibility: OK');

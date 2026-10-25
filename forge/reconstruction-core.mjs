@@ -330,7 +330,7 @@ export function extractEditableNodes(raw){
     // objects/arrays; metadata strings cannot become scene nodes.
     const nested=[];
     for(const [key,child] of Object.entries(value)){
-      if(nodeKeys.includes(key)||wrapperKeys.includes(key)) continue;
+      if(nodeKeys.includes(key)||wrapperKeys.includes(key)||['regions','canvas','recovery'].includes(key)) continue;
       if(child&&typeof child==='object'){
         const found=find(child,depth+1);
         if(found!==null){

@@ -683,6 +683,7 @@ import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleIma
 import {ImageRoutes, safeImageFailover} from './image-routes.mjs?v=20261020';
 const imageRoutes=new ImageRoutes();
 import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=whole-image-20261021-1';
+import {recoverBitmapResponse,visibleEditableContent} from './bitmap-response.mjs';
 import {inventoryPrompt,normalizeInventory,normalizeDiagnosis,evidencePrompt,patchPrompt,reconstructWithEvidence} from './bitmap-evidence.mjs';
 import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=whole-image-20261021-1';
 import {scaleRegionCatalog, scaleRegionPatch, scaleStructureScene,registerMissingObjects, editableNodeBounds, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, tileDetailCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion, planReconstructionTiles, subdivideReconstructionTile} from './reconstruction-core.mjs?v=whole-image-20261021-1';
@@ -4433,6 +4434,7 @@ function materializeEditableScene(raw,W,H){
     if(CSS.supports('color',value)){
       const c=document.createElement('canvas');c.width=c.height=1;
       const ctx=c.getContext('2d');ctx.fillStyle=value;ctx.fillRect(0,0,1,1);
+      if(ctx.getImageData(0,0,1,1).data[3]===0)return 'transparent';
       return '#'+Array.from(ctx.getImageData(0,0,1,1).data).slice(0,3).map(v=>v.toString(16).padStart(2,'0')).join('');
     }
     throw new Error('Invalid scene color: '+value.slice(0,80));
@@ -4581,33 +4583,24 @@ function materializeEditableScene(raw,W,H){
   };
 }
 function parseEditableSceneResponse(txt,W,H){
-  // The first JSON block can be a status/analysis envelope. Inspect every
-  // balanced block, including repairable variants, and retain the fullest scene.
-  const source=String(txt||'');
-  const candidates=jsonCandidateSlices(source);
-  if(source.trim()) candidates.unshift(source.trim());
-  const first=source.search(/[\[{]/);
-  if(first>=0) candidates.push(source.slice(first));
-  let best=null, parsedAny=false;
-  for(const candidate of candidates){
-    const variants=[candidate,candidate.replace(/,\s*([}\]])/g,'$1'),closeJsonCandidate(candidate)];
-    for(const variant of variants){
-      try{
-        const parsed=JSON.parse(variant);
-        parsedAny=true;
-        const scene=materializeEditableScene(parsed,W,H);
-        const rawNodes=extractEditableNodes(parsed);
-        scene.recognitionCounts={raw:rawNodes.length,expanded:expandStructuredNodes(rawNodes).length,parsed:scene.nodes.length};
-        if(!best||scene.nodes.length>best.nodes.length) best=scene;
-      }catch(_){ /* Try the next candidate or repair. */ }
-    }
-  }
-  if(best) return best;
-  const err=new Error(parsedAny
-    ? 'Vision model returned JSON without an editable nodes array'
-    : tt('recon.badjson'));
-  err.sceneFormatFailure=true;
-  throw err;
+  const raw=recoverBitmapResponse(txt,'scene');
+  const sources=Array.isArray(raw.nodes)?raw.nodes:extractEditableNodes(raw);
+  const scene=materializeEditableScene({nodes:[],regions:raw.regions||[]},W,H);
+  scene.recovery=raw.recovery;
+  sources.forEach((node,index)=>{
+    try{
+      if(!node||typeof node!=='object'||Array.isArray(node))throw Error('Editable node must be an object');
+      const parsed=materializeEditableScene({nodes:[{...node,id:node.id||'v'+index}]},W,H).nodes;
+      if(node.hidden||node.visible===false||Number(node.opacity??1)<=0)throw Error('Invisible node excluded');
+      parsed.forEach(n=>{if(Number(node.fillOpacity??1)<=0)n.fill='none';if(Number(node.strokeOpacity??1)<=0)n.stroke='none';});
+      if(!parsed.length)throw Error('Unsupported or empty editable node');
+      if(parsed.some(n=>scene.nodes.some(prior=>prior.id===n.id)))throw Error('Duplicate node ID');
+      scene.nodes.push(...parsed);
+    }catch(error){scene.recovery.rejected.push({field:'nodes',index,reason:String(error.message)});}
+  });
+  scene.counts={total:scene.nodes.length,text:scene.nodes.filter(n=>n.type==='text').length,images:scene.nodes.filter(n=>n.type==='image').length,shapes:scene.nodes.filter(n=>!['text','image'].includes(n.type)).length};
+  scene.recognitionCounts={raw:sources.length,expanded:expandStructuredNodes(sources.filter(n=>n&&typeof n==='object')).length,parsed:scene.nodes.length};
+  return scene;
 }
 function editableReconstructionModel(){
   return $('#reconModel').value;
@@ -4906,19 +4899,25 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
       let scene;
       try{
         if(audit.sourceInventory){
-          scene={...normalizeInventory(extractJSON(txt),W,H),nodes:[]};
+          const raw=recoverBitmapResponse(txt,'inventory');
+          scene={...normalizeInventory(raw,W,H),recovery:raw.recovery,nodes:[]};
         }else if(audit.defectDiagnosis){
-          const parsed=extractJSON(txt),raw=audit.wholeImageAssessment?normalizeDiagnosis(parsed,W,H):parsed;
+          const parsed=recoverBitmapResponse(txt,'diagnosis'),raw=audit.wholeImageAssessment?normalizeDiagnosis(parsed,W,H):parsed;
           if(!audit.wholeImageAssessment&&(typeof raw.complete!=='boolean'||!Array.isArray(raw.defects)||raw.defects.some(d=>![d.x,d.y,d.w,d.h].every(Number.isFinite)||d.w<=0||d.h<=0||!d.reason)))throw new Error('Invalid residual defect diagnosis');
-          scene={nodes:[],complete:raw.complete&&raw.defects.length===0,defects:raw.defects,wholeImageAcceptable:raw.wholeImageAcceptable,coverage:raw.coverage,summary:raw.summary,inventoryComplete:raw.inventoryComplete,unlistedSourceItems:raw.unlistedSourceItems,uncertainties:raw.uncertainties,evidence:raw.evidence};
+          scene={nodes:[],recovery:parsed.recovery,complete:raw.complete&&raw.defects.length===0,defects:raw.defects,wholeImageAcceptable:raw.wholeImageAcceptable,coverage:raw.coverage,summary:raw.summary,inventoryComplete:raw.inventoryComplete,unlistedSourceItems:raw.unlistedSourceItems,uncertainties:raw.uncertainties,evidence:raw.evidence};
         }else if(audit.regionPatch){
-          const raw=extractJSON(txt);
-          if(!Array.isArray(raw.operations))throw new Error('Region response requires operations array');
-          scene={operations:raw.operations.map(op=>{
-            const sources=Array.isArray(op.nodes)?op.nodes:op.node?[op.node]:[];
-            const nodes=materializeEditableScene({nodes:sources},W,H).nodes;
-            return {...op,op:op.op==='update'&&nodes.length>1?'split':op.op,node:undefined,nodes};
-          }),uncertainties:raw.uncertainties,nodes:[]};
+          const raw=recoverBitmapResponse(txt,'patch'),operations=[];
+          raw.operations.forEach((op,index)=>{
+            try{
+              if(!op||!['add','update','style','reorder','delete'].includes(op.op))throw Error('Unsupported patch operation');
+              const sources=Array.isArray(op.nodes)?op.nodes:op.node?[op.node]:[];
+              const parsed=parseEditableSceneResponse(JSON.stringify({nodes:sources}),W,H);
+              for(const rejected of parsed.recovery.rejected)raw.recovery.rejected.push({...rejected,field:'operations.nodes',operationIndex:index});
+              if((op.op==='update'&&parsed.recovery.rejected.length)||(['add','update'].includes(op.op)&&!parsed.nodes.length))throw Error('Invalid patch nodes');
+              operations.push({...op,node:undefined,nodes:parsed.nodes});
+            }catch(error){raw.recovery.rejected.push({field:'operations',index,reason:String(error.message)});}
+          });
+          scene={operations,uncertainties:raw.uncertainties||[],recovery:raw.recovery,nodes:[]};
         }else if(audit.objectRepair||audit.detailCatalog){
           const nodes=extractEditableNodes(extractJSON(txt));
           scene=nodes.length?materializeEditableScene({nodes},W,H):{canvas:{width:W,height:H},nodes:[]};
@@ -4950,6 +4949,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         if(err.sceneFormatFailure) err.message+=' ('+responseDiagnostics+')';
         throw err;
       }
+      audit.recovery=scene.recovery;
       const sourceImage=await loadImage(imageDataUri);
       const responseNodes=[...scene.nodes,...(scene.operations||[]).flatMap(op=>op.nodes||[])];
       for(const n of responseNodes){
@@ -5219,12 +5219,14 @@ async function runReconstruction(options={}){
     reconstructionAudit.cachedDetailComplete=!!cached?.detailComplete;
     let scene=await reconstructCatalogWithFallback(canvas,src,requestScene,reconstructionAudit,cached?.scene,!!cached?.omissionChecked,compareEditableRender,(partial)=>{
       st.partialScene=partial;
+      if(!visibleEditableContent(partial).length)return;
       const svg=sceneToSvgString(partial);
       Object.assign(st,{scene:partial,vectorScene:partial,svg,baseSvg:svg,vectorSvg:svg,source:'bitmap',recon:{...st.recon,qualityState:'needs-review'},reconFailed:false});
       renderEditableExportCard();
       return writeReconstructionCache(cacheKey,{scene:partial,omissionChecked:false,detailComplete:false,completedIds:[]});
     },{...options,onWholeImage:result=>{if(!options.refine||!st.wholeImageResult){result.request=reconstructionAudit.tiles.find(t=>t.wholeImage&&!t.sourceInventory);st.wholeImageResult=result;}renderEditableExportCard();},signal:controller.signal,deadline,maxAttempts:1,retryBudget:0});
     if(controller.signal.aborted)throw new DOMException("Refinement stopped","AbortError");
+    if(!visibleEditableContent(scene).length)throw Error('未生成可用内容：结果只有透明框、背景或无可见对象；本次最多一轮局部修补已结束。');
     let omissionChecked=!!reconstructionAudit.omissionChecked;
     const completedIds=new Set(cached?.completedIds||[]);
     const saveProgress=()=>writeReconstructionCache(cacheKey,{scene,omissionChecked,
@@ -5294,7 +5296,7 @@ async function runReconstruction(options={}){
     // A usable JSON scene is not evidence of a publication-ready redraw.
     // Keep the final export flagged until both fine strokes and the weakest
     // regions closely match the source image.
-    const qualityNeedsReview=reconstructionAudit.finalValidation?.state!=='passed' || !reconstructionAudit.tilePassComplete || !reconstructionAudit.actualPptxRenderVerified || !quality || quality.error || quality.score<.98 ||
+    const qualityNeedsReview=reconstructionAudit.tiles.some(t=>t.recovery?.rejected?.length||t.recovery?.repaired?.length) || reconstructionAudit.finalValidation?.state!=='passed' || !reconstructionAudit.tilePassComplete || !reconstructionAudit.actualPptxRenderVerified || !quality || quality.error || quality.score<.98 ||
       quality.darkRecall<.98 || quality.localRecall<.97 ||
       quality.edgeF1<.97 || quality.colorSimilarity<.98 ||
       reconstructionAudit.fallbackTiles>0 || reconstructionAudit.pptxQaError ||
@@ -5335,7 +5337,7 @@ async function runReconstruction(options={}){
     console.warn('reconstruction failed', err);
     const reconstructionAudit=window.__ffApiAudit&&window.__ffApiAudit.reconstruction;
     if(reconstructionAudit){ reconstructionAudit.state='failed'; reconstructionAudit.finishedAt=Date.now(); reconstructionAudit.error=String(err&&err.message||err); }
-    if(st.svg && st.scene){
+    if(st.svg && st.scene && visibleEditableContent(st.scene).length){
       st.reconFailed=false;st.reconError='';
       st.recon={...st.recon,qualityState:'needs-review'};
       if(reconstructionAudit)reconstructionAudit.state='needs-review';
