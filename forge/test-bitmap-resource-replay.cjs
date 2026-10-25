@@ -110,5 +110,3 @@ const output=path.join(root,'_local','bitmap-resource-replay');
     console.log(JSON.stringify({...result,confirmed:{...result.confirmed,manifest:undefined},output},null,2));
   }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;}).finally(()=>server.close());
-
-
