@@ -21,6 +21,11 @@ export function recoverBitmapResponse(text,schema){
   let source=original.replace(/([{,]\s*)"([A-Za-z_$][\w$-]*)="(?=[^:])/g,(_,prefix,key)=>{repaired.push({reason:'property separator',key});return prefix+'"'+key+'":"';})
     .replace(/([}\]])"(?=\s*[,}\]])/g,(_,close)=>{repaired.push({reason:'stray quote after container'});return close;});
   const result={},rejected=[];
+  // Preserve explicit coordinate provenance even when a later array is truncated.
+  for(const key of ['canvas','complete','wholeImageAcceptable','inventoryComplete','summary']){
+    const match=new RegExp('"'+key+'"\\s*:\\s*').exec(source);
+    if(match){const parsed=parseValue(source,match.index+match[0].length);if(parsed)result[key]=parsed.value;}
+  }
   const fields=[...source.matchAll(new RegExp('"('+keys.join('|')+')"\\s*:\\s*\\[','g'))];
   for(let f=0;f<fields.length;f++){
     const match=fields[f],key=match[1],start=match.index+match[0].length;
@@ -34,7 +39,7 @@ export function recoverBitmapResponse(text,schema){
       const parsed=parseValue(body,cursor);
       if(parsed){entries.push(parsed.value);cursor=parsed.end;index++;continue;}
       // Resynchronize only at a sibling object with the schema's discriminator.
-      const discriminator=key==='operations'?'op':key==='items'?'id':key==='nodes'||key==='elements'||key==='objects'||key==='shapes'?'id|type|kind|shape':key==='layers'?'backItemId':key==='connections'?'itemId':null;
+      const discriminator=key==='operations'?'op':key==='items'?'id':key==='defects'?'x|reason|objectIds':key==='evidence'?'itemId':key==='nodes'||key==='elements'||key==='objects'||key==='shapes'?'id|type|kind|shape':key==='layers'?'backItemId':key==='connections'?'itemId':null;
       const next=discriminator?new RegExp(',\\s*(\\{\\s*"(?:'+discriminator+')"\\s*:)','g'):null;
       if(next)next.lastIndex=cursor+1;
       const boundary=next?.exec(body),end=boundary?boundary.index+boundary[0].indexOf('{'):body.length;

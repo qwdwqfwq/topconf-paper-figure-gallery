@@ -295,7 +295,7 @@ const server = http.createServer((req,res)=>{
         const prompt=body.messages[1].content[0].text;calls++;
         let output;
         if(prompt.startsWith('Inspect ONLY the original')){
-          qa=0;output={items,layers:[],connections:[],uncertainties:[]};
+          qa=0;output={canvas:{width:300,height:100,units:'source-pixels'},items,layers:[],connections:[],uncertainties:[]};
         }else if(prompt.includes('INDEPENDENT WHOLE-IMAGE ACCEPTANCE GATE')){
           const passed=++qa>1;
           const catalog=JSON.parse(prompt.split(' Existing catalog: ')[1]);
@@ -431,6 +431,18 @@ const server = http.createServer((req,res)=>{
       return {nodes:patch.operations[0]?.nodes.map(n=>n.id),rejected:patch.recovery.rejected.length};
     });
     assert.deepEqual(mixedPatch.nodes,['valid']);assert.equal(mixedPatch.rejected,1);
+    const truncatedDiagnosis=await page.evaluate(async()=>{
+      const content='{"complete":false,"defects":[{"x":2,"y":3,"w":10,"h":8,"reason":"missing label","objectIds":[]},{"x":';
+      window.fetch=async()=>new Response(JSON.stringify({choices:[{finish_reason:'length',message:{content}}],usage:{completion_tokens:8000}}));
+      const c=document.createElement('canvas');c.width=80;c.height=40;
+      const audit={defectDiagnosis:true,maxAttempts:1,catalog:{nodes:[]}};
+      const result=await window.__ffTestRequestScene(c.toDataURL(),80,40,audit);
+      return {result,truncated:audit.outputTruncated};
+    });
+    assert.equal(truncatedDiagnosis.truncated,true);
+    assert.equal(truncatedDiagnosis.result.defects.length,1);
+    assert.equal(truncatedDiagnosis.result.complete,false);
+    assert.ok(truncatedDiagnosis.result.uncertainties.length);
     if(process.env.FF_REPLAY_RESPONSE){
       const responses=JSON.parse(fs.readFileSync(process.env.FF_REPLAY_RESPONSE,'utf8')).responses.map(r=>r.content);
       const replay=await page.evaluate(async ({responses,template})=>{

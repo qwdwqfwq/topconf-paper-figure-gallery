@@ -4,7 +4,7 @@ import * as pipeline from './reconstruction-pipeline.mjs';
 import {validateInventory,normalizeInventory,normalizeDiagnosis,validateEvidence,guardPatch,reconstructWithEvidence} from './bitmap-evidence.mjs';
 const canvas={width:600,height:300};
 const scene={canvas:{width:600,height:300},nodes:[{id:'label',type:'text',x:100,y:100,w:100,h:30,text:'A',fill:'#000000',fontSize:20}]};
-const inventory={items:[{id:'i',kind:'text',description:'label',x:100,y:100,w:100,h:30,text:'A',expectedCount:null,colors:[{role:'text',value:'#000000'}]}],layers:[],connections:[],uncertainties:[]};
+const inventory={canvas:{width:600,height:300,units:"source-pixels"},items:[{id:'i',kind:'text',description:'label',x:100,y:100,w:100,h:30,text:'A',expectedCount:null,colors:[{role:'text',value:'#000000'}]}],layers:[],connections:[],uncertainties:[]};
 const verdict=(s,passed)=>({complete:passed,wholeImageAcceptable:passed,coverage:[{region:'all',missingGroups:[]}],inventoryComplete:true,unlistedSourceItems:[],uncertainties:[],summary:'Source/render compared',evidence:[{itemId:'i',status:passed?'passed':'failed',nodeIds:['label'],reason:'checked'}],defects:passed?[]:[{x:100,y:100,w:100,h:30,reason:'Wrong OCR',objectIds:['label']}]});
 const q=n=>Object.fromEntries(['score','darkRecall','localRecall','edgeF1','colorSimilarity'].map(k=>[k,n]));
 const cropped=[];
@@ -65,7 +65,7 @@ assert.doesNotThrow(()=>guardPatch({operations:[{op:'add',node:{type:'rect'}}],u
 assert.throws(()=>guardPatch({operations:[]},[],[]));
 console.log('PASS evidence IDs/OCR/color/position/layers/counts/uncertainty and immutable-object patch guards');
 const variants=structuredClone(inventory);Object.assign(variants.items[0],{x:'100',y:'100',w:'100',h:'30',colors:[{role:'text',value:'#000'}]});
-assert.deepEqual(normalizeInventory(variants,600,300),inventory);
+assert.deepEqual(normalizeInventory(variants,600,300),{...inventory,coordinateVerified:true,rejectedResources:[]});
 const partial=structuredClone(inventory);partial.items.push({...partial.items[0],id:'bad',w:900});partial.layers=[{backItemId:'bad',frontItemId:'i',reason:'unknown'}];
 const recovered=normalizeInventory(partial,600,300);assert.equal(recovered.items.length,1);assert.equal(recovered.layers.length,0);assert.ok(recovered.uncertainties.length>=2);assert.equal(check(recovered).state,'failed');assert.deepEqual(normalizeInventory(recovered,600,300),recovered);
 const malformed=normalizeDiagnosis({defects:[{x:'100',y:'100',w:'100',h:'30',reason:'Missing label'},null,{x:900,y:0,w:10,h:10,reason:'outside'}]},600,300);

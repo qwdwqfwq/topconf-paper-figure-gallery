@@ -1,6 +1,6 @@
 // Step 4: source evidence is collected before (and independently of) reconstruction.
 export function inventoryPrompt(W,H){
-  return `Inspect ONLY the original ${W} x ${H} pixel image. Do not reconstruct it. Return STRICT JSON {items:[{id,kind,panelId,x,y,w,h,description,text,expectedCount,colors:[{role:"fill|stroke|text",value:"#rrggbb"}]}],layers:[{backItemId,frontItemId,reason}],connections:[{itemId,fromItemId,toItemId}],uncertainties:[]}. Inventory ALL panels, backgrounds, text groups (exact OCR), repeated units (exact count), icons, chart/table contents, photographs and connectors, including tiny details and margins. Use stable unique item IDs and source pixel bounding boxes. One repeated unit may consist of several primitives. Use null text/count where inapplicable. Record visible colors and meaningful occlusion/paint order: backgrounds behind contents, highlights behind text, foreground occluders above what they occlude. Create separate items for objects participating in layer relationships. Connections reference their own item and the source/target items; do not invent endpoints. Enumerate actual content without a quota. Record unreadable text, uncertain counts, colors or layer relations in uncertainties; never silently omit them. This inventory will be frozen BEFORE a separate reconstruction call. No reconstruction catalog or rendered output is available in this call.`;
+  return `Inspect ONLY the original ${W} x ${H} pixel image. Do not reconstruct it. Return STRICT JSON {canvas:{width:${W},height:${H},units:"source-pixels"},items:[{id,kind,panelId,x,y,w,h,description,text,expectedCount,colors:[{role:"fill|stroke|text",value:"#rrggbb"}]}],layers:[{backItemId,frontItemId,reason}],connections:[{itemId,fromItemId,toItemId}],uncertainties:[]}. Inventory ALL panels, backgrounds, text groups (exact OCR), repeated units (exact count), icons, chart/table contents, photographs and connectors, including tiny details and margins. Use stable unique item IDs and source pixel bounding boxes. For photographs, video frames and heatmaps use kind photo/video-frame/heatmap and ONE item per visible raster crop (expectedCount:1), including every overlapping frame; give exact visible crop bounds and explicit layer relations. Do not inventory an entire panel as a photo. One repeated unit may consist of several primitives. Use null text/count where inapplicable. Record visible colors and meaningful occlusion/paint order: backgrounds behind contents, highlights behind text, foreground occluders above what they occlude. Create separate items for objects participating in layer relationships. Connections reference their own item and the source/target items; do not invent endpoints. Enumerate actual content without a quota. Record unreadable text, uncertain counts, colors or layer relations in uncertainties; never silently omit them. This inventory will be frozen BEFORE a separate reconstruction call. No reconstruction catalog or rendered output is available in this call.`;
 }
 export function validateInventory(raw,W,H){
   const fail=msg=>{throw Error('原图检查清单无效：'+msg);};
@@ -22,18 +22,20 @@ export function validateInventory(raw,W,H){
 export function normalizeInventory(raw,W,H){
   const issues=Array.isArray(raw?.uncertainties)?structuredClone(raw.uncertainties):['缺少原图不确定项清单'];
   const warn=message=>issues.push(message), number=v=>typeof v==='number'?v:typeof v==='string'&&v.trim()?Number(v):NaN;
-  const items=[],ids=new Set();
+  const coordinateVerified=raw?.canvas?.width===W&&raw?.canvas?.height===H&&raw?.canvas?.units==='source-pixels';
+  if(!coordinateVerified)warn('盘点坐标缺少与原图一致的像素画布声明，禁止自动裁切');
+  const items=[],ids=new Set(),rejectedResources=structuredClone(raw?.rejectedResources||[]);
   if(!Array.isArray(raw?.items)||!raw.items.length)warn('缺少有效原图对象清单');
   for(const [index,value] of (Array.isArray(raw?.items)?raw.items:[]).entries()){
     const i={...value},box=i.bbox||i.bounds;
     if(box&&typeof box==='object')for(const [k,n] of ['x','y','w','h'].entries())i[n]??=Array.isArray(box)?box[k]:box[n]??box[n==='w'?'width':n==='h'?'height':n];
     for(const n of ['x','y','w','h'])i[n]=number(i[n]);
     if(typeof i.id==='number'&&Number.isFinite(i.id))i.id=String(i.id);
-    if(typeof i.id!=='string'||!i.id||ids.has(i.id)||typeof i.kind!=='string'||!i.kind||typeof i.description!=='string'||!i.description||![i.x,i.y,i.w,i.h].every(Number.isFinite)||i.x<0||i.y<0||i.w<=0||i.h<=0||i.x+i.w>W+1||i.y+i.h>H+1){warn(`原图对象 ${index+1} 字段或边界无效，未纳入有效证据`);continue;}
+    if(typeof i.id!=='string'||!i.id||ids.has(i.id)||typeof i.kind!=='string'||!i.kind||typeof i.description!=='string'||!i.description||![i.x,i.y,i.w,i.h].every(Number.isFinite)||i.x<0||i.y<0||i.w<=0||i.h<=0||i.x+i.w>W+1||i.y+i.h>H+1){warn(`原图对象 ${index+1} 字段或边界无效，未纳入有效证据`);if(isRasterItem(i))rejectedResources.push({...i,id:i.id||`invalid-resource-${index+1}`});continue;}
     ids.add(i.id);
     if(!Array.isArray(i.colors)){warn(`对象 ${i.id} 缺少颜色证据`);i.colors=[];}
     i.colors=i.colors.flatMap(c=>{let value=c?.value;if(/^#[\da-f]{3}$/i.test(value||''))value='#'+value.slice(1).split('').map(v=>v+v).join('');if(!['fill','stroke','text'].includes(c?.role)||!/^#[\da-f]{6}$/i.test(value||'')){warn(`对象 ${i.id} 颜色证据无效`);return [];}return [{role:c.role,value}];});
-    if(i.expectedCount!=null){i.expectedCount=number(i.expectedCount);if(!Number.isInteger(i.expectedCount)||i.expectedCount<1){warn(`对象 ${i.id} 重复数量无效`);i.expectedCount=null;}}
+    if(i.expectedCount!=null){i.expectedCount=number(i.expectedCount);if(!Number.isInteger(i.expectedCount)||i.expectedCount<1){warn(`对象 ${i.id} 重复数量无效`);i.expectedCount=null;i.resourceInvalidCount=true;}}
     if(i.text!=null&&typeof i.text!=='string'){warn(`对象 ${i.id} OCR 字段无效`);i.text=null;}
     items.push(i);
   }
@@ -41,7 +43,22 @@ export function normalizeInventory(raw,W,H){
   const relations=(key,valid)=>{if(!Array.isArray(raw?.[key])){warn(`缺少 ${key} 证据`);return [];}return raw[key].filter(r=>{if(r&&valid(r))return true;warn(`${key} 引用无效`);return false;});};
   const layers=relations('layers',r=>ids.has(r.backItemId)&&ids.has(r.frontItemId)&&r.backItemId!==r.frontItemId&&typeof r.reason==='string'&&!!r.reason);
   const connections=relations('connections',r=>[r.itemId,r.fromItemId,r.toItemId].every(id=>ids.has(id)));
-  return {items,layers,connections,uncertainties:[...new Set(issues)]};
+  return {canvas:raw?.canvas,coordinateVerified,rejectedResources,items,layers,connections,uncertainties:[...new Set(issues)]};
+}
+// Resource identity is independent of the model's primitive counts.
+export const isRasterItem=item=>/^(photo(?:graph)?s?|photographic|image|video[-_ ]?frames?|heat[-_ ]?maps?|照片|图片|视频帧|热力图)$/i.test(String(item?.kind||''));
+export function resourceManifest(inventory,W,H){
+  return [...inventory.items.filter(isRasterItem),...(inventory.rejectedResources||[])].map(item=>({itemId:item.id,kind:item.kind,source:{width:W,height:H},crop:{x:Math.floor(item.x),y:Math.floor(item.y),w:Math.ceil(item.x+item.w)-Math.floor(item.x),h:Math.ceil(item.y+item.h)-Math.floor(item.y)},expectedCount:item.expectedCount??1,layers:inventory.layers.filter(l=>l.backItemId===item.id||l.frontItemId===item.id),state:!item.resourceInvalidCount&&!inventory.rejectedResources?.some(r=>r.id===item.id)&&inventory.coordinateVerified&&item.x>=0&&item.y>=0&&item.x+item.w<=W&&item.y+item.h<=H&&(item.expectedCount==null||item.expectedCount===1)?'confirmed':'unresolved'}));
+}
+export function resourceDefects(manifest,scene){
+  return manifest.flatMap(r=>{
+    const nodes=scene.nodes.filter(n=>n.type==='image'&&n.sourceAssetId===r.itemId&&n.href&&n.sourceCrop&&['x','y','w','h'].every(k=>n.sourceCrop[k]===r.crop[k]&&n[k]===r.crop[k]));
+    return r.state==='confirmed'&&nodes.length===1?[]:[{...r.crop,itemId:r.itemId,resourceMissing:true,objectIds:[],reason:r.state==='confirmed'?'缺少经过原图裁切验证的图片资源':'图片坐标或逐帧数量未经确认，禁止猜测裁切'}];
+  });
+}
+export function repairStatus(audit,zh=true){
+  const state=!audit.repairRounds?'not-executed':audit.finalValidation?.state==='passed'?'passed':audit.resourceRepairs?.some(r=>r.state==='failed')||Object.values(audit.regionStates||{}).some(r=>r.error)?'failed':'needs-review';
+  return zh?({'not-executed':'未执行局部修补',passed:'一轮修补完成并通过验收',failed:'一轮修补执行失败，保留草稿','needs-review':'一轮修补已执行，仍未通过完整验收'}[state]):({'not-executed':'Local repair was not executed',passed:'One repair round passed validation',failed:'Repair failed; draft retained','needs-review':'One repair round executed; validation still incomplete'}[state]);
 }
 export function normalizeDiagnosis(raw,W,H){
   const issues=Array.isArray(raw?.uncertainties)?[...raw.uncertainties]:['缺少诊断不确定项证据'];
@@ -59,7 +76,7 @@ export function evidencePrompt(inventory){
   return ' Fixed ORIGINAL-ONLY inventory (do not replace or shorten): '+JSON.stringify(inventory)+'. In addition to defects/coverage, return inventoryComplete:boolean, unlistedSourceItems:[], uncertainties:[], evidence:[{itemId,status:"passed|failed|uncertain",nodeIds:["actual catalog ID"],instances:[["node IDs for unit 1"]],reason:"visible source versus render comparison"}]. Include EXACTLY one evidence row per inventory item. Inspect the ORIGINAL again for content absent even from the inventory; report it in unlistedSourceItems and bounded defects. For each item verify geometry, OCR, repeated-unit count, colors, layer/occlusion and connector endpoints against the actual rendering, not catalog claims. Passed node IDs must exist and correspond to the visible item. instances is required for expectedCount items; each unit has disjoint IDs. Every mismatch requires a tightly bounded defect, with objectIds ONLY for existing objects that genuinely need correction. Missing objects require no fabricated IDs. complete/wholeImageAcceptable may be true only if every item and every layer/connection passes, no unlisted item and no uncertainty remains.';
 }
 export function patchPrompt(W,H,audit,serialize=JSON.stringify){
-  return 'Return STRICT JSON {"operations":[],"uncertainties":[]}. Image 1 is the native-resolution ORIGINAL crop; image 2 is source context; image 3 is the CURRENT crop rendering; image 4 is the full source. Compare them and add ONLY genuinely missing objects. Existing catalog.nodes are mutable ONLY when their IDs appear in diagnosedIds; catalog.readOnlyContext is immutable. Never redraw correct objects or entire panels. Allowed operations: {op:"add",node:{type,...}}, {op:"update",id,version,node:{...complete corrected primitive...}}, {op:"style",id,version,changes:{fill,stroke,strokeWidth,dash}}, {op:"reorder",id,version,afterId}, {op:"reorder",id,version,position:"front|back"}, {op:"delete",id,version}. Update OCR or delete a duplicate ONLY for an explicitly diagnosed ID and visible source evidence. Preserve unrelated properties. Never split or merge objects. Nodes use rect/ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow}, polyline {points,closed,fill,stroke}, path {d,fill,stroke}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,anchor,rotation}, image {x,y,w,h}. Use images only for photographic content, never as a substitute for editable text/diagrams. Coordinates and font sizes are crop pixels, '+W+' x '+H+'; text x,y is box TOP-LEFT. Preserve exact OCR, repeated-unit counts, colors and back-to-front stacking. Stay inside ownership bounds and outside excludeRects. Reorder relative to existing IDs, without changing unrelated stacking. No invented unreadable text; report uncertainties instead. Empty operations is valid. Catalog: '+serialize(audit.detailCatalog)+' diagnosedIds: '+JSON.stringify(audit.diagnosedIds)+' ownership: '+JSON.stringify(audit.ownership)+' sourceRegion: '+JSON.stringify(audit.sourceRegion)+' defects: '+JSON.stringify(audit.feedback)+' fixed source inventory in GLOBAL coordinates: '+JSON.stringify(audit.sourceChecklist);
+  return 'Return STRICT JSON {"operations":[],"uncertainties":[]}. Image 1 is the native-resolution ORIGINAL crop; image 2 is source context; image 3 is the CURRENT crop rendering; image 4 is the full source. Compare them and add ONLY genuinely missing objects. Existing catalog.nodes are mutable ONLY when their IDs appear in diagnosedIds; catalog.readOnlyContext is immutable. Never redraw correct objects or entire panels. Allowed operations: {op:"add",node:{type,...}}, {op:"update",id,version,node:{...complete corrected primitive...}}, {op:"style",id,version,changes:{fill,stroke,strokeWidth,dash}}, {op:"reorder",id,version,afterId}, {op:"reorder",id,version,position:"front|back"}, {op:"delete",id,version}. Update OCR or delete a duplicate ONLY for an explicitly diagnosed ID and visible source evidence. Preserve unrelated properties. Never split or merge objects. Nodes use rect/ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow}, polyline {points,closed,fill,stroke}, path {d,fill,stroke}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,anchor,rotation}, image {x,y,w,h}. Use images only for photographs, video frames and heatmaps, never as a substitute for editable text/diagrams. Coordinates and font sizes are crop pixels, '+W+' x '+H+'; text x,y is box TOP-LEFT. Preserve exact OCR, repeated-unit counts, colors and back-to-front stacking. Stay inside ownership bounds and outside excludeRects. Reorder relative to existing IDs, without changing unrelated stacking. No invented unreadable text; report uncertainties instead. Empty operations is valid. Catalog: '+serialize(audit.detailCatalog)+' diagnosedIds: '+JSON.stringify(audit.diagnosedIds)+' ownership: '+JSON.stringify(audit.ownership)+' sourceRegion: '+JSON.stringify(audit.sourceRegion)+' defects: '+JSON.stringify(audit.feedback)+' fixed source inventory in GLOBAL coordinates: '+JSON.stringify(audit.sourceChecklist);
 }
 const norm=s=>String(s??'').replace(/\s+/g,'');
 const rgb=s=>/^#[\da-f]{6}$/i.test(s||'')?[1,3,5].map(i=>parseInt(s.slice(i,i+2),16)):null;
@@ -74,13 +91,14 @@ export function validateEvidence(inventory,scene,result,bounds){
     let ok=found.length===1&&e.status==='passed'&&typeof e.reason==='string'&&!!e.reason.trim()&&Array.isArray(ids)&&ids.length>0&&new Set(ids).size===ids.length&&ids.every(id=>byId.has(id));
     const nodes=ok?ids.map(id=>byId.get(id).n):[];
     if(ok&&bounds)ok=nodes.every(n=>{const b=bounds(n);return b&&b.x<item.x+item.w+4&&b.right>item.x-4&&b.y<item.y+item.h+4&&b.bottom>item.y-4;});
+    if(ok&&isRasterItem(item))ok=inventory.coordinateVerified===true&&nodes.every(n=>n.type==='image'&&n.sourceAssetId===item.id&&!!n.href)&&nodes.length===(item.expectedCount??1);
     if(ok&&item.text!=null)ok=norm(nodes.filter(n=>n.type==='text').map(n=>n.text).join(''))===norm(item.text);
     if(ok&&item.expectedCount!=null){
       const units=e.instances;
       ok=Array.isArray(units)&&units.length===item.expectedCount&&units.every(u=>Array.isArray(u)&&u.length>0&&u.every(id=>ids.includes(id)));
       if(ok){const flat=units.flat();ok=new Set(flat).size===flat.length&&new Set(flat).size===ids.length;}
     }
-    if(ok)for(const c of item.colors){const a=rgb(c.value);if(!nodes.some(n=>{const b=rgb(c.role==='stroke'?n.stroke:n.fill);return b&&b.every((v,i)=>Math.abs(v-a[i])<=32);}))ok=false;}
+    if(ok&&!isRasterItem(item))for(const c of item.colors){const a=rgb(c.value);if(!nodes.some(n=>{const b=rgb(c.role==='stroke'?n.stroke:n.fill);return b&&b.every((v,i)=>Math.abs(v-a[i])<=32);}))ok=false;}
     matches.set(item.id,ok?ids:[]);
     if(!ok)errors.push({itemId:item.id,reason:'缺少可核对的对象、文字、数量、颜色或位置证据'});
   }
@@ -121,7 +139,23 @@ export async function reconstructWithEvidence(canvas,src,request,audit,measure,o
   let inventory;
   try{inventory=normalizeInventory(await call(src,W,H,{sourceInventory:true,wholeImage:true,inputWidth:W,inputHeight:H}),W,H);}
   catch(error){stop();audit.inventoryError=String(error.message);inventory=normalizeInventory(null,W,H);inventory.uncertainties.push('原图盘点失败：'+audit.inventoryError);}
+  if(resourceManifest(inventory,W,H).some(r=>r.state==='unresolved')){
+    audit.originalSourceInventory=structuredClone(inventory);
+    try{
+      const confirmed=normalizeInventory(await call(src,W,H,{sourceInventory:true,resourceCoordinateConfirmation:true,previousInventory:inventory,inputWidth:W,inputHeight:H}),W,H);
+      // A coordinate follow-up cannot silently erase the original resource evidence.
+      const oldResources=resourceManifest(inventory,W,H),newResources=resourceManifest(confirmed,W,H);
+      const lineageComplete=oldResources.every(r=>{
+        const children=confirmed.items.filter(i=>isRasterItem(i)&&(i.id===r.itemId||i.sourceItemId===r.itemId));
+        return children.length===r.expectedCount&&children.every(i=>newResources.some(n=>n.itemId===i.id&&n.state==='confirmed'));
+      });
+      const originalNonRasters=inventory.items.filter(i=>!isRasterItem(i));
+      if(!confirmed.coordinateVerified||newResources.some(r=>r.state!=='confirmed')||!lineageComplete||originalNonRasters.some(i=>!confirmed.items.some(n=>n.id===i.id&&n.kind===i.kind)))throw Error('资源坐标、逐项身份或数量确认不完整，保留原始盘点');
+      inventory=confirmed;
+    }catch(error){stop();audit.coordinateConfirmationError=String(error.message);}
+  }
   audit.sourceInventory=inventory;
+  audit.resourceManifest=resourceManifest(inventory,W,H);
   audit.phase='whole';
   const task={wholeImage:true,sourceChecklist:inventory,inputWidth:W,inputHeight:H};
   const initial=await call(src,W,H,task);
@@ -143,11 +177,29 @@ export async function reconstructWithEvidence(canvas,src,request,audit,measure,o
   finally{audit.wholeImageValidation=firstPass.validation;await options.onWholeImage?.(firstPass);}
   audit.defectDiagnosis={complete:before.result.complete,defects:before.result.defects};
   // Repair only concrete source/render defects, never infer missing objects from absent evidence rows.
-  const defects=[...before.result.defects];
+  const missingResources=resourceDefects(audit.resourceManifest,scene);
+  const defects=[...before.result.defects,...missingResources];
   audit.defects=defects;
-  const regions=planDefectRegions(scene,defects,W,H,[]);
+  const regions=planDefectRegions(scene,defects.filter(d=>!d.resourceMissing),W,H,[]);
   audit.repairRegions=regions;audit.regionStates={};audit.inspection={total:0,complete:0,failed:0};
   audit.totalTiles=1+regions.length;audit.completedTiles=1;
+  audit.resourceRepairs=[];
+  for(const resource of audit.resourceManifest){
+    if(!missingResources.some(d=>d.itemId===resource.itemId))continue;
+    if(resource.state!=='confirmed'){audit.resourceRepairs.push({itemId:resource.itemId,state:'unresolved'});continue;}
+    stop();audit.repairRounds=1;
+    try{
+      let id='source-asset-'+resource.itemId;while(scene.nodes.some(n=>n.id===id&&n.sourceAssetId!==resource.itemId))id+='-crop';
+      const node={id,type:'image',...resource.crop,href:crop(resource.crop),sourceAssetId:resource.itemId,sourceCrop:{...resource.crop},sourceCanvas:{width:W,height:H}};
+      // Use explicit inventory layer evidence when corresponding nodes are known.
+      scene.nodes=scene.nodes.filter(n=>n.sourceAssetId!==resource.itemId&&!(n.type==='image'&&['x','y','w','h'].every(k=>n[k]===resource.crop[k])));
+      const frontIds=new Set(resource.layers.filter(l=>l.backItemId===resource.itemId).flatMap(l=>[...(before.validation.evidence||[]).filter(e=>e.itemId===l.frontItemId).flatMap(e=>e.nodeIds||[]),...scene.nodes.filter(n=>n.sourceAssetId===l.frontItemId).map(n=>n.id)]));
+      const front=scene.nodes.findIndex(n=>frontIds.has(n.id));
+      if(front>=0)scene.nodes.splice(front,0,node);else scene.nodes.push(node);
+      audit.resourceRepairs.push({itemId:resource.itemId,state:'embedded',nodeId:node.id,crop:resource.crop});
+    }catch(error){audit.resourceRepairs.push({itemId:resource.itemId,state:'failed',error:String(error.message)});}
+  }
+  // Model-patch rollback must retain deterministic crops of the original pixels.
   const roundStart=structuredClone(scene);
   if(regions.length){audit.repairRounds=1;audit.phase='regions';}
   // A single round over a fixed defect list. Never retry a region or regenerate the whole image.
@@ -157,7 +209,8 @@ export async function reconstructWithEvidence(canvas,src,request,audit,measure,o
     const patchTask={regionPatch:true,region:region.id,attempt:0,detailCatalog:catalog,diagnosedIds,sourceChecklist:inventory,sourceRegion:region,contextImage:src,fullSourceImage:src,inputWidth:region.w,inputHeight:region.h,inputScale:1,ownership:{x:(region.coreX??region.x)-region.x,y:(region.coreY??region.y)-region.y,w:(region.coreRight??region.x+region.w)-(region.coreX??region.x),h:(region.coreBottom??region.y+region.h)-(region.coreY??region.y)},feedback:{defects:region.defects||defects}};
     try{
       patchTask.retryRender=await renderCrop(scene,region);
-      const patch=guardPatch(await call(crop(region),region.w,region.h,patchTask),diagnosedIds,catalog.nodes.map(n=>n.id));
+      audit.repairCalls=(audit.repairCalls||0)+1;
+      const patch=guardPatch(await call(crop(region),region.w,region.h,patchTask),diagnosedIds,catalog.nodes.filter(n=>!n.sourceAssetId).map(n=>n.id));
       // Ownership/version checks still run in the existing patch engine. Explicit IDs
       // above allow narrowly diagnosed text correction or duplicate deletion.
       const applied=applyRegionPatch(scene,{...region,targeted:false,targetIds:undefined},patch,versions);
@@ -180,10 +233,10 @@ export async function reconstructWithEvidence(canvas,src,request,audit,measure,o
     await onProgress({...scene,regionStates:audit.regionStates},false);
   }
   let final=before;
-  if(regions.length){
+  if(audit.repairRounds){
     try{
       final=await assess(scene);
-      const priorPassed=new Set(before.validation.evidence.filter(e=>e.status==='passed'&&!before.validation.errors.some(x=>x.itemId===e.itemId)).map(e=>e.itemId));
+      const priorPassed=new Set((before.validation.evidence||[]).filter(e=>e.status==='passed'&&!(before.validation.errors||[]).some(x=>x.itemId===e.itemId)).map(e=>e.itemId));
       const regressions=final.validation.errors.filter(e=>priorPassed.has(e.itemId));
       if(regressions.length||final.validation.unlistedSourceItems?.length>(before.validation.unlistedSourceItems?.length||0)){
         scene=roundStart;audit.roundRolledBack=true;audit.rollbackReason='最终整图复验发现此前通过项退化';final=before;
@@ -198,6 +251,9 @@ export async function reconstructWithEvidence(canvas,src,request,audit,measure,o
     try{const q=await measure(canvas,scene,region);state.finalQuality=compactQuality(q);state.state=state.accepted&&reconstructionQualityDeficit(q)<.001?'passed':'failed';}
     catch(error){state.state='failed';state.error=String(error.message);}
   }
+  audit.resourceReconciliation=resourceDefects(audit.resourceManifest,scene);
+  if(audit.resourceReconciliation.length){final.validation={...final.validation,state:'failed',errors:[...(final.validation.errors||[]),...audit.resourceReconciliation]};}
+  audit.finalNodeCounts={total:scene.nodes.length,images:scene.nodes.filter(n=>n.type==='image').length,sourceAssets:scene.nodes.filter(n=>n.sourceAssetId).length};
   audit.finalValidation=final.validation;
   audit.omissionChecked=final.validation.state==='passed';
   audit.tilePassComplete=audit.omissionChecked&&Object.values(audit.regionStates).every(s=>s.state==='passed');

@@ -1,0 +1,56 @@
+import assert from 'node:assert/strict';
+import * as core from './reconstruction-core.mjs';
+import * as pipeline from './reconstruction-pipeline.mjs';
+import {normalizeInventory,resourceManifest,resourceDefects,reconstructWithEvidence,repairStatus} from './bitmap-evidence.mjs';
+import {recoverBitmapResponse} from './bitmap-response.mjs';
+const canvas={width:200,height:100},draws=[];
+globalThis.document={createElement:()=>({getContext:()=>({drawImage:(...args)=>draws.push(args.slice(1))}),toDataURL:()=> 'data:image/png;base64,crop'})};
+const photo={id:'photo',kind:'photograph',description:'original photo',x:10,y:20,w:40,h:30,expectedCount:1,colors:[]};
+const inventory={canvas:{width:200,height:100,units:'source-pixels'},items:[photo],layers:[],connections:[],uncertainties:[]};
+const original={canvas:{width:200,height:100},nodes:[{id:'placeholder',type:'rect',x:10,y:20,w:40,h:30,fill:'#008800'}]};
+const api={...core,...pipeline,sceneToSvgString:()=>'<svg/>',compactQuality:s=>s,renderCrop:async()=> 'render'};
+async function run(input,confirmation=input,diagnosis){
+ const audit={tiles:[]},calls=[];
+ const scene=await reconstructWithEvidence(canvas,'source',async(src,w,h,t)=>{
+  calls.push(t);
+  if(t.sourceInventory)return structuredClone(t.resourceCoordinateConfirmation?confirmation:input);
+  if(t.wholeImage)return structuredClone(original);
+  if(t.defectDiagnosis){if(diagnosis)return diagnosis;throw Error('QA output limit');}
+  if(t.regionPatch)return {operations:[],uncertainties:['No editable change confirmed']};
+  throw Error('Unexpected request');
+ },audit,async()=>({preview:'render'}),async()=>{}, {},api);
+ return {audit,scene,calls};
+}
+let r=await run(inventory);
+assert.equal(r.audit.repairRounds,1);assert.equal(r.scene.nodes.filter(n=>n.type==='image').length,1);
+assert.deepEqual(draws.at(-1),[10,20,40,30,0,0,40,30]);
+assert.equal(r.audit.resourceReconciliation.length,0);assert.notEqual(r.audit.finalValidation.state,'passed');
+assert.equal(r.calls.filter(t=>t.wholeImage&&!t.sourceInventory).length,1);
+assert.equal(r.calls.filter(t=>t.regionPatch).length,0);assert.match(repairStatus(r.audit),/仍未通过/);
+const manifest=resourceManifest(normalizeInventory(inventory,200,100),200,100);
+const edge=structuredClone(inventory);edge.items[0].x=160.5;
+assert.equal(resourceManifest(normalizeInventory(edge,200,100),200,100)[0].state,'unresolved','no crop may extend beyond native source pixels');
+assert.equal(resourceDefects(manifest,original).length,1,'a rectangle cannot satisfy photo evidence');
+const duplicate=structuredClone(r.scene);duplicate.nodes.push({...duplicate.nodes.at(-1),id:'duplicate'});
+assert.equal(resourceDefects(manifest,duplicate).length,1,'duplicate images cannot satisfy one resource');
+const unverified={...inventory,canvas:undefined};
+r=await run(unverified);
+assert.equal(r.audit.repairRounds,0);assert.equal(r.audit.resourceReconciliation.length,1);assert.match(repairStatus(r.audit),/未执行/);
+assert.equal(r.scene.nodes.filter(n=>n.type==='image').length,0);
+const replacement=structuredClone(inventory);replacement.items[0].id='unrelated';
+r=await run(unverified,replacement);assert.ok(r.audit.coordinateConfirmationError,'confirmation cannot replace asset identities');
+r=await run(unverified,inventory);assert.equal(r.audit.resourceReconciliation.length,0);assert.equal(r.audit.repairRounds,1);
+const grouped=structuredClone(inventory);grouped.items[0].expectedCount=2;
+r=await run(grouped,inventory);assert.ok(r.audit.coordinateConfirmationError,'confirmation cannot discard counted frames');
+const split=structuredClone(inventory);split.items=[{...photo,id:'frame1',sourceItemId:'photo'},{...photo,id:'frame2',sourceItemId:'photo',x:70}];
+r=await run(grouped,split);assert.equal(r.scene.nodes.filter(n=>n.type==='image').length,2);
+const truncated='{"complete":false,"wholeImageAcceptable":false,"summary":"cut","defects":[{"x":2,"y":3,"w":4,"h":5,"reason":"missing","objectIds":[]},{"x":';
+const recovered=recoverBitmapResponse(truncated,'diagnosis');
+assert.equal(recovered.defects.length,1);assert.equal(recovered.complete,false);assert.ok(recovered.uncertainties.length);
+r=await run(inventory,inventory,recovered);
+assert.equal(r.calls.filter(t=>t.regionPatch).length,1,'recovered defects enter the single local repair round');
+assert.equal(r.audit.repairRounds,1);
+assert.equal(r.scene.nodes.filter(n=>n.sourceAssetId==='photo').length,1,'local repair retains original photo crop');
+assert.equal(r.calls.filter(t=>t.wholeImage&&!t.sourceInventory).length,1);
+assert.match(repairStatus({repairRounds:1,resourceRepairs:[{state:'failed'}]}),/执行失败/);
+console.log('PASS bitmap resource preservation, coordinate guards, QA-failure repair and honest statuses');

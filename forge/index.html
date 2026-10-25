@@ -554,7 +554,6 @@
       <p class="bnote warn-inline" id="modelWarn" hidden></p>
       <p class="bnote" id="pdfModelHint" data-i18n="hint.model"></p>
       <small style="display:block;margin-top:9px">步骤一至四不设模型等待时限；极高推理可能需要更久。 / Steps 1–4 have no model waiting limit; extra-high reasoning may take longer.</small>
-      <small id="reconRelease">重建版本 / Reconstruction version: 20261021-whole-image-1</small>
       <div class="bfield" id="analyzeModelRow" hidden style="margin-top:9px"><span class="blab" data-i18n="analyzemodel"></span><select id="analyzeModel"></select></div>
       <div class="bfield" style="margin-top:9px"><span class="blab">视觉推理强度</span><select id="visualReasoningEffort" aria-label="视觉推理强度"><option value="">服务商默认</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">极高</option></select></div>
       <p class="bnote">用于参考图归纳。需模型及服务商支持；默认不指定强度。</p>
@@ -684,7 +683,7 @@ import {ImageRoutes, safeImageFailover} from './image-routes.mjs?v=20261020';
 const imageRoutes=new ImageRoutes();
 import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=whole-image-20261021-1';
 import {recoverBitmapResponse,visibleEditableContent} from './bitmap-response.mjs';
-import {inventoryPrompt,normalizeInventory,normalizeDiagnosis,evidencePrompt,patchPrompt,reconstructWithEvidence} from './bitmap-evidence.mjs';
+import {inventoryPrompt,normalizeInventory,normalizeDiagnosis,evidencePrompt,patchPrompt,reconstructWithEvidence,repairStatus} from './bitmap-evidence.mjs';
 import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=whole-image-20261021-1';
 import {scaleRegionCatalog, scaleRegionPatch, scaleStructureScene,registerMissingObjects, editableNodeBounds, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, tileDetailCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion, planReconstructionTiles, subdivideReconstructionTile} from './reconstruction-core.mjs?v=whole-image-20261021-1';
 import {planDefectRegions,planDetailRegions,planSemanticRegions,snapshotVersions,applyRegionPatch,fitSourceFills,calibrateShapeGeometry,expandStructuredNodes,regionObjectCatalog,rollbackRegionChanges,rejectUnsupportedLines,recoverDocumentInk,repairStructuralLayers} from './reconstruction-pipeline.mjs?v=whole-image-20261021-1';
@@ -4801,7 +4800,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
     audit.attemptStartedAt=Date.now();
     try{
       const assessmentInstructions=audit.wholeImageAssessment?'INDEPENDENT WHOLE-IMAGE ACCEPTANCE GATE. Also return wholeImageAcceptable:boolean, summary:string, coverage:[{region:string,missingGroups:string[]}]. Check EVERY source region and element class, including dense interiors, repeated small marks, text, connectors and 3D faces. Set wholeImageAcceptable=false if any entire group, panel internals, or widespread small elements are missing or materially misplaced. Local residual errors may be repairable, but a skeleton is unacceptable. Never use total node count alone as acceptance. Report missingGroups for every region and tightly bounded defects for all significant errors. ':'';
-      const attemptPrompt=audit.sourceInventory ? inventoryPrompt(W,H) : audit.defectDiagnosis
+      const attemptPrompt=audit.sourceInventory ? inventoryPrompt(W,H)+(audit.resourceCoordinateConfirmation ? " Previous inventory has unverified coordinates or grouped rasters. Reinspect the ORIGINAL at its declared native dimensions; return the FULL corrected inventory and split every raster into individual visible crops. Preserve all existing item IDs and non-raster items. When splitting a group, each child must have a unique id and sourceItemId equal to the original group ID; the number of children must match its expectedCount. Never silently reduce counts or replace resource identities. Do not rescale guessed coordinates. Record remaining uncertainty. Previous inventory: "+JSON.stringify(audit.previousInventory) : "") : audit.defectDiagnosis
         ? assessmentInstructions+(audit.wholeImageAssessment&&audit.sourceChecklist?evidencePrompt(audit.sourceChecklist):'')+'Compare image 1 ORIGINAL with image 2 CURRENT editable rendering. Diagnose ONLY clearly visible residual reconstruction errors in the first reconstruction. Return STRICT JSON {"complete":true,"defects":[]} when no significant errors remain, otherwise {"complete":false,"defects":[{"x":0,"y":0,"w":100,"h":100,"reason":"specific visible discrepancy","kind":"text|layer|chart|table|shape|photo","objectIds":["existing_id"]}]}. Coordinates are '+(audit.localInspection?'CROP-RELATIVE':'GLOBAL source')+' pixels, canvas '+W+' x '+H+'. Inspect missing objects, text hidden behind colored boxes, incorrect stacking/occlusion, duplicated text or lines, chart marks, table cells, fine print and photo crops. Check dashed versus solid strokes (including curved arrows), clipped icons behind title backgrounds, text crossing cell borders, out-of-cell numbers and doubled grid lines. Never accept missing fine print merely because the overall layout matches. Each defect box must tightly enclose the actual erroneous objects, with correct context excluded. Keep a chart/table together only when its structure needs repair. Minor antialiasing differences are not defects. Use source evidence; do not invent unreadable text. Inspect the entire '+(audit.localInspection?'crop':'image including margins')+'. Existing catalog: '+serializeVisionCatalog(audit.catalog)
         : audit.regionPatch
         ? patchPrompt(W,H,audit,serializeVisionCatalog)
@@ -4844,7 +4843,8 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         responseDiagnostics='stop_reason='+String(d.stop_reason||'unknown')+', output_chars='+txt.length;
         audit.responseDiagnostics=responseDiagnostics;
         txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
-        if(d.stop_reason==='max_tokens'){
+        audit.outputTruncated=d.stop_reason==='max_tokens';
+        if(audit.outputTruncated&&!audit.defectDiagnosis&&!audit.sourceInventory){
           const error=new Error('Vision response reached the output token limit ('+responseDiagnostics+')');
           error.sceneFormatFailure=true;
           error.outputTruncated=true;
@@ -4882,27 +4882,31 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         audit.responseModel=d.model||null;audit.usage=d.usage||null;
         txt=editableResponseText(d);
         const choice=d.choices&&d.choices[0]||{};
+        audit.outputTruncated=choice.finish_reason==='length';
         responseDiagnostics='finish_reason='+String(choice.finish_reason||'unknown')+', content_chars='+txt.length+
           (d.usage&&d.usage.completion_tokens!==undefined?', completion_tokens='+d.usage.completion_tokens:'');
         audit.responseDiagnostics=responseDiagnostics;
-        if(choice.finish_reason==='length'){
+        if(choice.finish_reason==='length'&&!audit.defectDiagnosis&&!audit.sourceInventory){
           const error=new Error('Vision response reached the output token limit ('+responseDiagnostics+')');
           error.sceneFormatFailure=true;
           error.outputTruncated=true;
           throw error;
         }
       }
-      if(wholeRequest){
+      if(wholeRequest||audit.sourceInventory||audit.defectDiagnosis||audit.regionPatch){
         window.__ffReconResponses=window.__ffReconResponses||[];
-        window.__ffReconResponses.push({stage:audit.sourceInventory?'source-inventory':'whole-image',content:txt,request:audit.requestParameters,usage:audit.usage,responseModel:audit.responseModel,diagnostics:responseDiagnostics});
+        window.__ffReconResponses.push({stage:audit.sourceInventory?'source-inventory':audit.defectDiagnosis?'diagnosis':audit.regionPatch?'local-repair':'whole-image',content:txt,request:audit.requestParameters,usage:audit.usage,responseModel:audit.responseModel,diagnostics:responseDiagnostics});
       }
       let scene;
       try{
         if(audit.sourceInventory){
           const raw=recoverBitmapResponse(txt,'inventory');
+          if(audit.outputTruncated)raw.uncertainties=[...(raw.uncertainties||[]),'盘点输出达到 token 上限，完整性未经确认'];
           scene={...normalizeInventory(raw,W,H),recovery:raw.recovery,nodes:[]};
         }else if(audit.defectDiagnosis){
-          const parsed=recoverBitmapResponse(txt,'diagnosis'),raw=audit.wholeImageAssessment?normalizeDiagnosis(parsed,W,H):parsed;
+          const parsed=recoverBitmapResponse(txt,'diagnosis');
+          if(audit.outputTruncated){parsed.complete=false;parsed.uncertainties=[...(parsed.uncertainties||[]),'诊断输出达到 token 上限，保留已恢复缺陷'];}
+          const raw=audit.wholeImageAssessment?normalizeDiagnosis(parsed,W,H):parsed;
           if(!audit.wholeImageAssessment&&(typeof raw.complete!=='boolean'||!Array.isArray(raw.defects)||raw.defects.some(d=>![d.x,d.y,d.w,d.h].every(Number.isFinite)||d.w<=0||d.h<=0||!d.reason)))throw new Error('Invalid residual defect diagnosis');
           scene={nodes:[],recovery:parsed.recovery,complete:raw.complete&&raw.defects.length===0,defects:raw.defects,wholeImageAcceptable:raw.wholeImageAcceptable,coverage:raw.coverage,summary:raw.summary,inventoryComplete:raw.inventoryComplete,unlistedSourceItems:raw.unlistedSourceItems,uncertainties:raw.uncertainties,evidence:raw.evidence};
         }else if(audit.regionPatch){
@@ -5226,7 +5230,7 @@ async function runReconstruction(options={}){
       return writeReconstructionCache(cacheKey,{scene:partial,omissionChecked:false,detailComplete:false,completedIds:[]});
     },{...options,onWholeImage:result=>{if(!options.refine||!st.wholeImageResult){result.request=reconstructionAudit.tiles.find(t=>t.wholeImage&&!t.sourceInventory);st.wholeImageResult=result;}renderEditableExportCard();},signal:controller.signal,deadline,maxAttempts:1,retryBudget:0});
     if(controller.signal.aborted)throw new DOMException("Refinement stopped","AbortError");
-    if(!visibleEditableContent(scene).length)throw Error('未生成可用内容：结果只有透明框、背景或无可见对象；本次最多一轮局部修补已结束。');
+    if(!visibleEditableContent(scene).length)throw Error('未生成可用内容：结果只有透明框、背景或无可见对象；'+repairStatus(reconstructionAudit,true)+'。');
     let omissionChecked=!!reconstructionAudit.omissionChecked;
     const completedIds=new Set(cached?.completedIds||[]);
     const saveProgress=()=>writeReconstructionCache(cacheKey,{scene,omissionChecked,
@@ -5330,7 +5334,7 @@ async function runReconstruction(options={}){
         : '; filtered '+scene.counts.filteredArtifactLines+' invalid lines from crop boundaries.';
     }
     status.textContent += qualityNeedsReview
-      ? (GAL_I18N.lang==='zh'?' 可编辑草稿已就绪，可直接导出。尚未通过完整验收；本次最多一轮局部修补已结束。':' Editable draft ready for export. Full acceptance has not passed; the single-round repair workflow is closed.')
+      ? (GAL_I18N.lang==='zh'?' 可编辑草稿已就绪，可直接导出。尚未通过完整验收；'+repairStatus(reconstructionAudit,true)+'。':' Editable draft ready for export. Full acceptance has not passed; '+repairStatus(reconstructionAudit,false)+'.')
       : (GAL_I18N.lang==='zh'?' 重建已通过视觉验收，可导出原生可编辑图形。':' Reconstruction passed visual validation. Native editable export is ready.');
     return true;
   }catch(err){
