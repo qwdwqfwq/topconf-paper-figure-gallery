@@ -11,9 +11,9 @@
 
 欢迎个人与机构提供 **资金赞助、模型 API 额度、GPU 算力或云资源**，支持画廊维护、FigureForge 开发与效果验证。也欢迎通过贡献代码、推荐论文和分享项目支持我们！
 
-**[🤝 洽谈赞助 / 提供资源支持](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/issues/new?title=Sponsorship%20%2F%20Resource%20Support)**
+**🤝 洽谈赞助 / 提供资源支持：[939123836@qq.com](mailto:939123836@qq.com)**
 
-<sub>Help keep this project open and growing. Financial sponsorship, model API credits, GPU compute, and cloud resources are welcome. Please open an issue to discuss support.</sub>
+<sub>Help keep this project open and growing. Financial sponsorship, model API credits, GPU compute, and cloud resources are welcome. Please email us to discuss support.</sub>
 
 <img src="docs/demo.gif" alt="Search, filter and lightbox demo" width="920">
 
