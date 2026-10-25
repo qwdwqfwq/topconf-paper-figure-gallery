@@ -683,7 +683,7 @@ import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleIma
 import {ImageRoutes, safeImageFailover} from './image-routes.mjs?v=20261020';
 const imageRoutes=new ImageRoutes();
 import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=whole-image-20261021-1';
-import {inventoryPrompt,validateInventory,evidencePrompt,patchPrompt,reconstructWithEvidence} from './bitmap-evidence.mjs';
+import {inventoryPrompt,normalizeInventory,normalizeDiagnosis,evidencePrompt,patchPrompt,reconstructWithEvidence} from './bitmap-evidence.mjs';
 import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=whole-image-20261021-1';
 import {scaleRegionCatalog, scaleRegionPatch, scaleStructureScene,registerMissingObjects, editableNodeBounds, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, tileDetailCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion, planReconstructionTiles, subdivideReconstructionTile} from './reconstruction-core.mjs?v=whole-image-20261021-1';
 import {planDefectRegions,planDetailRegions,planSemanticRegions,snapshotVersions,applyRegionPatch,fitSourceFills,calibrateShapeGeometry,expandStructuredNodes,regionObjectCatalog,rollbackRegionChanges,rejectUnsupportedLines,recoverDocumentInk,repairStructuralLayers} from './reconstruction-pipeline.mjs?v=whole-image-20261021-1';
@@ -4906,11 +4906,10 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
       let scene;
       try{
         if(audit.sourceInventory){
-          scene={...validateInventory(extractJSON(txt),W,H),nodes:[]};
+          scene={...normalizeInventory(extractJSON(txt),W,H),nodes:[]};
         }else if(audit.defectDiagnosis){
-          const raw=extractJSON(txt);
-          if(typeof raw.complete!=='boolean'||!Array.isArray(raw.defects)||raw.defects.some(d=>![d.x,d.y,d.w,d.h].every(Number.isFinite)||d.w<=0||d.h<=0||!d.reason))throw new Error('Invalid residual defect diagnosis');
-          if(audit.wholeImageAssessment&&(typeof raw.wholeImageAcceptable!=='boolean'||!Array.isArray(raw.coverage)||!raw.coverage.length||raw.coverage.some(r=>typeof r.region!=='string'||!Array.isArray(r.missingGroups))||typeof raw.summary!=='string'))throw new Error('Missing whole-image acceptance evidence');
+          const parsed=extractJSON(txt),raw=audit.wholeImageAssessment?normalizeDiagnosis(parsed,W,H):parsed;
+          if(!audit.wholeImageAssessment&&(typeof raw.complete!=='boolean'||!Array.isArray(raw.defects)||raw.defects.some(d=>![d.x,d.y,d.w,d.h].every(Number.isFinite)||d.w<=0||d.h<=0||!d.reason)))throw new Error('Invalid residual defect diagnosis');
           scene={nodes:[],complete:raw.complete&&raw.defects.length===0,defects:raw.defects,wholeImageAcceptable:raw.wholeImageAcceptable,coverage:raw.coverage,summary:raw.summary,inventoryComplete:raw.inventoryComplete,unlistedSourceItems:raw.unlistedSourceItems,uncertainties:raw.uncertainties,evidence:raw.evidence};
         }else if(audit.regionPatch){
           const raw=extractJSON(txt);
@@ -5329,7 +5328,7 @@ async function runReconstruction(options={}){
         : '; filtered '+scene.counts.filteredArtifactLines+' invalid lines from crop boundaries.';
     }
     status.textContent += qualityNeedsReview
-      ? (GAL_I18N.lang==='zh'?' 已生成可编辑草稿，仍有区域未通过视觉验收。':' Editable draft ready; some regions still require visual review.')
+      ? (GAL_I18N.lang==='zh'?' 可编辑草稿已就绪，可直接导出。尚未通过完整验收；本次最多一轮局部修补已结束。':' Editable draft ready for export. Full acceptance has not passed; the single-round repair workflow is closed.')
       : (GAL_I18N.lang==='zh'?' 重建已通过视觉验收，可导出原生可编辑图形。':' Reconstruction passed visual validation. Native editable export is ready.');
     return true;
   }catch(err){

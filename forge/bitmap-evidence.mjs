@@ -18,6 +18,43 @@ export function validateInventory(raw,W,H){
   for(const c of raw.connections)if(![c.itemId,c.fromItemId,c.toItemId].every(id=>ids.has(id)))fail('连接引用');
   return structuredClone({items:raw.items,layers:raw.layers,connections:raw.connections,uncertainties:raw.uncertainties});
 }
+// Normalize representation only; discarded/unknown evidence always blocks formal acceptance.
+export function normalizeInventory(raw,W,H){
+  const issues=Array.isArray(raw?.uncertainties)?structuredClone(raw.uncertainties):['缺少原图不确定项清单'];
+  const warn=message=>issues.push(message), number=v=>typeof v==='number'?v:typeof v==='string'&&v.trim()?Number(v):NaN;
+  const items=[],ids=new Set();
+  if(!Array.isArray(raw?.items)||!raw.items.length)warn('缺少有效原图对象清单');
+  for(const [index,value] of (Array.isArray(raw?.items)?raw.items:[]).entries()){
+    const i={...value},box=i.bbox||i.bounds;
+    if(box&&typeof box==='object')for(const [k,n] of ['x','y','w','h'].entries())i[n]??=Array.isArray(box)?box[k]:box[n]??box[n==='w'?'width':n==='h'?'height':n];
+    for(const n of ['x','y','w','h'])i[n]=number(i[n]);
+    if(typeof i.id==='number'&&Number.isFinite(i.id))i.id=String(i.id);
+    if(typeof i.id!=='string'||!i.id||ids.has(i.id)||typeof i.kind!=='string'||!i.kind||typeof i.description!=='string'||!i.description||![i.x,i.y,i.w,i.h].every(Number.isFinite)||i.x<0||i.y<0||i.w<=0||i.h<=0||i.x+i.w>W+1||i.y+i.h>H+1){warn(`原图对象 ${index+1} 字段或边界无效，未纳入有效证据`);continue;}
+    ids.add(i.id);
+    if(!Array.isArray(i.colors)){warn(`对象 ${i.id} 缺少颜色证据`);i.colors=[];}
+    i.colors=i.colors.flatMap(c=>{let value=c?.value;if(/^#[\da-f]{3}$/i.test(value||''))value='#'+value.slice(1).split('').map(v=>v+v).join('');if(!['fill','stroke','text'].includes(c?.role)||!/^#[\da-f]{6}$/i.test(value||'')){warn(`对象 ${i.id} 颜色证据无效`);return [];}return [{role:c.role,value}];});
+    if(i.expectedCount!=null){i.expectedCount=number(i.expectedCount);if(!Number.isInteger(i.expectedCount)||i.expectedCount<1){warn(`对象 ${i.id} 重复数量无效`);i.expectedCount=null;}}
+    if(i.text!=null&&typeof i.text!=='string'){warn(`对象 ${i.id} OCR 字段无效`);i.text=null;}
+    items.push(i);
+  }
+  for(const i of items)if(i.panelId&&!ids.has(i.panelId)){warn(`对象 ${i.id} 面板引用无效`);i.panelId=null;}
+  const relations=(key,valid)=>{if(!Array.isArray(raw?.[key])){warn(`缺少 ${key} 证据`);return [];}return raw[key].filter(r=>{if(r&&valid(r))return true;warn(`${key} 引用无效`);return false;});};
+  const layers=relations('layers',r=>ids.has(r.backItemId)&&ids.has(r.frontItemId)&&r.backItemId!==r.frontItemId&&typeof r.reason==='string'&&!!r.reason);
+  const connections=relations('connections',r=>[r.itemId,r.fromItemId,r.toItemId].every(id=>ids.has(id)));
+  return {items,layers,connections,uncertainties:[...new Set(issues)]};
+}
+export function normalizeDiagnosis(raw,W,H){
+  const issues=Array.isArray(raw?.uncertainties)?[...raw.uncertainties]:['缺少诊断不确定项证据'];
+  const defects=[];
+  if(!Array.isArray(raw?.defects))issues.push('缺少具体缺陷清单');
+  for(const d of Array.isArray(raw?.defects)?raw.defects:[]){
+    const b=Object.fromEntries(['x','y','w','h'].map(k=>[k,typeof d?.[k]==='string'&&d[k].trim()?Number(d[k]):d?.[k]]));
+    if(!Object.values(b).every(Number.isFinite)||b.x<0||b.y<0||b.w<=0||b.h<=0||b.x+b.w>W+1||b.y+b.h>H+1||typeof d?.reason!=='string'||!d.reason){issues.push('诊断中有无效缺陷区域，未用于修补');continue;}
+    defects.push({...d,...b,objectIds:Array.isArray(d.objectIds)?d.objectIds.filter(id=>typeof id==='string'):[]});
+  }
+  if(typeof raw?.complete!=='boolean'||typeof raw?.wholeImageAcceptable!=='boolean'||typeof raw?.summary!=='string'||!Array.isArray(raw?.coverage)||!raw.coverage.length||raw.coverage.some(r=>typeof r?.region!=='string'||!Array.isArray(r.missingGroups)))issues.push('整图验收结构不完整');
+  return {...raw,defects,uncertainties:[...new Set(issues)],complete:raw?.complete===true&&!defects.length&&!issues.length};
+}
 export function evidencePrompt(inventory){
   return ' Fixed ORIGINAL-ONLY inventory (do not replace or shorten): '+JSON.stringify(inventory)+'. In addition to defects/coverage, return inventoryComplete:boolean, unlistedSourceItems:[], uncertainties:[], evidence:[{itemId,status:"passed|failed|uncertain",nodeIds:["actual catalog ID"],instances:[["node IDs for unit 1"]],reason:"visible source versus render comparison"}]. Include EXACTLY one evidence row per inventory item. Inspect the ORIGINAL again for content absent even from the inventory; report it in unlistedSourceItems and bounded defects. For each item verify geometry, OCR, repeated-unit count, colors, layer/occlusion and connector endpoints against the actual rendering, not catalog claims. Passed node IDs must exist and correspond to the visible item. instances is required for expectedCount items; each unit has disjoint IDs. Every mismatch requires a tightly bounded defect, with objectIds ONLY for existing objects that genuinely need correction. Missing objects require no fabricated IDs. complete/wholeImageAcceptable may be true only if every item and every layer/connection passes, no unlisted item and no uncertainty remains.';
 }
@@ -27,7 +64,9 @@ export function patchPrompt(W,H,audit,serialize=JSON.stringify){
 const norm=s=>String(s??'').replace(/\s+/g,'');
 const rgb=s=>/^#[\da-f]{6}$/i.test(s||'')?[1,3,5].map(i=>parseInt(s.slice(i,i+2),16)):null;
 export function validateEvidence(inventory,scene,result,bounds){
-  const errors=[], rows=Array.isArray(result?.evidence)?result.evidence:[], byId=new Map(scene.nodes.map((n,i)=>[n.id,{n,i}]));
+  const errors=[], rows=Array.isArray(result?.evidence)?result.evidence.filter(e=>e&&typeof e==='object'):[], byId=new Map(scene.nodes.map((n,i)=>[n.id,{n,i}]));
+  if(Array.isArray(result?.evidence)&&rows.length!==result.evidence.length)errors.push({reason:'无效的对象验收证据'});
+  if(!inventory.items.length)errors.push({reason:'缺少有效原图对象清单'});
   const matches=new Map();
   for(const item of inventory.items){
     const found=rows.filter(e=>e.itemId===item.id), e=found[0];
@@ -74,7 +113,9 @@ export async function reconstructWithEvidence(canvas,src,request,audit,measure,o
   const call=async(image,w,h,task)=>{stop();task.maxAttempts=1;audit.tiles.push(task);return request(image,w,h,task);};
   if(options.refine)throw Error('此结果的修补流程已封闭；如需新结果，请手动发起新的重建。');
   audit.strategy='source-inventory-one-repair-round';audit.phase='inventory';audit.repairRounds=0;
-  const inventory=validateInventory(await call(src,W,H,{sourceInventory:true,wholeImage:true,inputWidth:W,inputHeight:H}),W,H);
+  let inventory;
+  try{inventory=normalizeInventory(await call(src,W,H,{sourceInventory:true,wholeImage:true,inputWidth:W,inputHeight:H}),W,H);}
+  catch(error){stop();audit.inventoryError=String(error.message);inventory=normalizeInventory(null,W,H);inventory.uncertainties.push('原图盘点失败：'+audit.inventoryError);}
   audit.sourceInventory=inventory;
   audit.phase='whole';
   const task={wholeImage:true,sourceChecklist:inventory,inputWidth:W,inputHeight:H};
@@ -86,19 +127,18 @@ export async function reconstructWithEvidence(canvas,src,request,audit,measure,o
   async function assess(candidate){
     stop();audit.phase='quality';
     const measured=await measure(canvas,candidate,whole);
-    const result=await call(src,W,H,{defectDiagnosis:true,wholeImageAssessment:true,sourceChecklist:inventory,catalog:candidate,contextImage:measured.preview});
+    const result=normalizeDiagnosis(await call(src,W,H,{defectDiagnosis:true,wholeImageAssessment:true,sourceChecklist:inventory,catalog:candidate,contextImage:measured.preview}),W,H);
     return {result,validation:validateEvidence(inventory,candidate,result,editableNodeBounds),measured};
   }
   const firstPass={scene:structuredClone(scene),svg:sceneToSvgString(scene),source:{width:W,height:H},sourceInventory:inventory,nodeCounts:audit.wholeImageNodeCounts,validation:{state:'pending'}};
   await options.onWholeImage?.(firstPass);
   let before;
   try{before=await assess(scene);firstPass.validation=before.validation;firstPass.quality=compactQuality(before.measured);}
-  catch(e){firstPass.validation={state:'unverified',error:String(e.message)};throw e;}
+  catch(e){stop();audit.diagnosisError=String(e.message);firstPass.validation={state:'unverified',error:String(e.message),errors:[],evidence:[]};before={result:{complete:false,defects:[]},validation:firstPass.validation};}
   finally{audit.wholeImageValidation=firstPass.validation;await options.onWholeImage?.(firstPass);}
   audit.defectDiagnosis={complete:before.result.complete,defects:before.result.defects};
-  // Missing evidence itself produces a bounded defect; it can never silently pass.
+  // Repair only concrete source/render defects, never infer missing objects from absent evidence rows.
   const defects=[...before.result.defects];
-  for(const e of before.validation.errors){const i=inventory.items.find(i=>i.id===e.itemId);if(i)defects.push({x:i.x,y:i.y,w:i.w,h:i.h,kind:i.kind,reason:e.reason,objectIds:[]});}
   audit.defects=defects;
   const regions=planDefectRegions(scene,defects,W,H,[]);
   audit.repairRegions=regions;audit.regionStates={};audit.inspection={total:0,complete:0,failed:0};

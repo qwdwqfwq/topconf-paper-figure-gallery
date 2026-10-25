@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict';
 import * as core from './reconstruction-core.mjs';
 import * as pipeline from './reconstruction-pipeline.mjs';
-import {validateInventory,validateEvidence,guardPatch,reconstructWithEvidence} from './bitmap-evidence.mjs';
+import {validateInventory,normalizeInventory,normalizeDiagnosis,validateEvidence,guardPatch,reconstructWithEvidence} from './bitmap-evidence.mjs';
 const canvas={width:600,height:300};
 const scene={canvas:{width:600,height:300},nodes:[{id:'label',type:'text',x:100,y:100,w:100,h:30,text:'A',fill:'#000000',fontSize:20}]};
 const inventory={items:[{id:'i',kind:'text',description:'label',x:100,y:100,w:100,h:30,text:'A',expectedCount:null,colors:[{role:'text',value:'#000000'}]}],layers:[],connections:[],uncertainties:[]};
-const verdict=(s,passed)=>({complete:passed,wholeImageAcceptable:passed,inventoryComplete:true,unlistedSourceItems:[],uncertainties:[],summary:'Source/render compared',evidence:[{itemId:'i',status:passed?'passed':'failed',nodeIds:['label'],reason:'checked'}],defects:passed?[]:[{x:100,y:100,w:100,h:30,reason:'Wrong OCR',objectIds:['label']}]});
+const verdict=(s,passed)=>({complete:passed,wholeImageAcceptable:passed,coverage:[{region:'all',missingGroups:[]}],inventoryComplete:true,unlistedSourceItems:[],uncertainties:[],summary:'Source/render compared',evidence:[{itemId:'i',status:passed?'passed':'failed',nodeIds:['label'],reason:'checked'}],defects:passed?[]:[{x:100,y:100,w:100,h:30,reason:'Wrong OCR',objectIds:['label']}]});
 const q=n=>Object.fromEntries(['score','darkRecall','localRecall','edgeF1','colorSimilarity'].map(k=>[k,n]));
 const cropped=[];
 globalThis.document={createElement:()=>({width:0,height:0,getContext(){return {drawImage(){}};},toDataURL(){cropped.push([this.width,this.height]);return 'native-crop';}})};
@@ -14,10 +14,10 @@ async function run(config={}){
  const audit={tiles:[]},calls=[],snapshots=[];let assessments=0;
  const request=async(src,w,h,t)=>{
   calls.push(t);assert.equal(t.maxAttempts,1);
-  if(t.sourceInventory){assert.equal(src,'source');assert.equal(w,600);assert.equal(h,300);assert.equal(t.catalog,undefined);return config.invalidInventory?{}:inventory;}
+  if(t.sourceInventory){assert.equal(src,'source');assert.equal(w,600);assert.equal(h,300);assert.equal(t.catalog,undefined);if(config.inventoryError)throw Error('Inventory JSON failed');return config.invalidInventory?{}:inventory;}
   if(t.wholeImage){if(config.wholeError)throw Error('whole failed');return structuredClone(scene);}
   if(t.localInspection)return {complete:!config.localReject,defects:config.localReject?[{reason:'bad'}]:[]};
-  if(t.wholeImageAssessment){assessments++;if(config.finalError&&assessments>1)throw Error('QA failed');const v=verdict(t.catalog,config.clean||assessments>1&&!config.finalReject);if(config.semanticRegression){v.evidence[0].status=assessments===1?'passed':'failed';v.complete=false;v.wholeImageAcceptable=false;v.defects=verdict(t.catalog,false).defects;}return v;}
+  if(t.wholeImageAssessment){assessments++;if(config.diagnosisError||config.finalError&&assessments>1)throw Error('QA failed');const v=verdict(t.catalog,config.clean||assessments>1&&!config.finalReject);if(config.missingEvidence){delete v.evidence;delete v.coverage;}if(config.semanticRegression){v.evidence[0].status=assessments===1?'passed':'failed';v.complete=false;v.wholeImageAcceptable=false;v.defects=verdict(t.catalog,false).defects;}return v;}
   if(t.regionPatch){assert.equal(src,'native-crop');assert.equal(w,t.sourceRegion.w);assert.equal(h,t.sourceRegion.h);if(config.patchError)throw Error('patch failed');return {operations:[{op:'update',id:'label',node:{...t.detailCatalog.nodes[0],text:'A',fill:'#000000',bold:true}}],uncertainties:[]};}
   throw Error('Unexpected request');
  };
@@ -36,7 +36,11 @@ for(const config of [{patchError:true},{localReject:true},{globalDamage:true},{f
 }
 r=await run({finalError:true});assert.equal(r.audit.roundRolledBack,true);assert.equal(r.audit.finalValidation.state,'unverified');
 r=await run({semanticRegression:true});assert.equal(r.audit.roundRolledBack,true);assert.equal(r.result.nodes[0].bold,undefined);assert.equal(r.audit.tilePassComplete,false);
-r=await run({invalidInventory:true});assert.match(r.error.message,/清单/);assert.equal(r.calls.length,1);
+for(const config of [{invalidInventory:true},{inventoryError:true},{missingEvidence:true}]){
+ r=await run(config);assert.equal(r.error,undefined);assert.ok(r.result.nodes[0].bold);assert.equal(r.audit.tilePassComplete,false);assert.equal(r.calls.filter(t=>t.regionPatch).length,1);assert.equal(r.calls.filter(t=>t.wholeImage&&!t.sourceInventory).length,1);assert.notEqual(r.audit.finalValidation.state,'passed');
+}
+r=await run({diagnosisError:true});assert.equal(r.error,undefined);assert.equal(r.result.nodes.length,1);assert.equal(r.audit.finalValidation.state,'unverified');assert.equal(r.audit.repairRounds,0);
+r=await run({missingEvidence:true,clean:true});assert.equal(r.audit.repairRounds,0);assert.notEqual(r.audit.finalValidation.state,'passed');
 r=await run({wholeError:true});assert.match(r.error.message,/whole failed/);assert.equal(r.calls.length,2);
 for(const options of [{signal:{aborted:true}},{deadline:Date.now()-1},{refine:true}]){r=await run({options});assert.ok(r.error);assert.equal(r.calls.length,0);}
 console.log('PASS source-only inventory, native crops, early draft, one whole call, one repair round, no retries, local/global rollback, QA failure, cancellation');
@@ -60,3 +64,11 @@ assert.doesNotThrow(()=>guardPatch({operations:[{op:'delete',id:'label'}],uncert
 assert.doesNotThrow(()=>guardPatch({operations:[{op:'add',node:{type:'rect'}}],uncertainties:[]},[],[]));
 assert.throws(()=>guardPatch({operations:[]},[],[]));
 console.log('PASS evidence IDs/OCR/color/position/layers/counts/uncertainty and immutable-object patch guards');
+const variants=structuredClone(inventory);Object.assign(variants.items[0],{x:'100',y:'100',w:'100',h:'30',colors:[{role:'text',value:'#000'}]});
+assert.deepEqual(normalizeInventory(variants,600,300),inventory);
+const partial=structuredClone(inventory);partial.items.push({...partial.items[0],id:'bad',w:900});partial.layers=[{backItemId:'bad',frontItemId:'i',reason:'unknown'}];
+const recovered=normalizeInventory(partial,600,300);assert.equal(recovered.items.length,1);assert.equal(recovered.layers.length,0);assert.ok(recovered.uncertainties.length>=2);assert.equal(check(recovered).state,'failed');assert.deepEqual(normalizeInventory(recovered,600,300),recovered);
+const malformed=normalizeDiagnosis({defects:[{x:'100',y:'100',w:'100',h:'30',reason:'Missing label'},null,{x:900,y:0,w:10,h:10,reason:'outside'}]},600,300);
+assert.equal(malformed.defects.length,1);assert.equal(malformed.complete,false);assert.ok(malformed.uncertainties.length);assert.deepEqual(normalizeDiagnosis(malformed,600,300),malformed);
+assert.equal(check(inventory,scene,{...good,evidence:[null]}).state,'failed');
+console.log('PASS deterministic normalization, retained valid inventory, malformed diagnosis regions, no invented evidence or false acceptance');

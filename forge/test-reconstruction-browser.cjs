@@ -340,6 +340,20 @@ const server = http.createServer((req,res)=>{
     assert.equal(await page.evaluate(()=>window.__ffLastGeneratedImage),generatedSource);
     await page.evaluate(()=>{
       window.__testOfficeRenders=0;
+      window.__testNormalFetch=window.fetch;
+      window.fetch=async(url,options)=>{
+        const response=await window.__testNormalFetch(url,options);
+        if(!String(url).endsWith('/chat/completions'))return response;
+        const prompt=JSON.parse(options.body).messages[1].content[0].text;
+        const isInventory=prompt.startsWith('Inspect ONLY the original');
+        const isAssessment=prompt.includes('INDEPENDENT WHOLE-IMAGE ACCEPTANCE GATE');
+        if(!isInventory&&!isAssessment)return response;
+        const body=await response.json(),output=JSON.parse(body.choices[0].message.content);
+        if(isInventory)output.items.push({id:'broken',description:'Invalid model item',x:-100});
+        else {delete output.coverage;delete output.evidence;}
+        body.choices[0].message.content=JSON.stringify(output);
+        return new Response(JSON.stringify(body));
+      };
       const blank=document.createElement('canvas');blank.width=300;blank.height=100;
       const ctx=blank.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,300,100);
       window.__ffRenderPptx=async()=>++window.__testOfficeRenders===1?blank.toDataURL():window.__ffExportState.bitmap;
@@ -348,6 +362,7 @@ const server = http.createServer((req,res)=>{
     await page.waitForFunction(()=>!window.__ffExportState.reconPending && !!window.__ffExportState.svg);
     const office=await page.evaluate(()=>{
       delete window.__ffRenderPptx;
+      window.fetch=window.__testNormalFetch;
       return {ok:!window.__ffExportState.reconFailed,renders:window.__testOfficeRenders,audit:window.__ffApiAudit.reconstruction};
     });
     assert.equal(await page.evaluate(()=>window.__ffExportState.reconBitmap),manualSource,'reconstruction must use uploaded input');
@@ -356,6 +371,8 @@ const server = http.createServer((req,res)=>{
     assert.equal(office.audit.actualPptxRenderVerified,true);
     assert.equal(office.audit.officeRetry,undefined);
     assert.equal(office.audit.state,'needs-review');
+    assert.equal(office.audit.repairRounds,1,'malformed inventory still allows the single repair round');
+    assert.equal(office.audit.finalValidation.state,'failed','discarded inventory evidence cannot become a formal pass');
     for(const format of ['svg','pptx','vsdx','drawio']){
       await page.locator(`#exportActions [data-export="${format}"]`).click();
       const promise=page.waitForEvent('download',{timeout:30000});
@@ -391,7 +408,7 @@ const server = http.createServer((req,res)=>{
       return {ok:await window.__ffReconstruct(),calls,audit:window.__ffApiAudit.reconstruction};
     },await page.evaluate(()=>localStorage.getItem('test-bitmap')));
     assert.equal(cached.ok,false);assert.equal(cached.audit.cacheBypassed,true);
-    assert.equal(cached.calls,1,'fresh whole-image request must bypass cached scene even when offline');
+    assert.equal(cached.calls,2,'inventory failure still attempts a fresh whole-image request, bypassing cached scene');
     const failed=await page.evaluate(async()=>{
       const select=document.querySelector('#reconModel');select.add(new Option('different','vision-different'));select.value='vision-different';
       window.fetch=async()=>new Response(JSON.stringify({choices:[{message:{content:'{"description":"no objects"}'}}]}),{status:200});

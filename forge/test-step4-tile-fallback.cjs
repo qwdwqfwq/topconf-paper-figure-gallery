@@ -41,7 +41,7 @@ const server=http.createServer((req,res)=>{
       const request=async(_src,_w,_h,task)=>{
         calls++;if(task.maxAttempts!==1)throw Error('Unexpected retry');
         if(task.sourceInventory)return {items:[{id:'i',kind:'text',description:'label',x:20,y:20,w:150,h:30,text:'Editable',colors:[{role:'text',value:'#000000'}]}],layers:[],connections:[],uncertainties:[]};
-        if(task.wholeImageAssessment)return {complete:true,wholeImageAcceptable:true,inventoryComplete:true,unlistedSourceItems:[],uncertainties:[],evidence:[{itemId:'i',status:'passed',nodeIds:['label'],reason:'Compared source and render'}],defects:[]};
+        if(task.wholeImageAssessment)return {complete:true,wholeImageAcceptable:true,coverage:[{region:'all',missingGroups:[]}],summary:'Compared',inventoryComplete:true,unlistedSourceItems:[],uncertainties:[],evidence:[{itemId:'i',status:'passed',nodeIds:['label'],reason:'Compared source and render'}],defects:[]};
         if(!task.wholeImage)throw Error('Unexpected repair');
         return {canvas:{width:320,height:180},nodes:[{id:'label',type:'text',x:20,y:20,w:150,h:30,text:'Editable',fill:'#000000',fontSize:18}]};
       };
@@ -56,7 +56,7 @@ const server=http.createServer((req,res)=>{
     });
     assert.equal(result.firstCalls,3);assert.equal(result.calls,6);
     assert.equal(result.published,true);assert.equal(result.measured,true);
-    assert.equal(result.failedCalls,1);assert.match(result.error,/Invalid scene/);
+    assert.equal(result.failedCalls,2);assert.match(result.error,/Invalid scene/);
     assert.deepEqual(result.details,[]);assert(result.nodes>0);
     assert.equal(result.validation,'passed');assert.equal(result.rounds,0);
     assert.match(result.progress,/1\/3/);assert(!result.progress.includes('NaN'));

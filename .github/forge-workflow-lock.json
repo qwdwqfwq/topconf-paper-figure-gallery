@@ -12,7 +12,7 @@
     "forge/i18n_forge.js": "3c4dd3c11fe4801f6b05375dfe20d1cc8ae9b47d34ccb953a24f69684ff9d797",
     "forge/image-api.mjs": "5c65038041f97b3fa2a6c608ddeb103ed44c4ad72ed501991d5ca1765a8adc9a",
     "forge/image-routes.mjs": "8724ef2c278d5dfa5975126c7374f013687f9c3fbd72a000ca9af027c6c44546",
-    "forge/index.html": "337b8348addf32bde9701f3c8771fe4a36bf165b8e375e38bc9203e3fd946daa",
+    "forge/index.html": "1a8dee9db08bd53c849c45088722f00bde8778176eb4b8cfaadba564d2979a26",
     "forge/infistar-audit.mjs": "145679bef9bf4251261e03a9eeb7868c1f83d3b5e57f2642c7767f12dee69f8d",
     "forge/pptx-template.json": "42a2c16730178c74755fddd1f2130ab04b939426df2be999c4762d43900f73bb",
     "forge/reconstruction-core.mjs": "574488c11472a5700364deb888ce3b2e5962b5d033552eb68173217c8c3fb2f6",
@@ -23,6 +23,6 @@
     "forge/source-fidelity.mjs": "58abadd0e0c2dc845419b7b211897728de99370e4a772132f6a743ab36896cb1",
     "forge/sw.js": "74447c7c5dd48783a9b04f91e48b2bd5e143482dca73024d601550fbbcb9769c",
     "forge/text-calibration.mjs": "94ae769599820967cb7aafdfcd8a75639fa28c65ff32631ad52670ebd594e0bf",
-    "forge/bitmap-evidence.mjs": "4f8225062fa39e1b4f5318c572d01c04b281f17e7a09cfa62d2bb1232b0fcb66"
+    "forge/bitmap-evidence.mjs": "8318db120498a6dd04512597194ddea60d4fc67ea6bf9c55e1329836d0e931d7"
   }
 }
