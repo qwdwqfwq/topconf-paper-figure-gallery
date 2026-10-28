@@ -5293,7 +5293,8 @@ async function runReconstruction(options={}){
   (window.__ffApiAudit||(window.__ffApiAudit={})).reconstruction=audit;
   window.__ffDirectTiming=audit;window.__ffReconResponses=[];window.__ffReconArchive=null;
   Object.assign(st,{svg:'',baseSvg:'',scene:null,partialScene:null,wholeImageResult:null,vectorScene:null,fidelityScene:null,vectorSvg:'',fidelitySvg:'',exportMode:'vector',recon:null,reconFailed:false,reconError:''});
-  const timer=setInterval(()=>{if(audit.state==='pending'&&status)status.textContent='单次整图识别中 · '+Math.round((Date.now()-startedAt)/1000)+' 秒 · 不进行分区、验收或修补';},1000);
+  const formatElapsed=ms=>{const seconds=Math.floor(Math.max(0,ms)/1000);return Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');};
+  const timer=setInterval(()=>{if(audit.state==='pending'&&status)status.textContent='单次整图识别中 · '+formatElapsed(Date.now()-startedAt)+' · 不进行分区、验收或修补';},1000);
   try{
     const src=await ensureBitmapDataUrl(syncStep3Bitmap());
     if(!src)throw Error('请先上传位图');
@@ -5313,7 +5314,7 @@ async function runReconstruction(options={}){
     Object.assign(audit,{state:'succeeded',phase:'complete',completedTiles:1,nodeCount:scene.nodes.length,finishedAt:Date.now()});audit.durationMs=audit.finishedAt-startedAt;
     Object.assign(st,{scene,svg,baseSvg:svg,vectorScene:scene,vectorSvg:svg,fidelityScene:null,fidelitySvg:'',exportMode:'vector',source:'bitmap',recon:{mode:'vector',nodes:scene.nodes.length,fidelityTiles:0,audit,qualityState:'not-run'},reconFailed:false,reconError:''});
     renderEditableExportCard();applyExportFont(st.font||'original');
-    if(status)status.textContent='单次整图识别完成：'+scene.nodes.length+' 个元素，原图 '+W+' × '+H+'；耗时 '+(audit.durationMs/1000).toFixed(1)+' 秒。可直接选择格式导出。';
+    if(status)status.textContent='单次整图识别完成：'+scene.nodes.length+' 个元素，原图 '+W+' × '+H+'；耗时 '+formatElapsed(audit.durationMs)+'。可直接选择格式导出。';
     return true;
   }catch(err){
     Object.assign(audit,{state:controller.signal.aborted?'cancelled':'failed',phase:'complete',finishedAt:Date.now(),error:safeExportError(err)});audit.durationMs=audit.finishedAt-startedAt;
