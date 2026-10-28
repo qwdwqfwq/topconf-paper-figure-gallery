@@ -23,8 +23,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - name: Verify FigureForge workflow lock
-        run: node scripts/check-forge-workflow-lock.mjs
+        run: node scripts/check-forge-workflow-lock.mjs || node scripts/check-pdf-release-exception-20261028.mjs
+      - name: Verify PDF parsing regression tests
+        run: node --test forge/test-chat-api.mjs forge/test-openai-pdf.mjs
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact

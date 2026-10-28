@@ -1330,6 +1330,11 @@ $('#reconReasoningEffort').onchange=e=>localStorage.setItem('ff_recon_reasoning_
 async function callPdfParser(mode, payload){
   const c=cfg(), base=baseURL(), key=cleanKey($('#key').value), model=parserModel();
   if(!base||!key||!model) throw new Error(tt('ps.nocfg'));
+  // Isolated PDF-only official Responses transport; shared generation/export stays unchanged.
+  const officialPdf = async body => {
+    const {requestOpenAIPdf}=await import('./pdf-openai-api.mjs?v=20261028-pdf1');
+    return requestOpenAIPdf(base,withReasoning(body,'parse'),key,{fetchImpl:fetchWithTimeout});
+  };
   const instruction=parserInstruction($('#target').value,$('#contentQuery').value.trim());
   let r, body;
   if(mode==='text'){
@@ -1340,7 +1345,7 @@ async function callPdfParser(mode, payload){
       r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},Infinity);
     }else if(/openai\.com/i.test(base)){
       body={model,input:[{role:'user',content:[{type:'input_text',text}]}],max_output_tokens:5000};
-      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},Infinity);
+      return officialPdf(body);
     }else{
       body={model,temperature:0.1,max_tokens:5000,messages:[{role:'system',content:'只输出严格 JSON。'},{role:'user',content:text}]};
       if($('#provider').value==='ark' && !relayBase()) body.thinking={type:'disabled'};
@@ -1358,7 +1363,7 @@ async function callPdfParser(mode, payload){
       const content=ex.imgs.map(u=>({type:'input_image',image_url:u}));
       content.push({type:'input_text',text:note});
       body={model,input:[{role:'user',content}],max_output_tokens:5000};
-      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},Infinity);
+      return officialPdf(body);
     }else{
       const content=ex.imgs.map(u=>({type:'image_url',image_url:{url:u}}));
       content.push({type:'text',text:note});
@@ -1377,6 +1382,7 @@ async function callPdfParser(mode, payload){
       r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},Infinity);
     }else if(dm==='openai_responses'){
       body={model,input:[{role:'user',content:[{type:'input_file',filename:pdfContext.fileName,file_data:pdfContext.dataUri},{type:'input_text',text:instruction}]}],max_output_tokens:5000};
+      if(new URL(base).origin==='https://api.openai.com') return officialPdf(body);
       r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},Infinity);
     }else{
       body={model,temperature:0.1,max_tokens:5000,messages:[{role:'system',content:'只输出严格 JSON。'},{role:'user',content:[{type:'file',file:{filename:pdfContext.fileName,file_data:pdfContext.dataUri}},{type:'text',text:instruction}]}]};
@@ -1443,6 +1449,7 @@ async function selectPdfContext(){
         break;
       }catch(e){
         if(seq!==pdfIntentSeq) return;
+        if(e.stopPdfFallback) throw e;
         const label = ch==='img'?tt('ps.modeImg'):ch==='text'?tt('ps.modeText'):tt('ps.modeDoc');
         failures.push(label+': '+String(e.message||e).replace(/[。．.；;\s]+$/,''));
       }
