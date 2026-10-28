@@ -1,5 +1,5 @@
 // Pure geometry helpers shared by the browser reconstruction flow and tests.
-import {geometrySegments,transformEditablePath} from './editable-native.mjs';
+import {geometrySegments,editableShapeFrame,transformEditablePath} from './editable-native.mjs';
 // Use the same targets for deciding whether to repair and for final review.
 // The former low thresholds stopped corrections while obvious errors remained.
 const QUALITY_TARGETS={score:.98,darkRecall:.98,localRecall:.97,
@@ -36,10 +36,19 @@ export function editableNodeBounds(n){
     const x=Number(n.x),y=Number(n.y),w=Number(n.w??n.width??0),h=Number(n.h??n.height??0);
     if([x,y,w,h].every(Number.isFinite)){
       const pad=n.type==='text'?Math.max(2,Number(n.fontSize||16)*.25):0;
-      coordinates=[{x:x-pad,y:y-pad},{x:x+w+pad,y:y+h+pad}];
+      coordinates=[{x:x-pad,y:y-pad},{x:x+w+pad,y:y-pad},
+        {x:x+w+pad,y:y+h+pad},{x:x-pad,y:y+h+pad}];
     }
   }
   if(!coordinates.length)return null;
+  if(n.type!=='text'&&Number(n.rotation)){
+    const frame=editableShapeFrame({...n,w:n.w??n.width,h:n.h??n.height});
+    if(frame){
+      const cx=frame.x+frame.w/2,cy=frame.y+frame.h/2,a=Number(n.rotation)*Math.PI/180;
+      coordinates=coordinates.map(p=>({x:cx+(p.x-cx)*Math.cos(a)-(p.y-cy)*Math.sin(a),
+        y:cy+(p.x-cx)*Math.sin(a)+(p.y-cy)*Math.cos(a)}));
+    }
+  }
   const xs=coordinates.map(p=>p.x),ys=coordinates.map(p=>p.y);
   const bounds={x:Math.min(...xs),y:Math.min(...ys),
     right:Math.max(...xs),bottom:Math.max(...ys)};
@@ -384,10 +393,20 @@ function sourceTileId(node){
   return /^tile([^_]+)_/.exec(String(node.id||''))?.[1]||null;
 }
 
+function strokeDashSignature(node){
+  const raw=node.dash||node.dashed||node.strokeDasharray;
+  if(raw===true)return 'preset-dash';
+  const values=Array.isArray(raw)?raw.map(Number):typeof raw==='string'&&raw.trim()
+    ?raw.trim().split(/[\s,]+/).map(Number):[];
+  if(!values.length||!values.every(value=>Number.isFinite(value)&&value>=0)
+    ||!values.some(value=>value>0))return 'solid';
+  return (values.length%2?[...values,...values]:values).join(',');
+}
+
 function sameStrokeStyle(a,b){
   return String(a.stroke||'').toLowerCase()===String(b.stroke||'').toLowerCase()
     && Math.abs(Number(a.strokeWidth||1)-Number(b.strokeWidth||1))<=1
-    && Boolean(a.dash)===Boolean(b.dash);
+    && strokeDashSignature(a)===strokeDashSignature(b);
 }
 
 function sameCurveGeometry(a,b){
@@ -433,16 +452,15 @@ function mergeCrossTileLines(nodes){
       if(!match){j++;continue;}
       const {ax,ay,ux,uy,length,t1,t2}=match;
       const low=Math.min(0,t1,t2),high=Math.max(length,t1,t2);
-      // Keep the direction of the arrow-bearing observation when possible.
-      if(b.arrow&&!a.arrow){
-        a.x=Number(b.x);a.y=Number(b.y);
-        a.x2=Number(b.x2);a.y2=Number(b.y2);a.arrow=b.arrow;
-      }
-      const direction=((Number(a.x2)-Number(a.x))*ux+(Number(a.y2)-Number(a.y))*uy)>=0;
-      const start=direction?low:high,end=direction?high:low;
-      a.x=ax+start*ux;a.y=ay+start*uy;
-      a.x2=ax+end*ux;a.y2=ay+end*uy;
-      a.arrow=Boolean(a.arrow||b.arrow);
+      // Preserve arrowheads at their observed endpoints, including reversed
+      // observations. An interior head describes a distinct connector.
+      const heads=[...(a.arrowStart?[0]:[]),...(a.arrow?[length]:[]),
+        ...(b.arrowStart?[t1]:[]),...(b.arrow?[t2]:[])];
+      if(heads.some(t=>Math.min(Math.abs(t-low),Math.abs(t-high))>4)){j++;continue;}
+      a.x=ax+low*ux;a.y=ay+low*uy;
+      a.x2=ax+high*ux;a.y2=ay+high*uy;
+      a.arrowStart=heads.some(t=>Math.abs(t-low)<=4);
+      a.arrow=heads.some(t=>Math.abs(t-high)<=4);
       nodes.splice(j,1);merged++;
       // The extended connector may also match a third crop.
       j=i+1;
@@ -469,6 +487,8 @@ function deduplicateCrossTileShapes(nodes){
       if(distance>4){j++;continue;}
       if(a.type==='path'||a.type==='polyline'){
         if(!sameCurveGeometry(a,b)){j++;continue;}
+        a.arrow=Boolean(a.arrow||b.arrow);
+        a.arrowStart=Boolean(a.arrowStart||b.arrowStart);
       }
       nodes.splice(j,1);removed++;
     }

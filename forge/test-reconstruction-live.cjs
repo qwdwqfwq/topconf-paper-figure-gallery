@@ -6,7 +6,12 @@ const input=path.resolve(process.argv[2]||''),output=path.resolve(process.argv[3
 if((!process.env.FF_API_KEY&&!process.env.FF_EXPORT_ONLY)||!fs.existsSync(input))throw Error('Set FF_API_KEY and pass input PNG');
 fs.mkdirSync(output,{recursive:true});
 const root=path.resolve(__dirname,'..');
+// Match the Infistar provider selected below; never send its key to another provider.
+const upstreamBase=new URL(process.env.FF_API_BASE||'https://infistar.cc/v1/');
+const upstreamChat=new URL(upstreamBase.href.replace(/\/$/,'')+'/chat/completions');
+if(upstreamChat.protocol!=='https:')throw Error('FF_API_BASE must use HTTPS');
 const deployedAssets={};
+let apiSequence=0;
 function readAsset(relative,filename,callback){
  if(!process.env.FF_DEPLOYED_BASE||!relative.startsWith('/forge/'))return fs.readFile(filename,callback);
  const url=process.env.FF_DEPLOYED_BASE.replace(/\/$/,'')+'/'+relative.slice('/forge/'.length);
@@ -22,8 +27,11 @@ function render(pptx,png,width,height){return new Promise((resolve,reject)=>exec
 const server=http.createServer((req,res)=>{
  const url=new URL(req.url,'http://localhost'),pathname=decodeURIComponent(url.pathname);
  if(pathname==='/relay/chat/completions'){
-  const callStarted=Date.now();
-  const upstream=https.request('https://infistar.cc/v1/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+process.env.FF_API_KEY}},r=>{let bytes=0;console.log('API status:',r.statusCode);r.on('data',b=>bytes+=b.length);r.on('end',()=>console.log('API complete:',bytes,'bytes',Date.now()-callStarted,'ms'));r.on('aborted',()=>{console.error('API response aborted:',bytes,'bytes');res.destroy();});res.writeHead(r.statusCode||502,{'Content-Type':r.headers['content-type']||'application/json'});r.pipe(res);});
+  const callStarted=Date.now(),callId=++apiSequence;
+  console.log('API started:',callId);
+  // Preserve completed model output independently of the browser merge queue.
+  // Headers and request bodies (including credentials) are never archived here.
+  const upstream=https.request(upstreamChat,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+process.env.FF_API_KEY}},r=>{let bytes=0;const chunks=[];console.log('API status:',callId,r.statusCode);r.on('data',b=>{bytes+=b.length;chunks.push(b);});r.on('end',()=>{const elapsedMs=Date.now()-callStarted;fs.writeFileSync(path.join(output,'response-'+String(callId).padStart(3,'0')+'.json'),Buffer.concat(chunks));fs.appendFileSync(path.join(output,'response-timings.jsonl'),JSON.stringify({callId,status:r.statusCode,bytes,elapsedMs})+'\n');console.log('API complete:',callId,bytes,'bytes',elapsedMs,'ms');});r.on('aborted',()=>{console.error('API response aborted:',callId,bytes,'bytes');res.destroy();});res.writeHead(r.statusCode||502,{'Content-Type':r.headers['content-type']||'application/json'});r.pipe(res);});
   res.on('close',()=>{if(!res.writableEnded)upstream.destroy();});
   upstream.on('error',e=>{console.error('API connection:',e.code||e.name);if(!res.destroyed){res.writeHead(502);res.end(JSON.stringify({error:{message:'Upstream connection failed'}}));}});req.pipe(upstream);return;
  }

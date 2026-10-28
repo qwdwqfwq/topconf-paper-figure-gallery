@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<script src="./nonelinear-config.js"></script>
 <title>FigureForge · 画廊检索画自己的主图</title>
 <style>
   :root{
@@ -678,17 +679,18 @@
 import * as T from './vendor/transformers.min.js';
 import {prepareQuery,buildIndex,rank} from './retrieval.mjs';
 import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=20261021-unlimited';
-import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261021-unlimited';
+import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261026-nonelinear-resolution';
 import {ImageRoutes, safeImageFailover} from './image-routes.mjs?v=20261020';
 const imageRoutes=new ImageRoutes();
-import {buildNativePptx, readNativePptxScene, geometrySegments, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=whole-image-20261021-1';
+import {buildNativePptx, readNativePptxScene, geometrySegments, editableShapeFrame, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=whole-image-20261021-1';
 import {recoverBitmapResponse,visibleEditableContent} from './bitmap-response.mjs';
-import {inventoryPrompt,normalizeInventory,normalizeDiagnosis,evidencePrompt,patchPrompt,reconstructWithEvidence,repairStatus} from './bitmap-evidence.mjs';
+import {layoutEditableText} from './editable-text-layout.mjs';
+import {typographyTolerance,rasterRecognitionPolicy,inventoryPrompt,nativeLayoutRecognitionPrompt,normalizeInventory,normalizeDiagnosis,evidencePrompt,localInspectionPrompt,regionalScenePrompt,patchPrompt,reconstructWithEvidence,repairStatus} from './bitmap-evidence.mjs';
 import {visionQueue, reconstructionCacheKey, readReconstructionCache, writeReconstructionCache} from './reconstruction-session.mjs?v=whole-image-20261021-1';
 import {scaleRegionCatalog, scaleRegionPatch, scaleStructureScene,registerMissingObjects, editableNodeBounds, regionForObjects, planCatalogRepairs, createWholeImageCatalog, objectRepairCatalog, tileDetailCatalog, auditExportLayout, extractEditableNodes, reconstructionQualityDeficit, acceptReconstructionRepair, planObjectRepairRegion, replaceObjectRepairRegion, planReconstructionTiles, subdivideReconstructionTile} from './reconstruction-core.mjs?v=whole-image-20261021-1';
-import {planDefectRegions,planDetailRegions,planSemanticRegions,snapshotVersions,applyRegionPatch,fitSourceFills,calibrateShapeGeometry,expandStructuredNodes,regionObjectCatalog,rollbackRegionChanges,rejectUnsupportedLines,recoverDocumentInk,repairStructuralLayers} from './reconstruction-pipeline.mjs?v=whole-image-20261021-1';
+import {planDefectRegions,planDetailRegions,planSemanticRegions,translateNode,snapshotVersions,applyRegionPatch,fitSourceFills,calibrateShapeGeometry,expandStructuredNodes,regionObjectCatalog,rollbackRegionChanges,rejectUnsupportedLines,recoverDocumentInk,repairStructuralLayers} from './reconstruction-pipeline.mjs?v=whole-image-20261021-1';
 import {calibrateEditableText} from './text-calibration.mjs?v=text-lines-20261017';
-import {figureCanvas,imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261016d';
+import {figureCanvas,imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261026-nonelinear-resolution';
 import {reconstructionHttpError,reconstructionRetryDelay,reconstructionFailureMessage} from './reconstruction-retry.mjs?v=20261021-detail-1';
 import {infistarAuditStatus} from './infistar-audit.mjs?v=20261016b';
 import {importDesktopScene} from './desktop-scene.mjs?v=20261014';
@@ -739,8 +741,8 @@ function syncBaseHint(){
 }
 
 const SKIP = /(embed|rerank|tts|speech|asx|transcri|whisper|ocr|audio|video|seedance|kling|wan.*(?:t2v|i2v))/i;
-const IMGRE = /(image|seedream|flux|kolors|dall-e|gpt-image|cogview|sd-|stable-diffusion|imagen|hy-image|wanx|qwen-image)/i;
-const kindOf = id => SKIP.test(id) ? 'skip' : IMGRE.test(id) ? 'image' : 'chat';
+const IMGRE = /(image|seedream|flux|kolors|dall-e|gpt-image|cogview|sd-|stable-diffusion|imagen|hy-image|wanx|qwen-image|^viduq2$|^kling-v2(?:-new|-1)?$)/i;
+const kindOf = id => /^kling-(?:image-o1|v2(?:-new|-1)?)$/i.test(id) ? 'image' : SKIP.test(id) ? 'skip' : IMGRE.test(id) ? 'image' : 'chat';
 // A model listed by /models is not necessarily able to understand images.
 // Never route image generators or ordinary text-only Qwen models to reconstruction.
 function isVisualChatModel(model, knownVision=[]){
@@ -1330,6 +1332,11 @@ $('#reconReasoningEffort').onchange=e=>localStorage.setItem('ff_recon_reasoning_
 async function callPdfParser(mode, payload){
   const c=cfg(), base=baseURL(), key=cleanKey($('#key').value), model=parserModel();
   if(!base||!key||!model) throw new Error(tt('ps.nocfg'));
+  // Isolated PDF-only official Responses transport; shared generation/export stays unchanged.
+  const officialPdf = async body => {
+    const {requestOpenAIPdf}=await import('./pdf-openai-api.mjs?v=20261028-pdf1');
+    return requestOpenAIPdf(base,withReasoning(body,'parse'),key,{fetchImpl:fetchWithTimeout});
+  };
   const instruction=parserInstruction($('#target').value,$('#contentQuery').value.trim());
   let r, body;
   if(mode==='text'){
@@ -1340,7 +1347,7 @@ async function callPdfParser(mode, payload){
       r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},Infinity);
     }else if(/openai\.com/i.test(base)){
       body={model,input:[{role:'user',content:[{type:'input_text',text}]}],max_output_tokens:5000};
-      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},Infinity);
+      return officialPdf(body);
     }else{
       body={model,temperature:0.1,max_tokens:5000,messages:[{role:'system',content:'只输出严格 JSON。'},{role:'user',content:text}]};
       if($('#provider').value==='ark' && !relayBase()) body.thinking={type:'disabled'};
@@ -1358,7 +1365,7 @@ async function callPdfParser(mode, payload){
       const content=ex.imgs.map(u=>({type:'input_image',image_url:u}));
       content.push({type:'input_text',text:note});
       body={model,input:[{role:'user',content}],max_output_tokens:5000};
-      r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},Infinity);
+      return officialPdf(body);
     }else{
       const content=ex.imgs.map(u=>({type:'image_url',image_url:{url:u}}));
       content.push({type:'text',text:note});
@@ -1377,6 +1384,7 @@ async function callPdfParser(mode, payload){
       r=await fetchWithTimeout(base+'/v1/messages',{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'parse'))},Infinity);
     }else if(dm==='openai_responses'){
       body={model,input:[{role:'user',content:[{type:'input_file',filename:pdfContext.fileName,file_data:pdfContext.dataUri},{type:'input_text',text:instruction}]}],max_output_tokens:5000};
+      if(new URL(base).origin==='https://api.openai.com') return officialPdf(body);
       r=await fetchWithTimeout(base+'/responses',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(withReasoning(body,'parse'))},Infinity);
     }else{
       body={model,temperature:0.1,max_tokens:5000,messages:[{role:'system',content:'只输出严格 JSON。'},{role:'user',content:[{type:'file',file:{filename:pdfContext.fileName,file_data:pdfContext.dataUri}},{type:'text',text:instruction}]}]};
@@ -1443,6 +1451,7 @@ async function selectPdfContext(){
         break;
       }catch(e){
         if(seq!==pdfIntentSeq) return;
+        if(e.stopPdfFallback) throw e;
         const label = ch==='img'?tt('ps.modeImg'):ch==='text'?tt('ps.modeText'):tt('ps.modeDoc');
         failures.push(label+': '+String(e.message||e).replace(/[。．.；;\s]+$/,''));
       }
@@ -1660,6 +1669,9 @@ async function populateAnalyzeModels(){
 }
 $('#analyzeModel').onchange = e=>localStorage.setItem('ff_amodel_'+$('#provider').value, e.target.value);
 function initProviders(){
+  // The official endpoint restricts browser CORS. The optional local launcher
+  // supplies a same-origin, fixed-upstream relay without storing API keys.
+  MAN.providers.nonelinear={label:'非线智能 NoneLinear',base:window.FF_NONELINEAR_BASE||'https://api.nonelinear.com.cn/v1',proto:'oai',cors:!!window.FF_NONELINEAR_BASE,chat:['Qwen3-8B-nothink:free','qwen3-vl-32b-instruct'],vision:['qwen3-vl-32b-instruct'],image:['Qwen-Image']};
   // Register independently of the periodically refreshed upstream manifest.
   MAN.providers.infistar={label:'Infistar 无限星河',base:'https://infistar.cc/v1',proto:'oai',cors:true,chat:[],vision:[],image:[]};
   // Retire these providers even when a refreshed manifest still contains them.
@@ -1694,6 +1706,7 @@ function restoreProviderState(p){
   $('#customModelRow').hidden = p!=='custom';
   $('#corsNote').hidden = c.cors!==false;
   if(c.cors===false) $('#corsNote').innerHTML = tt('cors.note');
+  if(p==='nonelinear' && c.cors===false) $('#corsNote').textContent = '非线智能尚未允许画廊域名跨域访问。站点管理员需让服务商开放画廊来源，或配置统一的 HTTPS 转发入口；配置完成后，访客只需打开画廊链接并填写自己的 Key。当前尚未配置线上入口。';
   syncRelayPreset();
   syncBaseHint();
   populateReconstructionModels();
@@ -1756,14 +1769,27 @@ document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
 function syncImageRatioSupport(){
   const warn=$('#imageRatioWarn');
   if(!warn) return;
+  for(const option of $('#imageResolution').options) option.disabled=false;
   warn.hidden=true;warn.textContent='';warn.classList.remove('audit-ok');
   if(mode!=='image') return;
   const p=$('#provider').value,model=p==='custom'?$('#customModel').value.trim():$('#model').value;
   if(!model) return;
+  if(p==='nonelinear'){
+    for(const option of $('#imageResolution').options){
+      try{imageRequestDimensions(p,model,$('#figureRatio').value,option.value);}
+      catch{option.disabled=true;}
+    }
+    const selected=$('#imageResolution').selectedOptions[0];
+    if(selected?.disabled){
+      const supported=Array.from($('#imageResolution').options).find(option=>!option.disabled);
+      if(supported) $('#imageResolution').value=supported.value;
+    }
+  }
   try{
     imageRequestDimensions(p,model,$('#figureRatio').value,$('#imageResolution').value,usesInfistarGemini(baseURL(),model));
   }catch(error){
     warn.textContent=tt('img.unsupported',{model,ratio:$('#figureRatio').value,resolution:$('#imageResolution').value});
+    if(p==='nonelinear') warn.textContent=`${model} 的非线智能接口未声明支持当前比例与分辨率组合，请选择可用配置。`;
     warn.hidden=false;
     return;
   }
@@ -2278,14 +2304,24 @@ function safeExportError(err){
 // Keep the timer active while the response body streams. A fulfilled fetch()
 // only means headers arrived; the previous timer was cleared before r.text().
 async function fetchTextWithTimeout(url, options={}, timeoutMs=Infinity){
+  const now=()=>globalThis.performance?.now?.()??Date.now();
   const ac=new AbortController();
   const cancel=()=>ac.abort();
   options.signal?.addEventListener("abort",cancel,{once:true});
   if(options.signal?.aborted)ac.abort();
   const to=Number.isFinite(timeoutMs)?setTimeout(()=>ac.abort(),timeoutMs):null;
   try{
+    const started=now();
     const r=await fetch(url,{...options,signal:ac.signal});
-    return {ok:r.ok,status:r.status,retryAfter:r.headers.get('retry-after'),text:await r.text()};
+    const headersMs=now()-started;
+    let text='',firstBodyChunkMs=null,responseBytes=0;
+    if(r.body?.getReader){
+      const reader=r.body.getReader(),decoder=new TextDecoder();
+      try{while(true){const {done,value}=await reader.read();if(done)break;if(firstBodyChunkMs===null)firstBodyChunkMs=now()-started;responseBytes+=value.byteLength;text+=decoder.decode(value,{stream:true});}text+=decoder.decode();}
+      finally{reader.releaseLock();}
+    }else{text=await r.text();responseBytes=new TextEncoder().encode(text).length;}
+    const elapsedMs=now()-started;
+    return {ok:r.ok,status:r.status,retryAfter:r.headers.get('retry-after'),text,transport:{headersMs,firstBodyChunkMs,responseBytes,elapsedMs}};
   }catch(err){
     if(options.signal?.aborted)throw new DOMException("Reconstruction stopped","AbortError");
     if(ac.signal.aborted){
@@ -2829,7 +2865,7 @@ function styleOf(el){
   };
 }
 
-// Preserve the pre-existing bitmap fallback parser byte-for-byte in behavior.
+// Keep bitmap fallback parsing isolated from the separate SVG export parser.
 const parseBitmapSvgScene = (() => {
 function svgColorToHex(value){
   if(!value) return null;
@@ -2854,9 +2890,9 @@ function svgColorToHex(value){
 
 function styleOf(el){
   let s = {};
-  try{ s = el.style || {}; }catch(_){ s = {}; }
+  try{ s = getComputedStyle(el); }catch(_){ s = el.style || {}; }
   const pick = name => {
-    const inline = s && s[name];
+    const inline = el.style?.getPropertyValue(name) || s?.getPropertyValue?.(name) || s?.[name];
     if(inline) return inline;
     const attr = el.getAttribute(name);
     return attr || null;
@@ -2865,6 +2901,9 @@ function styleOf(el){
     fill: pick('fill'),
     stroke: pick('stroke'),
     strokeWidth: pick('stroke-width'),
+    dash: pick('stroke-dasharray'),
+    markerStart: pick('marker-start'),
+    markerEnd: pick('marker-end'),
     opacity: pick('opacity'),
     fillOpacity: pick('fill-opacity'),
     strokeOpacity: pick('stroke-opacity'),
@@ -2875,6 +2914,14 @@ function styleOf(el){
     textAnchor: pick('text-anchor'),
     dominantBaseline: pick('dominant-baseline'),
   };
+}
+
+function connectorStyle(st){
+  const hasMarker = value => !!value && String(value).trim().toLowerCase() !== 'none';
+  const rawDash = String(st.dash || '').trim();
+  const dash = rawDash && rawDash !== 'none' ? rawDash.split(/[\s,]+/).map(v=>parseFloat(v)) : [];
+  return {arrowStart:hasMarker(st.markerStart), arrow:hasMarker(st.markerEnd),
+    ...(dash.length && dash.every(v=>Number.isFinite(v)&&v>=0) && dash.some(v=>v>0) ? {dash} : {})};
 }
 
 function parseLegacySvgScene(svg){
@@ -2959,7 +3006,7 @@ function parseLegacySvgScene(svg){
       const p2 = applyMatrix(m, num('x2',0), num('y2',0));
       nodes.push({type:'line', x:p1.x, y:p1.y, x2:p2.x, y2:p2.y,
         stroke:svgColorToHex(st.stroke)||'000000', strokeWidth:parseFloat(st.strokeWidth)||1,
-        arrow: !!el.getAttribute('marker-end')});
+        ...connectorStyle(st)});
       return;
     }
 
@@ -2968,7 +3015,7 @@ function parseLegacySvgScene(svg){
       const pts = el.getAttribute('points');
       let bbox = null;
       try{ bbox = el.getBBox(); }catch(_){ bbox = null; }
-      if(bbox && bbox.width>0 && bbox.height>0){
+      if(bbox && (bbox.width>0 || bbox.height>0)){
         const corners = [applyMatrix(m,bbox.x,bbox.y), applyMatrix(m,bbox.x+bbox.width,bbox.y),
                          applyMatrix(m,bbox.x,bbox.y+bbox.height), applyMatrix(m,bbox.x+bbox.width,bbox.y+bbox.height)];
         const xs=corners.map(c=>c.x), ys=corners.map(c=>c.y);
@@ -2978,9 +3025,9 @@ function parseLegacySvgScene(svg){
           d:d||null, points:pts||null,
           fill:svgColorToHex(st.fill), stroke:svgColorToHex(st.stroke)||'000000',
           strokeWidth:parseFloat(st.strokeWidth)||1,
-          arrow: !!el.getAttribute('marker-end'),
+          ...connectorStyle(st),
           matrix: isIdentity(m) ? null : m.slice(),
-          closed: tag!=='polyline'});
+          closed: tag==='polygon' || (tag==='path' && /[zZ]\s*$/.test(d || ''))});
       } else warnings.push(tag+' element without measurable bounds was skipped');
       return;
     }
@@ -4234,14 +4281,22 @@ function sceneToSvgString(scene){
     if(n.gradient?.stops?.length>=2){const a=Number(n.gradient.angle||0)*Math.PI/180,dx=Math.cos(a)*50,dy=Math.sin(a)*50;
       parts.push('<defs><linearGradient id="grad'+i+'" x1="'+(50-dx)+'%" y1="'+(50-dy)+'%" x2="'+(50+dx)+'%" y2="'+(50+dy)+'%">'+n.gradient.stops.map(s=>'<stop offset="'+Math.max(0,Math.min(1,Number(s.offset)))*100+'%" stop-color="'+escapeSvgAttr(s.color)+'"/>').join('')+'</linearGradient></defs>');fill='url(#grad'+i+')';}
     if(n.arrow)parts.push('<defs><marker id="arrow'+i+'" markerWidth="8" markerHeight="8" refX="8" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="'+stroke+'"/></marker></defs>');
+    if(n.arrowStart)parts.push('<defs><marker id="arrowStart'+i+'" markerWidth="8" markerHeight="8" refX="0" refY="4" orient="auto"><path d="M8 0L0 4L8 8Z" fill="'+stroke+'"/></marker></defs>');
+    const markers=(n.arrow?' marker-end="url(#arrow'+i+')"':'')+(n.arrowStart?' marker-start="url(#arrowStart'+i+')"':'');
     const sw = Math.max(0,num(n.strokeWidth,1));
-    const dash = n.dash || n.dashed ? ' stroke-dasharray="8 6"' : '';
+    const rawDash = n.dash || n.dashed || n.strokeDasharray;
+    const dashValues = Array.isArray(rawDash) ? rawDash : typeof rawDash === 'string' ? rawDash.trim().split(/[\s,]+/).map(Number) : null;
+    const dash = dashValues?.length && dashValues.every(v=>typeof v==='number' && Number.isFinite(v) && v>=0) && dashValues.some(v=>v>0)
+      ? ' stroke-dasharray="'+dashValues.join(' ')+'"' : rawDash===true ? ' stroke-dasharray="8 6"' : '';
+    const frame=n.type!=='text'&&num(n.rotation)?editableShapeFrame(n):null;
+    if(frame)parts.push('<g transform="rotate('+num(n.rotation)+' '+(frame.x+frame.w/2)+' '+(frame.y+frame.h/2)+')">');
     if(n.type === 'image'){
       parts.push('<image id="'+id+'" data-role="image" data-editable="true" x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'" preserveAspectRatio="none" href="'+escapeSvgAttr(n.href||'')+'" xlink:href="'+escapeSvgAttr(n.href||'')+'"/>');
     } else if(n.type === 'text'){
       const anchor = n.anchor==='middle' ? 'middle' : (n.anchor==='end' ? 'end' : 'start');
       const tx = anchor==='middle' ? x+w/2 : anchor==='end' ? x+w : x;
-      const fs=Math.max(1,num(n.fontSize,16)), lines=String(n.text||'').split(/\r?\n/), lineH=fs*1.14;
+      const fitted=scene.svgSource ? {text:String(n.text||''),fontSize:Math.max(1,num(n.fontSize,16))} : layoutEditableText(n.text,{...n,fontSize:num(n.fontSize,16)});
+      const fs=fitted.fontSize, lines=fitted.text.split(/\r?\n/), lineH=fs*1.14;
       const measuredBaseline=scene.svgSource&&Number.isFinite(Number(n.baselineRatio));
       const ty=measuredBaseline ? y+Number(n.baselineRatio)*h :
         (n.verticalAlign==='middle' ? y+(h-lines.length*lineH)/2+fs*.86 : y+fs*.84);
@@ -4252,12 +4307,13 @@ function sceneToSvgString(scene){
     } else if(n.type === 'ellipse'){
       parts.push('<ellipse id="'+id+'" data-editable="true" cx="'+(x+w/2)+'" cy="'+(y+h/2)+'" rx="'+(w/2)+'" ry="'+(h/2)+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+dash+'/>');
     } else if(n.type === 'line'){
-      parts.push('<line id="'+id+'" data-editable="true" x1="'+x+'" y1="'+y+'" x2="'+num(n.x2,x+w)+'" y2="'+num(n.y2,y+h)+'" stroke="'+color(n.stroke,'#334155')+'" stroke-width="'+sw+'" fill="none"'+(n.arrow?' marker-end="url(#arrow'+i+')"':'')+dash+'/>');
+      parts.push('<line id="'+id+'" data-editable="true" x1="'+x+'" y1="'+y+'" x2="'+num(n.x2,x+w)+'" y2="'+num(n.y2,y+h)+'" stroke="'+color(n.stroke,'#334155')+'" stroke-width="'+sw+'" fill="none"'+markers+dash+'/>');
     } else if(n.type === 'polyline'){
-      parts.push('<'+(n.closed?'polygon':'polyline')+' id="'+id+'" data-editable="true" points="'+escapeSvgAttr(n.points||'')+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+(n.arrow?' marker-end="url(#arrow'+i+')"':'')+dash+'/>');
+      parts.push('<'+(n.closed?'polygon':'polyline')+' id="'+id+'" data-editable="true" points="'+escapeSvgAttr(n.points||'')+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+markers+dash+'/>');
     } else if(n.type === 'path'){
-      parts.push('<path id="'+id+'" data-editable="true" d="'+escapeSvgAttr(n.d||'')+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+(n.arrow?' marker-end="url(#arrow'+i+')"':'')+dash+'/>');
+      parts.push('<path id="'+id+'" data-editable="true" d="'+escapeSvgAttr(n.d||'')+'" fill="'+fill+'" stroke="'+stroke+'" stroke-width="'+sw+'"'+markers+dash+'/>');
     }
+    if(frame)parts.push('</g>');
   });
   parts.push('</svg>');
   return parts.join('\n');
@@ -4404,19 +4460,45 @@ async function ensureBitmapDataUrl(src){
 }
 
 function editableScenePrompt(W,H,paper){
-  return 'Reconstruct this scientific figure as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"regions":[{"id":"panel_1","kind":"chart|table|flow|panel|photo","x":0,"y":0,"w":100,"h":100}],"nodes":[...]}. First inspect the entire source at its exact pixel dimensions and locate every panel boundary. Systematically inspect the image from top to bottom, left to right, then revisit dense charts, tables, legends, icons and small labels. Measure all coordinates against the FULL supplied canvas, never against a mentally resized preview. Verify each panel boundary and every object center against the original image before emitting JSON. Preserve the measured panel proportions, whitespace and alignment; never redesign the layout. Use the independently collected source checklist to provide the COMPLETE object catalog and semantic regions. Choose the region count from actual content, without a quota. Keep each entire chart (axes, ticks, legend, data and title), table, or connected local flow in ONE region. Prefer flat non-overlapping regions covering all content, including captions. Assign node owner to its region id; global connectors may remain unowned. This is the WHOLE IMAGE object catalog. Give every object a unique string id; retain each cross-region arrow, icon and text label exactly once as a complete object. Every node MUST have a string "type" field, for example {"type":"rect","x":1,"y":2,"w":3,"h":4}; never nest it as {"rect":{...}}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Transcribe each visible text line exactly, preserving capitalization, punctuation, mathematical symbols and line breaks. Use ONE text node for each complete continuous label or line; never split a word or label into several text nodes at a crop edge, duplicate its overlapping characters, or combine unrelated nearby labels. Estimate fontSize from visible glyph height, not the surrounding box. Give the line a tight x,y,w,h bounding box that does not overlap other labels. If text content cannot be read, do not invent characters. Preserve all independently visible surrounding boxes, marks, connectors and geometry; uncertainty about text never permits omitting the object or its region. Text must be OCR transcription, not a description. Inspect dense modules for short connectors, dashed returns, repeated tiny boxes and axis ticks before returning JSON. Keep adjacent boxes, graph nodes and arrows as separate objects. For curved arrows and rings use path d with SVG M/L/C/Q/A/Z commands; preserve true arcs and curves rather than polygonal approximations. For rotated text set rotation in degrees. For 90/270-degree labels, x,y,w,h MUST describe the visible box AFTER rotation (a vertical label has a narrow w and tall h), not a horizontal layout box; retain the visible box center. For text following a ring or arc use a text node with textPath:{d:"M ... A ...",startOffset:0.5}; keep the text transcribed as editable characters. Treat each small icon, chart, and dense module as a collection of distinct primitives. Assign each outline, interior mark, text label, and connector its own unique ID; preserve the full geometry of every object across crop boundaries. This global catalog establishes stable object IDs; later patches may add genuinely missed objects. Do not reduce this first pass to a layout skeleton. Inspect every region and include small internal lines and shapes now; do not defer missing objects to later crop requests. For 3D-looking bars, cubes, prisms, or beveled objects, draw the front, top, and side faces as separate closed polygons with their own fill colors and edges; never flatten them to a rectangle. Preserve geometry and layer order. Do not return a single full-canvas bitmap as a substitute. For every line or arrow, both endpoints must coincide with visible endpoints in the supplied source. Never use (0,0), a crop corner, or a crop edge as a placeholder endpoint. Do not invent unseen line geometry; retain all confirmed visible segments and adjacent shapes even when a connection is uncertain. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,closed,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor,rotation,textPath}, and image {x,y,w,h,href}. Use image only for photographic/illustrative content that cannot be decomposed, and include a crop object when possible. For EACH region check in order: outer frames and backgrounds; text; icon outlines and internal lines; connectors and arrowheads; axes and every tick; legends; every repeated small square; every face of 3D objects. Enumerate repeated instances individually, never substitute a representative or summary. Before submitting, revisit every region and category against the original and add omissions. Keep z-order from background to foreground. Use compact JSON with no commentary or repeated descriptions. Omit optional properties only when their default preserves appearance; retain geometry, IDs, owners, text, necessary styles and paint order. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
+  return typographyTolerance+rasterRecognitionPolicy+'Reconstruct this image as an editable vector scene. The reference image is the source of truth. Return STRICT JSON only, with schema {"canvas":{"width":'+W+',"height":'+H+'},"regions":[{"id":"panel_1","kind":"chart|table|flow|panel|photo","x":0,"y":0,"w":100,"h":100}],"nodes":[...]}. COMPLETENESS CONTRACT: This is an exact tracing task, not a schematic summary. Output every visible instance, including repeated small details. Apply category-specific rules only where that content appears: connected diagrams require every visible node, edge, arrowhead and label with their actual topology and opacity; icons and illustrations require their visible outlines and interior components; charts require axes, ticks, legends and data marks; tables require a shared editable grid, cell fills and each cell text; repeated groups require their individual contents. Do not assume any category exists or impose a standard icon anatomy. Preserve actual panel fills, heading backgrounds and badges where present. Measure each outer panel and inner card corner: for every visibly rounded rectangle include a nonzero radius matching the source; never omit radius and silently turn a rounded frame square. Preserve frame stroke width, dash pattern, and the exact overlap of header bands with rounded frames in back-to-front paint order. Transcribe mathematical glyphs visually: use separate text nodes for visibly raised/lowered scripts, fraction numerator and denominator, and a line for each fraction bar; do not expose LaTeX commands or literal markup absent from the image. Match visible font family, weight, glyph height and line wrapping, including serif headings and multiline labels. If the exact font family cannot be established from the pixels, use the matching generic serif or sans-serif family instead of guessing a named decorative font. Estimate text size from visible ink and preserve readable layout; slight font or size differences are acceptable under the typography acceptance policy. Before emitting each region, count its visible nodes, edges, cards, icon parts, table rows and columns against the source and include every one; do not treat a descriptive text node as geometry. There is no target node count and no need to economize by discarding detail. First inspect the entire source at its exact pixel dimensions and locate every panel boundary. Systematically inspect the image from top to bottom, left to right, then revisit dense charts, tables, legends, icons and small labels. Measure all coordinates against the FULL supplied canvas, never against a mentally resized preview. Verify each panel boundary and every object center against the original image before emitting JSON. Preserve the measured panel proportions, whitespace and alignment; never redesign the layout. Use the independently collected source checklist to provide the COMPLETE object catalog and semantic regions. Choose the region count from actual content, without a quota. Keep each entire chart (axes, ticks, legend, data and title), table, or connected local flow in ONE region. Prefer flat non-overlapping regions covering all content, including captions. Assign node owner to its region id; global connectors may remain unowned. Independently assign sourceItemId to every node that belongs to an item in the supplied source inventory, using that exact inventory item id. Choose the most specific item that owns the primitive; an arrow shaft and its heads share their connector item id. This sourceItemId is replacement lineage, not a scene region id or an invented label. Use null only for global backgrounds or objects genuinely absent from the inventory. Retain this lineage even when guessed geometry crosses the inventory item bounds. This is the WHOLE IMAGE object catalog. Give every object a unique string id; retain each cross-region arrow, icon and text label exactly once as a complete object. Every node MUST have a string "type" field, for example {"type":"rect","x":1,"y":2,"w":3,"h":4}; never nest it as {"rect":{...}}. Use pixel coordinates in the supplied canvas. Extract every visible primitive separately: panel/group rectangles, rounded boxes, dashed frames, circles, graph nodes, individual small squares, arrows/lines, connectors, paths, and every readable text label. Transcribe each visible text line exactly, preserving capitalization, punctuation, mathematical symbols and line breaks. Use ONE text node for each complete continuous label or line, except visibly positioned mathematical scripts, numerators and denominators which require separate measured text nodes as specified above; never split a word or label into several text nodes at a crop edge, duplicate its overlapping characters, or combine unrelated nearby labels. Estimate fontSize from visible glyph height, not the surrounding box. Give the line a tight x,y,w,h bounding box that does not overlap other labels. If text content cannot be read, do not invent characters. Preserve all independently visible surrounding boxes, marks, connectors and geometry; uncertainty about text never permits omitting the object or its region. Text must be OCR transcription, not a description. Inspect dense modules for short connectors, dashed returns, repeated tiny boxes and axis ticks before returning JSON. Keep adjacent boxes, graph nodes and arrows as separate objects. For curved arrows and rings use path d with SVG M/L/C/Q/A/Z commands; preserve true arcs and curves rather than polygonal approximations. For rotated text set rotation in degrees. For 90/270-degree labels, x,y,w,h MUST describe the visible box AFTER rotation (a vertical label has a narrow w and tall h), not a horizontal layout box; retain the visible box center. For text following a ring or arc use a text node with textPath:{d:"M ... A ...",startOffset:0.5}; keep the text transcribed as editable characters. Treat each small icon, chart, and dense module as a collection of distinct primitives. Assign each outline, interior mark, text label, and connector its own unique ID; preserve the full geometry of every object across crop boundaries. This global catalog establishes stable object IDs; later patches may add genuinely missed objects. Do not reduce this first pass to a layout skeleton. Inspect every region and include small internal lines and shapes now; do not defer missing objects to later crop requests. For 3D-looking bars, cubes, prisms, or beveled objects, draw the front, top, and side faces as separate closed polygons with their own fill colors and edges; never flatten them to a rectangle. Preserve geometry and layer order. Do not return a single full-canvas bitmap as a substitute. For every line or arrow, both endpoints must coincide with visible endpoints in the supplied source. Never use (0,0), a crop corner, or a crop edge as a placeholder endpoint. Do not invent unseen line geometry; retain all confirmed visible segments and adjacent shapes even when a connection is uncertain. Node types are rect {x,y,w,h,radius,fill,stroke,strokeWidth,dash}, ellipse {x,y,w,h,fill,stroke,strokeWidth}, line {x,y,x2,y2,stroke,strokeWidth,arrow,dash}, polyline {points,closed,fill,stroke,strokeWidth}, path {d,fill,stroke,strokeWidth}, text {x,y,w,h,text,fontSize,fill,fontFamily,bold,italic,anchor,rotation,textPath}, and image {x,y,w,h,href}. Apply the photographic content exception above; image nodes use measured source crop bounds and an empty href, which the application fills from the original pixels. For EACH region check in order: outer frames and backgrounds; text; icon outlines and internal lines; connectors and arrowheads; axes and every tick; legends; every repeated small square; every face of 3D objects. Enumerate repeated instances individually, never substitute a representative or summary. Before submitting, revisit every region and category against the original and add omissions. Keep z-order from background to foreground. Use compact JSON with no commentary or repeated descriptions. Omit optional properties only when their default preserves appearance; retain geometry, IDs, owners, text, necessary styles and paint order. Colors may be hex. Keep coordinates and dimensions inside the canvas. Paper context, used only to disambiguate text, follows:\n'+String(paper||'').slice(0,1800);
 }
 function editableSceneRetryPrompt(W,H){
   return 'The previous answer could not be used. Inspect the attached image crop and return ONLY a JSON object with this exact outer shape: {"canvas":{"width":'+W+',"height":'+H+'},"nodes":[{"type":"rect","x":0,"y":0,"w":10,"h":10,"fill":"#ffffff"}]}. Replace the example node with the actual visible, separately editable rectangles, lines, arrows, text, polygons and photographic regions. Coordinates are pixels within this crop. Every node needs a type. For text use {"type":"text","x":0,"y":0,"w":100,"h":20,"text":"actual words","fontSize":14,"fill":"#000000"}. For a completely blank white crop, nodes may be empty. No descriptions, analysis, Markdown, or other keys are needed.';
 }
-function rememberFailedReconResponse(audit,txt,diagnostics,error){
-  const record={time:new Date().toISOString(),model:audit.model,attempt:audit.attempt,
-    diagnostics,error:String(error&&error.message||error),content:String(txt||'')};
-  (window.__ffReconResponses||(window.__ffReconResponses=[])).push(record);
-  if(window.__ffReconResponses.length>12) window.__ffReconResponses.shift();
-  const button=$('#downloadReconResponse');
-  if(button) button.hidden=false;
+// Persist raw -> parsed -> final evidence independently of the volatile export card.
+// No credentials or request headers are stored. Failed writes remain downloadable.
+let reconArchiveQueue=Promise.resolve();
+async function reconArchiveStore(mode,operation){
+  const db=await new Promise((resolve,reject)=>{
+    const request=indexedDB.open('figure-forge-recognition-evidence',1);
+    request.onupgradeneeded=()=>request.result.createObjectStore('runs',{keyPath:'id'});
+    request.onerror=()=>reject(request.error);request.onsuccess=()=>resolve(request.result);
+  });
+  try{return await new Promise((resolve,reject)=>{
+    const transaction=db.transaction('runs',mode),request=operation(transaction.objectStore('runs'));
+    let result;request.onsuccess=()=>{result=request.result;};
+    transaction.oncomplete=()=>resolve(result);transaction.onerror=transaction.onabort=()=>reject(transaction.error||Error('Evidence transaction aborted'));
+  });}finally{db.close();}
 }
+function persistReconArchive(update={}){
+  const archive=window.__ffReconArchive||(window.__ffReconArchive={version:3,id:Date.now()+'-'+crypto.randomUUID(),startedAt:new Date().toISOString(),responses:[]});
+  Object.assign(archive,update,{responses:window.__ffReconResponses||[],updatedAt:new Date().toISOString()});
+  // Snapshot now: queued writes must never pick up another run's responses.
+  const snapshot=JSON.parse(JSON.stringify(archive));
+  reconArchiveQueue=reconArchiveQueue.then(async()=>{
+    try{await reconArchiveStore('readwrite',store=>store.put(snapshot));window.__ffLatestReconArchive=snapshot;delete archive.persistenceError;}
+    catch(error){archive.persistenceError=String(error.message||error);console.warn('Recognition evidence could not be persisted',error);const button=$('#downloadReconResponse');if(button)button.title='本地保存失败，请立即下载记录：'+archive.persistenceError;}
+  });
+  return reconArchiveQueue;
+}
+async function rememberReconResponse(record){
+  record.time??=new Date().toISOString();
+  (window.__ffReconResponses||(window.__ffReconResponses=[])).push(record);
+  const button=$('#downloadReconResponse');if(button)button.hidden=false;
+  await persistReconArchive();
+  return record;
+}
+
 
 function sceneNumber(v, fallback){
   const n=Number(v);
@@ -4497,15 +4579,16 @@ function materializeEditableScene(raw,W,H){
     const gradient=rawGradient?{...rawGradient,stops:(rawGradient.stops||[]).map(s=>({...s,color:cleanColor(s.color,'#ffffff')}))}:undefined;
     const base={
       id:String(n.id||('v'+i)),
-      x,y,w,h,version:Number(n.version)||0,parentId:n.parentId,owner:n.owner,gradient,cellBounds:n.cellBounds,
+      x,y,w,h,version:Number(n.version)||0,parentId:n.parentId,owner:n.owner,sourceItemId:typeof n.sourceItemId==='string'?n.sourceItemId:undefined,gradient,cellBounds:n.cellBounds,
       fill:cleanColor(rawFill,'none'),
       stroke:cleanColor(pick(n,['stroke','strokeColor','borderColor'],''),type==='line'?'#334155':'none'),
-      strokeWidth:clamp(pick(n,['strokeWidth','lineWidth','borderWidth'],1),0,12)
+      strokeWidth:clamp(pick(n,['strokeWidth','lineWidth','borderWidth'],1),0,12),
+      rotation:clamp(pick(n,['rotation','angle','rotate'],0),-360,360),
+      dash:Array.isArray(n.dash||n.dashed||n.strokeDasharray) ? [...(n.dash||n.dashed||n.strokeDasharray)] : (n.dash||n.dashed||n.strokeDasharray||false)
     };
     if(type==='rect') out.push(Object.assign(base,{
       type:'rect',
-      radius:clamp(pick(n,['radius','cornerRadius','r','rx','ry'],0),0,Math.min(w,h)/2),
-      dash:!!(n.dash||n.dashed||n.strokeDasharray)
+      radius:clamp(pick(n,['radius','cornerRadius','r','rx','ry'],0),0,Math.min(w,h)/2)
     }));
     else if(type==='ellipse') out.push(Object.assign(base,{type:'ellipse'}));
     else if(type==='line'){
@@ -4518,36 +4601,23 @@ function materializeEditableScene(raw,W,H){
       if(Math.hypot(x2-x,y2-y)<0.5) return;
       out.push(Object.assign(base,{
         type:'line',x2,y2,
-        arrow:!!(n.arrow||n.markerEnd||n.arrowhead),
-        dash:!!(n.dash||n.dashed||n.strokeDasharray)
+        arrow:!!(n.arrow||n.arrowEnd||n.markerEnd||n.arrowhead),arrowStart:!!(n.arrowStart||n.markerStart)
       }));
     }
     else if(type==='polyline' && pick(n,['points','vertices'],'')){
       const vertices=pick(n,['points','vertices'],[]);
       const points=Array.isArray(vertices) ? vertices.map(p=>Array.isArray(p)?p.join(','):(p&&typeof p==='object'?p.x+','+p.y:String(p))).join(' ') : String(vertices);
-      out.push(Object.assign(base,{type:'polyline',points,arrow:!!n.arrow,closed:!!(n.closed||n.isClosed||String(n.type).toLowerCase()==='polygon'),dash:!!(n.dash||n.dashed)}));
+      out.push(Object.assign(base,{type:'polyline',points,arrow:!!(n.arrow||n.arrowEnd||n.markerEnd||n.arrowhead),arrowStart:!!(n.arrowStart||n.markerStart),closed:!!(n.closed||n.isClosed||String(n.type).toLowerCase()==='polygon')}));
     }
     else if(type==='path' && pick(n,['d','path'],'')){
       const d=String(pick(n,['d','path'],''));
-      if(parseEditablePath(d).length) out.push(Object.assign(base,{type:'path',d,arrow:!!n.arrow}));
+      if(parseEditablePath(d).length) out.push(Object.assign(base,{type:'path',d,arrow:!!(n.arrow||n.arrowEnd||n.markerEnd||n.arrowhead),arrowStart:!!(n.arrowStart||n.markerStart)}));
     }
     else if(type==='text' && String(pick(n,['text','content','label','value'],'')).trim()){
-      const label=String(pick(n,['text','content','label','value'],'')).replace(/\r\n?/g,'\n').trim().slice(0,300);
-      let fontSize=clamp(pick(n,['fontSize','font_size','size'],18),6,120);
-      // The model may report a size from a magnified crop. Respect its
-      // explicit label bounds so adjacent editable labels do not collide.
-      const explicitW=sceneNumber(pick(n,['w','width'],null),0);
-      const explicitH=sceneNumber(pick(n,['h','height'],null),0);
-      const labelLines=label.split('\n');
-      if(explicitH>0) fontSize=Math.min(fontSize,Math.max(6,explicitH/(1+(labelLines.length-1)*1.14)*1.08));
-      const clippedAtTileEdge=x<=4 || x+explicitW>=W-4;
-      if(explicitW>0 && !clippedAtTileEdge && !n.textPath && !n.rotation){
-        const font=String(pick(n,['fontFamily','font','family'],'Arial'));
-        const measure=document.createElement('canvas').getContext('2d');
-        measure.font=`${n.bold?'bold ':''}${fontSize}px ${font}`;
-        const measured=Math.max(...labelLines.map(line=>measure.measureText(line).width));
-        if(measured>explicitW*1.04) fontSize=Math.max(6,fontSize*explicitW*1.04/measured);
-      }
+      const label=String(pick(n,['text','content','label','value'],'')).replace(/\r\n?/g,'\n').trim();
+      // Native-resolution recognition already reports the intended text size.
+      // Glyph bounds can be narrower/shorter than the font em; do not shrink it.
+      const fontSize=clamp(pick(n,['fontSize','font_size','size'],18),6,Math.max(W,H));
       out.push(Object.assign(base,{
         type:'text',
         text:label,
@@ -4583,7 +4653,7 @@ function materializeEditableScene(raw,W,H){
 }
 function parseEditableSceneResponse(txt,W,H){
   const raw=recoverBitmapResponse(txt,'scene');
-  const sources=Array.isArray(raw.nodes)?raw.nodes:extractEditableNodes(raw);
+  const sources=extractEditableNodes(raw);
   const scene=materializeEditableScene({nodes:[],regions:raw.regions||[]},W,H);
   scene.recovery=raw.recovery;
   sources.forEach((node,index)=>{
@@ -4593,12 +4663,18 @@ function parseEditableSceneResponse(txt,W,H){
       if(node.hidden||node.visible===false||Number(node.opacity??1)<=0)throw Error('Invisible node excluded');
       parsed.forEach(n=>{if(Number(node.fillOpacity??1)<=0)n.fill='none';if(Number(node.strokeOpacity??1)<=0)n.stroke='none';});
       if(!parsed.length)throw Error('Unsupported or empty editable node');
-      if(parsed.some(n=>scene.nodes.some(prior=>prior.id===n.id)))throw Error('Duplicate node ID');
+      const ids=new Set(scene.nodes.map(n=>n.id));
+      for(const n of parsed){
+        const original=n.id;let suffix=1;
+        while(ids.has(n.id))n.id=original+'-recovered-'+suffix++;
+        ids.add(n.id);
+        if(n.id!==original)(scene.recovery.repaired||(scene.recovery.repaired=[])).push({field:'nodes',index,reason:'Duplicate node ID renamed',originalId:original,id:n.id});
+      }
       scene.nodes.push(...parsed);
     }catch(error){scene.recovery.rejected.push({field:'nodes',index,reason:String(error.message)});}
   });
   scene.counts={total:scene.nodes.length,text:scene.nodes.filter(n=>n.type==='text').length,images:scene.nodes.filter(n=>n.type==='image').length,shapes:scene.nodes.filter(n=>!['text','image'].includes(n.type)).length};
-  scene.recognitionCounts={raw:sources.length,expanded:expandStructuredNodes(sources.filter(n=>n&&typeof n==='object')).length,parsed:scene.nodes.length};
+  scene.recognitionCounts={raw:sources.length,expanded:expandStructuredNodes(sources.filter(n=>n&&typeof n==='object')).length,parsed:scene.nodes.length,rejected:scene.recovery.rejected.length};
   return scene;
 }
 function editableReconstructionModel(){
@@ -4744,6 +4820,30 @@ async function prepareVisionImages(images,limited,signal){
   checkAbort();
   return {images:prepared,transport};
 }
+async function appendVisionOverviews(images,signal){
+  const overviewImages=[],records=[];
+  // Keep all existing image numbers stable (especially ORIGINAL/RENDER pairs).
+  // The original remains byte-for-byte intact; this extra view supplies composition.
+  for(let index=0;index<Math.min(images.length,2);index++){
+    if(signal?.aborted)throw new DOMException('已取消','AbortError');
+    const source=await loadImage(images[index]);
+    const width=source.naturalWidth,height=source.naturalHeight;
+    if(Math.max(width,height)<=2400)continue;
+    const scale=1800/Math.max(width,height),canvas=document.createElement('canvas');
+    canvas.width=Math.round(width*scale);canvas.height=Math.round(height*scale);
+    try{
+      const ctx=canvas.getContext('2d');
+      if(!ctx)throw new Error('无法建立整图定位概览。');
+      ctx.fillStyle='#fff';ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.drawImage(source,0,0,canvas.width,canvas.height);
+      if(signal?.aborted)throw new DOMException('已取消','AbortError');
+      records.push({index:images.length+overviewImages.length,sourceIndex:index,width:canvas.width,height:canvas.height,sourceWidth:width,sourceHeight:height});
+      overviewImages.push(canvas.toDataURL('image/jpeg',.95));
+    }finally{canvas.width=0;canvas.height=0;}
+  }
+  images.push(...overviewImages);
+  return records;
+}
 async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   const cfgv=cfg(), relay=relayBase(), model=tileAudit?.pinnedModel||editableReconstructionModel();
   if(!model) throw new Error(tt('analyze.needmodel'));
@@ -4754,13 +4854,13 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   const prepareBody=body=>{
     const sent=withReasoning(body,'recon');
     if(wholeRequest && /^gpt-/i.test(model) && sent.max_tokens){sent.max_completion_tokens=sent.max_tokens;delete sent.max_tokens;}
-    audit.requestParameters={model:sent.model,endpoint:baseURL(),max_tokens:sent.max_tokens,max_completion_tokens:sent.max_completion_tokens,reasoning_effort:sent.reasoning_effort,reasoning:sent.reasoning,imageTransport:audit.imageTransport,images:referenceImages.map((_,index)=>({index,detail:cfgv.proto==='anthropic'&&!relay?'provider-native':detail,...(index===0?{width:W,height:H}:{})}))};
+    audit.requestParameters={model:sent.model,endpoint:baseURL(),max_tokens:sent.max_tokens,max_completion_tokens:sent.max_completion_tokens,reasoning_effort:sent.reasoning_effort,reasoning:sent.reasoning,imageTransport:audit.imageTransport,images:referenceImages.map((_,index)=>({index,detail:cfgv.proto==='anthropic'&&!relay?'provider-native':imageDetail(index),...(index===0?{width:W,height:H}:{}),...(audit.compositionOverviews.find(r=>r.index===index)?{role:'composition-overview',...audit.compositionOverviews.find(r=>r.index===index)}:{})}))};
     audit.parameterSupport='awaiting-response';
     return checkVisionRequestSize(sent,limitedImages);
   };
   Object.assign(audit,{state:'pending',startedAt:Date.now(),model,provider:cfgv.proto,endpoint:baseURL(),attempt:0});
-  const sourcePrompt=audit.sourceChecklist?'\nFrozen source inventory: '+JSON.stringify(audit.sourceChecklist)+'. Reconstruct every item, repeated instance, color, connection and back-to-front layer relation; do not defer details.':'';
-  const prompt=audit.structureOnly ? 'Analyze ONLY the structure of this figure. Return STRICT JSON {"canvas":{"width":'+W+',"height":'+H+'},"regions":[{"id":"panel_a","parentId":null,"kind":"panel","x":0,"y":0,"w":100,"h":100}],"nodes":[]}. Use global pixel coordinates and stable unique IDs. Regions cover all contents: prefer one region per complete semantic panel; keep related charts, tables, labels and icons together; subdivide only exceptionally dense panels when their details cannot fit in one response; cross-panel connectors belong to the global nodes catalog, never to a separate overlapping region. Include every cross-panel connector as a complete node now. Parent remainder regions are generated automatically; do not fragment them into strips. Nodes include ONLY panel backgrounds, main headings WITH their opaque colored rounded background strips, and complete cross-region connectors. Place heading backgrounds after panel frames and before heading text so the frame cannot cross the heading. Never replace a rounded panel with a square rectangle. Defer tiny labels, chart marks and internal details to regional workers. Do not invent unreadable text. Nodes use rect/ellipse/line/path/polyline/text, geometry in pixels, hex fill/stroke, strokeWidth, fontSize/fontFamily/bold for text. Text MUST include x,y,w,h for its tight enclosing text BOX: x,y are the TOP-LEFT of that box, never a center or baseline. anchor is alignment INSIDE the box (start/middle/end); it never changes the coordinate origin. fontSize is in image 1 pixels. For rotated text include rotation in degrees; x,y,w,h describe the visible box AFTER rotation (vertical text has narrow w and tall h), never an unrotated layout box. Include fontFamily and bold, preserve each visible line break.  Prefer about 8-12 meaningful regions for a dense poster, following actual panel boundaries; group simple icon primitives together rather than one region per mark. Regions must cover every foreground object. Preserve layer order.' : editableScenePrompt(W,H,$('#paper')?$('#paper').value:'')+sourcePrompt;
+  const sourcePrompt=audit.sourceChecklist?'\nSource coverage checklist (original pixels take precedence over uncertain descriptions): '+JSON.stringify(audit.sourceChecklist)+'. Use the checklist to avoid omissions, but verify every count, crop and position against the original pixels; never reproduce a checklist hallucination. Reconstruct all visible details in your owned region.':'';
+  const prompt=audit.nativeLayout ? nativeLayoutRecognitionPrompt(W,H,audit.sourceChecklist,audit.nativeRegions) : audit.regionalRecognition ? regionalScenePrompt(W,H,audit) : audit.structureOnly ? 'Analyze ONLY the structure of this figure. Return STRICT JSON {"canvas":{"width":'+W+',"height":'+H+'},"regions":[{"id":"panel_a","parentId":null,"kind":"panel","x":0,"y":0,"w":100,"h":100}],"nodes":[]}. Use global pixel coordinates and stable unique IDs. Regions cover all contents: prefer one region per complete semantic panel; keep related charts, tables, labels and icons together; subdivide only exceptionally dense panels when their details cannot fit in one response; cross-panel connectors belong to the global nodes catalog, never to a separate overlapping region. Include every cross-panel connector as a complete node now. Parent remainder regions are generated automatically; do not fragment them into strips. Nodes include ONLY panel backgrounds, main headings WITH their opaque colored rounded background strips, and complete cross-region connectors. Place heading backgrounds after panel frames and before heading text so the frame cannot cross the heading. Never replace a rounded panel with a square rectangle. Defer tiny labels, chart marks and internal details to regional workers. Do not invent unreadable text. Nodes use rect/ellipse/line/path/polyline/text, geometry in pixels, hex fill/stroke, strokeWidth, fontSize/fontFamily/bold for text. Text MUST include x,y,w,h for its tight enclosing text BOX: x,y are the TOP-LEFT of that box, never a center or baseline. anchor is alignment INSIDE the box (start/middle/end); it never changes the coordinate origin. fontSize is in image 1 pixels. For rotated text include rotation in degrees; x,y,w,h describe the visible box AFTER rotation (vertical text has narrow w and tall h), never an unrotated layout box. Include fontFamily and bold, preserve each visible line break.  Prefer about 8-12 meaningful regions for a dense poster, following actual panel boundaries; group simple icon primitives together rather than one region per mark. Regions must cover every foreground object. Preserve layer order.' : editableScenePrompt(W,H,$('#paper')?$('#paper').value:'')+sourcePrompt;
   // Feed the existing object graph back to the model. Photo data URLs are
   // replaced by crop coordinates; the source image is attached separately.
   const priorScene=revision&&revision.scene?JSON.stringify({
@@ -4775,6 +4875,9 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   if(audit.contextImage)referenceImages.push(audit.contextImage);
   if(audit.retryRender)referenceImages.push(audit.retryRender);
   if(audit.fullSourceImage)referenceImages.push(audit.fullSourceImage);
+  audit.compositionOverviews=await appendVisionOverviews(referenceImages,audit.signal);
+  const imageDetail=index=>audit.compositionOverviews.some(r=>r.index===index)?'high':detail;
+  const overviewPrompt=audit.compositionOverviews.length?'\nCOMPOSITION REFERENCES: '+audit.compositionOverviews.map(r=>'Image '+(r.index+1)+' is a complete overview of image '+(r.sourceIndex+1)+' ('+r.sourceWidth+' x '+r.sourceHeight+' source pixels).').join(' ')+' Use these overviews to locate ALL panels, including bottom and right edges. Read fine text and exact details from the corresponding unchanged original. An overview is the SAME image, never a new panel or additional content. All output coordinates and font sizes remain in the declared source/crop pixel canvas, never overview pixels. Verify every box against the complete composition; do not extrapolate columns across unrelated bottom panels. Truncated words inside a source heading do not mean the canvas itself is cropped.':'';
   // One gate for inventory, reconstruction, whole/local acceptance and repair images.
   let preparedImages;
   try{preparedImages=await prepareVisionImages(referenceImages,limitedImages,audit.signal);}
@@ -4798,10 +4901,11 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
     audit.timeoutMs=timeoutMs;
     audit.attempt=attempt;
     audit.attemptStartedAt=Date.now();
+    let responseRecord;
     try{
       const assessmentInstructions=audit.wholeImageAssessment?'INDEPENDENT WHOLE-IMAGE ACCEPTANCE GATE. Also return wholeImageAcceptable:boolean, summary:string, coverage:[{region:string,missingGroups:string[]}]. Check EVERY source region and element class, including dense interiors, repeated small marks, text, connectors and 3D faces. Set wholeImageAcceptable=false if any entire group, panel internals, or widespread small elements are missing or materially misplaced. Local residual errors may be repairable, but a skeleton is unacceptable. Never use total node count alone as acceptance. Report missingGroups for every region and tightly bounded defects for all significant errors. ':'';
-      const attemptPrompt=audit.sourceInventory ? inventoryPrompt(W,H)+(audit.resourceCoordinateConfirmation ? " Previous inventory has unverified coordinates or grouped rasters. Reinspect the ORIGINAL at its declared native dimensions; return the FULL corrected inventory and split every raster into individual visible crops. Preserve all existing item IDs and non-raster items. When splitting a group, each child must have a unique id and sourceItemId equal to the original group ID; the number of children must match its expectedCount. Never silently reduce counts or replace resource identities. Do not rescale guessed coordinates. Record remaining uncertainty. Previous inventory: "+JSON.stringify(audit.previousInventory) : "") : audit.defectDiagnosis
-        ? assessmentInstructions+(audit.wholeImageAssessment&&audit.sourceChecklist?evidencePrompt(audit.sourceChecklist):'')+'Compare image 1 ORIGINAL with image 2 CURRENT editable rendering. Diagnose ONLY clearly visible residual reconstruction errors in the first reconstruction. Return STRICT JSON {"complete":true,"defects":[]} when no significant errors remain, otherwise {"complete":false,"defects":[{"x":0,"y":0,"w":100,"h":100,"reason":"specific visible discrepancy","kind":"text|layer|chart|table|shape|photo","objectIds":["existing_id"]}]}. Coordinates are '+(audit.localInspection?'CROP-RELATIVE':'GLOBAL source')+' pixels, canvas '+W+' x '+H+'. Inspect missing objects, text hidden behind colored boxes, incorrect stacking/occlusion, duplicated text or lines, chart marks, table cells, fine print and photo crops. Check dashed versus solid strokes (including curved arrows), clipped icons behind title backgrounds, text crossing cell borders, out-of-cell numbers and doubled grid lines. Never accept missing fine print merely because the overall layout matches. Each defect box must tightly enclose the actual erroneous objects, with correct context excluded. Keep a chart/table together only when its structure needs repair. Minor antialiasing differences are not defects. Use source evidence; do not invent unreadable text. Inspect the entire '+(audit.localInspection?'crop':'image including margins')+'. Existing catalog: '+serializeVisionCatalog(audit.catalog)
+      const attemptPrompt=audit.sourceInventory ? inventoryPrompt(W,H)+(audit.resourceCoordinateConfirmation ? " Previous inventory has unverified coordinates or grouped rasters. Reinspect the ORIGINAL at its declared native dimensions; return the FULL corrected inventory and split every raster into individual visible crops. Recheck panel boundaries against visible borders: independent adjacent modules are separate panels, never overlapping column strips spanning unrelated modules. Preserve correct item IDs. When splitting a correctly counted group, use unique child IDs and sourceItemId for the old group. If the previous count, grouping, kind or identity was wrong, explicitly return corrections:[{itemId:oldID,replacementIds:[newIDs],reason:concise visual evidence,verifiedFromOriginal:true}]. Include a correction for EACH replaced old item. Count only frames actually visible in the original; do not invent frames to satisfy a previous guessed count. Keep every genuinely visible item, and retain correct items unchanged. Corrections must refer to replacements in the full corrected items list. Do not rescale guessed coordinates. Record remaining uncertainty. Previous inventory: "+JSON.stringify(audit.previousInventory) : "") : audit.defectDiagnosis
+        ? assessmentInstructions+(audit.localInspection?localInspectionPrompt(audit):'')+(audit.wholeImageAssessment&&audit.sourceChecklist?evidencePrompt(audit.sourceChecklist):'')+'Compare image 1 ORIGINAL with image 2 CURRENT editable rendering. Diagnose ONLY clearly visible residual reconstruction errors in the first reconstruction. '+(audit.wholeImageAssessment?'Return ONE STRICT JSON object with ALL fields: {"complete":false,"wholeImageAcceptable":false,"summary":"concise visible findings","coverage":[{"region":"source region","missingGroups":[]}],"inventoryComplete":false,"unlistedSourceItems":[],"uncertainties":[],"evidence":[{"itemId":"each inventory ID exactly once","status":"passed|failed|uncertain","nodeIds":["actual catalog ID"],"instances":[],"reason":"concise pixel evidence"}],"defects":[{"x":0,"y":0,"w":100,"h":100,"reason":"specific visible discrepancy","kind":"text|layer|chart|table|shape|photo","objectIds":["existing_id"]}]}. Include every evidence row even when defects exist. Use compact reasons; never omit evidence or coverage. Set complete and wholeImageAcceptable true only after every check passes, with defects empty. ':'Return STRICT JSON {"complete":true,"defects":[]} when no significant errors remain, otherwise {"complete":false,"defects":[{"x":0,"y":0,"w":100,"h":100,"reason":"specific visible discrepancy","kind":"text|layer|chart|table|shape|photo","objectIds":["existing_id"]}]}. ')+'Coordinates are '+(audit.localInspection?'CROP-RELATIVE':'GLOBAL source')+' pixels, canvas '+W+' x '+H+'. Inspect missing objects, text hidden behind colored boxes, incorrect stacking/occlusion, duplicated text or lines, chart marks, table cells, fine print and photo crops. Check dashed versus solid strokes (including curved arrows), clipped icons behind title backgrounds, text crossing cell borders, out-of-cell numbers and doubled grid lines. Never accept missing fine print merely because the overall layout matches. Each defect box must tightly enclose the actual erroneous objects, with correct context excluded. Keep a chart/table together only when its structure needs repair. Minor antialiasing differences are not defects. '+typographyTolerance+' Use source evidence; do not invent unreadable text. Inspect the entire '+(audit.localInspection?'repair ownership including every intersecting object; surrounding padding is context':'image including margins')+'. Existing catalog: '+serializeVisionCatalog(audit.catalog)
         : audit.regionPatch
         ? patchPrompt(W,H,audit,serializeVisionCatalog)
         : audit.structureOnly ? prompt
@@ -4826,7 +4930,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
           max_tokens:audit.wholeImage?128000:audit.defectDiagnosis?8000:audit.regionPatch?16000:32000,
           system:RECON_SYS,
           messages:[{role:'user',content:[
-            {type:'text',text:attemptPrompt},
+            {type:'text',text:attemptPrompt+overviewPrompt},
             ...referenceImages.map(uri=>{const part=dataURIToParts(uri);return {type:'image',source:{type:'base64',media_type:part.media,data:part.data}};})
           ]}]
         };
@@ -4835,7 +4939,8 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
           headers:anthropicHeaders(cleanKey($('#key').value)),
           body:prepareBody(body)
         },timeoutMs);
-        txt=r.text;
+        txt=r.text;audit.transport=r.transport;
+        responseRecord=await rememberReconResponse({stage:audit.sourceInventory?'source-inventory':audit.defectDiagnosis?'diagnosis':audit.regionPatch?'local-repair':audit.regionalRecognition?'regional-recognition':'whole-image',model,attempt,region:audit.region||null,sourceRegion:audit.sourceRegion||null,regionalRecognition:!!audit.regionalRecognition,request:audit.requestParameters,envelope:txt,content:txt,status:r.status});
         if(!r.ok){audit.parameterSupport='rejected';throw reconstructionHttpError(r,'HTTP '+r.status+': '+friendlyHttp(r.status,txt)+(wholeRequest?' [whole-image: 128000 tokens, detail='+detail+'; no automatic downgrade]':''));}
         const d=JSON.parse(txt);
         audit.parameterSupport='accepted-by-endpoint; internal image resolution unverified';
@@ -4844,11 +4949,12 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         audit.responseDiagnostics=responseDiagnostics;
         txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
         audit.outputTruncated=d.stop_reason==='max_tokens';
+        Object.assign(audit,{outputChars:txt.length,outputCharsPerSecond:r.transport?.elapsedMs>0?txt.length*1000/r.transport.elapsedMs:null});
+        Object.assign(responseRecord,{content:txt,diagnostics:responseDiagnostics,usage:audit.usage,responseModel:audit.responseModel,transport:audit.transport,outputChars:audit.outputChars,outputCharsPerSecond:audit.outputCharsPerSecond});await persistReconArchive();
         if(audit.outputTruncated&&!audit.defectDiagnosis&&!audit.sourceInventory){
           const error=new Error('Vision response reached the output token limit ('+responseDiagnostics+')');
           error.sceneFormatFailure=true;
           error.outputTruncated=true;
-          rememberFailedReconResponse(audit,txt,responseDiagnostics,error);
           throw error;
         }
       }else{
@@ -4859,8 +4965,8 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
           messages:[
             {role:'system',content:RECON_SYS},
             {role:'user',content:[
-              {type:'text',text:attemptPrompt},
-              ...referenceImages.map(url=>({type:'image_url',image_url:{url,detail}}))
+              {type:'text',text:attemptPrompt+overviewPrompt},
+              ...referenceImages.map((url,index)=>({type:'image_url',image_url:{url,detail:imageDetail(index)}}))
             ]}
           ]
         };
@@ -4875,7 +4981,8 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
           headers:{'Content-Type':'application/json',Authorization:'Bearer '+cleanKey($('#key').value)},
           body:prepareBody(body)
         },timeoutMs);
-        txt=r.text;
+        txt=r.text;audit.transport=r.transport;
+        responseRecord=await rememberReconResponse({stage:audit.sourceInventory?'source-inventory':audit.defectDiagnosis?'diagnosis':audit.regionPatch?'local-repair':audit.regionalRecognition?'regional-recognition':'whole-image',model,attempt,region:audit.region||null,sourceRegion:audit.sourceRegion||null,regionalRecognition:!!audit.regionalRecognition,request:audit.requestParameters,envelope:txt,content:txt,status:r.status});
         if(!r.ok){audit.parameterSupport='rejected';throw reconstructionHttpError(r,'HTTP '+r.status+': '+friendlyHttp(r.status,txt)+(wholeRequest?' [whole-image: 128000 tokens, detail='+detail+'; no automatic downgrade]':''));}
         const d=JSON.parse(txt);
         audit.parameterSupport='accepted-by-endpoint; internal image resolution unverified';
@@ -4886,16 +4993,14 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         responseDiagnostics='finish_reason='+String(choice.finish_reason||'unknown')+', content_chars='+txt.length+
           (d.usage&&d.usage.completion_tokens!==undefined?', completion_tokens='+d.usage.completion_tokens:'');
         audit.responseDiagnostics=responseDiagnostics;
+        Object.assign(audit,{outputChars:txt.length,outputCharsPerSecond:r.transport?.elapsedMs>0?txt.length*1000/r.transport.elapsedMs:null});
+        Object.assign(responseRecord,{content:txt,diagnostics:responseDiagnostics,usage:audit.usage,responseModel:audit.responseModel,transport:audit.transport,outputChars:audit.outputChars,outputCharsPerSecond:audit.outputCharsPerSecond});await persistReconArchive();
         if(choice.finish_reason==='length'&&!audit.defectDiagnosis&&!audit.sourceInventory){
           const error=new Error('Vision response reached the output token limit ('+responseDiagnostics+')');
           error.sceneFormatFailure=true;
           error.outputTruncated=true;
           throw error;
         }
-      }
-      if(wholeRequest||audit.sourceInventory||audit.defectDiagnosis||audit.regionPatch){
-        window.__ffReconResponses=window.__ffReconResponses||[];
-        window.__ffReconResponses.push({stage:audit.sourceInventory?'source-inventory':audit.defectDiagnosis?'diagnosis':audit.regionPatch?'local-repair':'whole-image',content:txt,request:audit.requestParameters,usage:audit.usage,responseModel:audit.responseModel,diagnostics:responseDiagnostics});
       }
       let scene;
       try{
@@ -4948,11 +5053,11 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         err.sceneFormatFailure=true;
         if(err.sceneFormatFailure || /editable nodes array|empty editable scene/.test(String(err.message))){
           previousResponse=txt;
-          rememberFailedReconResponse(audit,txt,responseDiagnostics,err);
         }
         if(err.sceneFormatFailure) err.message+=' ('+responseDiagnostics+')';
         throw err;
       }
+      responseRecord.parsed=structuredClone(scene);await persistReconArchive();
       audit.recovery=scene.recovery;
       const sourceImage=await loadImage(imageDataUri);
       const responseNodes=[...scene.nodes,...(scene.operations||[]).flatMap(op=>op.nodes||[])];
@@ -4961,11 +5066,15 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
         const c=document.createElement('canvas');
         const w=Math.max(1,Math.round(n.w||1)), h=Math.max(1,Math.round(n.h||1));
         c.width=w; c.height=h;
-        const sx=Math.max(0,Math.round((Number(n.x||0)/W)*sourceImage.width));
-        const sy=Math.max(0,Math.round((Number(n.y||0)/H)*sourceImage.height));
-        const sw=Math.max(1,Math.min(sourceImage.width-sx,Math.round((w/W)*sourceImage.width)));
-        const sh=Math.max(1,Math.min(sourceImage.height-sy,Math.round((h/H)*sourceImage.height)));
+        if(![n.x,n.y,n.w,n.h].every(Number.isFinite)||n.x<0||n.y<0||n.w<=0||n.h<=0||n.x+n.w>W||n.y+n.h>H)throw Error('照片裁切超出原图范围，需重新识别边界：'+n.id);
+        const sx=Math.round(n.x/W*sourceImage.width),sy=Math.round(n.y/H*sourceImage.height);
+        const right=Math.round((n.x+n.w)/W*sourceImage.width),bottom=Math.round((n.y+n.h)/H*sourceImage.height);
+        const sw=right-sx,sh=bottom-sy;
+        if(sw<=0||sh<=0)throw Error('照片裁切为空：'+n.id);
         c.getContext('2d').drawImage(sourceImage,sx,sy,sw,sh,0,0,w,h);
+        const origin=audit.sourceRegion;
+        n.sourceCrop={x:n.x+(origin?.x||0),y:n.y+(origin?.y||0),w:n.w,h:n.h};
+        n.sourceCanvas={width:audit.fullSourceWidth||W,height:audit.fullSourceHeight||H};
         n.href=c.toDataURL('image/png');
         n.crop={x:Number(n.x||0)/W,y:Number(n.y||0)/H,w:Number(n.w||0)/W,h:Number(n.h||0)/H};
       }
@@ -4975,9 +5084,11 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
       audit.nodeCount=responseNodes.length;
       if(scene.recognitionCounts)audit.nodeCounts={...scene.recognitionCounts};
       audit.attempts=attempt;
+      responseRecord.result=structuredClone(scene);await persistReconArchive();
       return scene;
     }catch(err){
       lastError=err;
+      if(responseRecord){responseRecord.error=String(err.message||err);await persistReconArchive();}
       audit.lastError=String(err&&err.message||err);
       const delay=err.imageTransportFailure?null:reconstructionRetryDelay(err,attempt,formatAttempts);
       if(attempt>=maxAttempts || audit.signal?.aborted || delay===null || (Number.isFinite(audit.maxTotalMs)&&Date.now()-audit.startedAt+delay+1000>=audit.maxTotalMs)) break;
@@ -5096,19 +5207,39 @@ async function acceptMissingDetailsByRender(canvas,scene,proposals,measureScene,
   return scene;
 }
 function compactQuality(q){if(!q)return q;return Object.fromEntries(Object.entries(q).filter(([k,v])=>typeof v==='number'||typeof v==='boolean'));}
-async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cachedScene,cachedOmissionChecked=false,measureScene=compareEditableRender,onProgress=async()=>{},options={}){
-  return reconstructWithEvidence(canvas,src,requestScene,audit,measureScene,onProgress,options,{
-    createWholeImageCatalog,sceneToSvgString,compactQuality,planDefectRegions,regionObjectCatalog,snapshotVersions,
-    applyRegionPatch,acceptReconstructionRepair,reconstructionQualityDeficit,editableNodeBounds,
+function createEvidenceRenderer(canvas,audit,measureScene=compareEditableRender){
+  const office=typeof window.__ffRenderPptx==='function',renders=new WeakMap();
+  audit.evidenceRenderSource=office?'host-office':'scene-svg';
+  const imageFor=async scene=>{
+    if(!office)return sceneToSvgString(scene);
+    if(!renders.has(scene))renders.set(scene,(async()=>{
+      const png=await window.__ffRenderPptx(await buildNativePptx(scene,zipStore),{width:canvas.width,height:canvas.height});
+      if(typeof png!=='string'||!/^data:image\/png;base64,/.test(png))throw Error('PPTX renderer must return a PNG data URL');
+      const image=await loadImage(png);
+      if(image.naturalWidth!==canvas.width||image.naturalHeight!==canvas.height)throw Error('PPTX render dimensions mismatch');
+      return png;
+    })());
+    return renders.get(scene);
+  };
+  return {
+    measure:async(source,scene,region)=>measureScene(source,office?await imageFor(scene):scene,region),
     renderCrop:async(scene,region)=>{
-      const url=URL.createObjectURL(new Blob([sceneToSvgString(scene)],{type:'image/svg+xml'}));
+      const rendered=await imageFor(scene);
+      const url=office?rendered:URL.createObjectURL(new Blob([rendered],{type:'image/svg+xml'}));
       try{
         const image=await loadImage(url),crop=document.createElement('canvas');crop.width=region.w;crop.height=region.h;
         const ctx=crop.getContext('2d');ctx.fillStyle='#ffffff';ctx.fillRect(0,0,crop.width,crop.height);
         ctx.drawImage(image,region.x,region.y,region.w,region.h,0,0,crop.width,crop.height);
         return crop.toDataURL('image/png');
-      }finally{URL.revokeObjectURL(url);}
+      }finally{if(!office)URL.revokeObjectURL(url);}
     }
+  };
+}
+async function reconstructCatalogWithFallback(canvas,src,requestScene,audit,cachedScene,cachedOmissionChecked=false,measureScene=compareEditableRender,onProgress=async()=>{},options={}){
+  const renderer=createEvidenceRenderer(canvas,audit,measureScene);
+  return reconstructWithEvidence(canvas,src,requestScene,audit,renderer.measure,onProgress,options,{
+    createWholeImageCatalog,sceneToSvgString,compactQuality,planDefectRegions,regionObjectCatalog,snapshotVersions,translateNode,
+    applyRegionPatch,acceptReconstructionRepair,reconstructionQualityDeficit,editableNodeBounds,renderCrop:renderer.renderCrop
   });
 }
 function reconstructionProgressText(audit){
@@ -5119,9 +5250,10 @@ function reconstructionProgressText(audit){
   const queued=calls.filter(call=>call.state==='queued').length;
   const phase=audit.phase||'prepare';
   let stage;
-  if(zh) stage={prepare:'准备图像',inventory:'建立原图检查清单',whole:'完整整图识别',inspection:'原分辨率逐区对照',retry:'局部重试',regions:'定点修复缺陷',details:'原分辨率细节精修',merge:'合并分区',omission:'整图查漏',quality:'首轮已完成，验收中',repair:'局部精修',final:'生成导出'}[phase]||'重建中';
-  else stage={prepare:'Preparing image',inventory:'Inventorying original image',whole:'Complete whole-image recognition',inspection:'Comparing full-resolution crops',retry:'Retrying selected region',regions:'Repairing diagnosed defects',details:'Native-resolution detail refinement',merge:'Merging regions',omission:'Whole-image completeness check',quality:'Quality check',repair:'Object refinement',final:'Preparing export'}[phase]||'Reconstructing';
+  if(zh) stage={prepare:'准备图像',inventory:'建立原图检查清单',recognition:'全局与分区并行识别',whole:'完整整图识别',inspection:'原分辨率逐区对照',retry:'局部重试',regions:'定点修复缺陷',details:'原分辨率细节精修',merge:'合并分区',omission:'整图查漏',quality:'首轮已完成，验收中',repair:'局部精修',final:'生成导出'}[phase]||'重建中';
+  else stage={prepare:'Preparing image',inventory:'Inventorying original image',recognition:'Concurrent global and regional recognition',whole:'Complete whole-image recognition',inspection:'Comparing full-resolution crops',retry:'Retrying selected region',regions:'Repairing diagnosed defects',details:'Native-resolution detail refinement',merge:'Merging regions',omission:'Whole-image completeness check',quality:'Quality check',repair:'Object refinement',final:'Preparing export'}[phase]||'Reconstructing';
   const parts=[stage,zh?'已用 '+clock:'elapsed '+clock];
+  if(phase==='recognition'){const r=audit.nativeRecognition;const done=(r?.results||[]).filter(x=>x.state==='merged').length;parts.push((zh?'已合并分区 ':'regions merged ')+done+'/'+(r?.regions.length||0));}
   if(phase==='regions'||phase==='details'){
     const wholeDone=audit.completedTiles>0&&audit.strategy!=='tiled-fallback'?1:0;
     const done=Math.max(0,audit.completedTiles-wholeDone),total=Math.max(0,audit.totalTiles-wholeDone);
@@ -5175,6 +5307,8 @@ async function runReconstruction(options={}){
   const controller=new AbortController();reconstructionController=controller;
   const deadline=Infinity;
   window.__ffReconResponses=[];
+  window.__ffReconArchive=null;
+  await persistReconArchive({status:'running'});
   const responseButton=$('#downloadReconResponse');
   if(responseButton) responseButton.hidden=true;
   renderEditableExportCard();
@@ -5214,6 +5348,7 @@ async function runReconstruction(options={}){
       });
     };
     const cacheKey=await reconstructionCacheKey(src,{textLayoutVersion:5,catalogQualityVersion:21,model:pinnedModel,reasoningEffort:reasoningEffort('recon'),provider:cfg().proto,endpoint:baseURL(),paper:$('#paper')?.value||''});
+    await persistReconArchive({source:{width:canvas.width,height:canvas.height,cacheKey},model:pinnedModel});
     // Every new recognition bypasses saved catalogs.
     st.skipReconCacheOnce=false;
     const cached=options.refine&&st.scene?{scene:st.scene}:null;
@@ -5221,14 +5356,15 @@ async function runReconstruction(options={}){
     if(!options.refine){st.wholeImageResult=null;window.__ffReconResponses=[];}
     reconstructionAudit.cacheHit=!!cached;
     reconstructionAudit.cachedDetailComplete=!!cached?.detailComplete;
-    let scene=await reconstructCatalogWithFallback(canvas,src,requestScene,reconstructionAudit,cached?.scene,!!cached?.omissionChecked,compareEditableRender,(partial)=>{
+    let scene=await reconstructCatalogWithFallback(canvas,src,requestScene,reconstructionAudit,cached?.scene,!!cached?.omissionChecked,compareEditableRender,async(partial)=>{
       st.partialScene=partial;
+      await persistReconArchive({scene:partial,status:'partial',audit:reconstructionAudit});
       if(!visibleEditableContent(partial).length)return;
       const svg=sceneToSvgString(partial);
       Object.assign(st,{scene:partial,vectorScene:partial,svg,baseSvg:svg,vectorSvg:svg,source:'bitmap',recon:{...st.recon,qualityState:'needs-review'},reconFailed:false});
       renderEditableExportCard();
       return writeReconstructionCache(cacheKey,{scene:partial,omissionChecked:false,detailComplete:false,completedIds:[]});
-    },{...options,onWholeImage:result=>{if(!options.refine||!st.wholeImageResult){result.request=reconstructionAudit.tiles.find(t=>t.wholeImage&&!t.sourceInventory);st.wholeImageResult=result;}renderEditableExportCard();},signal:controller.signal,deadline,maxAttempts:1,retryBudget:0});
+    },{...options,onWholeImage:async result=>{await persistReconArchive({wholeImageResult:result,audit:reconstructionAudit});if(!options.refine||!st.wholeImageResult){result.request=reconstructionAudit.tiles.find(t=>t.wholeImage&&!t.sourceInventory);st.wholeImageResult=result;}renderEditableExportCard();},signal:controller.signal,deadline,maxAttempts:1,retryBudget:0});
     if(controller.signal.aborted)throw new DOMException("Refinement stopped","AbortError");
     if(!visibleEditableContent(scene).length)throw Error('未生成可用内容：结果只有透明框、背景或无可见对象；'+repairStatus(reconstructionAudit,true)+'。');
     let omissionChecked=!!reconstructionAudit.omissionChecked;
@@ -5356,6 +5492,7 @@ async function runReconstruction(options={}){
     renderEditableExportCard();
     return false;
   }finally{
+    await persistReconArchive({scene:st.scene||st.partialScene||null,svg:st.svg||'',wholeImageResult:st.wholeImageResult,audit:window.__ffApiAudit?.reconstruction,status:window.__ffApiAudit?.reconstruction?.state||'failed'});
     if(progressTimer)clearInterval(progressTimer);
     if(reconstructionController===controller)reconstructionController=null;
   }
@@ -5496,7 +5633,7 @@ function renderEditableExportCard(){
   for(const id of ['reconModel','reconReasoningEffort'])$('#'+id).disabled=!!state.reconPending;
   const firstPassButton=$('#downloadWholeImage');if(firstPassButton)firstPassButton.hidden=!state.wholeImageResult;
   const responseButton=$('#downloadReconResponse');
-  if(responseButton) responseButton.hidden=!(window.__ffReconResponses&&window.__ffReconResponses.length);
+  if(responseButton) responseButton.hidden=!((window.__ffReconResponses?.length||window.__ffLatestReconArchive?.responses?.length));
   const confirm=$('#exportConfirm'); if(confirm) confirm.disabled = locked || !!state.reconPending || !state.target;
   if(!locked) syncExportSelection();
 }
@@ -5857,10 +5994,21 @@ $('#exportUseGenerated')?.addEventListener('click', function(){
 });
 
 /* Step 4 and its manual retry use the same vision reconstruction path. */
-$('#downloadReconResponse')?.addEventListener('click', function(){
-  const responses=window.__ffReconResponses||[];
-  if(responses.length) downloadText('figure-forge-reconstruction-response.json',
-    JSON.stringify({version:2,responses,audit:window.__ffApiAudit?.reconstruction},null,2),'application/json;charset=utf-8');
+async function restoreLatestReconArchive(){
+  try{
+    const keys=await reconArchiveStore('readonly',store=>store.getAllKeys());
+    if(!keys.length)return;
+    const latest=await reconArchiveStore('readonly',store=>store.get(keys.sort().at(-1)));
+    if(window.__ffReconArchive)return;
+    window.__ffLatestReconArchive=latest;
+    const button=$('#downloadReconResponse');if(button){button.hidden=!latest?.responses?.length;button.title='下载上次重建的完整识别记录';}
+  }catch(error){console.warn('Recognition evidence restore failed',error);}
+}
+restoreLatestReconArchive();
+$('#downloadReconResponse')?.addEventListener('click', async function(){
+  await reconArchiveQueue;
+  const archive=window.__ffReconArchive||window.__ffLatestReconArchive;
+  if(archive?.responses?.length)downloadText('figure-forge-reconstruction-response.json',JSON.stringify(archive,null,2),'application/json;charset=utf-8');
 });
 $('#downloadWholeImage')?.addEventListener('click',()=>{
   const result=ensureExportState().wholeImageResult;
@@ -6098,7 +6246,10 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
   let endpoint='/images/generations';
   let usedRefs=false;
   body = {model, prompt:imgPrompt};
-  if(!nativeGemini) body[dimensions.field]=dimensions.value;
+  if(!nativeGemini){
+    body[dimensions.field]=dimensions.value;
+    if(dimensions.aspectRatio) body.aspect_ratio=dimensions.aspectRatio;
+  }
   if(p==='ark' && !relayBase()){ body.response_format='b64_json'; body.watermark=false; }
   if(useIds.length && (nativeGemini || p!=='glm')){
     const uris = await refDataURIs(useIds);
@@ -6109,7 +6260,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
     const request=geminiImageRequest(base,model,imgPrompt,body.image||[],dimensions);
     base=request.base; endpoint=request.endpoint; body=request.body;
   }else{
-    const request=compatibleImageRequest(body,base);
+    const request=compatibleImageRequest(body,base,p);
     endpoint=request.endpoint;body=request.body;
   }
   let r;

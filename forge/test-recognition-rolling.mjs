@@ -1,0 +1,70 @@
+import assert from 'node:assert/strict';
+import * as core from './reconstruction-core.mjs';
+import * as pipeline from './reconstruction-pipeline.mjs';
+import {reconstructWithEvidence,planNativeRecognition,normalizeInventory,regionalRecognitionPrompt} from './bitmap-evidence.mjs';
+
+const canvas={width:1000,height:200};
+const items=Array.from({length:4},(_,i)=>({id:`i${i}`,kind:'text',panelId:null,x:30+i*240,y:70,w:100,h:30,text:`Label ${i}`,description:'label',expectedCount:null,colors:[{role:'text',value:'#000000'}]}));
+const inventory={canvas:{...canvas,units:'source-pixels'},items,layers:[],connections:[],uncertainties:[]};
+const regions=planNativeRecognition(normalizeInventory(inventory,1000,200),1000,200);
+assert.equal(regions.length,4);
+globalThis.document={createElement:()=>({getContext:()=>({drawImage(){}}),toDataURL:()=> 'crop'})};
+const deferred=()=>{let resolve;const promise=new Promise(r=>resolve=r);return {promise,resolve};};
+const gates=Array.from({length:5},deferred),started=[],commits=[];
+const inspectionGates=Array.from({length:5},deferred),inspectionStarted=[];
+let active=0,peak=0;
+const audit={tiles:[]};
+const request=async(src,w,h,t)=>{
+  if(t.sourceInventory)return inventory;
+  if(t.wholeImageAssessment||t.panelInspection){
+    const index=t.panelInspection?regions.findIndex(r=>r.id===t.sourceRegion.id)+1:0;
+    inspectionStarted.push(index);active++;peak=Math.max(peak,active);
+    await inspectionGates[index].promise;active--;
+    return t.panelInspection?{complete:true,defects:[],uncertainties:[]}:{complete:true,wholeImageAcceptable:true,summary:'Global inspection',coverage:[{region:'whole',missingGroups:[]}],uncertainties:[],defects:[],inventoryComplete:true,unlistedSourceItems:[],evidence:[]};
+  }
+  const index=t.regionalRecognition?regions.findIndex(r=>r.id===t.region)+1:0;
+  if(t.regionalRecognition){
+    assert.equal(src,'crop');
+    assert.equal(t.fullSourceImage,'source','Every region receives the unchanged full original as context');
+    assert.equal(t.fullSourceWidth,1000);assert.equal(t.fullSourceHeight,200);
+    assert.deepEqual(t.sourceRegion,regions[index-1]);
+    assert.ok(Array.isArray(t.sharedObjectContext));
+    assert.ok(t.sourceChecklist.items.every(i=>i.x>=0&&i.y>=0&&i.x+i.w<=w&&i.y+i.h<=h));
+    const prompt=regionalRecognitionPrompt(t);
+    for(const clause of ['Image 1 is the authoritative native-resolution crop','Image 2 is the complete original','GLOBAL original coordinates','never rescale from Image 2'])assert.ok(prompt.includes(clause));
+  }
+  started.push(index);active++;peak=Math.max(peak,active);
+  await gates[index].promise;active--;
+  return {canvas:{width:w,height:h},nodes:index?[{id:'label',type:'text',x:20,y:4,w:100,h:30,fontSize:20,text:`Region ${index}`}]:[{id:'background',type:'rect',x:0,y:0,w:1000,h:200,fill:'#ffffff'}]};
+};
+const api={...core,...pipeline,sceneToSvgString:()=>'<svg/>',compactQuality:s=>s,renderCrop:async()=> 'render',planDefectRegions:()=>[]};
+const resultPromise=reconstructWithEvidence(canvas,'source',request,audit,async()=>({score:1,preview:'render'}),async scene=>{commits.push(scene.nodes.map(n=>n.id));},{},api);
+const until=async predicate=>{for(let i=0;i<100;i++){if(predicate())return;await new Promise(r=>setTimeout(r,0));}assert.fail('Scheduler did not advance');};
+await until(()=>started.length===3);
+assert.deepEqual(started,[0,1,2]);
+gates[2].resolve();
+await until(()=>started.length===4);
+assert.deepEqual(started,[0,1,2,3]);
+assert.equal(commits.length,0,'No regional merge before global scene');
+gates[3].resolve();
+await until(()=>started.length===5);
+assert.equal(active,3);
+gates[4].resolve();gates[1].resolve();gates[0].resolve();
+await until(()=>inspectionStarted.length===3);
+assert.deepEqual(inspectionStarted,[0,1,2]);
+inspectionGates[2].resolve();
+await until(()=>inspectionStarted.length===4);
+assert.deepEqual(inspectionStarted,[0,1,2,3]);
+assert.equal(active,3,'Global and panel inspections share the same three slots');
+inspectionGates[3].resolve();
+await until(()=>inspectionStarted.length===5);
+inspectionGates[4].resolve();inspectionGates[1].resolve();inspectionGates[0].resolve();
+const result=await resultPromise;
+assert.equal(peak,3);
+assert.equal(audit.nativeRecognition.globalState,'merged');
+assert.ok(audit.nativeRecognition.results.every(r=>r.state==='merged'));
+assert.deepEqual(result.nodes.filter(n=>n.type==='text').map(n=>n.text),['Region 1','Region 2','Region 3','Region 4']);
+assert.equal(result.canvas.width,1000);assert.equal(result.canvas.height,200);
+assert.equal(audit.panelInspections.length,4);
+assert.ok(audit.panelInspections.every(p=>p.complete&&p.defects.length===0));
+console.log('PASS rolling three-slot recognition and inspection: refill before global completion, deterministic merges, all panels checked and source dimensions');

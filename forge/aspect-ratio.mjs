@@ -1,3 +1,5 @@
+import {nonelinearImageDimensions} from './nonelinear-image.mjs';
+
 export const FIGURE_RATIOS = Object.freeze({
   '16:9':[16,9], '3:2':[3,2], '4:3':[4,3], '1:1':[1,1]
 });
@@ -12,6 +14,10 @@ export function imageRequestDimensions(provider,model,ratio,resolution='2K',nati
   if(!FIGURE_RATIOS[ratio]) throw new Error(`Unsupported figure ratio: ${ratio}`);
   if(!['1K','2K','4K'].includes(resolution)) throw new Error(`Unsupported resolution: ${resolution}`);
   if(nativeGemini) return {field:'gemini',aspectRatio:ratio,imageSize:resolution};
+  if(provider==='nonelinear'){
+    const dimensions=nonelinearImageDimensions(model,ratio,resolution);
+    if(dimensions) return dimensions;
+  }
   // Infistar's Seedream 5 channel rejects the generic 2K rectangle sizes.
   // These native sizes were checked against the returned bitmap pixels.
   if(provider==='infistar' && /^doubao-seedream-5-0-/i.test(model) && resolution==='2K'){
@@ -33,7 +39,7 @@ export function imageRequestDimensions(provider,model,ratio,resolution='2K',nati
   // GPT Image 2/2.5 accept custom sizes: edges divisible by 16, <=3840px,
   // and 655360-8294400 total pixels. Keep the requested ratio exact.
   // https://developers.openai.com/api/docs/guides/image-generation#size-and-quality-options
-  if(['oai','infistar'].includes(provider) && /^gpt-image-2(?:\.5-(?:sunburst|flare))?$/i.test(model)){
+  if(['oai','infistar','nonelinear'].includes(provider) && /^gpt-image-2(?:\.5-(?:sunburst|flare))?(?:-\d{4}-\d{2}-\d{2})?$/i.test(model)){
     const sizes={
       '1K':{'16:9':'1280x720','3:2':'1152x768','4:3':'1024x768','1:1':'1024x1024'},
       '2K':{'16:9':'2048x1152','3:2':'2304x1536','4:3':'2048x1536','1:1':'2048x2048'},

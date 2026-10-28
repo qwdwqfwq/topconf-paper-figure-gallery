@@ -13,7 +13,7 @@ const server=http.createServer((req,res)=>{
     if(err){res.writeHead(404);return res.end();}
     if(name===path.join(root,'forge','index.html'))data=Buffer.from(data.toString().replace(/\r\n/g,'\n')
       .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
-      .replace('window.__ffReconstruct = () => runReconstruction();','window.__ffReconstruct = () => runReconstruction(); window.__transport={prepareVisionImages,visionImageSize,checkVisionRequestSize,requestEditableScene,loadImage};')
+      .replace('window.__ffReconstruct = () => runReconstruction();','window.__ffReconstruct = () => runReconstruction(); window.__transport={prepareVisionImages,visionImageSize,checkVisionRequestSize,requestEditableScene,loadImage,appendVisionOverviews};')
       .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});","MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});"));
     res.writeHead(200,{'Content-Type':/\.html$/.test(name)?'text/html':'text/javascript'});res.end(data);
   });
@@ -55,6 +55,12 @@ const server=http.createServer((req,res)=>{
         pixels.data[i+3]=255;
       }
       nc.putImageData(pixels,0,0);const large=noise.toDataURL();
+      const originals=[large,large];
+      const overviewRecords=await api.appendVisionOverviews(originals);
+      ensure(originals[0]===large&&originals[1]===large,'original references remain byte-identical and ordered');
+      ensure(JSON.stringify(overviewRecords.map(r=>[r.index,r.sourceIndex]))==='[[2,0],[3,1]]','overviews append after existing references');
+      const overview=await api.loadImage(originals[2]);
+      ensure(overview.naturalWidth===1800&&overview.naturalHeight===1523,'overview geometry');
       ensure(api.visionImageSize(large).bytes>16*1024*1024,'fixture must reproduce >16 MiB');
       const compressed=await api.prepareVisionImages([large],true);
       const transport=compressed.transport[0];
@@ -87,10 +93,12 @@ const server=http.createServer((req,res)=>{
         await api.requestEditableScene(large,2600,2200,audit);
         ensure(audit.requestParameters.imageTransport[0].encoding==='jpeg','request audit encoding evidence');
         ensure(audit.requestParameters.images[0].width===2600&&audit.requestParameters.images[0].height===2200,'request geometry unchanged');
+        ensure(audit.compositionOverviews.length===1&&audit.compositionOverviews[0].sourceIndex===0,'overview source recorded');
+        ensure(audit.requestParameters.images[1].role==='composition-overview','overview role recorded');
         ensure(requests.length===6,'exactly one API request per stage');
         ensure(requests.every(r=>r.model==='doubao-vision-test'&&r.temperature===.1&&r.images.every(i=>i.detail==='high')&&r.thinking.type==='disabled'&&r.response_format.type==='json_object'),'frozen model parameters');
         ensure(requests[0].max_tokens===128000&&requests[1].max_tokens===128000&&requests[5].max_tokens===128000,'whole-image token budget unchanged');
-        ensure(JSON.stringify(requests.map(r=>r.images.length))==='[1,1,2,4,2,1]','all reference slots preserved');
+        ensure(JSON.stringify(requests.map(r=>r.images.length))==='[1,1,2,4,2,2]','all reference slots preserved with appended overview');
         const saved=HTMLCanvasElement.prototype.toDataURL,qualities=[];
         HTMLCanvasElement.prototype.toDataURL=function(type,q){if(type==='image/jpeg')qualities.push(q);return padded;};
         const failedAudit={wholeImage:true,maxAttempts:3};let stopped=false;

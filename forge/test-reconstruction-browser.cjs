@@ -21,7 +21,7 @@ const server = http.createServer((req,res)=>{
       const html=data.toString('utf8').replace(/\r\n/g,'\n')
         .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
         .replace('window.__ffReconstruct = () => runReconstruction();',
-          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestParseScene = parseEditableSceneResponse; window.__ffTestRecover = recoverBitmapResponse; window.__ffTestVisible = visibleEditableContent; window.__ffTestLongLines = filterUnsupportedLongLines; window.__ffTestMaterialize = materializeEditableScene; window.__ffTestCalibrate = calibrateEditableText; window.__ffTestGenerateBitmap = genOaiImage; window.__ffTestZip = zipStore; window.__ffTestRequestScene = requestEditableScene; window.__ffTestParseSvg = parseSvgScene; window.__ffTestParseBitmap = parseBitmapSvgScene; window.__ffTestDrawio = sceneToDrawio; window.__ffTestVsdx = sceneToVsdxFiles; window.__ffTestPptx = buildNativePptx; window.__ffTestSvgString = sceneToSvgString;')
+          'window.__ffReconstruct = () => runReconstruction();\nwindow.__ffTestRememberRecon = rememberReconResponse; window.__ffTestPersistRecon = persistReconArchive; window.__ffTestRestoreRecon = restoreLatestReconArchive; window.__ffTestParseScene = parseEditableSceneResponse; window.__ffTestRecover = recoverBitmapResponse; window.__ffTestVisible = visibleEditableContent; window.__ffTestLongLines = filterUnsupportedLongLines; window.__ffTestEvidenceRenderer = createEvidenceRenderer; window.__ffTestMaterialize = materializeEditableScene; window.__ffTestCalibrate = calibrateEditableText; window.__ffTestGenerateBitmap = genOaiImage; window.__ffTestZip = zipStore; window.__ffTestRequestScene = requestEditableScene; window.__ffTestParseSvg = parseSvgScene; window.__ffTestParseBitmap = parseBitmapSvgScene; window.__ffTestDrawio = sceneToDrawio; window.__ffTestVsdx = sceneToVsdxFiles; window.__ffTestPptx = buildNativePptx; window.__ffTestSvgString = sceneToSvgString;')
         .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});",
           "MAN=FALLBACK;\ninitProviders();\nsyncSubCount();\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});");
       data=Buffer.from(html);
@@ -67,6 +67,45 @@ const server = http.createServer((req,res)=>{
     assert.deepEqual(colors.fills,['#abcdef','#abcdee']);
     assert.equal(colors.gradient.stops.length,2,'gradient objects survive materialization');
     assert.equal(colors.rejected,true,'invalid colors cannot silently export as black');
+    const dashedShapes=await page.evaluate(async()=>{
+      const raw={nodes:[
+        {id:'curve',type:'path',d:'M 10 10 Q 40 60 80 10',x:10,y:10,w:70,h:50,stroke:'#dd6600',dash:true},
+        {id:'ring',type:'ellipse',x:10,y:70,w:40,h:20,stroke:'#334455',dashed:true},
+        {id:'poly',type:'polyline',points:[[60,70],[80,90],[90,70]],stroke:'#334455',strokeDasharray:'8 6'}
+      ]};
+      const scene=window.__ffTestMaterialize(raw,100,100);
+      return {nodes:scene.nodes,svg:window.__ffTestSvgString(scene),pptx:new TextDecoder().decode(await (await window.__ffTestPptx(scene,window.__ffTestZip)).arrayBuffer())};
+    });
+    assert.ok(dashedShapes.nodes.every(n=>n.dash),'dashed curves, ellipses and polylines retain their stroke during scene normalization');
+    assert.equal((dashedShapes.svg.match(/stroke-dasharray=/g)||[]).length,3);
+    assert.equal((dashedShapes.pptx.match(/<a:prstDash val="dash"\/>/g)||[]).length,2,'boolean dash strokes retain PowerPoint preset dashes');
+    assert.equal((dashedShapes.pptx.match(/<a:custDash>/g)||[]).length,1,'explicit dash lengths retain a PowerPoint custom dash pattern');
+    const evidenceRenderer=await page.evaluate(async()=>{
+      const canvas=document.createElement('canvas');canvas.width=80;canvas.height=40;
+      const ctx=canvas.getContext('2d');ctx.fillStyle='#ff0000';ctx.fillRect(0,0,80,40);
+      const png=canvas.toDataURL();let calls=0,measured;
+      window.__ffRenderPptx=async()=>{calls++;return png;};
+      const audit={},renderer=window.__ffTestEvidenceRenderer(canvas,audit,async(c,s)=>{measured=s;return {score:1};});
+      const scene={canvas:{width:80,height:40},nodes:[]};
+      await renderer.measure(canvas,scene);const crop=await renderer.renderCrop(scene,{x:10,y:5,w:20,h:10});
+      const image=new Image();image.src=crop;await image.decode();const out=document.createElement('canvas');out.width=20;out.height=10;out.getContext('2d').drawImage(image,0,0);
+      const pixel=Array.from(out.getContext('2d').getImageData(0,0,1,1).data);
+      await renderer.measure(canvas,{...scene,nodes:[]});const successfulCalls=calls;
+      canvas.width=1;canvas.height=1;window.__ffRenderPptx=async()=>canvas.toDataURL();
+      const original=document.createElement('canvas');original.width=80;original.height=40;
+      let error='';try{await window.__ffTestEvidenceRenderer(original,{}).measure(original,scene);}catch(e){error=e.message;}
+      delete window.__ffRenderPptx;
+      return {source:audit.evidenceRenderSource,usesPng:measured===png,pixel,successfulCalls,error};
+    });
+    assert.equal(evidenceRenderer.source,'host-office');
+    assert.equal(evidenceRenderer.usesPng,true,'evidence metrics receive actual exported PowerPoint pixels');
+    assert.deepEqual(evidenceRenderer.pixel,[255,0,0,255],'repair crop uses host render rather than the blank SVG scene');
+    assert.equal(evidenceRenderer.successfulCalls,2,'reuse one Office render per immutable candidate; render changed candidates separately');
+    assert.match(evidenceRenderer.error,/dimensions mismatch/,'invalid Office output must not silently fall back to SVG evidence');
+    const numericRecovery=await page.evaluate(()=>window.__ffTestParseScene('{"nodes":[{"id":"card1","type":"rect","x":10,"y":10,"w":121,","h":99,"fill":"#fff"},{"id":"card2","type":"rect","x":30,"y":30,"w":121","h":99,"fill":"#fff"},{"id":"invalid","type":"unsupported"}]}',300,200));
+    assert.deepEqual(numericRecovery.nodes.map(n=>n.id),['card1','card2'],'both real numeric-quote failures retain their complete objects');
+    assert.equal(numericRecovery.recognitionCounts.parsed,2);
+    assert.equal(numericRecovery.recognitionCounts.rejected,1,'recognition audit exposes rejected objects instead of hiding a count difference');
     const lineEvidence=await page.evaluate(()=>{
       const canvas=document.createElement('canvas');canvas.width=500;canvas.height=300;
       const ctx=canvas.getContext('2d');ctx.fillStyle='#fff';ctx.fillRect(0,0,500,300);
@@ -156,7 +195,7 @@ const server = http.createServer((req,res)=>{
     assert.equal(svgCheck.label.fontSize,25,'class font size survives');
     assert.equal(svgCheck.label.fill,'123456','class text fill survives');
     assert.equal(svgCheck.bitmapLabel.x,240,'bitmap fallback retains its original SVG parser coordinates');
-    assert.equal(svgCheck.bitmapLabel.fontSize,16,'bitmap fallback retains its original style parser');
+    assert.equal(svgCheck.bitmapLabel.fontSize,25,'bitmap fallback preserves the computed class font size');
     assert.equal(svgCheck.background.fill,'FFFFFF','white background survives');
     assert.equal(svgCheck.lines.length,2,'horizontal and vertical path lines survive');
     assert.ok(svgCheck.lines.every(n=>n.dash&&n.arrow),'class dash and marker survive');
@@ -185,6 +224,32 @@ const server = http.createServer((req,res)=>{
       console.log('SVG editable browser regression: OK');
       return;
     }
+
+    const fontMapping=await page.evaluate(async()=>{
+      const families=['serif','sans-serif',' SERIF ','Times New Roman, serif','Georgia, serif'];
+      const scene={canvas:{width:500,height:300},nodes:families.map((fontFamily,i)=>({id:'font'+i,type:'text',x:10,y:i*40,w:300,h:35,text:'Font '+i,fontSize:30,fontFamily}))};
+      return new TextDecoder().decode(await (await window.__ffTestPptx(scene,window.__ffTestZip)).arrayBuffer());
+    });
+    assert.ok(!/typeface="(?:serif|sans-serif)"/i.test(fontMapping),'CSS generic families must resolve to installed PowerPoint fonts');
+    assert.ok((fontMapping.match(/typeface="Times New Roman"/g)||[]).length>=3,'serif and concrete family stacks retain their intended face');
+    assert.match(fontMapping,/typeface="Arial"/,'sans-serif maps to Arial');
+    assert.match(fontMapping,/typeface="Georgia"/,'concrete families survive');
+    const tightGlyph=await page.evaluate(()=>window.__ffTestMaterialize({nodes:[{type:'text',x:100,y:100,w:20,h:12,text:'Wide label',fontSize:30}]},600,400).nodes[0]);
+    assert.equal(tightGlyph.fontSize,30,'tight glyph bounds must not silently shrink model font size');
+    const nativeHeading=await page.evaluate(()=>window.__ffTestMaterialize({nodes:[{type:'text',x:100,y:100,w:4000,h:240,text:'Native resolution heading',fontSize:180}]},5504,3072).nodes[0]);
+    assert.equal(nativeHeading.fontSize,180,'native-resolution headings must not be capped at 120 pixels');
+    const textFit=await page.evaluate(async()=>{
+      const node={type:'text',x:10,y:10,w:105,h:35,text:'ABCDEFGHIJ',fontSize:20,fontFamily:'Arial'};
+      const scene={canvas:{width:500,height:300},nodes:[node]};
+      const svg=window.__ffTestSvgString(scene),originalSvg=window.__ffTestSvgString({...scene,svgSource:true});
+      const parse=s=>Number(new DOMParser().parseFromString(s,'image/svg+xml').querySelector('text').getAttribute('font-size'));
+      const fitted=parse(svg),native=new TextDecoder().decode(await (await window.__ffTestPptx(scene,window.__ffTestZip)).arrayBuffer());
+      return {fitted,sourceSize:parse(originalSvg),native,unchanged:node.fontSize===20};
+    });
+    assert.ok(textFit.fitted>=17&&textFit.fitted<20,'bitmap preview applies the bounded native-export text fit');
+    assert.equal(textFit.sourceSize,20,'SVG source keeps its recognized font size');
+    assert.equal(textFit.unchanged,true,'rendering never mutates recognized geometry');
+    assert.ok(textFit.native.includes(`sz="${Math.max(100,Math.round(textFit.fitted*pptxUnit/914400*72*100))}"`),'PPTX and bitmap preview use the same fitted font size');
 
     const textCheck=await page.evaluate(()=>{
       const raw={nodes:[
@@ -249,7 +314,7 @@ const server = http.createServer((req,res)=>{
       document.querySelector('#provider').value='ark';document.querySelector('#key').value='test';
       const select=document.querySelector('#reconModel');select.add(new Option('test','gpt-6.1-sol'));select.value='gpt-6.1-sol';
       const c=document.createElement('canvas');c.width=5504;c.height=3072;const src=c.toDataURL();
-      const nodes=Array.from({length:520},(_,i)=>({id:'n'+i,type:'rect',x:(i%40)*100,y:Math.floor(i/40)*100,w:20,h:20,fill:'#123456'}));
+      const nodes=Array.from({length:520},(_,i)=>({id:'n'+i,sourceItemId:'inventory-'+i,type:'rect',x:(i%40)*100,y:Math.floor(i/40)*100,w:20,h:20,fill:'#123456'}));
       let calls=0,mode='ok';const bodies=[],original=window.fetch;
       window.fetch=async(url,options)=>{
         if(!String(url).endsWith('/chat/completions'))return original(url,options);
@@ -261,8 +326,8 @@ const server = http.createServer((req,res)=>{
       try{
         for(const effort of ['high','medium']){
           document.querySelector('#reconReasoningEffort').value=effort;
-          const audit={wholeImage:true,maxAttempts:1};const scene=await window.__ffTestRequestScene(src,5504,3072,audit);
-          runs.push({audit,count:scene.nodes.length});
+          const audit={wholeImage:true,maxAttempts:1,...(effort==='medium'?{regionalRecognition:true,region:'native-test',sourceRegion:{x:12,y:34,w:5504,h:3072},fullSourceImage:src,fullSourceWidth:6000,fullSourceHeight:4000,sharedObjectContext:[{id:'cross-panel',kind:'connector',x:0,y:200,w:6000,h:20}]}:{})};const scene=await window.__ffTestRequestScene(src,5504,3072,audit);
+          runs.push({audit,count:scene.nodes.length,sourceItems:scene.nodes.map(n=>n.sourceItemId)});
         }
         const failures=[];
         for(const failure of ['rejected','truncated']){
@@ -270,18 +335,56 @@ const server = http.createServer((req,res)=>{
           try{await window.__ffTestRequestScene(src,5504,3072,audit);}catch(e){error=e.message;}
           failures.push({audit,error});
         }
-        return {runs,failures,calls,bodies:bodies.map(b=>({budget:b.max_completion_tokens,legacy:b.max_tokens,effort:b.reasoning_effort,images:b.messages[1].content.filter(c=>c.type==='image_url').map(c=>({detail:c.image_url.detail,unchanged:c.image_url.url===src}))}))};
+        return {runs,failures,calls,bodies:bodies.map(b=>({budget:b.max_completion_tokens,legacy:b.max_tokens,effort:b.reasoning_effort,prompt:b.messages[1].content[0].text,images:b.messages[1].content.filter(c=>c.type==='image_url').map(c=>({detail:c.image_url.detail,unchanged:c.image_url.url===src}))}))};
       }finally{window.fetch=original;}
     });
     assert.equal(wholeContract.calls,4,'unsupported and truncated responses must not silently downgrade/retry');
-    for(const run of wholeContract.runs){assert.equal(run.count,520);assert.equal(run.audit.nodeCounts.raw,520);assert.equal(run.audit.nodeCounts.parsed,520);assert.equal(run.audit.usage.completion_tokens,65000);}
-    for(const body of wholeContract.bodies){assert.equal(body.budget,128000);assert.equal(body.legacy,undefined);assert.deepEqual(body.images,[{detail:'original',unchanged:true}]);}
+    for(const run of wholeContract.runs){assert.equal(run.count,520);assert.deepEqual(run.sourceItems,Array.from({length:520},(_,i)=>'inventory-'+i));assert.equal(run.audit.nodeCounts.raw,520);assert.equal(run.audit.nodeCounts.parsed,520);assert.equal(run.audit.usage.completion_tokens,65000);}
+    for(const [bodyIndex,body] of wholeContract.bodies.entries()){assert.equal(body.budget,128000);assert.equal(body.legacy,undefined);assert.match(body.prompt,/visibly rounded rectangle include a nonzero radius/);
+    assert.match(body.prompt,/generic serif or sans-serif family instead of guessing/);
+    assert.match(body.prompt,/never split a word or label into several text nodes/);assert.match(body.prompt,/clipping\/overlap/);assert.match(body.prompt,/sourceItemId is replacement lineage/);assert.match(body.prompt,/COMPOSITION REFERENCES/);
+    const regional=bodyIndex===1;
+    assert.deepEqual(body.images,regional?[{detail:'original',unchanged:true},{detail:'original',unchanged:true},{detail:'high',unchanged:false},{detail:'high',unchanged:false}]:[{detail:'original',unchanged:true},{detail:'high',unchanged:false}]);
+    if(regional){assert.match(body.prompt,/Image 2 is the complete original/);assert.match(body.prompt,/cross-panel/);assert.match(body.prompt,/never rescale from Image 2/);
+      assert.doesNotMatch(body.prompt,/WHOLE IMAGE object catalog|COMPLETE object catalog|FULL supplied canvas/,'crop requests must not inherit whole-image ownership');
+      assert.match(body.prompt,/Complete every visible equation/);assert.match(body.prompt,/numerator, denominator and fraction bar/);
+      assert.ok(body.prompt.length<wholeContract.bodies[0].prompt.length,'regional instructions should remove redundant global instructions');}}
     assert.deepEqual(wholeContract.bodies.slice(0,2).map(b=>b.effort),['high','medium']);
     assert.equal(wholeContract.failures[0].audit.parameterSupport,'rejected');
     assert.ok(wholeContract.failures.every(f=>f.error));
     assert.equal(wholeContract.failures[1].audit.usage.completion_tokens,65000);
     console.log('PASS: whole-image 128000/original native input, high/medium, 520-node parsing, usage and explicit rejection/truncation');
+    const retained=await page.evaluate(async()=>{
+      const records=window.__ffReconResponses;
+      const summary=records.map(r=>({envelope:r.envelope,parsed:r.parsed?.nodes.length,error:r.error,region:r.region,sourceRegion:r.sourceRegion,regionalRecognition:r.regionalRecognition}));
+      const text='完整文字'.repeat(100);
+      const scene=window.__ffTestParseScene(JSON.stringify({nodes:[{id:'same',type:'rect',x:1,y:1,w:10,h:10}],texts:[{id:'same',x:20,y:20,w:200,h:100,text}],labels:[{id:'third',x:20,y:130,w:200,h:30,text:'parallel label'}]}),600,300);
+      for(let i=0;i<14;i++)await window.__ffTestRememberRecon({stage:'test',content:'retained-'+i,envelope:'raw-'+i});
+      await window.__ffTestPersistRecon({scene,status:'test-complete'});
+      return {summary,nodes:scene.nodes,ids:scene.nodes.map(n=>n.id),count:window.__ffReconResponses.length};
+    });
+    assert.equal(retained.summary.length,4);
+    assert.equal(retained.summary[0].parsed,520);
+    assert.equal(retained.summary[1].parsed,520);
+    assert.equal(retained.summary[1].region,'native-test');
+    assert.deepEqual(retained.summary[1].sourceRegion,{x:12,y:34,w:5504,h:3072});
+    assert.equal(retained.summary[1].regionalRecognition,true);
+    assert.match(retained.summary[2].envelope,/unsupported detail original/);
+    assert.ok(retained.summary[2].error);
+    assert.match(retained.summary[3].envelope,/length/);
+    assert.ok(retained.summary[3].error);
+    assert.equal(retained.nodes.length,3);
+    assert.equal(new Set(retained.ids).size,3);
+    assert.equal(retained.nodes.find(n=>n.text?.startsWith('完整')).text.length,400);
     await page.reload({waitUntil:'domcontentloaded'});
+    const restored=await page.evaluate(async()=>{
+      await window.__ffTestRestoreRecon();
+      const a=window.__ffLatestReconArchive;
+      return {count:a?.responses.length,last:a?.responses.at(-1).envelope,nodes:a?.scene.nodes.length,status:a?.status};
+    });
+    assert.equal(restored.count,retained.count);
+    assert.equal(restored.last,'raw-13');assert.equal(restored.nodes,3);assert.equal(restored.status,'test-complete');
+    console.log('PASS: parallel fields, duplicate IDs, full long text and raw/error/parsed evidence retained across reload without 12-response clipping');
 
     const result=await page.evaluate(async()=>{
       document.querySelector('#provider').value='ark';document.querySelector('#key').value='test';
@@ -296,7 +399,13 @@ const server = http.createServer((req,res)=>{
         let output;
         if(prompt.startsWith('Inspect ONLY the original')){
           qa=0;output={canvas:{width:300,height:100,units:'source-pixels'},items,layers:[],connections:[],uncertainties:[]};
+        }else if(prompt.includes('This is ONE native-resolution ORIGINAL region')){
+          // Deliberately incomplete regional output keeps this fixture testing
+          // the one repair round, while exercising open-kind dispatch as well.
+          output={nodes:[{id:'blank',type:'rect',x:0,y:0,w:1,h:1,fill:'#ffffff',stroke:'none'}]};
         }else if(prompt.includes('INDEPENDENT WHOLE-IMAGE ACCEPTANCE GATE')){
+          if(!prompt.includes('Return ONE STRICT JSON object with ALL fields:'))throw Error('Whole assessment must request a complete evidence schema');
+          if(prompt.includes('Return STRICT JSON {"complete":true,"defects":[]}'))throw Error('Two-field local schema must not override whole assessment evidence');
           const passed=++qa>1;
           const catalog=JSON.parse(prompt.split(' Existing catalog: ')[1]);
           output={wholeImageAcceptable:passed,summary:passed?'All squares match':'Missing squares',coverage:[{region:'all',missingGroups:passed?[]:['squares']}],complete:passed,inventoryComplete:true,unlistedSourceItems:[],uncertainties:[],evidence:items.map(item=>({itemId:item.id,status:passed?'passed':'failed',nodeIds:passed?[catalog.nodes.find(n=>n.fill==='#123456'&&Math.abs(n.x-item.x)<1).id]:[],reason:'Compared original and rendered squares'})),defects:passed?[]:[{x:25,y:25,w:230,h:30,reason:'Missing colored squares',kind:'shape',objectIds:[]}]};
@@ -316,11 +425,12 @@ const server = http.createServer((req,res)=>{
       const ok=await window.__ffReconstruct();return {ok,calls,peak,nodes:window.__ffExportState.scene?.nodes,audit:window.__ffApiAudit.reconstruction};
     });
     assert.equal(result.ok,true,JSON.stringify(result));
-    assert.equal(result.audit.strategy,'source-inventory-one-repair-round');
+    assert.equal(result.audit.strategy,'source-inventory-native-regions-one-repair-round');
     assert.equal(result.peak,1,'the fixed repair round never retries or restarts');
-    assert.equal(result.calls,6,'inventory, reconstruction, two whole QA, one patch and local QA');
+    assert.equal(result.calls,15,'inventory, global reconstruction, three native regions, two whole QA with three regional checks each, one patch and repair QA');
+    assert.equal(result.audit.nativeRecognition.results.filter(r=>r.state==='merged').length,3);
     assert.equal(result.audit.repairRounds,1);
-    assert.equal(result.audit.finalValidation.state,'passed');
+    assert.equal(result.audit.finalValidation.state,'passed',JSON.stringify({validation:result.audit.finalValidation,regions:result.audit.regionStates}));
     assert.equal(result.nodes.filter(n=>n.type==='rect'&&n.fill==='#123456').length,3);
     assert.equal(result.audit.actualPptxRenderVerified,false,'roundtrip XML is not an Office render');
     assert.equal(result.audit.state,'needs-review','actual renderer remains required');
@@ -367,7 +477,8 @@ const server = http.createServer((req,res)=>{
     });
     assert.equal(await page.evaluate(()=>window.__ffExportState.reconBitmap),manualSource,'reconstruction must use uploaded input');
     assert.equal(office.ok,true);
-    assert.equal(office.renders,1,'Office QA must not trigger automatic reconstruction');
+    assert.equal(office.renders,3,'render initial evidence, repair candidate and final export without restarting recognition');
+    assert.equal(office.audit.evidenceRenderSource,'host-office');
     assert.equal(office.audit.actualPptxRenderVerified,true);
     assert.equal(office.audit.officeRetry,undefined);
     assert.equal(office.audit.state,'needs-review');
@@ -383,12 +494,17 @@ const server = http.createServer((req,res)=>{
     }
     // A faithful host render plus complete evidence promotes the result to formal.
     const formal=await page.evaluate(async()=>{
-      window.__ffRenderPptx=async()=>window.__ffExportState.bitmap;
+      const blank=document.createElement('canvas');blank.width=300;blank.height=100;
+      const ctx=blank.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,300,100);
+      let renders=0;
+      // The initial catalog contains only a frame. The host must show that
+      // missing content before it shows the repaired, faithful candidate.
+      window.__ffRenderPptx=async()=>++renders===1?blank.toDataURL():window.__ffExportState.bitmap;
       const ok=await window.__ffReconstruct();
       delete window.__ffRenderPptx;
-      return {ok,audit:window.__ffApiAudit.reconstruction,qualityState:window.__ffExportState.recon.qualityState};
+      return {ok,audit:window.__ffApiAudit.reconstruction,qualityState:window.__ffExportState.recon?.qualityState,error:window.__ffExportState.reconError};
     });
-    assert.equal(formal.ok,true);
+    assert.equal(formal.ok,true,JSON.stringify(formal));
     assert.equal(formal.audit.finalValidation.state,'passed');
     assert.equal(formal.audit.state,'succeeded',JSON.stringify(formal.audit));
     assert.equal(formal.qualityState,'succeeded');

@@ -86,14 +86,14 @@ export async function requestImageWithRecovery({url,body,key,usedReferences=fals
   }finally{clearTimeout(timer);}
 }
 
-// Preserve Infistar's historical JSON image extension. A GPT model name alone
+// Preserve Infistar and NoneLinear's JSON image extensions. A GPT model name alone
 // does not establish which input protocol a relay accepts.
 // Direct OpenAI-compatible GPT edits continue to upload multipart files.
-export function compatibleImageRequest(body,base=''){
+export function compatibleImageRequest(body,base='',provider=''){
   const references=Array.isArray(body.image)?body.image:body.image?[body.image]:[];
-  let infistar=false;
-  try{infistar=/^(?:www\.)?infistar\.(?:cc|ai)$/.test(new URL(base).hostname);}catch{}
-  if(infistar || !/^gpt-image-/i.test(body.model)||!references.length)
+  let jsonReferences=provider==='nonelinear';
+  try{jsonReferences ||= /^(?:(?:www\.)?infistar\.(?:cc|ai)|api\.nonelinear\.com\.cn)$/.test(new URL(base).hostname);}catch{}
+  if(jsonReferences || !/^gpt-image-/i.test(body.model)||!references.length)
     return {endpoint:'/images/generations',body};
   const form=new FormData();
   for(const [key,value] of Object.entries(body)){

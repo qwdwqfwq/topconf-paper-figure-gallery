@@ -1,6 +1,46 @@
 // Recovery is confined to Step 4. Never evaluate model output or substitute
 // metadata for drawing primitives. Unrecoverable entries remain in the audit.
 const schemas={inventory:['items','layers','connections','uncertainties'],scene:['nodes','elements','objects','shapes','regions','uncertainties'],patch:['operations','uncertainties'],diagnosis:['defects','coverage','evidence','unlistedSourceItems','uncertainties']};
+function removeContainerStrayQuotes(source,repaired){
+  let result='',inString=false,escaped=false,previous='';
+  for(let i=0;i<source.length;i++){
+    const ch=source[i];
+    if(inString){
+      result+=ch;
+      if(escaped)escaped=false;
+      else if(ch==='\\')escaped=true;
+      else if(ch==='"')inString=false;
+      continue;
+    }
+    if(ch==='"'){
+      // A real path response ended with `"strokeWidth":2,"}`. This is
+      // punctuation after a complete numeric value, never a string value.
+      if(/(?:[:\[,]\s*)-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?\s*,\s*$/.test(result)&&/^\s*}/.test(source.slice(i+1))){
+        result=result.replace(/,\s*$/,'');
+        repaired.push({reason:'stray quote and trailing comma after number'});continue;
+      }
+      // Real regional responses can append a quote to a complete numeric
+      // value ("w":121",). Match only a value token outside strings;
+      // text ending in a digit or an escaped quote must remain untouched.
+      if(/(?:[:\[,]\s*)-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?\s*$/.test(result)&&/^\s*[,}\]]/.test(source.slice(i+1))){
+        repaired.push({reason:'stray quote after number'});continue;
+      }
+      // Another observed form is "w":121,","h":99. The extra quote and
+      // comma occur between a complete value and the next quoted property.
+      if(/(?:[:\[,]\s*)-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?\s*,\s*$/.test(result)&&/^,\s*"[^"\r\n]+"\s*:/.test(source.slice(i+1))){
+        repaired.push({reason:'stray quote and comma after number'});i++;continue;
+      }
+      // A quote closing a text value belongs to the string, including formulas
+      // ending in } or ]. Only remove quotes outside strings after containers.
+      if(/[}\]]/.test(previous)&&/^\s*[,}\]]/.test(source.slice(i+1))){
+        repaired.push({reason:'stray quote after container'});continue;
+      }
+      inString=true;
+    }
+    result+=ch;if(!/\s/.test(ch))previous=ch;
+  }
+  return result;
+}
 function parseValue(source,start){
   // Try complete JSON prefixes. A broken quote in one entry cannot hide later
   // siblings, unlike a single quote-state scan over the entire response.
@@ -18,8 +58,8 @@ export function recoverBitmapResponse(text,schema){
   try{let value=JSON.parse(original);if(schema==='scene'&&Array.isArray(value))value={nodes:value};if(value&&typeof value==='object'&&(!required||Array.isArray(value[required])))return {...value,recovery:{schema,repaired:[],rejected:[]}};}catch{}
   const repaired=[];
   // Only unambiguous punctuation repairs; invalid values are never guessed.
-  let source=original.replace(/([{,]\s*)"([A-Za-z_$][\w$-]*)="(?=[^:])/g,(_,prefix,key)=>{repaired.push({reason:'property separator',key});return prefix+'"'+key+'":"';})
-    .replace(/([}\]])"(?=\s*[,}\]])/g,(_,close)=>{repaired.push({reason:'stray quote after container'});return close;});
+  let source=original.replace(/([{,]\s*)"([A-Za-z_$][\w$-]*)="(?=[^:])/g,(_,prefix,key)=>{repaired.push({reason:'property separator',key});return prefix+'"'+key+'":"';});
+  source=removeContainerStrayQuotes(source,repaired);
   const result={},rejected=[];
   // Preserve explicit coordinate provenance even when a later array is truncated.
   for(const key of ['canvas','complete','wholeImageAcceptable','inventoryComplete','summary']){

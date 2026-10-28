@@ -99,6 +99,35 @@ assert.equal(seamGeometry.nodes.filter(n=>n.type==='rect').length,1,
 assert.equal(seamGeometry.counts.mergedCrossTileLines,1);
 assert.equal(seamGeometry.counts.deduplicatedCrossTileShapes,1);
 
+// Adjacent crops must not erase distinctions between dashed connectors.
+function mergedDashLines(leftStyle,rightStyle){
+  return mergeReconstructionTiles([
+    {tile:tiles[0],scene:{nodes:[{id:'left',type:'line',x:600,y:420,x2:828,y2:420,stroke:'#222',...leftStyle}]}},
+    {tile:tiles[1],scene:{nodes:[{id:'right',type:'line',x:0,y:420,x2:228,y2:420,stroke:'#222',...rightStyle}]}}
+  ],1600,900).nodes.filter(node=>node.type==='line');
+}
+assert.equal(mergedDashLines({dash:[12,6]},{dash:[3,2]}).length,2,
+  'different dash patterns must remain separate');
+assert.equal(mergedDashLines({strokeDasharray:'12 6'},{}).length,2,
+  'a dash alias must not merge with a solid line');
+assert.equal(mergedDashLines({dash:[3,2,1]},{strokeDasharray:'3,2,1,3,2,1'}).length,1,
+  'equivalent odd dash arrays and string aliases may merge');
+assert.equal(mergedDashLines({dash:true},{dash:[8,6]}).length,2,
+  'a preset dash must retain its distinct export semantics');
+const doubleHead=mergedDashLines({arrowStart:true},{arrow:true});
+assert.equal(doubleHead.length,1);
+assert.equal(doubleHead[0].arrowStart,true,'merging must preserve the left arrowhead');
+assert.equal(doubleHead[0].arrow,true,'merging must preserve the right arrowhead');
+assert.equal(mergedDashLines({arrow:true},{}).length,2,
+  'an interior arrowhead must not move to the end of an extended line');
+const reversedHead=mergedDashLines({arrowStart:true},{x:228,x2:0,arrowStart:true});
+assert.equal(reversedHead.length,1);
+assert.deepEqual([reversedHead[0].x,reversedHead[0].x2],[600,1000]);
+assert.equal(reversedHead[0].arrowStart,true);
+assert.equal(reversedHead[0].arrow,true,'a reversed fragment start head belongs at the final end');
+assert.equal(mergedDashLines({},{x:228,x2:0,arrow:true}).length,2,
+  'a reversed fragment interior end head must remain at its observed position');
+
 // A large filled panel may have its centre outside this tile's owning core.
 // Its visible part must survive and must stop at the core boundary.
 const panelTiles=planReconstructionTiles(1600,900,800,28);

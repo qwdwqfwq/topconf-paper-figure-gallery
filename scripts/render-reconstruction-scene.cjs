@@ -37,6 +37,15 @@ const server=http.createServer((req,res)=>{
     await page.waitForFunction(()=>typeof window.__ffTestSvg==='function',{timeout:30000});
     const svg=await page.evaluate(scene=>window.__ffTestSvg(scene),JSON.parse(fs.readFileSync(input,'utf8')));
     fs.writeFileSync(output,svg);
+    if(process.argv[4]){
+      const canvas=JSON.parse(fs.readFileSync(input,'utf8')).canvas;
+      const width=Math.min(2048,canvas.width),height=Math.round(canvas.height*width/canvas.width);
+      await page.setViewportSize({width,height});
+      await page.setContent(svg.replace(/<\?xml[^>]*\?>/,''));
+      await page.addStyleTag({content:'html,body{margin:0}svg{display:block;width:100vw;height:100vh}'});
+      await page.evaluate(()=>document.fonts.ready);
+      await page.screenshot({path:path.resolve(process.argv[4])});
+    }
     console.log(output);
   }finally{await browser.close();server.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;server.close();});
