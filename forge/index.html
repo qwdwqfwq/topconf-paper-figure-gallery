@@ -696,6 +696,7 @@
 <script src="./i18n_forge.js?v=20261021-pdf-status"></script>
 <script type="module">
 import * as T from './vendor/transformers.min.js';
+import {fetchBitmapSource} from './nonelinear-source.mjs';
 import {prepareQuery,buildIndex,rank} from './retrieval.mjs';
 import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=20261021-unlimited';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261026-nonelinear-resolution';
@@ -4521,7 +4522,7 @@ function buildFidelityScene(scene, sourceCanvas){
 async function ensureBitmapDataUrl(src){
   if(!src) return null;
   if(/^data:image\//i.test(String(src))) return String(src);
-  const r = await fetch(src);
+  const r = await fetchBitmapSource(src,{provider:$('#provider').value,base:baseURL(),key:$('#key').value.trim()});
   if(!r.ok) throw new Error('Reference image could not be read');
   return fileToDataURI(await r.blob());
 }
