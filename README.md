@@ -45,7 +45,7 @@
 ![Stars](https://img.shields.io/github/stars/qwdwqfwq/topconf-paper-figure-gallery?style=social)
 
 <p align="center">
-  <a href="https://atomgit.com/qq_56538430/topconf-paper-figure-gallery"><img src="https://atomgit.com/qq_56538430/topconf-paper-figure-gallery/star/new_badge.svg" alt="AtomGit G-Star selected by" height="80" align="middle"></a>
+  <a href="https://atomgit.com/qq_56538430/topconf-paper-figure-gallery"><img src="docs/atomgit-gstar.svg" alt="AtomGit G-Star selected by" height="80" align="middle"></a>
   &nbsp;&nbsp;
   <a href="https://github.com/qwdwqfwq/topconf-paper-figure-gallery"><img src="docs/star-hint.gif" alt="点右上角给个 Star · Star us on GitHub" height="80" align="middle"></a>
 </p>
