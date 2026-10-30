@@ -181,6 +181,9 @@
 
   /* ===== step 1: boxed two-column layout ===== */
   .step-note{font-size:11.5px;font-weight:500;color:var(--muted);margin-left:2px}
+  #card4 > .step{flex-wrap:wrap}
+  .step4-replica-hint{margin-left:auto;max-width:100%;padding:8px 14px;border:1px solid #c4b5fd;border-radius:10px;background:#f5f3ff;color:#4f46e5;font-size:14px;font-weight:750;line-height:1.5}
+  @media(max-width:720px){.step4-replica-hint{width:100%;margin-left:0;font-size:13px}}
   .s1-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:13px;align-items:start}
   .s1-col{display:grid;gap:13px;min-width:0}
   @media(max-width:960px){.s1-grid{grid-template-columns:minmax(0,1fr)}}
@@ -569,6 +572,7 @@
   <div class="card" id="card4">
     <div class="step"><span class="num">4</span><span data-i18n="s4"></span>
       <span class="step-note" data-i18n="s4.note"></span>
+      <span class="step4-replica-hint">可上传图片进行复刻 / 上一步生成的位图自动复刻</span>
     </div>
     <div class="flow-note" data-i18n-html="export.intro"></div>
     <div class="flow-note" style="display:block">
