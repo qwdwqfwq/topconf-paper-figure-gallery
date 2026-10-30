@@ -697,6 +697,7 @@
 <script type="module">
 import * as T from './vendor/transformers.min.js';
 import {fetchBitmapSource} from './nonelinear-source.mjs';
+import {fetchReconstructionStream,usesReconstructionStream} from './infistar-reconstruction-stream.mjs';
 import {prepareQuery,buildIndex,rank} from './retrieval.mjs';
 import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=20261021-unlimited';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261026-nonelinear-resolution';
@@ -5044,7 +5045,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
           // contain malformed scene JSON, triggering costly tile subdivision.
           body.response_format={type:'json_object'};
         }
-        const r=await fetchTextWithTimeout(baseURL()+'/chat/completions',{
+        const r=await (usesReconstructionStream($('#provider').value)?fetchReconstructionStream:fetchTextWithTimeout)(baseURL()+'/chat/completions',{
           method:'POST',signal:audit.signal,
           headers:{'Content-Type':'application/json',Authorization:'Bearer '+cleanKey($('#key').value)},
           body:prepareBody(body)
