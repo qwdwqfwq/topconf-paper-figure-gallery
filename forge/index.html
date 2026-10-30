@@ -315,7 +315,8 @@
     .export-font-row select{min-width:220px;border:1px solid var(--line);border-radius:10px;background:#fff;color:var(--ink);padding:9px 12px;font:inherit}
     .export-recon{margin-top:12px;border:1px dashed #c7d2fe;border-radius:11px;padding:11px 12px;background:#f8faff}
     .recon-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:9px}
-    .recon-status{color:var(--muted);font-size:12px;line-height:1.5}
+    .recon-status{flex-basis:100%;max-width:100%;padding:10px 14px;border:1px solid #c4b5fd;border-radius:10px;background:#f5f3ff;color:#4f46e5;font-size:14px;font-weight:750;line-height:1.6;overflow-wrap:anywhere}
+    .recon-status:empty{display:none}
     .export-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin-top:14px}
     .export-actions button{min-height:52px;padding:10px 12px;border:1px solid #dfe3f5;border-radius:12px;background:#fff;color:var(--ink);font:inherit;font-weight:700;cursor:pointer;transition:.16s ease}
     .export-actions button:hover{border-color:#667eea;box-shadow:0 0 0 3px rgba(102,126,234,.12);background:#f8f9ff}
@@ -574,7 +575,6 @@
       <span class="step-note" data-i18n="s4.note"></span>
       <span class="step4-replica-hint">可上传图片进行复刻 / 上一步生成的位图自动复刻</span>
     </div>
-    <div class="flow-note" data-i18n-html="export.intro"></div>
     <div class="flow-note" style="display:block">
       <label for="exportBitmapUpload" data-i18n="export.upload"></label>
       <input id="exportBitmapUpload" type="file" accept="image/png,image/jpeg,image/webp" />
