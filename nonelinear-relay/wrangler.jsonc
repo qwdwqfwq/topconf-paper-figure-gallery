@@ -1,0 +1,8 @@
+{
+  "name": "gallery-nonelinear-relay",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "vars": { "ALLOWED_ORIGINS": "https://qwdwqfwq.github.io" },
+  "observability": { "enabled": false }
+}
