@@ -182,6 +182,10 @@
   /* ===== step 1: boxed two-column layout ===== */
   .step-note{font-size:11.5px;font-weight:500;color:var(--muted);margin-left:2px}
   #card4 > .step{flex-wrap:wrap}
+  #pdfModelHint{color:#4f46e5;font-weight:750}
+  #exportBitmapUpload{max-width:100%}
+  #exportBitmapUpload::file-selector-button{margin-right:10px;padding:11px 24px;border:0;border-radius:12px;background:var(--indigo);color:#fff;font:inherit;font-weight:750;cursor:pointer;box-shadow:0 4px 12px rgba(79,70,229,.25)}
+  #exportBitmapUpload:disabled::file-selector-button{background:#a5b4fc;box-shadow:none;cursor:not-allowed}
   .step4-replica-hint{margin-left:auto;max-width:100%;padding:8px 14px;border:1px solid #c4b5fd;border-radius:10px;background:#f5f3ff;color:#4f46e5;font-size:14px;font-weight:750;line-height:1.5}
   @media(max-width:720px){.step4-replica-hint{width:100%;margin-left:0;font-size:13px}}
   .s1-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:13px;align-items:start}
@@ -558,7 +562,6 @@
       <p class="bnote warn-inline" id="imageRatioWarn" hidden></p>
       <p class="bnote warn-inline" id="modelWarn" hidden></p>
       <p class="bnote" id="pdfModelHint" data-i18n="hint.model"></p>
-      <small style="display:block;margin-top:9px">步骤一至四不设模型等待时限；极高推理可能需要更久。 / Steps 1–4 have no model waiting limit; extra-high reasoning may take longer.</small>
       <div class="bfield" id="analyzeModelRow" hidden style="margin-top:9px"><span class="blab" data-i18n="analyzemodel"></span><select id="analyzeModel"></select></div>
       <div class="bfield" style="margin-top:9px"><span class="blab">视觉推理强度</span><select id="visualReasoningEffort" aria-label="视觉推理强度"><option value="">服务商默认</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">极高</option></select></div>
       <p class="bnote">用于参考图归纳。需模型及服务商支持；默认不指定强度。</p>
@@ -572,7 +575,6 @@
 
   <div class="card" id="card4">
     <div class="step"><span class="num">4</span><span data-i18n="s4"></span>
-      <span class="step-note" data-i18n="s4.note"></span>
       <span class="step4-replica-hint">可上传图片进行复刻 / 上一步生成的位图自动复刻</span>
     </div>
     <div class="flow-note" style="display:block">
