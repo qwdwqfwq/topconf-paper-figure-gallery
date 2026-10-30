@@ -102,6 +102,14 @@
   .c-spot{background:linear-gradient(90deg,#94a3b8,#64748b);color:#fff}
   .c-best{background:linear-gradient(90deg,#ef4444,#b91c1c);color:#fff}
   .c-hm{background:#dbeafe;color:#1d4ed8}
+  .refs-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .refs-heading h4{margin:0}
+  .refs-tools{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  #refsSummary{color:#047857;font-size:12px}
+  #refsUploadStatus{color:#b91c1c}
+  .refmini{min-width:0;max-width:100%}
+  .refmini>div{min-width:0}
+  .refmini .x{border:0;background:transparent;font-size:14px}
   .refs-strip{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:13px}
   .refmini{display:flex;gap:8px;align-items:center;background:#f9fafb;border:1px solid var(--line);
            border-radius:10px;padding:6px 10px 6px 6px;font-size:12px;max-width:340px}
@@ -536,7 +544,13 @@
     </div>
 
     <section class="box b-green">
-      <h4><span class="bi" aria-hidden="true">🖼️</span><span data-i18n="box.refs"></span></h4>
+      <div class="refs-heading">
+        <h4><span class="bi" aria-hidden="true">🖼️</span><span data-i18n="box.refs"></span></h4>
+        <div class="refs-tools"><span id="refsSummary" aria-live="polite"></span><button type="button" class="btn-primary" id="refsUploadBtn"></button><button type="button" class="btn-ghost" id="refsClearBtn" hidden></button></div>
+      </div>
+      <input type="file" id="refsUpload" accept="image/png,image/jpeg,image/webp" multiple hidden>
+      <p class="hint" id="refsUploadHelp" style="margin:0 0 12px"></p>
+      <p class="hint" id="refsUploadStatus" role="status" hidden></p>
       <div class="refs-strip" id="refsStrip"><span class="hint" style="margin:0" data-i18n="refs.initial"></span></div>
     </section>
 
@@ -715,6 +729,49 @@ const esc = s => (s+'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&
 let refs = new Set(), results = [], mode = 'svg';
 let passMode = 'two'; const MAX_REFS = 10; let analysis = null;
 let data = { ids:[], figs:[], bm:null, IE:null, TE:null, N:0 };
+// Uploaded references stay outside the searchable public catalog.
+const uploadedRefs = new Map();
+let referenceUploadEpoch = 0;
+const referenceFigure = id => uploadedRefs.get(id) || data.figs.find(f=>f.id===id);
+const referenceURL = f => f.localURL || '../'+f.image;
+const refsText = (zh,en) => GAL_I18N.lang==='en' ? en : zh;
+function releaseUploadedReference(id){
+  const f=uploadedRefs.get(id);
+  if(f){ URL.revokeObjectURL(f.localURL); uploadedRefs.delete(id); }
+}
+function clearReferences(){
+  referenceUploadEpoch++;
+  for(const id of uploadedRefs.keys()) releaseUploadedReference(id);
+  refs.clear(); patchAllCards(); updateCount(); renderRefsStrip();
+}
+$('#refsUploadBtn').onclick=()=>$('#refsUpload').click();
+$('#refsClearBtn').onclick=clearReferences;
+$('#refsUpload').onchange=async e=>{
+  const files=[...e.target.files]; e.target.value='';
+  if(!files.length) return;
+  const errors=[], epoch=referenceUploadEpoch; $('#refsUploadBtn').disabled=true;
+  try{
+    for(const file of files){
+      if(refs.size>=MAX_REFS){ errors.push(refsText('参考图合计最多 10 张，其余文件未添加。','Up to 10 references in total; remaining files were not added.')); break; }
+      if(!['image/png','image/jpeg','image/webp'].includes(file.type) || file.size>20*1024*1024){
+        errors.push(file.name+refsText('：请选择不超过 20 MB 的 PNG、JPG 或 WebP 图片。',': choose a PNG, JPG or WebP image up to 20 MB.')); continue;
+      }
+      const url=URL.createObjectURL(file);
+      try{
+        const img=new Image(); img.src=url; await img.decode();
+        if(!img.naturalWidth || img.naturalWidth*img.naturalHeight>40000000) throw Error('dimensions');
+        if(epoch!==referenceUploadEpoch){ URL.revokeObjectURL(url); break; }
+        if(refs.size>=MAX_REFS){ URL.revokeObjectURL(url); errors.push(refsText('参考图合计最多 10 张，其余文件未添加。','Up to 10 references in total; remaining files were not added.')); break; }
+        const id='upload-'+crypto.randomUUID();
+        uploadedRefs.set(id,{id,title:file.name,venue:'upload',year:'',pattern:'reference',localURL:url}); refs.add(id);
+      }catch(error){ URL.revokeObjectURL(url); errors.push(file.name+refsText('：图片无法读取或超过 4000 万像素。',': image could not be read or exceeds 40 megapixels.')); }
+    }
+  }finally{
+    $('#refsUploadBtn').disabled=false;
+    $('#refsUploadStatus').textContent=errors.join(' '); $('#refsUploadStatus').hidden=!errors.length;
+    updateCount(); renderRefsStrip();
+  }
+};
 let clip = { tokenizer:null, model:null };
 let MAN = null;
 
@@ -1038,19 +1095,24 @@ $('#grid').addEventListener('keydown', e=>{
   if(e.target.closest('.rc-preview')){ e.preventDefault(); openForgeLightbox(card.dataset.id); return; }
   e.preventDefault(); card.click();
 });
-$('#clearBtn').onclick = ()=>{ refs.clear(); patchAllCards(); updateCount(); renderRefsStrip(); };
+$('#clearBtn').onclick = clearReferences;
 function renderRefsStrip(){
-  if(!refs.size){ $('#refsStrip').innerHTML='<span class="hint" style="margin:0">'+tt('refs.strip2')+'</span>'; return; }
+  const uploads=[...refs].filter(id=>uploadedRefs.has(id)).length;
+  $('#refsSummary').textContent=refsText('已选 '+refs.size+' / '+MAX_REFS+' 张 · 画廊 '+(refs.size-uploads)+' 张 · 上传 '+uploads+' 张','Selected '+refs.size+' / '+MAX_REFS+' · Gallery '+(refs.size-uploads)+' · Uploaded '+uploads);
+  $('#refsUploadBtn').textContent=refsText('＋ 上传参考图','＋ Upload references');
+  $('#refsClearBtn').textContent=refsText('清空参考图','Clear references'); $('#refsClearBtn').hidden=!refs.size;
+  $('#refsUploadHelp').textContent=refsText('支持全上传、全检索或混合选择。PNG / JPG / WebP，单张不超过 20 MB、4000 万像素；上传图仅保留在当前页面。','Use uploaded images, gallery references, or both. PNG / JPG / WebP, up to 20 MB and 40 megapixels each. Uploads stay in this page.');
+  if(!refs.size){ $('#refsStrip').innerHTML='<span class="hint" style="margin:0">'+refsText('可从步骤二勾选，也可上传自己的参考图，支持混合使用。','Select references in Step 2 or upload your own images. You can combine both.')+'</span>'; return; }
   $('#refsStrip').innerHTML = [...refs].map(id=>{
-    const f = data.figs.find(x=>x.id===id);
-    return `<div class="refmini"><img src="../${esc(f.image)}"><div><b>${esc(f.title)}</b>
-      <span>${f.venue.toUpperCase()} ${f.year} · ${esc(f.pattern)}</span></div>
-      <span class="x" data-id="${esc(f.id)}">✕</span></div>`;
+    const f = referenceFigure(id);
+    return `<div class="refmini"><img src="${esc(referenceURL(f))}" alt=""><div><b>${esc(f.title)}</b>
+      <span>${uploadedRefs.has(id)?refsText('用户上传','User upload'):refsText('画廊参考 · ','Gallery · ')+f.venue.toUpperCase()+' '+f.year+' · '+esc(f.pattern)}</span></div>
+      <button type="button" class="x" data-id="${esc(f.id)}" aria-label="${esc(refsText('移除参考图','Remove reference'))}">✕</button></div>`;
   }).join('');
 }
 $('#refsStrip').addEventListener('click', e=>{
   const x = e.target.closest('.x'); if(!x) return;
-  const id = x.dataset.id; refs.delete(id);
+  const id = x.dataset.id; refs.delete(id); releaseUploadedReference(id);
   const card = [...$('#grid').querySelectorAll('.rc')].find(el=>el.dataset.id===id);
   if(card) patchCard(card, id);
   updateCount(); renderRefsStrip();
@@ -1530,8 +1592,8 @@ async function blobToShrunkURI(blob, maxSide=1280){
 async function refDataURIs(refIds){
   const out = [];
   for(const id of (refIds||[...refs])){
-    const f = data.figs.find(x=>x.id===id);
-    const r = await fetch('../'+f.image);
+    const f = referenceFigure(id);
+    const r = await fetch(referenceURL(f));
     if(!r.ok) throw new Error(tt('ref.fail',{f:f.image}));
     out.push(await blobToShrunkURI(await r.blob()));
   }
@@ -1544,9 +1606,9 @@ async function refDataURIs(refIds){
 async function refDataURIsOriginal(refIds){
   const out = [];
   for(const id of (refIds||[...refs])){
-    const f = data.figs.find(x=>x.id===id);
+    const f = referenceFigure(id);
     if(!f) continue;
-    const r = await fetch('../'+f.image);
+    const r = await fetch(referenceURL(f));
     if(!r.ok) throw new Error(tt('ref.fail',{f:f.image}));
     out.push(await fileToDataURI(await r.blob()));
   }
@@ -1973,7 +2035,7 @@ async function analyzeReferences(){
   // Representative figures may come back as ids (preferred, unambiguous) or as
   // 1-based indices (older models). Accept either, but only ids that really exist
   // in the analysed set, so a miscount can no longer silently pick the wrong figure.
-  const validIds = [...new Set(ordered)].filter(id=>data.figs.some(f=>f.id===id));
+  const validIds = [...new Set(ordered)].filter(id=>!!referenceFigure(id));
   const resolveRefId = x=>{
     const s=String(x).trim();
     if(validIds.includes(s)) return s;
@@ -2014,7 +2076,7 @@ async function analyzeReferences(){
 }
 function renderAnalyze(ordered){
   const j=analysis.j;
-  const repHtml=analysis.repIds.map(id=>{const f=data.figs.find(x=>x.id===id);return `<span class="rep-chip"><img src="../${esc(f.image)}">${tt('rep.fig')}</span>`;}).join('');
+  const repHtml=analysis.repIds.map(id=>{const f=referenceFigure(id);return `<span class="rep-chip"><img src="${esc(referenceURL(f))}">${tt('rep.fig')}</span>`;}).join('');
   $('#analyzeBox').innerHTML=`<div class="analyze-box">
     <h4>${tt('analyze.done',{n:ordered.length})}</h4>
     <div class="analyze-grid">
@@ -2216,7 +2278,7 @@ function buildPrompt(content, layoutGuide, refIds){
   const targetInfo = generationIntent(content);
   const useIds = refIds || [...refs];
   const refLines = useIds.map((id,idx)=>{
-    const f = data.figs.find(x=>x.id===id);
+    const f = referenceFigure(id);
     // Follows the UI language; this was hardcoded Chinese, so an English session
     // still injected Chinese instructions into an English-generation prompt.
     return tt('ref.note',{i:idx+1, t:f.title, v:f.venue.toUpperCase(), y:f.year, p:f.pattern, id:f.id});
@@ -6227,6 +6289,7 @@ document.addEventListener('langchange',()=>{
 });
 syncLangBtn();
 GAL_I18N.apply();
+renderRefsStrip();
 syncContentMode();
 // Run once at startup, at top level: without a draft this puts step 4 into its locked
 // state, so the card is visible and explains what it is waiting for. Placing this inside
