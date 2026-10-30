@@ -1,5 +1,5 @@
 // Scoped Step 4 transport. All other providers retain the existing caller.
-export const usesReconstructionStream=provider=>provider==='infistar';
+export const usesReconstructionStream=provider=>provider==='infistar'||provider==='nonelinear';
 
 export async function fetchReconstructionStream(url,options={},timeoutMs=Infinity,fetchImpl=fetch){
   const controller=new AbortController(),started=performance.now();

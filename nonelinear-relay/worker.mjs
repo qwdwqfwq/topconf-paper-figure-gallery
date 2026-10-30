@@ -2,6 +2,7 @@
 import { adaptReferences, ReferenceError } from './reference-images.mjs';
 import { sourceImage } from './source-image.mjs';
 import { prepareChat, waitingChat } from './chat-stream.mjs';
+import { waitingSSE } from './live-chat.mjs';
 const routes = new Map([['/v1/models', 'GET'], ['/v1/chat/completions', 'POST'], ['/v1/images/generations', 'POST'], ['/v1/images/edits', 'POST'], ['/v1/source-image', 'POST']]);
 export function normalizeMedia(body) {
   const data = JSON.parse(body);
@@ -69,6 +70,7 @@ export default {
         method, headers: outgoing, body, redirect: 'manual', signal: request.signal,
       });
       if (aggregate) return waitingChat(pending, headers);
+      if (url.pathname === '/v1/chat/completions' && JSON.parse(body).stream === true) return waitingSSE(pending, headers);
       const response = await pending;
       // Workers does not support redirect: 'error'. Reject redirects explicitly
       // so credentials can never be forwarded to another destination.

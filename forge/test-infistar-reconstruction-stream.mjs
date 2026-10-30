@@ -6,7 +6,7 @@ const event=o=>'data: '+JSON.stringify(o)+'\r\n\r\n';
 const chunk=(content,finish_reason=null)=>({id:'test',model:'same-model',choices:[{index:0,delta:{content},finish_reason}]});
 const options={method:'POST',headers:{Authorization:'Bearer fake'},body:JSON.stringify({model:'same-model',max_completion_tokens:128000,temperature:.1,messages:[{role:'user',content:[{type:'image_url',image_url:{url:'data:image/jpeg;base64,UNCHANGED',detail:'original'}}]}]})};
 function response(text,status=200,type='text/event-stream'){return new Response(text,{status,headers:{'content-type':type}});}
-test('only Infistar use stream transport',()=>{for(const p of ['infistar'])assert.ok(usesReconstructionStream(p));for(const p of ['nonelinear','openai','ark','anthropic','custom',''])assert.equal(usesReconstructionStream(p),false);});
+test('only Infistar and NoneLinear use stream transport',()=>{for(const p of ['infistar','nonelinear'])assert.ok(usesReconstructionStream(p));for(const p of ['openai','ark','anthropic','custom',''])assert.equal(usesReconstructionStream(p),false);});
 test('changes only stream; reconstructs UTF8 split on every byte, usage and finish reason',async()=>{
  const bytes=enc.encode(event(chunk('中文'))+event({choices:[{index:0,delta:{reasoning_content:'reason'},finish_reason:'stop'}],usage:{completion_tokens:8}})+'data: [DONE]\r\n\r\n');
  let n=0;

@@ -26,9 +26,9 @@ jobs:
         with:
           fetch-depth: 0
       - name: Verify FigureForge workflow lock
-        run: node scripts/check-forge-workflow-lock.mjs || node scripts/check-pdf-release-exception-20261028.mjs || node scripts/check-nonelinear-source-release-20261031.mjs || node scripts/check-infistar-step4-release-20261031.mjs
+        run: node scripts/check-forge-workflow-lock.mjs || node scripts/check-pdf-release-exception-20261028.mjs || node scripts/check-nonelinear-source-release-20261031.mjs || node scripts/check-infistar-step4-release-20261031.mjs || node scripts/check-nonelinear-step4-stream-release-20261031.mjs
       - name: Verify PDF parsing regression tests
-        run: node --test forge/test-chat-api.mjs forge/test-openai-pdf.mjs nonelinear-relay/test-worker.mjs nonelinear-relay/test-references.mjs nonelinear-relay/test-source-image.mjs nonelinear-relay/test-chat-stream.mjs forge/test-infistar-reconstruction-stream.mjs
+        run: node --test forge/test-chat-api.mjs forge/test-openai-pdf.mjs nonelinear-relay/test-worker.mjs nonelinear-relay/test-references.mjs nonelinear-relay/test-source-image.mjs nonelinear-relay/test-chat-stream.mjs forge/test-infistar-reconstruction-stream.mjs nonelinear-relay/test-live-chat.mjs
       - name: Verify editable export regression tests
         run: node forge/test-editable-export.mjs
       - name: Setup Pages
