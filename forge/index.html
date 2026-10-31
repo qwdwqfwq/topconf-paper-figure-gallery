@@ -375,7 +375,7 @@
     <div class="pill" data-i18n="pill"></div>
   </header>
 
-  <div id="bootBanner"><span class="spin big" style="padding:0"></span><span id="bootText" data-i18n="boot"></span></div>
+  <div id="bootBanner" role="status" aria-live="polite"><span id="bootSpin" class="spin big" style="padding:0"></span><span id="bootText"></span> <button id="bootRetry" type="button" hidden>重试 / Retry</button></div>
 
   <div class="card" id="card1">
     <div class="step"><span class="num">1</span><span data-i18n="s1"></span>
@@ -695,7 +695,7 @@
 <script src="./i18n.js"></script>
 <script src="./i18n_forge.js?v=20261021-pdf-status"></script>
 <script type="module">
-import * as T from './vendor/transformers.min.js';
+import {createRetrievalBoot,createSemanticWorker} from './retrieval-boot.mjs';
 import {fetchBitmapSource} from './nonelinear-source.mjs';
 import {fetchReconstructionStream,usesReconstructionStream} from './infistar-reconstruction-stream.mjs';
 import {prepareQuery,buildIndex,rank} from './retrieval.mjs';
@@ -773,7 +773,7 @@ $('#refsUpload').onchange=async e=>{
     updateCount(); renderRefsStrip();
   }
 };
-let clip = { tokenizer:null, model:null };
+let semanticWorker = null;
 let MAN = null;
 
 /* Step-1 helper: the “no PDF yet” line is shown in red/bold, other notes stay quiet. */
@@ -829,90 +829,91 @@ const TARGETS = {
 /* FALLBACK：manifest 拉取失败（离线）时使用，与 forge/data/manifest.json 同口径 */
 const FALLBACK = {"updated":"2026-09-30","providers":{"ark":{"label":"火山方舟 Ark","base":"https://ark.cn-beijing.volces.com/api/v3","proto":"oai","cors":true,"chat":["doubao-seed-2-1-pro-260915","doubao-seed-2-1-lite-260915","doubao-seed-2-1-pro-260628","doubao-seed-2-1-turbo-260628","doubao-seed-evolving","doubao-seed-2-0-pro-260215","doubao-seed-2-0-lite-260428","doubao-seed-2-0-mini-260428","doubao-seed-character-260628"],"vision":["doubao-seed-2-1-pro-260915","doubao-seed-2-1-lite-260915","doubao-seed-2-1-pro-260628","doubao-seed-2-1-turbo-260628","doubao-seed-evolving","doubao-seed-2-0-pro-260215","doubao-seed-2-0-lite-260428"],"image":["doubao-seedream-5-0-pro-260628","doubao-seedream-5-0-flash-260915","doubao-seedream-5-0-260128","doubao-seedream-4-5-251128","doubao-seedream-4-0-250828"]},"sf":{"label":"硅基流动 SiliconFlow","base":"https://api.siliconflow.cn/v1","proto":"oai","cors":true,"chat":["deepseek-ai/DeepSeek-V3","Qwen/Qwen3-235B-A22B"],"vision":["Qwen/Qwen2.5-VL-72B-Instruct"],"image":["black-forest-labs/FLUX.1-schnell","Kwai-Kolors/Kolors"]},"glm":{"label":"智谱 GLM","base":"https://open.bigmodel.cn/api/paas/v4","proto":"oai","cors":true,"chat":["glm-4.5","glm-4.5-air"],"vision":["glm-4v-plus"],"image":["cogview-4"]},"ds":{"label":"DeepSeek","base":"https://api.deepseek.com","proto":"oai","cors":true,"chat":["deepseek-v4-pro","deepseek-flash"],"vision":[],"image":[]},"oai":{"label":"OpenAI","base":"https://api.openai.com/v1","proto":"oai","cors":true,"chat":["gpt-6.1-sol","gpt-6-sol","gpt-6-luna","gpt-6-astra","gpt-5.5","gpt-5.4"],"vision":["gpt-6.1-sol","gpt-6-sol","gpt-6-luna","gpt-6-astra","gpt-5.5","gpt-5.4"],"image":["gpt-image-2.5-sunburst","gpt-image-2.5-flare","gpt-image-2","gpt-image-1"]},"kimi":{"label":"Kimi 月之暗面","base":"https://api.moonshot.cn/v1","proto":"oai","cors":true,"chat":["kimi-k3","kimi-k2.6"],"vision":["kimi-k2.6"],"image":[]},"qwen":{"label":"通义千问 Qwen","base":"https://dashscope.aliyuncs.com/compatible-mode/v1","proto":"oai","cors":true,"chat":["qwen-max","qwen-plus"],"vision":["qwen-vl-max"],"image":["qwen-image"]},"hy":{"label":"腾讯混元 Hunyuan","base":"https://api.hunyuan.cloud.tencent.com/v1","proto":"oai","cors":true,"chat":["hunyuan-turbos-latest"],"vision":["hunyuan-vision"],"image":["hy-image-v3.5-preview"]},"claude":{"label":"Anthropic Claude","base":"https://api.anthropic.com","proto":"anthropic","cors":true,"chat":["claude-opus-5-5","claude-sonnet-5","claude-sonnet-4-6"],"vision":["claude-opus-5-5","claude-sonnet-5"],"image":[]},"custom":{"label":"自定义 OpenAI 兼容","base":"","proto":"oai","cors":true,"chat":[],"vision":[],"image":[]}}};
 
-/* ---------------- boot: manifest + data + local CLIP ---------------- */
+/* ---------------- isolated retrieval initialization ---------------- */
+let manifestPromise;
 async function loadManifest(){
-  try{
-    // The service worker checks this small file network-first and stores one
-    // canonical copy. A timestamp here would defeat persistent caching.
-    const r = await fetch('data/manifest.json', {cache:'no-store'});
-    if(!r.ok) throw new Error('manifest '+r.status);
-    MAN = await r.json();
-  }catch(e){ MAN = FALLBACK; }
-}
-function loadBin(name){
-  return fetch('data/'+name+'?v='+(MAN.dataVersion||'0')).then(r=>{ if(!r.ok) throw new Error(name+' '+r.status); return r.arrayBuffer();})
-            .then(b=>new Float32Array(b));
-}
-const BOOT_TIMEOUT = 180000;
-let bootPromise = null;
-let bootError = null;
-const withTimeout = (promise, ms, label) => Promise.race([
-  promise,
-  new Promise((_, reject) => setTimeout(() => reject(new Error(tt('timeout',{l:label,s:Math.round(ms/1000)}))), ms))
-]);
-async function cacheSummary(){
-  if(!('caches' in window)) return '';
-  try{
-    const names = await caches.keys();
-    const namesToCheck = names.filter(n => n.startsWith('figureforge-static-'));
-    if(!namesToCheck.length) return '';
-    let keys = [];
-    for(const name of namesToCheck) keys = keys.concat(await caches.open(name).then(c => c.keys()));
-    const hasModel = keys.some(r => /text_model_quantized\.onnx$/.test(new URL(r.url).pathname));
-    const hasIndex = keys.some(r => /(?:image_emb|text_emb)\.bin(?:\?.*)?$/.test(new URL(r.url).pathname + new URL(r.url).search));
-    return hasModel && hasIndex ? tt('cache.hit') : tt('cache.will');
-  }catch(e){ return ''; }
-}
-async function boot(){
-  if(bootPromise) return bootPromise;
-  bootPromise = (async() => {
-  window.__t = window.__t||[]; const started = performance.now();
-  const L = m => window.__t.push(Math.round(performance.now())+' '+m);
-  const bt = $('#bootText');
-  const cacheHint = await cacheSummary();
-  const show = m => { bt.textContent = m + '（已用 '+Math.round((performance.now()-started)/1000)+' 秒）'; };
-  try{
-    show(cacheHint ? tt('boot.cache') : tt('boot.manifest')); L('start');
-    await withTimeout(loadManifest(), 30000, '模型清单加载'); L('manifest');
-    const DV = MAN.dataVersion || '0';
-    const [figs, ids, bm, IE, TE] = await withTimeout(Promise.all([
-      fetch('data/figures.json?v='+DV).then(r=>r.json()),
-      fetch('data/ids.json?v='+DV).then(r=>r.json()),
-      fetch('data/bm25.json?v='+DV).then(r=>r.json()),
-      loadBin('image_emb.bin'), loadBin('text_emb.bin'),
-    ]), BOOT_TIMEOUT, '检索索引加载');
-    L('data done');
-    data = { ids, figs, bm, IE, TE, N: ids.length };
-    show(tt('boot.clip1'));
-    T.env.allowLocalModels = true;
-    T.env.allowRemoteModels = false;
-    T.env.localModelPath = new URL('./models/', import.meta.url).href;
-    T.env.backends.onnx.wasm.wasmPaths = new URL('vendor/', document.baseURI).href;
-    const MP = 'clip-vit-base-patch32';
-    clip.tokenizer = await withTimeout(T.AutoTokenizer.from_pretrained(MP), BOOT_TIMEOUT, 'CLIP tokenizer 加载');
-    L('tokenizer done');
-    show(tt('boot.clip2'));
-    clip.model = await withTimeout(T.CLIPTextModelWithProjection.from_pretrained(MP, {dtype:'q8'}), BOOT_TIMEOUT, 'CLIP 模型加载');
-    L('model done');
-    $('#bootBanner').hidden = true;
-    bootError = null;
-  }catch(e){
-    L('ERR '+e.message);
-    bootError = e;
-    bt.innerHTML = '<span style="color:#991b1b">'+tt('boot.fail',{m:esc(e.message)})+'</span>';
-  }
+  return manifestPromise ||= (async()=>{
+    const controller=new AbortController();
+    const timer=setTimeout(()=>controller.abort(),15000);
+    try{
+      const r=await fetch('data/manifest.json',{cache:'no-store',signal:controller.signal});
+      if(!r.ok) throw new Error('manifest '+r.status);
+      MAN=await r.json();
+      if(!MAN.providers) throw new Error('Invalid manifest');
+    }catch(e){ MAN=structuredClone(FALLBACK); }
+    finally{clearTimeout(timer);}
   })();
-  return bootPromise;
 }
-async function queryVec(q){
-  if(!clip.model) await boot();
-  if(bootError || !clip.tokenizer || !clip.model) throw new Error('检索模型尚未就绪，请稍后重试。');
-  const inputs = clip.tokenizer(q, {padding:true, truncation:true});
-  const out = await clip.model(inputs);
-  const v = out.text_embeds.tolist()[0];
-  const n = Math.hypot(...v);
-  return v.map(x=>x/n);
+const BOOT_TIMEOUT = 300000;
+let bootError=null;
+let bootStatus={phase:'core-loading'};
+let bootClock=null;
+let bootStarted=Date.now();
+let bootProgress='';
+const bootWords=(zh,en)=>GAL_I18N.lang==='en'?en:zh;
+function renderBootStatus(){
+  const s=bootStatus, busy=s.phase.endsWith('loading');
+  $('#bootBanner').hidden=s.phase==='ready';
+  $('#bootSpin').hidden=!busy;
+  $('#bootRetry').hidden=busy||s.phase==='ready';
+  $('#bootRetry').textContent=bootWords('重试检索初始化','Retry retrieval');
+  const elapsed=Math.floor((Date.now()-bootStarted)/1000);
+  let text=s.phase==='core-loading'?bootWords('正在加载基础检索索引','Loading keyword index'):
+    s.phase==='semantic-loading'?bootWords('关键词检索已可用，语义模型正在后台加载（最长 5 分钟）','Keyword search is ready. Semantic search is loading in the background (up to 5 minutes)'):
+    s.phase==='core-error'?bootWords('基础检索索引加载失败，请检查网络后点击重试','Keyword index failed to load. Check your connection and retry'):
+    bootWords('关键词检索可用，语义检索暂不可用，可点击重试；生成、重建及导出可正常使用','Keyword search is available. Semantic search is unavailable; retry when ready. Generation, reconstruction and export remain available');
+  if(busy)text+=' · '+elapsed+'s'+(bootProgress?' · '+bootProgress:'');
+  if(s.error)text+=' · '+s.error.message;
+  $('#bootText').textContent=text;
 }
+function onBootState(s){
+  if(s.phase!==bootStatus.phase){bootStarted=Date.now();bootProgress='';}
+  bootStatus=s;bootError=s.phase==='core-error'?s.error:null;
+  clearInterval(bootClock);bootClock=null;
+  if(s.phase.endsWith('loading'))bootClock=setInterval(renderBootStatus,1000);
+  renderBootStatus();
+}
+const retrievalBoot=createRetrievalBoot({
+  timeoutMs:BOOT_TIMEOUT,onState:onBootState,
+  loadCore:async signal=>{
+    await loadManifest();
+    const DV=MAN.dataVersion||'0';
+    const json=async name=>{
+      const r=await fetch('data/'+name+'?v='+DV,{signal});
+      if(!r.ok)throw new Error(name+' HTTP '+r.status);
+      return r.json();
+    };
+    const [figs,ids,bm]=await Promise.all(['figures.json','ids.json','bm25.json'].map(json));
+    const next={figs,ids,bm,IE:null,TE:null,N:ids.length};
+    const index=buildIndex(next);
+    if(signal.aborted)throw signal.reason;
+    data=next;retrievalIndex=index;
+  },
+  loadSemantic:async signal=>{
+    const client=createSemanticWorker(new URL('./retrieval-worker.mjs',import.meta.url),signal,progress=>{
+      if(progress.status==='progress'&&progress.total)bootProgress=(progress.file||'model').split('/').pop()+' '+Math.round(progress.loaded/progress.total*100)+'%';
+      else if(progress.status==='initialize')bootProgress=bootWords('下载完成，正在初始化计算引擎','Downloaded; initializing inference engine');
+      renderBootStatus();
+    });
+    semanticWorker=client;
+    try{
+      const binary=async name=>{
+        const r=await fetch('data/'+name+'?v='+(MAN.dataVersion||'0'),{signal});
+        if(!r.ok)throw new Error(name+' HTTP '+r.status);
+        const v=new Float32Array(await r.arrayBuffer());
+        if(v.length!==data.N*512)throw new Error(name+' dimensions mismatch');
+        return v;
+      };
+      const [IE,TE]=await Promise.all([binary('image_emb.bin'),binary('text_emb.bin'),client.ready]);
+      if(signal.aborted)throw signal.reason;
+      data.IE=IE;data.TE=TE;
+    }catch(e){client.dispose(e);throw e;}
+  }
+});
+async function boot(){await retrievalBoot.start();}
+$('#bootRetry').onclick=()=>retrievalBoot.retry();
+window.addEventListener('langchange',renderBootStatus);
+async function queryVec(q){return semanticWorker.embed(q);}
 
 /* ---------------- tokenize + BM25 ---------------- */
 function tokenize(s){
@@ -967,12 +968,18 @@ async function search(){
     retrievalIndex ||= buildIndex(data);
     const prepared=prepareQuery(q,retrievalIndex.idf);
     const modelQuery=prepared.clipText;
-    if(retrievalLastQuery!==modelQuery || !retrievalLastVector){
-      retrievalLastVector=await queryVec(modelQuery);
-      retrievalLastQuery=modelQuery;
-    }
     const images=new Float32Array(data.N), texts=new Float32Array(data.N);
-    for(const i of candidates){ images[i]=dot(i,retrievalLastVector); texts[i]=dotT(i,retrievalLastVector); }
+    if(retrievalBoot.state.phase==='ready'){
+      try{
+        if(retrievalLastQuery!==modelQuery || !retrievalLastVector){
+          retrievalLastVector=await queryVec(modelQuery);retrievalLastQuery=modelQuery;
+        }
+        for(const i of candidates){images[i]=dot(i,retrievalLastVector);texts[i]=dotT(i,retrievalLastVector);}
+      }catch(e){
+        retrievalLastQuery='';retrievalLastVector=null;
+        semanticWorker.dispose(e);retrievalBoot.semanticFailed(e);
+      }
+    }
     scored=rank(retrievalIndex,prepared,candidates,images,texts);
   }else{
     scored=candidates.map(i=>({i})).sort((a,b)=>{
@@ -6298,10 +6305,13 @@ syncContentMode();
 renderEditableExportCard();
 
 /* ---------------- go ---------------- */
-await boot();
+onBootState(bootStatus);
+await loadManifest();
 initProviders();
 syncSubCount();
-await Promise.all([populateModels(), populateParserModels()]);
+const startupModels=Promise.all([populateModels(), populateParserModels()]);
+await boot();
+await startupModels;
 $('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});
 </script>
 

@@ -58,7 +58,7 @@ export function prepareQuery(raw, idf = {}) {
 export function buildIndex(data) {
   const {figs, ids, bm, IE, TE} = data;
   if (figs.length !== ids.length || bm.docs.length !== ids.length ||
-      IE.length !== ids.length * 512 || TE.length !== ids.length * 512 ||
+      (IE != null && IE.length !== ids.length * 512) || (TE != null && TE.length !== ids.length * 512) ||
       figs.some((f, i) => f.id !== ids[i]))
     throw new Error('检索数据行未对齐，已停止搜索，避免错误匹配。');
   const df = new Map();

@@ -15,7 +15,7 @@ const server=http.createServer((req,res)=>{
     if(pathname==='/forge/index.html') data=Buffer.from(data.toString().replace(/\r\n/g,'\n')
       .replace("import * as T from './vendor/transformers.min.js';",'const T={};')
       .replace('window.__ffReconstruct = () => runReconstruction();',`window.__test={parse:callPdfParser,refs:analyzeReferences,scene:requestEditableScene,labels:requestRegionLabels,seed(){pdfContext={fileName:'test.pdf',dataUri:'data:application/pdf;base64,dGVzdA=='};}};`)
-      .replace("await boot();\ninitProviders();\nsyncSubCount();\nawait Promise.all([populateModels(), populateParserModels()]);\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});","MAN=FALLBACK;\ninitProviders();\nsyncSubCount();"));
+      .replace("onBootState(bootStatus);\nawait loadManifest();\ninitProviders();\nsyncSubCount();\nconst startupModels=Promise.all([populateModels(), populateParserModels()]);\nawait boot();\nawait startupModels;\n$('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});","MAN=FALLBACK;\ninitProviders();\nsyncSubCount();"));
     res.writeHead(200,{'Content-Type':/\.m?js$/.test(filename)?'text/javascript':filename.endsWith('.html')?'text/html':'application/octet-stream'});res.end(data);
   });
 });
