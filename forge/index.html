@@ -362,6 +362,7 @@
 #analyzeModel{flex:1;max-width:none;min-width:0}
 #figureRatio:focus-visible,#imageResolution:focus-visible,#analyzeModel:focus-visible,#reconModel:focus-visible,#reconReasoningEffort:focus-visible{outline:3px solid #c4b5fd;outline-offset:2px;border-color:#7c3aed}
 </style>
+  <script defer src="../assets/analytics.js?v=20261102"></script>
 </head>
 <body>
 <div class="wrap">
@@ -2495,10 +2496,12 @@ $('#genBtn').onclick = async ()=>{
       $('#stepper').hidden=true; btn.textContent=tt('gen.working');
     }
     if(mode==='svg'){
+      try{ globalThis.GalleryAnalytics?.generation(mode); }catch{} // analytics: isolated task start
       if(useAnthropic) await genAnthropicSVG(base,model,key,content,refIds,layoutGuide);
       else await genOaiSVG(base,model,key,content,p,refIds,layoutGuide);
     }else{
       if(useAnthropic) throw new Error(tt('gen.claudeImage'));
+      try{ globalThis.GalleryAnalytics?.generation(mode); }catch{} // analytics: isolated task start
       await genOaiImage(base,model,key,content,p,refIds,layoutGuide);
     }
     if(passMode==='two') setStep(2,'done');
