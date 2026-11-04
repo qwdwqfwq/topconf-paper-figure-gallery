@@ -60,6 +60,7 @@
 }
 </script>
   <script defer src="assets/analytics.js?v=20261102"></script>
+<link rel="stylesheet" href="assets/support-dialog.css">
 </head>
 <body>
 
@@ -76,6 +77,7 @@
         </div>
       </div>
       <div class="hero-right">
+        <button id="support-author" class="support-trigger" type="button" aria-haspopup="dialog" aria-controls="support-dialog">♡ 支持作者</button>
         <button id="lang-toggle" class="lang-toggle" type="button" title="Switch language">中/EN</button>
         <div class="hero-stats" id="hero-stats">
           <span class="stat-pill"><b id="total-figures">…</b>&nbsp;<span data-i18n="stat.figures">figures</span></span>
@@ -201,5 +203,14 @@
 <script src="assets/i18n_gallery.js"></script>
 <script src="assets/figures.js"></script>
 <script src="assets/app.js?v=20261001"></script>
+<dialog id="support-dialog" class="support-dialog" aria-labelledby="support-heading">
+  <button id="support-close" class="support-close" type="button" aria-label="关闭支持作者弹窗">×</button>
+  <h2 id="support-heading">请作者喝杯咖啡 ☕</h2>
+  <p>如果这个画廊帮你找到了论文配图灵感，欢迎随意支持，帮助我持续整理主图、更新数据和维护工具。</p>
+  <a href="assets/wechat-pay.jpg" target="_blank" rel="noopener" aria-label="查看微信收款码原图"><img src="assets/wechat-pay.jpg" alt="作者提供的微信收款码" width="1308" height="1781" loading="lazy"></a>
+  <p class="support-links"><a href="assets/wechat-pay.jpg" download="画廊作者-微信收款码.jpg">保存收款码</a> · <a href="support.html">打开支持页面 ↗</a></p>
+  <p class="support-thanks">打赏完全自愿，金额随意。<br>感谢你的支持，Star、分享和反馈也同样重要。</p>
+</dialog>
+<script src="assets/support-dialog.js"></script>
 </body>
 </html>

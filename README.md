@@ -390,3 +390,13 @@ Thanks to [@timelic](https://github.com/timelic) and [@TansyZenix](https://githu
     <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=qwdwqfwq/topconf-paper-figure-gallery&type=Date" width="720" />
   </picture>
 </a>
+
+## ♡ 支持作者
+
+### 请作者喝杯咖啡 ☕
+
+如果这个画廊帮你找到了论文配图灵感，欢迎随意支持，帮助我持续整理主图、更新数据和维护工具。
+
+[微信扫码支持作者](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/support.html)
+
+打赏完全自愿，金额随意。感谢你的支持，Star、分享和反馈也同样重要。
