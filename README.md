@@ -99,7 +99,7 @@ FigureForge drafts your Figure 1 from the gallery: describe your paper, and 3,45
   <img src="forge/demo-forge.gif?v=20261002" alt="FigureForge walkthrough: describe paper, retrieve references, generate bitmap draft" width="560">
 </p>
 
-**[▶ Full demo video, 1:58 with audio](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)**
+**[▶ Full demo video, 3:23 with audio](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)**
 
 [![▶ FigureForge demo video](assets/figureforge-demo-poster.jpg)](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)
 
@@ -152,7 +152,7 @@ FigureForge 基于画廊生成你的 Figure 1 初稿：描述论文，3,452 张�
   <img src="forge/demo-forge.gif?v=20261002" alt="FigureForge 流程演示：输入论文、检索参考图、生成位图初稿" width="560">
 </p>
 
-**[▶ 完整演示视频，1 分 58 秒，有声音](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)**
+**[▶ 完整演示视频，3 分 23 秒，有声音](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)**
 
 [![▶ FigureForge 演示视频](assets/figureforge-demo-poster.jpg)](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)
 
