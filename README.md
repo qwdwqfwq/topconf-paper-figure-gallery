@@ -24,10 +24,10 @@
 <table>
   <tr>
     <td width="50%" align="center"><a href="docs/figureforge-examples/robot-policy.png"><img src="docs/figureforge-examples/robot-policy.png" alt="FigureForge 生成的机器人策略与执行论文主图" width="430"></a><br><strong>机器人策略与执行</strong><br><sub>Robot policy &amp; execution</sub></td>
-    <td width="50%" align="center"><a href="docs/figureforge-examples/hierarchical-memory.png"><img src="docs/figureforge-examples/hierarchical-memory.png" alt="FigureForge 生成的层级工作记忆论文主图" width="430"></a><br><strong>层级工作记忆</strong><br><sub>Hierarchical working memory</sub></td>
+    <td width="50%" align="center"><a href="docs/figureforge-examples/controllable-video-generation.jpg"><img src="docs/figureforge-examples/controllable-video-generation.jpg" alt="FigureForge 生成的时空扩散 Transformer 可控视频生成论文主图" width="430"></a><br><strong>时空扩散 Transformer · 可控视频生成</strong><br><sub>Controllable video generation via spatio-temporal diffusion transformer</sub></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><a href="docs/figureforge-examples/memory-system.png"><img src="docs/figureforge-examples/memory-system.png" alt="FigureForge 生成的工作记忆系统论文主图" width="430"></a><br><strong>工作记忆系统 · 从输入到结果</strong><br><sub>Memory system overview</sub></td>
+    <td width="50%" align="center"><a href="docs/figureforge-examples/reed-straw-slurry.jpg"><img src="docs/figureforge-examples/reed-straw-slurry.jpg" alt="FigureForge 生成的湿磨芦苇秸秆浆料稳定性与流变控制论文主图" width="430"></a><br><strong>湿磨芦苇秸秆浆料 · 稳定性与流变控制</strong><br><sub>Stability and rheology control of wet-milled reed straw slurries</sub></td>
     <td width="50%" align="center"><a href="docs/figureforge-examples/sycophancy-analysis.png"><img src="docs/figureforge-examples/sycophancy-analysis.png" alt="FigureForge 生成的 LLM 迎合行为因果分析论文主图" width="430"></a><br><strong>LLM 迎合行为因果分析</strong><br><sub>Internal causes of sycophancy in LLMs</sub></td>
   </tr>
 </table>
