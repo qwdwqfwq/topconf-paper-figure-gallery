@@ -101,7 +101,7 @@ FigureForge drafts your Figure 1 from the gallery: describe your paper, and 3,45
 
 **[▶ Full demo video, 3:23 with audio](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)**
 
-[![▶ FigureForge demo video](assets/figureforge-demo-poster.jpg)](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)
+[![▶ FigureForge demo video](assets/figureforge-demo-poster-en.png)](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)
 
 1. **Describe the paper.** Paste the title and abstract, upload the PDF (the Step 1 model reads it and summarizes the sections matching overview / architecture / pipeline / results), or type one sentence giving the "input → method → output" story.
 2. **Pick a pattern.** `framework` for system or multi-agent overviews, `pipeline` for end-to-end flows, `architecture` for internal model structure, `conceptual` for visual metaphors; also `teaser` and `taxonomy`.
@@ -154,7 +154,7 @@ FigureForge 基于画廊生成你的 Figure 1 初稿：描述论文，3,452 张�
 
 **[▶ 完整演示视频，3 分 23 秒，有声音](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)**
 
-[![▶ FigureForge 演示视频](assets/figureforge-demo-poster.jpg)](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)
+[![▶ FigureForge 演示视频](assets/figureforge-demo-poster-zh.png)](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)
 
 1. **输入论文**：粘贴标题和摘要、上传 PDF（步骤一的模型直接阅读，按概览、架构、流程、结果总结相关章节），或写一句话讲清「输入 → 方法 → 输出」。
 2. **选模式**：系统或多智能体总览选 `framework`，端到端流程选 `pipeline`，模型内部结构选 `architecture`，视觉隐喻选 `conceptual`；另有 `teaser`、`taxonomy`。
