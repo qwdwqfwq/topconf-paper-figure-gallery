@@ -5039,7 +5039,6 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
       }else{
         const body={
           model,
-          temperature:0.1,
           max_tokens:audit.wholeImage?128000:audit.defectDiagnosis?8000:audit.regionPatch?16000:32000,
           messages:[
             {role:'system',content:RECON_SYS},
@@ -5428,7 +5427,7 @@ async function requestRegionLabels(regions, canvas){
     const d = JSON.parse(txt);
     txt = (d.content||[]).filter(function(b){ return b.type === 'text'; }).map(function(b){ return b.text; }).join('');
   }else{
-    const body = { model:model, temperature:0.2,
+    const body = { model:model,
                    messages:[{ role:'system', content:ANALYZE_SYS },
                              { role:'user', content:prompt }] };
     if($('#provider').value === 'ark' && !relayBase()) body.thinking = { type:'disabled' };

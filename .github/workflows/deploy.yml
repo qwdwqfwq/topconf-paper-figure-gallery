@@ -26,7 +26,7 @@ jobs:
         with:
           fetch-depth: 0
       - name: Verify FigureForge workflow lock
-        run: node scripts/check-forge-workflow-lock.mjs || node scripts/check-pdf-release-exception-20261028.mjs || node scripts/check-nonelinear-source-release-20261031.mjs || node scripts/check-infistar-step4-release-20261031.mjs || node scripts/check-nonelinear-step4-stream-release-20261031.mjs || node scripts/check-retrieval-boot-release-20261031.mjs || node scripts/check-analytics-release.mjs || node scripts/check-tutorial-video-release-20261104.mjs || node scripts/check-support-author-release-20261104.mjs || node scripts/check-tutorial-cover-release-20261107.mjs || node scripts/check-gallery-summary-release-20261109.mjs --prepare-pages
+        run: node scripts/check-forge-workflow-lock.mjs || node scripts/check-pdf-release-exception-20261028.mjs || node scripts/check-nonelinear-source-release-20261031.mjs || node scripts/check-infistar-step4-release-20261031.mjs || node scripts/check-nonelinear-step4-stream-release-20261031.mjs || node scripts/check-retrieval-boot-release-20261031.mjs || node scripts/check-analytics-release.mjs || node scripts/check-tutorial-video-release-20261104.mjs || node scripts/check-support-author-release-20261104.mjs || node scripts/check-tutorial-cover-release-20261107.mjs || node scripts/check-gallery-summary-release-20261109.mjs --prepare-pages || node scripts/check-step4-temperature-release-20261109.mjs --prepare-pages
       - name: Verify retrieval initialization regression tests
         run: node --test forge/test-retrieval-boot.mjs
       - name: Verify PDF parsing regression tests
