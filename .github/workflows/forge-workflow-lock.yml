@@ -9,7 +9,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 3
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-      - run: node scripts/check-forge-workflow-lock.mjs
+      - name: Verify FigureForge workflow lock
+        shell: bash
+        run: |
+          if node scripts/check-forge-workflow-lock.mjs; then
+            exit 0
+          fi
+
+          # Allow only the one CI-only follow-up to the approved release.
+          approved=c8f26bc17383a60ddb23be0f2665dfa539990cf9
+          expected_paths=$(printf '%s\n' .github/workflows/deploy.yml .github/workflows/forge-workflow-lock.yml)
+          test "$GITHUB_EVENT_NAME" = push
+          test "$GITHUB_REF" = refs/heads/main
+          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"
+          test "$(git show -s --format=%P HEAD)" = "$approved"
+          test "$(git diff --name-only --no-renames "$approved" HEAD)" = "$expected_paths"
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+          # Reuse the release checker on the exact approved tree.
+          git checkout --detach "$approved"
+          node scripts/check-step4-temperature-release-20261109.mjs

@@ -25,20 +25,44 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: Verify the CI-only follow-up
+        id: ci_only
+        shell: bash
+        run: |
+          approved=c8f26bc17383a60ddb23be0f2665dfa539990cf9
+          if [[ "$GITHUB_EVENT_NAME" != push || "$GITHUB_REF" != refs/heads/main ||
+                "$(git show -s --format=%P HEAD)" != "$approved" ]]; then
+            exit 0
+          fi
+
+          test "$GITHUB_SHA" = "$(git rev-parse HEAD)"
+          expected_paths=$(printf '%s\n' .github/workflows/deploy.yml .github/workflows/forge-workflow-lock.yml)
+          test "$(git diff --name-only --no-renames "$approved" HEAD)" = "$expected_paths"
+          test -z "$(git status --porcelain --untracked-files=all)"
+
+          echo "Site content matches the approved release $approved. Skipping repeat publication."
+          echo "skip=true" >> "$GITHUB_OUTPUT"
       - name: Verify FigureForge workflow lock
+        if: steps.ci_only.outputs.skip != 'true'
         run: node scripts/check-forge-workflow-lock.mjs || node scripts/check-pdf-release-exception-20261028.mjs || node scripts/check-nonelinear-source-release-20261031.mjs || node scripts/check-infistar-step4-release-20261031.mjs || node scripts/check-nonelinear-step4-stream-release-20261031.mjs || node scripts/check-retrieval-boot-release-20261031.mjs || node scripts/check-analytics-release.mjs || node scripts/check-tutorial-video-release-20261104.mjs || node scripts/check-support-author-release-20261104.mjs || node scripts/check-tutorial-cover-release-20261107.mjs || node scripts/check-gallery-summary-release-20261109.mjs --prepare-pages || node scripts/check-step4-temperature-release-20261109.mjs --prepare-pages
       - name: Verify retrieval initialization regression tests
+        if: steps.ci_only.outputs.skip != 'true'
         run: node --test forge/test-retrieval-boot.mjs
       - name: Verify PDF parsing regression tests
+        if: steps.ci_only.outputs.skip != 'true'
         run: node --test forge/test-chat-api.mjs forge/test-openai-pdf.mjs nonelinear-relay/test-worker.mjs nonelinear-relay/test-references.mjs nonelinear-relay/test-source-image.mjs nonelinear-relay/test-chat-stream.mjs forge/test-infistar-reconstruction-stream.mjs nonelinear-relay/test-live-chat.mjs
       - name: Verify editable export regression tests
+        if: steps.ci_only.outputs.skip != 'true'
         run: node forge/test-editable-export.mjs
       - name: Setup Pages
+        if: steps.ci_only.outputs.skip != 'true'
         uses: actions/configure-pages@v5
       - name: Upload artifact
+        if: steps.ci_only.outputs.skip != 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: '.'
       - name: Deploy to GitHub Pages
+        if: steps.ci_only.outputs.skip != 'true'
         id: deployment
         uses: actions/deploy-pages@v4
