@@ -3,8 +3,8 @@ GAL_I18N.register({
   en: {
     "tagline": 'Inspiration gallery of top-conference Figure 1 · <span class="vn iclr">ICLR</span>·<span class="vn icml">ICML</span>·<span class="vn neurips">NeurIPS</span>·<span class="vn cvpr">CVPR</span>·<span class="vn acl">ACL</span>·<span class="vn aaai">AAAI</span> · 2023–2026',
     "stat.figures": "figures",
-    "intro": 'Curated <b>Figure&nbsp;1 / teaser figures</b> from six top ML conferences — <b>conceptual diagrams</b>, <b>system frameworks</b>, <b>pipelines</b> &amp; <b>architectures</b>. Filter by venue, year, <b class="t-k">acceptance tier</b> or visual pattern to find layout ideas for <b>your own paper\u2019s overview figure</b>.',
-    "cta.sub": "Generate and download publication-ready paper figures with FigureForge using gallery references, your own uploads, or both. Recreate figures with high fidelity and export editable PowerPoint (PPTX), SVG, Visio (VSDX), or draw.io files for detailed editing.",
+    "intro": 'Curated <b>Figure&nbsp;1 / teaser figures</b> from six top ML conferences — <b>conceptual diagrams</b>, <b>system frameworks</b>, <b>pipelines</b> &amp; <b>architectures</b>. Filter by venue, year, <b class="t-k">acceptance tier</b> or visual pattern to find layout ideas for <b>your own paper\u2019s overview figure</b>. FigureForge can generate paper figures using images found in the gallery, your own uploads, or both. Download the results to support manuscript submission, or recreate figures with high fidelity and export editable PowerPoint (PPTX), SVG, Visio (VSDX), and draw.io files for detailed editing.',
+    "cta.sub": "FigureForge can generate paper figures using images found in the gallery, your own uploads, or both. Download the results to support manuscript submission, or recreate figures with high fidelity and export editable PowerPoint (PPTX), SVG, Visio (VSDX), and draw.io files for detailed editing.",
     "cta.go": "Try now →",
     "search.ph": "Search titles / authors · DPO · robot · 3D · gaussian…",
     "sort.label": "Sort",
@@ -38,8 +38,8 @@ GAL_I18N.register({
   zh: {
     "tagline": '顶会论文主图灵感画廊 · <span class="vn iclr">ICLR</span>·<span class="vn icml">ICML</span>·<span class="vn neurips">NeurIPS</span>·<span class="vn cvpr">CVPR</span>·<span class="vn acl">ACL</span>·<span class="vn aaai">AAAI</span> · 2023–2026',
     "stat.figures": "张",
-    "intro": '精选六大顶会排版精良的 <b>Figure 1 / Teaser</b>，覆盖<b>概念示意 · 系统框架 · 流程 · 架构</b>，并按 <b style="color:#b8860b">Oral / Spotlight / Best Paper</b> 等级标注，为你的论文主图找灵感。',
-    "cta.sub": "FigureForge 可用六大顶会画廊检索到的参考图、自己上传的图，或混合两者生成论文主图。成图可直接下载用于投稿，也可高保真复刻并导出为可编辑的 PPTX（PowerPoint）、SVG、VSDX（Visio）和 draw.io 文件，逐项精修。",
+    "intro": '精选六大顶会排版精良的 <b>Figure 1 / Teaser</b>，覆盖<b>概念示意 · 系统框架 · 流程 · 架构</b>，并按 <b style="color:#b8860b">Oral / Spotlight / Best Paper</b> 等级标注，为你的论文主图找灵感。 FigureForge 可用画廊检索图、自己上传的图，或混合两者生成论文主图。成图可直接下载辅助论文投稿，也可高保真复刻并导出为可编辑的 PPTX（PowerPoint）、SVG、VSDX（Visio）和 draw.io 文件，逐项精修。',
+    "cta.sub": "FigureForge 可用六大顶会画廊检索到的参考图、自己上传的图，或混合两者生成论文主图。成图可直接下载辅助论文投稿，也可高保真复刻并导出为可编辑的 PPTX（PowerPoint）、SVG、VSDX（Visio）和 draw.io 文件，逐项精修。",
     "cta.go": "立即试用 →",
     "search.ph": "搜索标题或作者 · DPO · robot · 3D · gaussian…",
     "sort.label": "排序",
