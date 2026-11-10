@@ -1753,17 +1753,30 @@ function initProviders(){
   MAN.providers.infistar={label:'Infistar 无限星河',base:'https://infistar.cc/v1',proto:'oai',cors:true,chat:[],vision:[],image:[]};
   // Retire these providers even when a refreshed manifest still contains them.
   for(const id of ['sf','claude','custom']) delete MAN.providers[id];
+  const providerIds=['infistar','nonelinear','oai'];
   const s = $('#provider');
-  s.replaceChildren();
-  for(const k of ['infistar',...Object.keys(MAN.providers).filter(k=>k!=='infistar')]){
+  // A retired selection stays unconfigured until the user picks a provider.
+  MAN.providers['']={base:'',chat:[],vision:[],image:[]};
+  const placeholder=option('');
+  placeholder.disabled=true;
+  placeholder.hidden=true;
+  s.replaceChildren(placeholder);
+  for(const k of providerIds){
     const o=option(k);
     if(k==='infistar'){o.dataset.i18n='provider.infistar';o.textContent=tt('provider.infistar');}
     else o.textContent=MAN.providers[k].label;
     s.appendChild(o);
   }
+  const officialOption=s.querySelector('option[value="oai"]');
+  const updateProviderLabels=()=>{
+    placeholder.textContent=refsText('请选择服务商','Select a provider');
+    officialOption.textContent=refsText('OpenAI 官网','OpenAI (official)');
+  };
+  updateProviderLabels();
+  document.addEventListener('langchange',updateProviderLabels);
   const saved=localStorage.getItem('ff_provider');
-  s.value=Object.hasOwn(MAN.providers,saved)?saved:'infistar';
-  localStorage.setItem('ff_provider',s.value);
+  s.value=saved===null?'infistar':providerIds.includes(saved)?saved:'';
+  if(s.value) localStorage.setItem('ff_provider',s.value);
   restoreProviderState(s.value);
   populateParserModels();
 }
@@ -1771,15 +1784,16 @@ function restoreProviderState(p){
   const reconEffort=localStorage.getItem('ff_recon_reasoning_effort_'+p);
   $('#reconReasoningEffort').value=['','medium','high','xhigh'].includes(reconEffort)?reconEffort:(p==='infistar'?'high':'');
   $('#infistarSignup').hidden = p!=='infistar';
-  $('#key').value = localStorage.getItem('ff_key_'+p)||'';
-  $('#baseOverride').value = localStorage.getItem('ff_base_'+p)||'';
+  $('#key').disabled = !p;
+  $('#key').value = p ? localStorage.getItem('ff_key_'+p)||'' : '';
+  $('#baseOverride').value = p ? localStorage.getItem('ff_base_'+p)||'' : '';
   $('#customModel').value = localStorage.getItem('ff_cmodel_'+p)||'';
   $('#parseCustomModel').value = localStorage.getItem('ff_parse_cmodel_'+p)||'';
   const c = cfg();
   const needRelay = c.cors===false || p==='infistar';
   $('#useRelay').checked = needRelay || localStorage.getItem('ff_relay_'+p)==='1';
-  $('#relayToggle').hidden = p==='infistar';
-  $('#relayRow').hidden = p==='infistar' || !$('#useRelay').checked;
+  $('#relayToggle').hidden = !p || p==='infistar';
+  $('#relayRow').hidden = !p || p==='infistar' || !$('#useRelay').checked;
   $('#customModelRow').hidden = p!=='custom';
   $('#corsNote').hidden = c.cors!==false;
   if(c.cors===false) $('#corsNote').innerHTML = tt('cors.note');
