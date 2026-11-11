@@ -43,7 +43,8 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
   await page.evaluate(()=>window.__revisionTest.configure());
   async function bitmap(n){image=await page.evaluate(n=>{const c=document.createElement('canvas');c.width=2048;c.height=1152;const x=c.getContext('2d');x.fillStyle='#f8f7ff';x.fillRect(0,0,c.width,c.height);x.fillStyle='#7351df';x.font='bold 68px sans-serif';x.fillText('FigureForge · V'+n,110,150);for(let i=0;i<3;i++){x.fillStyle=['#d8ebf7','#e6ddf6','#dbf0e0'][i];x.fillRect(110+i*640,300,560,650);x.fillStyle='#41445c';x.font='44px sans-serif';x.fillText(['Input','Method','Results'][i],160+i*640,400);}return c.toDataURL().split(',')[1];},n);}
   const cards=page.locator('.ff-version');
-  async function modify(index,prompt,n){await bitmap(n);await cards.nth(index).locator('[data-modify]').click();await page.locator('.ff-revision-editor textarea').fill(prompt);await page.locator('.ff-revision-editor [data-submit]').click();}
+  async function acceptReview(){await page.locator('[data-revision-accept]').click();}
+  async function modify(index,prompt,n){await bitmap(n);await cards.nth(index).locator('[data-modify]').click();await page.locator('.ff-revision-editor textarea').fill(prompt);await page.locator('.ff-revision-editor [data-submit]').click();if(!fail)await acceptReview();}
   async function resolve(index){await page.evaluate(i=>window.__revisionTest.jobs[i].resolve(),index);await page.waitForFunction(()=>!window.__revisionTest.state().reconPending);}
   await bitmap(1);await page.evaluate(()=>window.__revisionTest.generate());
   await page.waitForFunction(()=>window.__revisionTest.jobs.length===1);
@@ -89,13 +90,17 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
   await page.waitForFunction(()=>document.querySelector('.ff-revision-error').textContent.includes('失败'));
   assert.equal(await cards.count(),4);assert.equal(requests.length,count+1);assert.deepEqual(requests.at(-1).image,[v1,screenshot]);
   assert.equal(await page.locator('[data-preview]').count(),1);
-  fail=false;await page.locator('.ff-revision-editor [data-submit]').click();await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===5);
+  fail=false;await page.locator('.ff-revision-editor [data-submit]').click();await acceptReview();await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===5);
   await page.waitForFunction(async()=> (await window.__revisionTest.records()).length===5);
   const records=await page.evaluate(()=>window.__revisionTest.records());
   assert.equal(records.find(v=>v.number===1).state.scene.version,1);assert.equal(records.find(v=>v.number===2).state.scene.version,2);
   assert.equal(records.find(v=>v.number===5).parentId,records.find(v=>v.number===1).id);
   assert.equal(JSON.stringify(records).includes('offline-only'),false);
   assert.equal(records.some(v=>'attachmentsDraft' in v||'attachments' in v),false);
+  const audit=records.find(v=>v.number===4).revisionAudit;
+  assert.equal(audit.referenceCount,3);assert.equal(audit.status,200);assert.equal(audit.review,'user-confirmed');
+  assert.equal(audit.pixelCheck,'changed');assert.equal(audit.inputHashes.length,3);
+  assert.ok(audit.inputHashes.every(h=>/^[a-f0-9]{64}$/.test(h)));assert.ok(/^[a-f0-9]{64}$/.test(audit.promptHash));
   const formats=await page.evaluate(async({source,shot})=>{
    const {generateRevision}=await import('./revision-gallery.mjs?v=20261112');const originalFetch=window.fetch,seen=[];
    try{
@@ -108,7 +113,10 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
       else{const body=JSON.parse(options.body);seen.push({kind:body.contents?'native':'json',url,body});}
       return new Response(JSON.stringify({data:[{b64_json:source.split(',')[1]}],candidates:[{content:{parts:[{inlineData:{mimeType:'image/png',data:source.split(',')[1]}}]}}]}));
      };
-     await generateRevision({image:source,route,attachments:[{data:shot}]},'change the marked area',{key:'offline-only',toDataURL:async x=>x,loadImage:async()=>({width:route.p==='sf'?1024:2048,height:route.p==='sf'?1024:1152})});
+     let rejected=false;
+     try{await generateRevision({image:source,route,attachments:[{data:shot}]},'change the marked area',{key:'offline-only',toDataURL:async x=>x,loadImage:async()=>{throw Error('identical URI needs no decode');}});}
+     catch(e){if(!e.message.includes('与原图像素相同'))throw e;rejected=true;}
+     if(!rejected)throw Error('Unchanged API output was accepted');
     }
    }finally{window.fetch=originalFetch;}
    return seen;
@@ -117,6 +125,33 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
   assert.deepEqual(formats[0].body.generationConfig.imageConfig,{aspectRatio:'16:9',imageSize:'2K'});
   assert.deepEqual(formats[1].images,[v1,screenshot]);assert.equal(formats[1].size,'2048x1152');assert.ok(formats[1].url.endsWith('/images/edits'));
   assert.deepEqual(formats[2].body.image,[v1,screenshot]);assert.equal(formats[2].body.image_size,'1024x1024');
+  // Review rejects semantic misses without saving or triggering another paid request.
+  await bitmap(6);await cards.nth(0).locator('[data-modify]').click();
+  const rejectedPrompt='删除红框内容并重新排版 <img src=x onerror="window.reviewInjection=true">';
+  await page.locator('.ff-revision-editor textarea').fill(rejectedPrompt);
+  const beforeReview=requests.length;
+  await page.locator('.ff-revision-editor [data-submit]').click();
+  await page.locator('[data-revision-reject]').waitFor();
+  assert.equal(await cards.count(),5);assert.equal(requests.length,beforeReview+1);
+  assert.equal(await page.locator('.ff-revision-review pre').textContent(),rejectedPrompt);
+  assert.equal(await page.evaluate(()=>!!window.reviewInjection),false);
+  assert.equal(await page.locator('.ff-revision-compare img').count(),3);
+  await page.locator('.ff-revision-review').screenshot({path:path.join(require('node:os').tmpdir(),'figureforge-revision-review.png')});
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.locator('.ff-revision-review').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
+  await page.locator('.ff-revision-review').screenshot({path:path.join(require('node:os').tmpdir(),'figureforge-revision-review-mobile.png')});
+  await page.setViewportSize({width:1440,height:1000});
+  await page.locator('[data-revision-reject]').click();
+  assert.equal(await page.locator('.ff-revision-editor textarea').inputValue(),rejectedPrompt);
+  assert.equal(await page.locator('[data-preview]').count(),1);
+  assert.equal(await cards.count(),5);assert.equal(requests.length,beforeReview+1);
+  // An unchanged result is an error, not a sixth version; input remains retryable.
+  image=v1.split(',')[1];await page.locator('.ff-revision-editor [data-submit]').click();
+  await page.waitForFunction(()=>document.querySelector('.ff-revision-error').textContent.includes('与原图像素相同'));
+  assert.equal(await cards.count(),5);assert.equal(requests.length,beforeReview+2);
+  assert.equal(await page.locator('dialog[open]').count(),0);
+  assert.equal(await page.locator('[data-preview]').count(),1);
+  assert.equal((await page.evaluate(()=>window.__revisionTest.records())).length,5);
   await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===5);
   await cards.nth(1).locator('[data-build]').click();assert.equal(await page.evaluate(()=>window.__revisionTest.state().scene.version),2);
   await cards.nth(4).locator('[data-modify]').click();
@@ -167,6 +202,6 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
   assert.equal(await cards.count(),0);
   assert.equal(await page.evaluate(()=>window.__revisionTest.state().bitmap||''),'');
   assert.ok(errors.every(message=>message.includes("Service worker is disabled because the context is sandboxed")));
-  console.log('Screenshot upload/paste/drop/preview/removal/draft isolation/payload order passed. Revision browser integration passed: continuous/branched edits during conversion; manual revisions; per-version results; failures; reload persistence; deletion/cancel/failure/isolation/final-version cleanup; SVG return; mobile layout. Zero live API calls.');
+  console.log('Revision browser integration passed: screenshot upload/paste/drop/preview/removal/draft isolation/payload order; continuous/branched edits during conversion; review accept/reject; unchanged output rejection; audit persistence; manual retries; per-version results; reload persistence; deletion/cancel/failure/isolation/final-version cleanup; SVG return; desktop/mobile layouts. Zero live API calls.');
  }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

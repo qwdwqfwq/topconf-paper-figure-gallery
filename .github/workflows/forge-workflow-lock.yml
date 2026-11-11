@@ -10,7 +10,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 3
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -54,6 +54,10 @@ jobs:
           fi
 
           if node scripts/check-revision-delete-release-20261112.mjs; then
+            exit 0
+          fi
+
+          if node scripts/check-revision-edit-release-20261112.mjs; then
             exit 0
           fi
 

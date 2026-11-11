@@ -1,34 +1,111 @@
-import {usesInfistarGemini,geminiImageRequest,geminiImageResult,compatibleImageRequest,requestImageWithRecovery} from './image-api.mjs?v=20261026-nonelinear-resolution';
+import {usesInfistarGemini,geminiImageRequest,geminiImageResult,compatibleImageRequest,requestImageWithRecovery,imageRequestDiagnostics} from './image-api.mjs?v=20261026-nonelinear-resolution';
 import {imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261026-nonelinear-resolution';
 
 // Separate image-edit request: chosen full bitmap first, optional screenshot references after it.
 // This module never calls or configures the editable reconstruction pipeline.
+export function revisionInstruction(prompt,count){
+  return `Perform a real image edit of the supplied full figure. The first image is the complete figure to edit.
+${count>1?`Images 2 through ${count} are user-provided screenshots for locating areas or illustrating the requested changes.`:'No screenshot references accompany this request.'} Match screenshot content to the first image, including cropped or scaled screenshots. They are guidance, not replacement canvases. Borders, arrows, highlights and surrounding application UI are annotations, not figure content to reproduce. Interpret each screenshot together with the user's written request; do not assume every screenshot requests deletion.
+The user's request below defines the edits and takes priority over preservation. Preserve the meaning, text, colors and style of content the user wants to keep, but do not freeze its positions or sizes when rearrangement is requested. For deletion requests, actually remove the specified content and its obsolete connectors. When re-layout is requested, redistribute and align the remaining elements, repair connections, and use the available canvas coherently; do not merely blank the deleted area or leave a hole or an obsolete empty band. Apply additions, replacements, text corrections, style or position changes only as requested. Do not delete other content just because it appears in a screenshot.
+Keep the output canvas aspect ratio required by this request; this does not require preserving the old arrangement. Return the complete revised figure, never the unchanged input or an annotated screenshot. Before returning, check every requested change against the input and screenshots, including removal and re-layout where requested.
+
+USER REQUEST (verbatim):\n${prompt}`;
+}
+
+const imageData=/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=\r\n]+$/;
+async function fingerprint(value){
+  return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),n=>n.toString(16).padStart(2,'0')).join('');
+}
+
+// Exact decoded-pixel comparison also detects an original re-encoded as PNG/WebP.
+// No similarity threshold: a legitimate one-character or small-area edit is allowed.
+async function samePixels(left,right,loadImage){
+  if(left===right)return true;
+  const a=await loadImage(left),b=await loadImage(right);
+  const width=a.naturalWidth||a.width,height=a.naturalHeight||a.height;
+  if(width!==(b.naturalWidth||b.width)||height!==(b.naturalHeight||b.height))return false;
+  const canvas=document.createElement('canvas');canvas.width=width;canvas.height=Math.min(128,height);
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});
+  if(!ctx)throw new Error('无法检查修改图，请使用支持 Canvas 的浏览器。');
+  for(let y=0;y<height;y+=canvas.height){
+    const h=Math.min(canvas.height,height-y);
+    ctx.clearRect(0,0,width,canvas.height);ctx.drawImage(a,0,y,width,h,0,0,width,h);
+    const first=ctx.getImageData(0,0,width,h).data;
+    ctx.clearRect(0,0,width,canvas.height);ctx.drawImage(b,0,y,width,h,0,0,width,h);
+    const second=ctx.getImageData(0,0,width,h).data;
+    if(first.some((n,i)=>n!==second[i]))return false;
+  }
+  return true;
+}
+
 export async function generateRevision(parent,prompt,{key,toDataURL,loadImage}){
   const {base,model,p,ratio,resolution}=parent.route;
   if(!key)throw new Error('请先填写该服务商的 API Key。');
+  if(typeof prompt!=='string'||!prompt.trim())throw new Error('请填写本次修改要求。');
   const source=await toDataURL(parent.image);
   const references=[source,...(parent.attachments||[]).map(item=>item.data)];
+  if(references.length>5||references.some(data=>typeof data!=='string'||!imageData.test(data)))
+    throw new Error('待修改原图或截图无效，请重新选择；本次未发送请求。');
   const native=usesInfistarGemini(base,model);
   const dimensions=imageRequestDimensions(p,model,ratio,resolution,native);
-  const instruction='Edit the supplied figure according to the following request. Preserve all content, colors and style not mentioned. Keep the original canvas aspect ratio. Return the complete revised figure.'+(references.length>1?' The first image is the complete figure to edit. Additional images are user-provided screenshots for locating areas or illustrating the requested changes. Use them only as guidance; do not replace the full canvas with a screenshot.':'')+'\n\n'+prompt;
+  const instruction=revisionInstruction(prompt,references.length);
   let body={model,prompt:instruction,image:p==='sf'&&!native&&references.length===1?source:references};
   if(!native){body[dimensions.field]=dimensions.value;if(dimensions.aspectRatio)body.aspect_ratio=dimensions.aspectRatio;}
   const request=native?geminiImageRequest(base,model,instruction,references,dimensions):compatibleImageRequest(body,base,p);
+  const url=(request.base||base)+request.endpoint;
+  const transport=imageRequestDiagnostics(url,request.body);
+  if(transport.referenceCount!==references.length)throw new Error('修改请求未完整包含原图和截图，本次未发送。');
+  const inputHashes=await Promise.all(references.map(fingerprint));
+  const startedAt=Date.now(),clientRequestId=crypto.randomUUID();
   try{
-    const response=await requestImageWithRecovery({url:(request.base||base)+request.endpoint,body:request.body,key,usedReferences:true,allowReferenceFallback:false});
+    const response=await requestImageWithRecovery({url,body:request.body,key,usedReferences:true,allowReferenceFallback:false});
     if(!response.ok)throw new Error('修改生图失败（HTTP '+response.status+'）。'+response.text.slice(0,400));
     const data=JSON.parse(response.text);
-    const item=native?geminiImageResult(data,{locale:'zh'}):(data?.data?.[0]||data?.images?.[0]);
+    const item=native?geminiImageResult(data,{locale:'zh',requestId:response.requestId}):(data?.data?.[0]||data?.images?.[0]);
     const image=item?.b64_json?`data:${item.mimeType||'image/png'};base64,${item.b64_json}`:item?.url;
     if(!image)throw new Error('服务商未返回图片，未自动重试。');
-    const loaded=await loadImage(image),width=loaded.naturalWidth||loaded.width,height=loaded.naturalHeight||loaded.height;
+    const output=await toDataURL(image);
+    if(await samePixels(source,output,loadImage))throw new Error('修改未生效：API 返回的图片与原图像素相同，未保存新版本。请调整要求后手动重试；不会自动重复计费。');
+    for(const screenshot of references.slice(1)){
+      if(await samePixels(screenshot,output,loadImage))throw new Error('API 返回了上传的示意截图，未生成完整修改图，未保存新版本。');
+    }
+    const loaded=await loadImage(output),width=loaded.naturalWidth||loaded.width,height=loaded.naturalHeight||loaded.height;
     if(!verifyImageRatio(width,height,ratio)||!verifyImageResolution(width,height,resolution,dimensions.field==='size'?dimensions.value:null))
       throw new Error('修改图的比例或分辨率与所选版本不符，未替换任何已有结果。');
-    return {image:await toDataURL(image),width,height};
+    return {image:output,width,height,revisionAudit:{clientRequestId,startedAt,completedAt:Date.now(),
+      provider:p,model,endpoint:transport.endpoint,format:transport.format,referenceCount:references.length,
+      inputHashes,promptHash:await fingerprint(prompt),instructionHash:await fingerprint(instruction),
+      requestId:String(response.requestId||'').replaceAll(key,'[redacted]').slice(0,160),
+      status:response.status,pixelCheck:'changed',review:'pending'}};
   }catch(error){
     error.message=String(error.message).split(key).join('[redacted]').replace(/Bearer\s+\S+/gi,'Bearer [redacted]');
     throw error;
   }
+}
+
+// Semantic completion is reviewed by the user; changed pixels alone cannot prove it.
+function reviewRevision(parent,result,prompt,references){
+  return new Promise(resolve=>{
+    const dialog=document.createElement('dialog');dialog.className='ff-revision-review';
+    const title=document.createElement('h3');title.textContent='核对本次修改结果';
+    const hint=document.createElement('p');hint.textContent='请按本次要求逐项检查指定内容和排版。像素有变化不代表所有要求都已完成；确认后才保存新版本。';
+    const request=document.createElement('pre');request.textContent=prompt;
+    const grid=document.createElement('div');grid.className='ff-revision-compare';
+    for(const [label,src] of [['待修改图 · V'+parent.number,parent.image],['API 返回的修改图',result.image],...references.map((item,i)=>['参考截图 '+(i+1),item.data])]){
+      const figure=document.createElement('figure'),caption=document.createElement('figcaption'),img=document.createElement('img');
+      caption.textContent=label;img.src=src;img.alt=label;figure.append(caption,img);grid.append(figure);
+    }
+    const audit=document.createElement('p'),a=result.revisionAudit;
+    audit.textContent=a?`API 已响应：HTTP ${a.status} · 原图 1 张 + 截图 ${a.referenceCount-1} 张 · ${a.model}${a.requestId?' · 请求 ID：'+a.requestId:''}`:'请核对返回图片。';
+    const actions=document.createElement('div');actions.className='ff-revision-review-actions';
+    const reject=document.createElement('button'),accept=document.createElement('button');
+    reject.type=accept.type='button';reject.dataset.revisionReject='true';accept.dataset.revisionAccept='true';
+    reject.textContent='未符合要求，保留输入';accept.textContent='确认符合要求，保存新版本';
+    reject.onclick=()=>dialog.close('reject');accept.onclick=()=>dialog.close('accept');
+    actions.append(reject,accept);dialog.append(title,hint,request,audit,grid,actions);
+    dialog.onclose=()=>{const accepted=dialog.returnValue==='accept';dialog.remove();resolve(accepted);};
+    document.body.append(dialog);dialog.showModal();reject.focus();
+  });
 }
 
 function historyStore(){
@@ -58,6 +135,7 @@ export function createRevisionGallery(adapter){
     style.textContent=`.ff-revisions{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}.ff-version{border:1px solid #dedbf5;border-radius:14px;background:white;padding:14px;margin-bottom:18px}.ff-version.selected{border-color:#7860ec;box-shadow:0 0 0 2px #ede9ff}.ff-version header{display:flex;gap:12px;align-items:center;margin-bottom:12px}.ff-version small{color:#73788c}.ff-version img{width:100%;height:auto;border-radius:8px}.ff-version footer{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}.ff-version button,.ff-revision-editor button{padding:9px 14px;border-radius:9px;border:1px solid #ddd6ff;background:#f3efff;color:#6944db;cursor:pointer;font:inherit}.ff-version button:disabled,.ff-revision-editor button:disabled{opacity:.5;cursor:default}.ff-version [data-build]{margin-left:auto}.ff-revision-editor{position:sticky;top:18px;padding:18px;border:1px solid #e1dcff;border-radius:14px;background:#faf9ff}.ff-revision-editor h3{margin:0 0 14px;color:#6642d9}.ff-revision-editor textarea{box-sizing:border-box;width:100%;min-height:165px;resize:vertical;margin:14px 0;padding:12px;border:1px solid #dcd5ef;border-radius:10px;font:inherit}.ff-revision-editor button{width:100%;background:#7552e8;color:white}.ff-revision-error{color:#b42338;font-size:13px;white-space:pre-wrap}.ff-revision-storage{grid-column:1/-1;color:#9b6216;font-size:13px}@media(max-width:850px){.ff-revisions{grid-template-columns:1fr}.ff-revision-editor{position:static;grid-row:1}}`;
     style.textContent+=`.ff-revision-editor.dragging{outline:2px dashed #7552e8;outline-offset:3px}.ff-revision-editor [data-upload]{width:auto;background:#f3efff;color:#6944db;margin-bottom:12px}.ff-revision-attachments{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.ff-revision-attachment{position:relative;width:72px}.ff-revision-editor [data-preview]{padding:0;width:72px;height:64px;background:white;overflow:hidden}.ff-revision-attachment img{width:100%;height:100%;object-fit:contain}.ff-revision-editor [data-remove]{position:absolute;right:-5px;top:-7px;width:24px;height:24px;padding:0;border-radius:50%;background:white;color:#6944db}.ff-revision-preview{border:1px solid #dedbf5;border-radius:14px;max-width:90vw;max-height:90vh;padding:16px}.ff-revision-preview::backdrop{background:#15112699}.ff-revision-preview img{display:block;max-width:80vw;max-height:75vh;object-fit:contain}.ff-revision-preview button{display:block;margin:0 0 12px auto;padding:6px 14px;cursor:pointer}`;
     style.textContent+=`.ff-version [data-delete]{margin-left:auto;padding:6px 10px;font-size:13px}.ff-revision-history{grid-column:1/-1;color:#73788c;font-size:13px}`;
+    style.textContent+=`.ff-revision-review{box-sizing:border-box;width:1200px;max-width:96vw;max-height:94vh;overflow:auto;border:1px solid #dedbf5;border-radius:14px;padding:20px;background:white;color:#29243d}.ff-revision-review::backdrop{background:#151126aa}.ff-revision-review pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;background:#f3efff;padding:12px}.ff-revision-compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.ff-revision-compare figure{min-width:0;margin:0}.ff-revision-compare img{display:block;width:100%;height:auto}.ff-revision-review-actions{display:flex;gap:12px;flex-wrap:wrap;position:sticky;bottom:0;background:white;padding:12px 0}.ff-revision-review button{font:inherit;cursor:pointer;padding:10px;border:1px solid #dcd5ef;border-radius:8px}.ff-revision-review [data-revision-accept]{background:#7552e8;color:white}@media(max-width:650px){.ff-revision-compare{grid-template-columns:1fr}}`;
     document.head.append(style);
     root=document.createElement('div');root.className='ff-revisions';
     list=document.createElement('div');panel=document.createElement('aside');panel.className='ff-revision-editor';
@@ -111,6 +189,7 @@ export function createRevisionGallery(adapter){
   }
   function persist(v){
     const record={id:v.id,number:v.number,parentId:v.parentId,prompt:v.prompt,image:v.image,width:v.width,height:v.height,route:v.route,created:v.created,state:savedState(v.state)};
+    if(v.revisionAudit)record.revisionAudit=v.revisionAudit;
     void store.write(record).catch(()=>{storageHint.textContent='浏览器未能保存历史记录；当前页面中的版本和结果仍保留。';});
   }
   function snapshot(){if(active&&adapter.currentImage()===active.image){active.state=structuredClone(savedState(adapter.getState()));active.view=adapter.captureView();persist(active);}}
@@ -174,7 +253,12 @@ export function createRevisionGallery(adapter){
     generating=true;error.textContent='';refresh();
     try{
       // Request-only attachments; never replace a version bitmap or reconstruction state.
-      const result=await adapter.generate({...parent,attachments:[...(parent.attachmentsDraft||[])]},prompt);
+      const references=(parent.attachmentsDraft||[]).map(item=>({...item}));
+      const result=await adapter.generate({...parent,route:{...parent.route},attachments:references},prompt);
+      if(!await reviewRevision(parent,result,prompt,references)){
+        edit(parent);error.textContent='本次结果未保存。修改要求和截图已保留；再次生成会发起新的 API 请求。';return;
+      }
+      if(result.revisionAudit)result.revisionAudit={...result.revisionAudit,review:'user-confirmed',reviewedAt:Date.now()};
       const v={...result,id:crypto.randomUUID(),number:nextNumber,parentId:parent.id,prompt,route:{...parent.route},created:Date.now(),state:null};
       append(v);persist(v);edit(v);v.card.scrollIntoView({block:'nearest',behavior:'smooth'});
     }catch(e){error.textContent=e.message||'修改失败，请重试。';}
