@@ -734,7 +734,8 @@ import {fetchReconstructionStream,usesReconstructionStream} from './infistar-rec
 import {prepareQuery,buildIndex,rank} from './retrieval.mjs';
 import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=20261021-unlimited';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261026-nonelinear-resolution';
-import {createRevisionGallery,generateRevision} from './revision-gallery.mjs?v=20261112';
+import {createRevisionGallery,generateRevision} from './revision-gallery.mjs?v=20261112-svg';
+import {svgVersion,generateSVGRevision} from './svg-revision.mjs?v=20261112';
 import {ImageRoutes, safeImageFailover} from './image-routes.mjs?v=20261020';
 const imageRoutes=new ImageRoutes();
 import {buildNativePptx, readNativePptxScene, geometrySegments, editableShapeFrame, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=whole-image-20261021-1';
@@ -5905,13 +5906,33 @@ window.__ffRenderSVG = (...args) => {revisionGallery.leave();return renderSVG(..
 
 /* Exposed the same way as __ffRenderSVG: the rebuild is otherwise module-scoped. */
 window.__ffReconstruct = () => runReconstruction();
+function revisionConfiguration(version, validate=true){
+  const svg=version.source==='svg',p=$('#provider').value;
+  const model=($('#model').value==='custom'?$('#customModel').value:$('#model').value).trim();
+  const route={p,model,base:baseURL(),proto:cfg().proto,ratio:$('#figureRatio').value,resolution:$('#imageResolution').value};
+  const key=cleanKey($('#key').value);
+  if(validate){
+    if(mode!==(svg?'svg':'image'))throw new Error(svg?'请在步骤三选择「SVG 可编辑初稿」，并选择视觉模型。':'请在步骤三选择「AI 位图初稿」，并选择图像模型。');
+    if(!model || (svg?!isVisualChatModel(model,cfg().vision||[]):!(kindOf(model)==='image'||(cfg().image||[]).includes(model))))throw new Error(svg?'请在步骤三选择支持图像输入的视觉模型。':'请在步骤三选择图像模型。');
+    if(!key)throw new Error('请先填写当前服务商的 API Key。');
+    if(!/^https?:\/\//.test(route.base))throw new Error('请先配置有效的服务商接口地址。');
+  }
+  return {route,key};
+}
 const revisionGallery=createRevisionGallery({
   output:$('#out'),
   busy:()=>exportUploadPending || !!ensureExportState().reconPending || $('#exportConfirm')?.classList.contains('is-busy'),
   getState:()=>ensureExportState(),currentImage:()=>currentStep3Bitmap(),
+  isCurrent:v=>v.source==='svg'?ensureExportState().source==='svg'&&ensureExportState().baseSvg===v.svg:ensureExportState().source!=='svg'&&currentStep3Bitmap()===v.image,
+  modelLabel:v=>{let label='修改模型：'+(revisionConfiguration(v,false).route.model||'未选择')+' · '+(v.source==='svg'?'视觉模型':'图像模型');try{revisionConfiguration(v);}catch(e){label+='（'+e.message+'）';}return label;},
   captureView:()=>({status:[...$('#exportStatus').childNodes],reconStatus:$('#reconStatus').textContent,
     archive:window.__ffReconArchive,responses:window.__ffReconResponses,timing:window.__ffDirectTiming}),
   activate:v=>{
+    if(v.source==='svg'){
+      if(v.state?.svg){window.__ffExportState=structuredClone(v.state);renderEditableExportCard();}
+      else showEditableExportStep(v.svg);
+      return;
+    }
     uploadedExportBitmap='';
     window.__ffExportState=v.state?structuredClone(v.state):{svg:'',baseSvg:'',scene:null,recon:null,reconPending:false,
       reconFailed:false,reconError:'',source:'bitmap',bitmap:v.image,reconBitmap:v.image,
@@ -5925,16 +5946,26 @@ const revisionGallery=createRevisionGallery({
     renderEditableExportCard();
     if(v.view?.status)$('#exportStatus').replaceChildren(...v.view.status);
   },
-  generate:(parent,prompt)=>generateRevision(parent,prompt,{
-    key:cleanKey(parent.route.p===$('#provider').value?$('#key').value:localStorage.getItem('ff_key_'+parent.route.p)),
-    toDataURL:ensureBitmapDataUrl,loadImage}),
+  generate:async(parent,prompt)=>{
+    const {route,key}=revisionConfiguration(parent);
+    const input={...parent,route};
+    if(parent.source==='svg')return generateSVGRevision(input,prompt,{route,key,post:async(path,body)=>{
+      const response=route.proto==='anthropic'?await fetchWithTimeout(route.base+path,{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(body)},240000):await postJSON(route.base,path,body,key,240000);
+      if(!response.ok)throw new Error('SVG 修改请求失败（HTTP '+response.status+'）');
+      return response.json();
+    }});
+    return {...await generateRevision(input,prompt,{key,toDataURL:ensureBitmapDataUrl,loadImage}),route};
+  },
   rebuild:()=>$('#reconBtn').click(),
   showExport:()=>$('#card4').scrollIntoView({behavior:'smooth',block:'start'}),
-  download:async v=>{try{const response=await fetch(v.image);if(!response.ok)throw new Error('download');
+  download:async v=>{if(v.source==='svg'){downloadBlob('figure-forge-v'+v.number+'.svg',new Blob([v.svg],{type:'image/svg+xml'}));return;}try{const response=await fetch(v.image);if(!response.ok)throw new Error('download');
     const blob=await response.blob(),ext=blob.type.includes('webp')?'webp':/jpe?g/.test(blob.type)?'jpg':'png';
     downloadBlob('figure-forge-v'+v.number+'.'+ext,blob);
   }catch{window.open(v.image,'_blank');}}
 });
+for(const id of ['modeTabs','model','customModel','provider','baseOverride','key']){
+  $('#'+id)?.addEventListener(id==='modeTabs'?'click':'change',()=>queueMicrotask(()=>revisionGallery.refresh()));
+}
 // Export may finish after its button was clicked; keep version controls in sync.
 new MutationObserver(()=>revisionGallery.refresh()).observe($('#exportConfirm'),{attributes:true,attributeFilter:['class','disabled']});
 // Save version results before an independent SVG or uploaded-image selection takes over.
@@ -6055,17 +6086,11 @@ function svgPreviewDocument(svg){
 }
 
 function renderSVG(svg, usedVision, useIds, truncated, auditRes){
-  const blob = new Blob([svg],{type:'image/svg+xml'});
-  const url = URL.createObjectURL(blob);
-  const n = (useIds||[...refs]).length;
-  const auditNote = auditRes ? auditSummaryText(auditRes) : '';
-  $('#out').style.display='block';
-  $('#out').innerHTML = `<iframe sandbox title="SVG preview"></iframe>
-    <div class="dl"><a class="btn-primary" href="${url}" download="figure-forge-draft.svg">${tt('svg.download')}</a>
-    <span class="hint">${usedVision?tt('svg.hint1',{n:n}):tt('svg.hint2')}${truncated?tt('svg.trunc'):''}${auditNote}</span></div>`;
-  const frame=$('#out iframe');
-  if(frame) frame.srcdoc=svgPreviewDocument(svg);
-  showEditableExportStep(svg);
+  try{
+    const result=revisionGallery.addInitial({...svgVersion(svg),route:revisionConfiguration({source:'svg'},false).route});
+    result.catch(error=>showErr(error.message));
+    return result;
+  }catch(error){showErr(error.message);throw error;}
 }
 
 function imagePromptBudget(model){

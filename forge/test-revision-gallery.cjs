@@ -173,8 +173,11 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
   assert.equal(await page.locator('.ff-revisions').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);
   await page.locator('.ff-revision-editor').screenshot({path:path.join(require('node:os').tmpdir(),'figureforge-revision-mobile.png')});
   assert.deepEqual(errors,[]);
-  // Existing SVG output may replace #out; the next bitmap must restore the gallery.
+  // SVG and bitmap versions coexist; deleting SVG leaves bitmap history intact.
   await page.evaluate(()=>window.__ffRenderSVG('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="80" height="80"/></svg>',false,[],false));
+  await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===6);
+  page.once('dialog',dialog=>dialog.accept());await cards.nth(5).locator('[data-delete]').click();
+  await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===5);
   await page.evaluate(()=>window.__revisionTest.configure());await bitmap(6);await page.evaluate(()=>window.__revisionTest.generate());
   await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===6);
   await cards.nth(0).locator('[data-modify]').click();

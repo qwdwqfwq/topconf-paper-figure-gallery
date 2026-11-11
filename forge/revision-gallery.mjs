@@ -189,7 +189,7 @@ export function createRevisionGallery(adapter){
     document.head.append(style);
     root=document.createElement('div');root.className='ff-revisions';
     list=document.createElement('div');panel=document.createElement('aside');panel.className='ff-revision-editor';
-    panel.innerHTML='<h3>继续修改</h3><div data-base></div><textarea aria-label="你希望改哪里？" placeholder="输入修改要求，可粘贴或拖入截图"></textarea><input data-files type="file" accept="image/png,image/jpeg,image/webp" multiple hidden><button data-upload type="button">＋ 上传截图</button><div class="ff-revision-attachments"></div><button data-submit type="button">生成修改版</button><p class="ff-revision-error" role="alert"></p>';
+    panel.innerHTML='<h3>继续修改</h3><div data-base></div><small data-model style="display:block;margin-top:10px;overflow-wrap:anywhere"></small><textarea aria-label="你希望改哪里？" placeholder="输入修改要求，可粘贴或拖入截图"></textarea><input data-files type="file" accept="image/png,image/jpeg,image/webp" multiple hidden><button data-upload type="button">＋ 上传截图</button><div class="ff-revision-attachments"></div><button data-submit type="button">生成修改版</button><p class="ff-revision-error" role="alert"></p>';
     textarea=panel.querySelector('textarea');submit=panel.querySelector('[data-submit]');error=panel.querySelector('[role=alert]');
     attachments=panel.querySelector('.ff-revision-attachments');fileInput=panel.querySelector('[data-files]');
     panel.querySelector('[data-upload]').onclick=()=>fileInput.click();
@@ -239,10 +239,11 @@ export function createRevisionGallery(adapter){
   }
   function persist(v){
     const record={id:v.id,number:v.number,parentId:v.parentId,prompt:v.prompt,image:v.image,width:v.width,height:v.height,route:v.route,created:v.created,state:savedState(v.state)};
+    if(v.source==='svg'){record.source='svg';record.svg=v.svg;}
     if(v.revisionAudit)record.revisionAudit=v.revisionAudit;
     void store.write(record).catch(()=>{storageHint.textContent='浏览器未能保存历史记录；当前页面中的版本和结果仍保留。';});
   }
-  function snapshot(){if(active&&adapter.currentImage()===active.image){active.state=structuredClone(savedState(adapter.getState()));active.view=adapter.captureView();persist(active);}}
+  function snapshot(){if(active&&(adapter.isCurrent?adapter.isCurrent(active):adapter.currentImage()===active.image)){active.state=structuredClone(savedState(adapter.getState()));active.view=adapter.captureView();persist(active);}}
   function activate(v){
     if(busy())return false;
     snapshot();active=v;adapter.activate(v);refresh();return true;
@@ -258,7 +259,7 @@ export function createRevisionGallery(adapter){
     const footer=document.createElement('footer');
     const download=document.createElement('button');download.type='button';download.textContent='下载图片';download.onclick=()=>adapter.download(v);
     const modify=document.createElement('button');modify.type='button';modify.textContent='继续修改';modify.dataset.modify='true';modify.onclick=()=>{edit(v);panel.scrollIntoView({block:'nearest',behavior:'smooth'});textarea.focus();};
-    const build=document.createElement('button');build.type='button';build.dataset.build='true';build.onclick=()=>{if(activate(v)){if(!v.state?.scene)adapter.rebuild();else adapter.showExport();}};
+    const build=document.createElement('button');build.type='button';build.dataset.build='true';build.onclick=()=>{if(activate(v)){if(v.source==='svg'||v.state?.scene)adapter.showExport();else adapter.rebuild();}};
     const status=document.createElement('small');status.dataset.status='true';footer.append(download,modify,status,build);card.append(header,image,footer);list.append(card);v.card=card;
     refresh();
   }
@@ -287,10 +288,11 @@ export function createRevisionGallery(adapter){
   }
   function refresh(){
     if(!mounted)return;
+    if(editing)panel.querySelector('[data-model]').textContent=adapter.modelLabel?.(editing)||'';
     for(const v of versions){
       v.card.querySelector('[data-delete]').disabled=busy()||generating||!!reading||deleting;
       const pending=job?.version===v||v.state?.reconPending;
-      const ready=!!v.state?.scene&&!!v.state?.svg;
+      const ready=v.source==='svg'?!!v.svg:!!v.state?.scene&&!!v.state?.svg;
       v.card.classList.toggle('selected',editing===v);
       v.card.querySelector('[data-status]').textContent=pending?'可编辑版生成中…':ready?'可编辑版已就绪':v.state?.reconFailed?'可编辑版生成失败':'';
       const b=v.card.querySelector('[data-build]');b.disabled=busy()||deleting;b.textContent=pending?'正在生成可编辑版…':ready?'查看可编辑版':v.state?.reconFailed?'重试生成可编辑版':'生成可编辑版';
@@ -310,7 +312,7 @@ export function createRevisionGallery(adapter){
         edit(parent);error.textContent='本次结果未保存。修改要求和截图已保留；再次生成会发起新的 API 请求。';return;
       }
       if(result.revisionAudit)result.revisionAudit={...result.revisionAudit,review:'user-confirmed',reviewedAt:Date.now()};
-      const v={...result,id:crypto.randomUUID(),number:nextNumber,parentId:parent.id,prompt,route:{...parent.route},created:Date.now(),state:null};
+      const v={...result,id:crypto.randomUUID(),number:nextNumber,parentId:parent.id,prompt,route:{...(result.route||parent.route)},created:Date.now(),state:null};
       append(v);persist(v);edit(v);v.card.scrollIntoView({block:'nearest',behavior:'smooth'});
     }catch(e){error.textContent=e.message||'修改失败，请重试。';}
     finally{generating=false;refresh();}
