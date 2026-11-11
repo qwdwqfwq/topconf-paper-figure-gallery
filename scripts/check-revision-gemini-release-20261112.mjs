@@ -23,9 +23,12 @@ const artifactChanges=[module];
 const changed=(...args)=>git('diff','--name-only','--no-renames',...args,'--').split('\n').filter(Boolean).sort();
 const staged=process.argv.includes('--staged');
 const revision=staged?':':'HEAD:';
-assert.equal(staged?git('rev-parse','HEAD'):git('show','-s','--format=%P','HEAD'),parent,'Unexpected release parent');
+const reviewedRelease='f0b6a34ab89461c3ea08e3f4cc73bf4fbbb665ba';
+assert.equal(git('show','-s','--format=%P',reviewedRelease),parent,'Unexpected reviewed release ancestry');
+assert.equal(staged?git('rev-parse','HEAD'):git('show','-s','--format=%P','HEAD'),reviewedRelease,'Unexpected follow-up parent');
+assert.deepEqual(changed(...(staged?['--cached',reviewedRelease]:[reviewedRelease,'HEAD'])),[check],'Follow-up must only repair this release guard');
 assert.deepEqual(changed(...(staged?['--cached',parent]:[parent,'HEAD'])),[...Object.keys(expected),check].sort(),'Unexpected release scope');
-assert.equal(git('status','--porcelain','--untracked-files=all').split('\n').filter(Boolean).length,staged?Object.keys(expected).length+1:0,'Unexpected working tree changes');
+assert.equal(git('status','--porcelain','--untracked-files=all').split('\n').filter(Boolean).length,staged?1:0,'Unexpected working tree changes');
 for(const [path,hash] of Object.entries(expected)){
  const committed=execFileSync('git',['show',revision+path],{cwd:root,encoding:'utf8'}).replace(/\r\n/g,'\n');
  assert.equal(createHash('sha256').update(committed).digest('hex'),hash,'Unreviewed patch: '+path);
@@ -37,11 +40,18 @@ let artifactTree;
 try{
  const env={...process.env,GIT_INDEX_FILE:join(temp,'index')};
  const indexGit=(...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8',env}).trim();
- indexGit('read-tree',publishedTree);
+ indexGit('read-tree','7e089379d187af99271d0d7de8ae50c2b128dc2f');
+ // Rebuild the exact live tree from reachable commits; synthetic trees are not fetched by CI.
+ for(const path of ['README.md','forge/assets/nonelinear-wechat.png','forge/index.html','assets/i18n_gallery.js','index.html',module,'forge/svg-revision.mjs']){
+  const entry=git('ls-tree',parent,'--',path).match(/^(\d+) blob ([0-9a-f]+)\t(.+)$/);
+  assert.ok(entry,'Missing live artifact file: '+path);
+  indexGit('update-index','--add','--cacheinfo',entry[1],entry[2],path);
+ }
  assert.equal(indexGit('write-tree'),publishedTree,'Previous deployment tree changed');
  // For staged validation the source blob is already in the real index.
  for(const path of artifactChanges)indexGit('update-index','--add','--cacheinfo','100644',git('rev-parse',revision+path),path);
  artifactTree=indexGit('write-tree');
+ assert.equal(artifactTree,'7ef7838ad7811848ebce633849571e7f01639ff1','Reviewed Gemini artifact changed');
  assert.deepEqual(changed(publishedTree,artifactTree),artifactChanges,'Only approved Gemini revision module may change online');
 }finally{rmSync(temp,{recursive:true,force:true});}
 if(process.argv.includes('--prepare-pages')){
