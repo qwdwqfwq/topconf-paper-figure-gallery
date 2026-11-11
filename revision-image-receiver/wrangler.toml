@@ -1,0 +1,8 @@
+name = "gallery-revision-images"
+main = "worker.mjs"
+compatibility_date = "2026-11-01"
+workers_dev = true
+account_id = "03d0e7f5e2659b917b65c66eaa5c0e7b"
+
+[observability]
+enabled = false

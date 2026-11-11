@@ -7,13 +7,18 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
  const {createGalleryServer}=await import(pathToFileURL(path.resolve(__dirname,'../scripts/serve-nonelinear.mjs')).href);
  const server=createGalleryServer();await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const origin=`http://127.0.0.1:${server.address().port}`;
- let browser,image='',fail=false;const requests=[],errors=[];
+ let browser,image='',fail=false;const requests=[],errors=[],uploaded=new Map();
  try{
   browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'});
   const page=await browser.newPage({serviceWorkers:'block',viewport:{width:1440,height:1000}});
   page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/*',async route=>{
    const req=route.request(),url=new URL(req.url());
+   if(url.href==='https://nonelinear.com.cn/api/upload-file'){
+    const body=req.postDataJSON(),href='https://storage.example.test/revision-'+(uploaded.size+1)+'.png';
+    uploaded.set(href,'data:image/'+(body.type==='.jpg'?'jpeg':body.type.slice(1))+';base64,'+body.image);
+    return route.fulfill({json:{url:href}});
+   }
    if(url.origin!==origin)return route.abort();
    if(url.pathname==='/forge/'){
     const response=await route.fetch();let html=await response.text();
@@ -33,7 +38,9 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
    }
    if(url.pathname.startsWith('/api/nonelinear/v1/')){
     if(req.method()==='GET')return route.fulfill({json:{data:[{id:'gemini-3.1-flash-image-preview'}]}});
-    requests.push(req.postDataJSON());
+    const body=req.postDataJSON();
+    if(body.image){assert.ok(body.image.every(url=>uploaded.has(url)),'revision references must be uploaded');body.image=body.image.map(url=>uploaded.get(url));}
+    requests.push(body);
     return fail?route.fulfill({status:400,json:{error:{message:'Invalid reference image'}}}):route.fulfill({json:{data:[{b64_json:image}]}});
    }
    return route.continue();

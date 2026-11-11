@@ -6,16 +6,17 @@ import {readFileSync} from 'node:fs';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('..',import.meta.url));
 const git=(...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8'}).trim();
-const parent="095ddc5a20c85756d57eabbabd2d7054ce664437";
+const parent="e739c9df311639f150594329146cacd7a5994265";
 // Exact tree produced by the successfully deployed parent release's --prepare-pages.
-const publishedTree="41e81ef4789a7c7ffde9441b0f5824de00ec55d3";
+const publishedTree="3ec6d82c97e80570c87bad2d755856f63b68a639";
 const liveBase='7e089379d187af99271d0d7de8ae50c2b128dc2f';
 const expected={
-  "forge/revision-gallery.mjs": "9c4bf028e50d3bf9b1568dc688624eb09b8a6848fdbdadfb351ab47dd2808785",
-  "forge/test-revision-gallery.cjs": "9ca42b5a601708090b60e6b9faae0595eaee629f2fd39983599f7e65b13546f4",
-  "forge/test-revision-request.cjs": "9e5524351fedde3cec91c9130ef80925d457aa02103aaed8c4dc2fb9861d7056",
-  ".github/workflows/deploy.yml": "075a494b296c0aae3651305982474140fcf21af588460cebc0379bfc181b3332",
-  ".github/workflows/forge-workflow-lock.yml": "18ecd9e9863b265c0f656d5ef498d03a05f8392a3c6b4ae6da7b480f9eb7e593"
+  "forge/revision-gallery.mjs": "74f7938f4ae1ba4e3b5beee643c6b04eb119379cb4abeb1919a0489518908ff9",
+  "forge/test-revision-gallery.cjs": "67427dbbd5b52b7f347c94f9a87efe620790ef642e95976b466ae5ca7f085a58",
+  "forge/test-revision-request.cjs": "927434cf75999e83e891b7ced51d25de8ea8eaa797b18c27d0e3ca65322f1d82",
+  "revision-image-receiver/worker.mjs": "0de5226b348b70af87aa682a91d128773fa5ee5d618d8bc3c08f9950e7b2e0ee",
+  "revision-image-receiver/test.mjs": "6d9e360b03dd87400d3a30818a1ba4748c0e9d434a2994c8c4316ff094bccd14",
+  "revision-image-receiver/wrangler.toml": "2223e606dd7ea34aea2203710edee893ccee7422fefc1716975fb97d315de8dc"
 };
 const check='scripts/check-revision-edit-release-20261112.mjs';
 const module='forge/revision-gallery.mjs';

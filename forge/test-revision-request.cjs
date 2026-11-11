@@ -36,21 +36,34 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
    const deps={key:'offline-secret',toDataURL:async x=>x,loadImage};
    const route={base:'https://relay.example.test/v1',model:'gemini-3.1-flash-image-preview',p:'nonelinear',ratio:'16:9',resolution:'2K'};
    const parent={image:source,route,attachments:[{data:shot}]};
-   const originalFetch=window.fetch,requests=[];let responseImage=edited,status=200;
-   window.fetch=async(url,options)=>{requests.push({url,body:JSON.parse(options.body)});return new Response(status===200?JSON.stringify({data:[{b64_json:responseImage.split(',')[1]}]}):JSON.stringify({error:{message:'offline-secret Bearer another-secret'}}),{status,headers:{'x-request-id':'offline-request-123'}});};
+   const originalFetch=window.fetch,requests=[],uploads=[];let responseImage=edited,status=200,uploadStatus=200,uploadURL;
+   window.fetch=async(url,options)=>{
+    if(url==='https://nonelinear.com.cn/api/upload-file'){
+     uploads.push({url,body:JSON.parse(options.body),headers:options.headers});
+     return new Response(JSON.stringify({url:uploadURL||'https://storage.example.test/ref-'+uploads.length+'.png'}),{status:uploadStatus});
+    }
+    const multipart=options.body instanceof FormData;
+    requests.push({url,body:multipart?Object.fromEntries(options.body):JSON.parse(options.body),
+      files:multipart?await Promise.all(options.body.getAll('image[]').map(async file=>({type:file.type,bytes:await file.arrayBuffer()}))):[]});
+    return new Response(status===200?JSON.stringify({data:[{b64_json:responseImage.split(',')[1]}]}):JSON.stringify({error:{message:'offline-secret Bearer another-secret'}}),{status,headers:{'x-request-id':'offline-request-123'}});
+   };
    function check(value,message){if(!value)throw Error(message);}
    async function rejected(input,prompt,fragment){let error;try{await generateRevision(input,prompt,deps);}catch(e){error=e;}check(error&&error.message.includes(fragment),'Expected '+fragment+', got '+error?.message);return error;}
    try{
     const prompt='删除截图标记的左下块，保留其他内容，重新排版';
     const first=await generateRevision(parent,prompt,deps);
     check(requests.length===1,'one submission must make one POST');
-    check(JSON.stringify(requests[0].body.image)===JSON.stringify([source,shot]),'input order');
+    check(JSON.stringify(requests[0].body.image)===JSON.stringify(['https://storage.example.test/ref-1.png','https://storage.example.test/ref-2.png']),'HTTPS input order');
+    check(uploads.length===2&&uploads[0].body.image===source.split(',')[1]&&uploads[1].body.image===shot.split(',')[1],'upload exact source and screenshot bytes in order');
+    check(uploads.every(x=>x.body.type==='.png'&&x.headers.Authorization==='Bearer offline-secret'),'documented upload type and auth');
+    check(!JSON.stringify(requests[0].body).includes('data:image'),'provider must not receive data URLs');
     check(requests[0].body.prompt.endsWith(prompt),'verbatim current prompt');
     check(first.revisionAudit.requestId==='offline-request-123','provider request ID');
     check(first.revisionAudit.referenceCount===2&&first.revisionAudit.status===200,'request audit');
+    check(first.revisionAudit.uploadedReferenceCount===2&&first.revisionAudit.referenceTransport==='https-upload','upload audit');
     responseImage=tiny;
     const second=await generateRevision({...parent,image:edited,attachments:[]},'将一个小标记变绿',deps);
-    check(requests.length===2&&requests[1].body.image[0]===edited&&requests[1].body.image.length===1,'fresh source and screenshot snapshot');
+    check(requests.length===2&&uploads[2].body.image===edited.split(',')[1]&&requests[1].body.image[0]==='https://storage.example.test/ref-3.png'&&requests[1].body.image.length===1,'fresh source and screenshot snapshot');
     check(first.revisionAudit.clientRequestId!==second.revisionAudit.clientRequestId,'unique submission identity');
     check(first.revisionAudit.promptHash!==second.revisionAudit.promptHash,'new prompt identity');
     responseImage=source;await rejected(parent,prompt,'与原图像素相同');
@@ -63,6 +76,29 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
     status=400;const error=await rejected(parent,prompt,'HTTP 400');
     check(!error.message.includes('offline-secret')&&!error.message.includes('another-secret'),'redacted API errors');
     check(requests.length===count+1,'no automatic paid retry');
+    const paidCalls=requests.length;
+    uploadStatus=401;await rejected(parent,prompt,'上传失败（HTTP 401）');uploadStatus=200;
+    for(const badURL of ['http://storage.example.test/ref.png','https://127.0.0.1/ref.png','https://user:secret@storage.example.test/ref.png','not-a-url']){
+     uploadURL=badURL;await rejected(parent,prompt,'公网 HTTPS');
+    }
+    uploadURL=undefined;
+    check(requests.length===paidCalls,'upload errors never send generation request');
+    status=200;responseImage=edited;
+    const fourShots=await generateRevision({...parent,attachments:Array.from({length:4},()=>({data:shot}))},'更正截图圈出的文字并重新排版',deps);
+    check(requests.at(-1).body.image.length===5&&fourShots.revisionAudit.uploadedReferenceCount===5,'source and four screenshots retained');
+    const inline=await generateRevision({...parent,route:{...route,p:'infistar'}},'移动截图中的模块',deps);
+    check(JSON.stringify(requests.at(-1).body.image)===JSON.stringify([source,shot])&&inline.revisionAudit.uploadedReferenceCount===0,'other providers retain inline contract');
+    for(const [p,base] of [['infistar','https://infistar.cc/v1'],['oai','https://api.openai.com/v1']]){
+     const result=await generateRevision({...parent,route:{...route,p,base,model:'gpt-image-2'}},'移动截图中的模块',deps);
+     const request=requests.at(-1);
+     check(request.url===base+'/images/edits'&&request.files.length===2,p+' edit endpoint and two multipart files');
+     for(const [i,uri] of [source,shot].entries()){
+      const actual=new Uint8Array(request.files[i].bytes),expected=Uint8Array.from(atob(uri.split(',')[1]),c=>c.charCodeAt(0));
+      check(request.files[i].type==='image/png'&&actual.length===expected.length&&actual.every((n,j)=>n===expected[j]),p+' exact ordered reference bytes');
+     }
+     check(request.body.size==='2048x1152'&&request.body.prompt.endsWith('移动截图中的模块'),p+' dimensions and prompt');
+     check(result.revisionAudit.referenceCount===2&&result.revisionAudit.format==='multipart/form-data',p+' audit');
+    }
     for(const requirement of ['删除并重新排版','增加一个模块','更正文字','换成蓝色','移动到右上角']){
      const instruction=revisionInstruction(requirement,3);check(instruction.endsWith(requirement),'general request preserved');
      check(instruction.includes('do not assume every screenshot requests deletion'),'not a hardcoded deletion flow');
@@ -70,6 +106,6 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
     return {calls:requests.length,pixelComparison:'exact URI and differently encoded PNG rejected; one-pixel edit accepted',inputs:'source + screenshots + verbatim prompt',audit:'unique submission, input hashes, HTTP status, provider ID',retry:'manual only'};
    }finally{window.fetch=originalFetch;}
   });
-  assert.equal(report.calls,6);console.log('Offline revision request checks passed:',JSON.stringify(report),'. Zero live API calls.');
+  assert.equal(report.calls,10);console.log('Offline revision request checks passed:',JSON.stringify(report),'. Zero live API calls.');
  }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

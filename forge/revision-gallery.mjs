@@ -4,17 +4,55 @@ import {imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './a
 // Separate image-edit request: chosen full bitmap first, optional screenshot references after it.
 // This module never calls or configures the editable reconstruction pipeline.
 export function revisionInstruction(prompt,count){
-  return `Perform a real image edit of the supplied full figure. The first image is the complete figure to edit.
-${count>1?`Images 2 through ${count} are user-provided screenshots for locating areas or illustrating the requested changes.`:'No screenshot references accompany this request.'} Match screenshot content to the first image, including cropped or scaled screenshots. They are guidance, not replacement canvases. Borders, arrows, highlights and surrounding application UI are annotations, not figure content to reproduce. Interpret each screenshot together with the user's written request; do not assume every screenshot requests deletion.
-The user's request below defines the edits and takes priority over preservation. Preserve the meaning, text, colors and style of content the user wants to keep, but do not freeze its positions or sizes when rearrangement is requested. For deletion requests, actually remove the specified content and its obsolete connectors. When re-layout is requested, redistribute and align the remaining elements, repair connections, and use the available canvas coherently; do not merely blank the deleted area or leave a hole or an obsolete empty band. Apply additions, replacements, text corrections, style or position changes only as requested. Do not delete other content just because it appears in a screenshot.
-Keep the output canvas aspect ratio required by this request; this does not require preserving the old arrangement. Return the complete revised figure, never the unchanged input or an annotated screenshot. Before returning, check every requested change against the input and screenshots, including removal and re-layout where requested.
+  return `本次任务：根据用户要求编辑图片并输出完整的新图。
+用户要求：${prompt}
+
+The first image is the complete figure to edit. ${count>1?`Images 2 through ${count} are screenshots explaining the requested edits, possibly cropped or marked.`:'There are no extra screenshots.'}
+以第一张图为内容基础，结合其他截图定位用户指定的区域。截图中的红框、箭头和界面仅作说明，不要画入结果；do not assume every screenshot requests deletion.
+必须落实用户要求的增删、替换或文字修改。如果要求删除，删除指定内容本身及失效连线；如果要求重新排版，重新调整保留内容的大小、位置和连线，充分利用画布，不留删除后的空洞。保留未要求改变的信息与科学含义。输出符合指定画布比例的完整图片。检查结果已包含用户要求的实际改动，不能直接复刻输入图。
 
 USER REQUEST (verbatim):\n${prompt}`;
 }
 
 const imageData=/^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/=\r\n]+$/;
+// NoneLinear's image API accepts public HTTPS references, not data URLs.
+// Upload only to the provider's documented endpoint; never forward credentials
+// to the returned storage URL or silently fall back to text-only generation.
+async function uploadRevisionReference(data,key,index){
+  const [,type,bytes]=data.match(/^data:image\/(png|jpeg|webp);base64,([\s\S]+)$/);
+  let response;
+  try{
+    response=await fetch('https://nonelinear.com.cn/api/upload-file',{
+      method:'POST',headers:{Authorization:'Bearer '+key,'Content-Type':'application/json'},
+      body:JSON.stringify({image:bytes.replace(/[\r\n]/g,''),type:'.'+(type==='jpeg'?'jpg':type)}),
+      signal:AbortSignal.timeout(60000)
+    });
+  }catch{throw new Error('第 '+(index+1)+' 张修改参考图上传失败，本次未调用生图 API；请检查网络后手动重试。');}
+  if(!response.ok)throw new Error('第 '+(index+1)+' 张修改参考图上传失败（HTTP '+response.status+'），本次未调用生图 API。');
+  let url;
+  try{
+    const data=await response.json();url=new URL(data.url);
+    if(url.protocol!=='https:'||url.username||url.password||url.port||
+      !url.hostname.includes('.')||/^(localhost|127\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(url.hostname))throw new Error();
+  }catch{throw new Error('参考图上传未返回有效的公网 HTTPS 地址，本次未调用生图 API。');}
+  return url.href;
+}
 async function fingerprint(value){
   return Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value))),n=>n.toString(16).padStart(2,'0')).join('');
+}
+
+// Private output path: never change the frozen Step 3/4 source-image relay.
+async function revisionOutput(image,provider,toDataURL){
+  if(provider!=='nonelinear'||image.startsWith('data:'))return toDataURL(image);
+  let url;try{url=new URL(image);}catch{throw new Error('服务商返回了无效图片地址。');}
+  if(url.protocol!=='https:'||url.hostname!=='imagen-nonelinear-2025.tos-cn-beijing.volces.com'||url.port||url.username||url.password||url.search||url.hash||!/^\/(?:others|gemini)\/[A-Za-z0-9_-]+\.(?:png|jpe?g|webp)$/.test(url.pathname))return toDataURL(image);
+  const response=await fetch('https://gallery-revision-images.lixiao-gallery.workers.dev/revision-image',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url.href}),
+    credentials:'omit',redirect:'error',signal:AbortSignal.timeout(90000)
+  });
+  if(!response.ok)throw new Error('修改图接收失败（HTTP '+response.status+'），未保存新版本。');
+  const blob=await response.blob();
+  return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('修改图读取失败。'));reader.readAsDataURL(blob);});
 }
 
 // Exact decoded-pixel comparison also detects an original re-encoded as PNG/WebP.
@@ -49,22 +87,30 @@ export async function generateRevision(parent,prompt,{key,toDataURL,loadImage}){
   const native=usesInfistarGemini(base,model);
   const dimensions=imageRequestDimensions(p,model,ratio,resolution,native);
   const instruction=revisionInstruction(prompt,references.length);
-  let body={model,prompt:instruction,image:p==='sf'&&!native&&references.length===1?source:references};
-  if(!native){body[dimensions.field]=dimensions.value;if(dimensions.aspectRatio)body.aspect_ratio=dimensions.aspectRatio;}
-  const request=native?geminiImageRequest(base,model,instruction,references,dimensions):compatibleImageRequest(body,base,p);
-  const url=(request.base||base)+request.endpoint;
-  const transport=imageRequestDiagnostics(url,request.body);
-  if(transport.referenceCount!==references.length)throw new Error('修改请求未完整包含原图和截图，本次未发送。');
   const inputHashes=await Promise.all(references.map(fingerprint));
   const startedAt=Date.now(),clientRequestId=crypto.randomUUID();
   try{
+    const apiReferences=[];
+    for(const [index,data] of references.entries())apiReferences.push(p==='nonelinear'?await uploadRevisionReference(data,key,index):data);
+    let body={model,prompt:instruction,image:p==='sf'&&!native&&references.length===1?source:apiReferences};
+    if(!native){body[dimensions.field]=dimensions.value;if(dimensions.aspectRatio)body.aspect_ratio=dimensions.aspectRatio;}
+    // Infistar GPT edits use the same multipart image[] protocol as OpenAI.
+    // Keep this override private: the shared Step 3/4 adapter stays frozen.
+    const multipartGPT=p!=='nonelinear'&&/^gpt-image-/i.test(model);
+    const request=native?geminiImageRequest(base,model,instruction,references,dimensions):
+      compatibleImageRequest(body,multipartGPT?'':base,multipartGPT?'':p);
+    const revisionBase=p==='nonelinear'&&base==='https://gallery-nonelinear-relay.lixiao-gallery.workers.dev/v1'?'https://gallery-revision-images.lixiao-gallery.workers.dev/v1':(request.base||base);
+    const url=revisionBase+request.endpoint;
+    const transport=imageRequestDiagnostics(url,request.body);
+    if(transport.referenceCount!==references.length)throw new Error('修改请求未完整包含原图和截图，本次未发送。');
     const response=await requestImageWithRecovery({url,body:request.body,key,usedReferences:true,allowReferenceFallback:false});
     if(!response.ok)throw new Error('修改生图失败（HTTP '+response.status+'）。'+response.text.slice(0,400));
     const data=JSON.parse(response.text);
+    if(data._revisionUpstreamStatus>=400)throw new Error('修改生图失败（HTTP '+data._revisionUpstreamStatus+'）。'+JSON.stringify(data.error||{}).slice(0,400));
     const item=native?geminiImageResult(data,{locale:'zh',requestId:response.requestId}):(data?.data?.[0]||data?.images?.[0]);
     const image=item?.b64_json?`data:${item.mimeType||'image/png'};base64,${item.b64_json}`:item?.url;
     if(!image)throw new Error('服务商未返回图片，未自动重试。');
-    const output=await toDataURL(image);
+    const output=await revisionOutput(image,p,toDataURL);
     if(await samePixels(source,output,loadImage))throw new Error('修改未生效：API 返回的图片与原图像素相同，未保存新版本。请调整要求后手动重试；不会自动重复计费。');
     for(const screenshot of references.slice(1)){
       if(await samePixels(screenshot,output,loadImage))throw new Error('API 返回了上传的示意截图，未生成完整修改图，未保存新版本。');
@@ -74,6 +120,7 @@ export async function generateRevision(parent,prompt,{key,toDataURL,loadImage}){
       throw new Error('修改图的比例或分辨率与所选版本不符，未替换任何已有结果。');
     return {image:output,width,height,revisionAudit:{clientRequestId,startedAt,completedAt:Date.now(),
       provider:p,model,endpoint:transport.endpoint,format:transport.format,referenceCount:references.length,
+      referenceTransport:p==='nonelinear'?'https-upload':'inline',uploadedReferenceCount:p==='nonelinear'?apiReferences.length:0,
       inputHashes,promptHash:await fingerprint(prompt),instructionHash:await fingerprint(instruction),
       requestId:String(response.requestId||'').replaceAll(key,'[redacted]').slice(0,160),
       status:response.status,pixelCheck:'changed',review:'pending'}};
