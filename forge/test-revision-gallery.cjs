@@ -131,8 +131,42 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
   await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===6);
   await cards.nth(0).locator('[data-modify]').click();
   assert.equal(await page.evaluate(()=>window.__revisionTest.jobs.length),1);
+  assert.equal(await cards.nth(0).locator('[data-delete]').isDisabled(),true);
   await resolve(0);
+  await page.waitForFunction(()=>!document.querySelector('[data-delete]').disabled);
+  await page.waitForFunction(async()=> (await window.__revisionTest.records()).length===6);
+  const beforeDelete=await page.evaluate(()=>window.__revisionTest.records());
+  page.once('dialog',dialog=>dialog.dismiss());await cards.nth(1).locator('[data-delete]').click();
+  assert.equal(await cards.count(),6);
+  // Failed storage deletion keeps both the card and its persisted result.
+  await page.evaluate(()=>{window.originalDelete=IDBObjectStore.prototype.delete;IDBObjectStore.prototype.delete=function(){throw Error('offline failure');};});
+  page.once('dialog',dialog=>dialog.accept());await cards.nth(1).locator('[data-delete]').click();
+  await page.waitForFunction(()=>document.querySelector('.ff-revision-storage').textContent.includes('删除失败'));
+  assert.equal(await cards.count(),6);
+  await page.evaluate(()=>{IDBObjectStore.prototype.delete=window.originalDelete;});
+  page.once('dialog',dialog=>dialog.accept());await cards.nth(1).locator('[data-delete]').click();
+  await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===5);
+  const afterDelete=await page.evaluate(()=>window.__revisionTest.records());
+  assert.deepEqual(afterDelete,beforeDelete.filter(v=>v.number!==2));
+  assert.equal(afterDelete.some(v=>v.parentId===beforeDelete.find(x=>x.number===2).id),true);
+  // Active-version deletion chooses a surviving version without reconstruction.
+  page.once('dialog',dialog=>dialog.accept());await cards.nth(4).locator('[data-delete]').click();
+  await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===4);
+  assert.equal(await page.evaluate(()=>window.__revisionTest.jobs.length),1);
+  await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===4);
+  assert.deepEqual((await page.evaluate(()=>window.__revisionTest.records())).map(v=>v.number).sort((a,b)=>a-b),[1,3,4,5]);
+  await page.locator('.ff-revisions').screenshot({path:path.join(require('node:os').tmpdir(),'figureforge-version-delete.png')});
+  for(let remaining=4;remaining>0;remaining--){
+    page.once('dialog',dialog=>dialog.accept());await cards.nth(0).locator('[data-delete]').click();
+    if(remaining>1)await page.waitForFunction(n=>document.querySelectorAll('.ff-version').length===n,remaining-1);
+    else await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===0);
+  }
+  await page.waitForFunction(()=>!!window.__revisionTest);
+  assert.equal((await page.evaluate(()=>window.__revisionTest.records())).length,0);
+  await page.reload();await page.waitForFunction(()=>!!window.__revisionTest);
+  assert.equal(await cards.count(),0);
+  assert.equal(await page.evaluate(()=>window.__revisionTest.state().bitmap||''),'');
   assert.ok(errors.every(message=>message.includes("Service worker is disabled because the context is sandboxed")));
-  console.log('Screenshot upload/paste/drop/preview/removal/draft isolation/payload order passed. Revision browser integration passed: continuous/branched edits during conversion; manual revisions; per-version results; failures; reload persistence; SVG return; mobile layout. Zero live API calls.');
+  console.log('Screenshot upload/paste/drop/preview/removal/draft isolation/payload order passed. Revision browser integration passed: continuous/branched edits during conversion; manual revisions; per-version results; failures; reload persistence; deletion/cancel/failure/isolation/final-version cleanup; SVG return; mobile layout. Zero live API calls.');
  }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});
