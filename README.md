@@ -63,20 +63,54 @@ A searchable, filterable gallery of Figure 1 / teaser figures. Static HTML/CSS/J
 
 </div>
 
-## 🎨 算力赞助伙伴｜Infistar.cc 无限星河
+## 🤝 赞助伙伴
 
-<p align="center">
-  <a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link">
-    <img src="docs/infistar-banner.png" alt="Infistar.cc 无限星河大模型 API 服务平台，点击专属推广链接注册" width="920">
-  </a>
-</p>
+感谢以下伙伴为本项目提供大模型 API 与算力支持。点击横幅或名称即可访问，完整介绍可展开查看。
 
-感谢 **Infistar.cc 无限星河** 为本项目提供大模型 API 算力支持！
+<!-- Sponsors: two cells per row; add a new row for each additional pair. -->
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link"><strong>Infistar.cc 无限星河</strong></a><br><br>
+      <a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link"><img src="docs/infistar-banner.png" alt="Infistar.cc 无限星河 大模型 API 平台，点击专属链接 · 领取福利" width="430"></a><br>
+      <sub>多模型聚合 · 科研绘图与论文辅助</sub><br>
+      <sub><strong>专属注册可领 5 元体验额度</strong></sub><br>
+      <a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link">专属链接 · 领取福利 ↗</a>
+      <details>
+        <summary>详细介绍与活动说明</summary>
+        <p>感谢 Infistar.cc 无限星河 对本项目的赞助支持！</p>
+        <ul>
+          <li><strong>主流模型一站接入</strong>：聚合 Claude、OpenAI、DeepSeek 等模型，支持图表代码生成（TikZ / Python）、论文润色与图表解析。</li>
+          <li><strong>降低科研成本</strong>：部分模型价格低至官方 0.1 折，倍率以平台实时公示为准。</li>
+          <li><strong>高并发支持</strong>：支持开票；模型可用性与限流规则以平台实时状态为准。</li>
+          <li><strong>专属体验礼</strong>：通过<a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link">专属推广链接</a>注册，可领取 5 元体验额度与首充特惠，具体以活动页面为准。</li>
+        </ul>
+        <a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link">专属链接 · 领取福利 ↗</a>
+      </details>
+    </td>
+    <td width="50%" valign="top">
+      <a href="https://www.aiyoyoo.com/"><strong>CrazyToken</strong></a><br><br>
+      <a href="https://www.aiyoyoo.com/"><img src="docs/crazytoken-banner.png" alt="CrazyToken 大模型 API 平台，点击访问官网" width="430"></a><br>
+      <sub>多模型 API · 论文理解与科研创作</sub><br>
+      <sub><strong>新用户注册可领 $20 体验额度</strong></sub><br>
+      <a href="https://www.aiyoyoo.com/">访问官网 ↗</a>
+      <details>
+        <summary>详细介绍与活动说明</summary>
+        <p>感谢 CrazyToken 对本项目的赞助支持！</p>
+        <ul>
+          <li><strong>超低成本</strong>：最低 0.05× 倍率，低至官方定价的 5%，Token 级账单透明可查。</li>
+          <li><strong>全模型支持</strong>：支持 Claude、GPT、Gemini、Kimi、GLM、DeepSeek、Qwen、Grok，辅助论文理解、代码绘图与英文润色。</li>
+          <li><strong>满血输出</strong>：官方原生通道，不掺水、不混模、不压缩长上下文。</li>
+          <li><strong>高效出图</strong>：稳定高速，结合顶会主图参考与 FigureForge，加速版式分析、主图生成与迭代。</li>
+          <li><strong>科研福利</strong>：注册即送 $20 体验额度，充值额外加赠，提供 1 对 1 远程配置服务。</li>
+        </ul>
+        <a href="https://www.aiyoyoo.com/">访问官网 ↗</a>
+      </details>
+    </td>
+  </tr>
+</table>
 
-- 🔬 **主流模型一站接入**：聚合 Claude、OpenAI、DeepSeek 等模型，支持图表代码生成（TikZ / Python）、论文润色与图表解析。
-- 📉 **降低科研成本**：部分模型价格低至官方 0.1 折，倍率以平台实时公示为准。
-- ⚡ **高并发支持**：支持开票；模型可用性与限流规则以平台实时状态为准。
-- 🎁 **专属体验礼**：通过[专属推广链接](https://www.infistar.cc/register?aff=RZ4MDTRU&ref_source=link)注册，可领取 5 元体验额度与首充特惠，具体以活动页面为准。
+<sub>推广介绍由赞助商提供，价格、模型可用性、额度与活动条件以各平台官网实时页面为准。</sub>
 
 ---
 
