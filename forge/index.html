@@ -228,6 +228,10 @@
   .bnote .warn-txt{color:#dc2626;font-weight:700}
   .infistar-signup{margin:0 0 10px;padding-left:95px;font-size:12px}
   .infistar-signup a{color:#6d28d9;font-weight:700;text-decoration:underline;text-underline-offset:2px}
+  .nonelinear-links{display:inline-flex;align-items:center;gap:14px;min-height:28px}
+  .nonelinear-links a{white-space:nowrap}
+  .nonelinear-divider{height:14px;border-left:1px solid #a78bfa}
+  .nonelinear-offer{display:block;margin-top:2px;line-height:1.6}
   .nonelinear-support{margin:auto;border:0;border-radius:16px;padding:20px;width:min(400px,calc(100vw - 32px));max-height:90vh;overflow:auto;box-shadow:0 16px 64px #0004}
   .nonelinear-support::backdrop{background:#11182788}
   .nonelinear-support header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
@@ -439,7 +443,7 @@
             <select id="provider"></select>
           </div>
           <p class="bnote infistar-signup" id="infistarSignup"><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link" target="_blank" rel="noopener noreferrer sponsored" data-i18n="infistar.signup"></a></p>
-          <p class="bnote infistar-signup" id="nonelinearSignup" hidden><a href="./assets/nonelinear-wechat.png" id="nonelinearSupportOpen" aria-haspopup="dialog" aria-controls="nonelinearSupportDialog">扫码添加客服报暗号【灵感画廊】立领 20 元体验金，畅享最新模型</a> · <a href="https://nonelinear.com.cn/static/models.html" target="_blank" rel="noopener noreferrer sponsored">官网 ↗</a></p>
+          <p class="bnote infistar-signup" id="nonelinearSignup" hidden><span class="nonelinear-links"><a href="./assets/nonelinear-wechat.png" id="nonelinearSupportOpen" aria-haspopup="dialog" aria-controls="nonelinearSupportDialog">扫码添加客服</a><span class="nonelinear-divider" aria-hidden="true"></span><a href="https://nonelinear.com.cn/static/models.html" target="_blank" rel="noopener noreferrer sponsored">访问官网 ↗</a></span><span class="nonelinear-offer">报暗号【灵感画廊】立领 20 元体验金，畅享最新模型</span></p>
           <div class="bfield">
             <span class="blab">API Key</span>
             <input type="password" id="key" data-i18n-ph="keyPh">
