@@ -228,6 +228,13 @@
   .bnote .warn-txt{color:#dc2626;font-weight:700}
   .infistar-signup{margin:0 0 10px;padding-left:95px;font-size:12px}
   .infistar-signup a{color:#6d28d9;font-weight:700;text-decoration:underline;text-underline-offset:2px}
+  .nonelinear-support{margin:auto;border:0;border-radius:16px;padding:20px;width:min(400px,calc(100vw - 32px));max-height:90vh;overflow:auto;box-shadow:0 16px 64px #0004}
+  .nonelinear-support::backdrop{background:#11182788}
+  .nonelinear-support header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
+  .nonelinear-support h2{font-size:18px}
+  .nonelinear-support button{border:0;background:transparent;font-size:26px;line-height:1;cursor:pointer;padding:4px 8px;color:#6b7280}
+  .nonelinear-support img{display:block;width:100%;height:auto}
+  .nonelinear-support p{margin-top:12px;text-align:center;font-size:12px;color:#6b7280}
   .box .chkline{margin-top:9px}
   .box .corsnote{margin-top:9px}
   .btn-sm{padding:7px 12px;font-size:12.5px;white-space:nowrap}
@@ -432,6 +439,7 @@
             <select id="provider"></select>
           </div>
           <p class="bnote infistar-signup" id="infistarSignup"><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link" target="_blank" rel="noopener noreferrer sponsored" data-i18n="infistar.signup"></a></p>
+          <p class="bnote infistar-signup" id="nonelinearSignup" hidden><a href="./assets/nonelinear-wechat.png" id="nonelinearSupportOpen" aria-haspopup="dialog" aria-controls="nonelinearSupportDialog">扫码添加客服报暗号【灵感画廊】立领 20 元体验金，畅享最新模型</a> · <a href="https://nonelinear.com.cn/static/models.html" target="_blank" rel="noopener noreferrer sponsored">官网 ↗</a></p>
           <div class="bfield">
             <span class="blab">API Key</span>
             <input type="password" id="key" data-i18n-ph="keyPh">
@@ -693,6 +701,26 @@
   <button class="forge-lb-nav next" id="forgeLbNext" data-i18n-aria="lb.next">›</button>
 </div>
 
+<dialog id="nonelinearSupportDialog" class="nonelinear-support" aria-labelledby="nonelinearSupportTitle">
+  <header><h2 id="nonelinearSupportTitle">扫描客服微信</h2><button type="button" id="nonelinearSupportClose" aria-label="关闭客服二维码">×</button></header>
+  <img src="./assets/nonelinear-wechat.png" alt="非线智能客服微信二维码" loading="lazy" width="523" height="693">
+  <p>添加客服后报暗号【灵感画廊】，领取 20 元体验金。</p>
+</dialog>
+<script>
+{
+  const supportDialog = document.getElementById('nonelinearSupportDialog');
+  document.getElementById('nonelinearSupportOpen').addEventListener('click', event => {
+    event.preventDefault();
+    supportDialog.showModal();
+  });
+  document.getElementById('nonelinearSupportClose').addEventListener('click', () => supportDialog.close());
+  supportDialog.addEventListener('click', event => {
+    if (event.target !== supportDialog) return;
+    const bounds = supportDialog.getBoundingClientRect();
+    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) supportDialog.close();
+  });
+}
+</script>
 <script src="./i18n.js"></script>
 <script src="./i18n_forge.js?v=20261021-pdf-status"></script>
 <script type="module">
@@ -1784,6 +1812,7 @@ function restoreProviderState(p){
   const reconEffort=localStorage.getItem('ff_recon_reasoning_effort_'+p);
   $('#reconReasoningEffort').value=['','medium','high','xhigh'].includes(reconEffort)?reconEffort:(p==='infistar'?'high':'');
   $('#infistarSignup').hidden = p!=='infistar';
+  $('#nonelinearSignup').hidden = p!=='nonelinear';
   $('#key').disabled = !p;
   $('#key').value = p ? localStorage.getItem('ff_key_'+p)||'' : '';
   $('#baseOverride').value = p ? localStorage.getItem('ff_base_'+p)||'' : '';
