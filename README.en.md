@@ -61,6 +61,25 @@ These partners support the project with model APIs and compute. Click a banner t
 <td width="50%" valign="top"><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link"><strong>Infistar.cc</strong></a><br><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link"><img src="docs/infistar-banner.png" alt="Infistar.cc" width="430"></a><br><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link">Register for ¥5 trial credit ↗</a><details><summary>Details and offers</summary><ul><li>One entry point for Claude, OpenAI, DeepSeek and other models, including TikZ / Python chart code, paper editing and figure analysis.</li><li>Some models are advertised at as little as 1% of official prices; refer to the platform for current rates.</li><li>High concurrency and invoicing; availability and rate limits follow the platform’s current status.</li><li>The referral link offers a ¥5 trial credit and first-payment offers, subject to the current campaign.</li></ul></details></td>
 <td width="50%" valign="top"><a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU"><strong>CrazyToken</strong></a><br><a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU"><img src="docs/crazytoken-banner.png" alt="CrazyToken" width="430"></a><br><a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU">Register for $20 trial credit ↗</a><details><summary>Details and offers</summary><ul><li>Advertised rates start at 0.05× official pricing, with token-level billing.</li><li>Supports Claude, GPT, Gemini, Kimi, GLM, DeepSeek, Qwen and Grok for paper understanding, chart code and English editing.</li><li>The provider describes its channels as native official access, without model substitution or long-context compression.</li><li>Combine top-conference references with FigureForge for layout analysis, generation and iteration.</li><li>Advertises $20 credit at registration, top-up bonuses and one-to-one remote configuration assistance.</li></ul></details></td>
 </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://nonelinear.com.cn/"><strong>Nonelinear API</strong></a><br>
+      <a href="https://nonelinear.com.cn/"><img src="docs/nonelinear-banner.png" alt="Nonelinear API — nonelinear.com.cn" width="430"></a><br>
+      <sub>One-stop model APIs · Research figures｜<a href="https://nonelinear.com.cn/"><strong>Mention “灵感画廊” for ¥20 trial credit ↗</strong></a></sub>
+      <details>
+        <summary><sub>Details and offers</sub></summary>
+        <p>Thanks to Nonelinear API (nonelinear.com.cn) for supporting this project with multimodal model API compute!</p>
+        <ul>
+          <li><strong>Leading models in one place</strong>：The sponsor advertises access without a VPN to Claude, GPT, DeepSeek and other models through full-capability official channels, supporting research figure generation, paper editing and complex chart analysis.</li>
+          <li><strong>Lower research costs</strong>：Advertised cache hit rates of up to 98% reduce token costs for long papers and intensive reasoning.</li>
+          <li><strong>High concurrency</strong>：Advertised millisecond-level responses and invoicing support.</li>
+          <li><strong>Exclusive trial offer</strong>：Contact customer service with the code “灵感画廊” for ¥20 in trial credit and first-payment offers.</li>
+        </ul>
+        <p>Setup and usage tutorial：<a href="https://docs.nonelinear.com.cn/scenes/overview">Nonelinear API quick-start guide ↗</a></p>
+      </details>
+    </td>
+    <td width="50%" valign="top"></td>
+  </tr>
 </table>
 
 <sub>Promotional descriptions are supplied by the sponsors. Prices, model availability, credits and offer conditions are governed by each provider’s current official pages.</sub>

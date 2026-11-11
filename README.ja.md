@@ -61,6 +61,25 @@ FigureForgeで実際に生成した図です。細部を編集できる形式で
 <td width="50%" valign="top"><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link"><strong>Infistar.cc</strong></a><br><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link"><img src="docs/infistar-banner.png" alt="Infistar.cc" width="430"></a><br><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link">登録して5元のお試しクレジット ↗</a><details><summary>詳細と特典</summary><ul><li>Claude、OpenAI、DeepSeekなどをまとめて利用し、TikZ / Pythonコード、論文校正、図の解析を支援します。</li><li>一部モデルは公式料金の最安1%と案内されています。最新料金はプラットフォームをご確認ください。</li><li>高い同時実行数と請求書発行に対応。利用可否と制限はサービスの状況によります。</li><li>紹介リンクから登録すると5元のお試しクレジットと初回入金特典が提供されます。キャンペーン条件が適用されます。</li></ul></details></td>
 <td width="50%" valign="top"><a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU"><strong>CrazyToken</strong></a><br><a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU"><img src="docs/crazytoken-banner.png" alt="CrazyToken" width="430"></a><br><a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU">登録して20ドルのお試しクレジット ↗</a><details><summary>詳細と特典</summary><ul><li>公式料金の最安0.05倍と、トークン単位の請求を案内しています。</li><li>Claude、GPT、Gemini、Kimi、GLM、DeepSeek、Qwen、Grokで論文理解、作図コード、英文校正を支援します。</li><li>提供元は、モデルの置換や長いコンテキストの圧縮を行わない公式のネイティブ経路と説明しています。</li><li>学会図の参考例とFigureForgeを組み合わせ、レイアウト分析、生成、改善を支援します。</li><li>登録時20ドルのクレジット、入金ボーナス、個別のリモート設定支援を案内しています。</li></ul></details></td>
 </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://nonelinear.com.cn/"><strong>Nonelinear API</strong></a><br>
+      <a href="https://nonelinear.com.cn/"><img src="docs/nonelinear-banner.png" alt="Nonelinear API — nonelinear.com.cn" width="430"></a><br>
+      <sub>統合モデル API · 研究図の作成｜<a href="https://nonelinear.com.cn/"><strong>合言葉「灵感画廊」で体験クレジット20元 ↗</strong></a></sub>
+      <details>
+        <summary><sub>詳細と特典</sub></summary>
+        <p>マルチモーダルモデル API の計算資源で本プロジェクトを支援してくださる Nonelinear API（nonelinear.com.cn）に感謝します！</p>
+        <ul>
+          <li><strong>先端モデルへの一括アクセス</strong>：スポンサーはVPN 不要で Claude、GPT、DeepSeek などの公式チャネル・フル機能へのアクセスを提供し、論文のメイン図生成、推敲、複雑な図表の解析を支援すると案内しています。</li>
+          <li><strong>研究コストの削減</strong>：最大98%のキャッシュヒット率により、長い論文や高度な推論のトークン費用を削減すると案内しています。</li>
+          <li><strong>高い同時処理能力</strong>：ミリ秒単位の応答と適正な請求書発行を支援すると案内しています。</li>
+          <li><strong>専用体験特典</strong>：カスタマーサービスに合言葉「灵感画廊」を伝えると、20元の体験クレジットと初回チャージ特典を受け取れます。</li>
+        </ul>
+        <p>導入・利用チュートリアル：<a href="https://docs.nonelinear.com.cn/scenes/overview">Nonelinear API クイックスタートガイド ↗</a></p>
+      </details>
+    </td>
+    <td width="50%" valign="top"></td>
+  </tr>
 </table>
 
 <sub>宣伝文はスポンサー提供です。料金、モデルの利用可否、クレジット、特典条件は各サービスの最新の公式案内に従います。</sub>

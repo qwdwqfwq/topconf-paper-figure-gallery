@@ -61,6 +61,25 @@ Ces partenaires soutiennent le projet avec des API de modèles et des ressources
 <td width="50%" valign="top"><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link"><strong>Infistar.cc</strong></a><br><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link"><img src="docs/infistar-banner.png" alt="Infistar.cc" width="430"></a><br><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link">S’inscrire : crédit d’essai de 5 ¥ ↗</a><details><summary>Présentation et offres</summary><ul><li>Accès à Claude, OpenAI, DeepSeek et à d’autres modèles pour le code TikZ / Python, la révision d’articles et l’analyse de figures.</li><li>Certains modèles sont annoncés à partir de 1 % du tarif officiel ; consultez les prix actuels de la plateforme.</li><li>Prise en charge de fortes concurrences et de la facturation ; disponibilité et limites selon l’état du service.</li><li>Le lien partenaire propose 5 ¥ de crédit d’essai et des offres de premier paiement, selon les conditions de la campagne.</li></ul></details></td>
 <td width="50%" valign="top"><a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU"><strong>CrazyToken</strong></a><br><a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU"><img src="docs/crazytoken-banner.png" alt="CrazyToken" width="430"></a><br><a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU">S’inscrire : crédit d’essai de 20 $ ↗</a><details><summary>Présentation et offres</summary><ul><li>Tarifs annoncés à partir de 0,05× le prix officiel, avec facturation par jeton.</li><li>Claude, GPT, Gemini, Kimi, GLM, DeepSeek, Qwen et Grok pour comprendre les articles, coder des figures et réviser l’anglais.</li><li>Le fournisseur annonce des canaux officiels natifs, sans substitution de modèle ni compression du contexte long.</li><li>Associez les références des conférences à FigureForge pour analyser, générer et améliorer les compositions.</li><li>Offre annoncée de 20 $ à l’inscription, bonus de recharge et aide individuelle à la configuration à distance.</li></ul></details></td>
 </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://nonelinear.com.cn/"><strong>Nonelinear API</strong></a><br>
+      <a href="https://nonelinear.com.cn/"><img src="docs/nonelinear-banner.png" alt="Nonelinear API — nonelinear.com.cn" width="430"></a><br>
+      <sub>API de modèles · Figures scientifiques｜<a href="https://nonelinear.com.cn/"><strong>Code « 灵感画廊 » : crédit d’essai de 20 ¥ ↗</strong></a></sub>
+      <details>
+        <summary><sub>Présentation et offres</sub></summary>
+        <p>Merci à Nonelinear API (nonelinear.com.cn) pour son soutien au projet en ressources API de modèles multimodaux !</p>
+        <ul>
+          <li><strong>Modèles de pointe réunis</strong>：Le partenaire annonce l’accès sans VPN à Claude, GPT, DeepSeek et à d’autres modèles via des canaux officiels complets, pour générer des figures, réviser des articles et analyser des graphiques complexes.</li>
+          <li><strong>Réduction des coûts</strong>：Taux de succès du cache annoncé jusqu’à 98 %, pour réduire les coûts en jetons des articles longs et du raisonnement intensif.</li>
+          <li><strong>Forte concurrence</strong>：Réponses annoncées en millisecondes et prise en charge de la facturation.</li>
+          <li><strong>Offre d’essai exclusive</strong>：Contactez le service client avec le code « 灵感画廊 » pour 20 ¥ de crédit d’essai et des offres de premier paiement.</li>
+        </ul>
+        <p>Tutoriel de configuration et d’utilisation：<a href="https://docs.nonelinear.com.cn/scenes/overview">Guide de démarrage rapide Nonelinear API ↗</a></p>
+      </details>
+    </td>
+    <td width="50%" valign="top"></td>
+  </tr>
 </table>
 
 <sub>Les descriptions promotionnelles sont fournies par les partenaires. Prix, disponibilité des modèles, crédits et conditions dépendent des pages officielles actuelles de chaque service.</sub>

@@ -61,6 +61,25 @@
 <td width="50%" valign="top"><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link"><strong>Infistar.cc</strong></a><br><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link"><img src="docs/infistar-banner.png" alt="Infistar.cc" width="430"></a><br><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link">Регистрация: пробные 5 ¥ ↗</a><details><summary>Подробности и предложения</summary><ul><li>Единый доступ к Claude, OpenAI, DeepSeek и другим моделям для TikZ / Python, редактирования статей и анализа иллюстраций.</li><li>Для отдельных моделей заявлены цены от 1% официальных; актуальные тарифы указаны на платформе.</li><li>Высокая параллельность и выставление счетов; доступность и лимиты зависят от текущего состояния сервиса.</li><li>По партнёрской ссылке предлагаются пробные 5 ¥ и бонусы первого пополнения на условиях акции.</li></ul></details></td>
 <td width="50%" valign="top"><a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU"><strong>CrazyToken</strong></a><br><a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU"><img src="docs/crazytoken-banner.png" alt="CrazyToken" width="430"></a><br><a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU">Регистрация: пробные 20 $ ↗</a><details><summary>Подробности и предложения</summary><ul><li>Заявлены тарифы от 0,05× официальной цены и детализация оплаты по токенам.</li><li>Claude, GPT, Gemini, Kimi, GLM, DeepSeek, Qwen и Grok для понимания статей, кода иллюстраций и правки английского.</li><li>Провайдер заявляет прямые официальные каналы без подмены моделей и сжатия длинного контекста.</li><li>Используйте примеры конференций с FigureForge для анализа композиции, генерации и доработки.</li><li>Заявлены 20 $ при регистрации, бонусы пополнения и индивидуальная удалённая настройка.</li></ul></details></td>
 </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://nonelinear.com.cn/"><strong>Nonelinear API</strong></a><br>
+      <a href="https://nonelinear.com.cn/"><img src="docs/nonelinear-banner.png" alt="Nonelinear API — nonelinear.com.cn" width="430"></a><br>
+      <sub>API моделей · Научные иллюстрации｜<a href="https://nonelinear.com.cn/"><strong>Код «灵感画廊»: 20 ¥ на пробу ↗</strong></a></sub>
+      <details>
+        <summary><sub>Описание и предложения</sub></summary>
+        <p>Благодарим Nonelinear API (nonelinear.com.cn) за поддержку проекта вычислительными ресурсами API мультимодальных моделей!</p>
+        <ul>
+          <li><strong>Передовые модели в одном месте</strong>：Спонсор заявляет доступ без VPN к Claude, GPT, DeepSeek и другим моделям через официальные каналы с полными возможностями для генерации научных иллюстраций, редактирования статей и анализа сложных диаграмм.</li>
+          <li><strong>Снижение затрат на исследования</strong>：Заявлена доля попаданий в кеш до 98 %, что снижает затраты на токены при работе с длинными статьями и сложными рассуждениями.</li>
+          <li><strong>Высокая параллельность</strong>：Заявлены отклик за миллисекунды и возможность выставления счетов.</li>
+          <li><strong>Пробное предложение</strong>：Сообщите службе поддержки код «灵感画廊», чтобы получить 20 ¥ пробного кредита и предложения для первого пополнения.</li>
+        </ul>
+        <p>Настройка и использование：<a href="https://docs.nonelinear.com.cn/scenes/overview">Краткое руководство по Nonelinear API ↗</a></p>
+      </details>
+    </td>
+    <td width="50%" valign="top"></td>
+  </tr>
 </table>
 
 <sub>Рекламные описания предоставлены спонсорами. Цены, доступность моделей, кредиты и условия акций определяются актуальными официальными страницами провайдеров.</sub>

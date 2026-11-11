@@ -103,6 +103,25 @@
       </details>
     </td>
   </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://nonelinear.com.cn/"><strong>非线智能 API</strong></a><br>
+      <a href="https://nonelinear.com.cn/"><img src="docs/nonelinear-banner.png" alt="非线智能 API — nonelinear.com.cn" width="430"></a><br>
+      <sub>多模型一站接入 · 科研绘图｜<a href="https://nonelinear.com.cn/"><strong>报暗号「灵感画廊」领 20 元 ↗</strong></a></sub>
+      <details>
+        <summary><sub>详细介绍与活动说明</sub></summary>
+        <p>感谢非线智能 API（nonelinear.com.cn）为本项目提供多模态大模型 API 算力支持！</p>
+        <ul>
+          <li><strong>前沿顶尖模型一站接入</strong>：免翻墙聚合最新 Claude、GPT、DeepSeek 等模型，官方满血保真，支持顶会论文主图生成、论文润色与复杂图表解析。</li>
+          <li><strong>降低顶会科研成本</strong>：超高缓存命中率（高达 98%），极大降低长篇论文与高推理强度下的 Token 消耗成本。</li>
+          <li><strong>满血高并发支持</strong>：毫秒级响应，支持合规开票。</li>
+          <li><strong>专属体验礼</strong>：联系客服报专属暗号「灵感画廊」，立送 20 元专享体验额度及首充优惠！</li>
+        </ul>
+        <p>接入与使用教程：<a href="https://docs.nonelinear.com.cn/scenes/overview">非线智能 API 快速接入指南 ↗</a></p>
+      </details>
+    </td>
+    <td width="50%" valign="top"></td>
+  </tr>
 </table>
 
 <sub>推广介绍由赞助商提供，价格、模型可用性、额度与活动条件以各平台官网实时页面为准。</sub>

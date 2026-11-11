@@ -61,6 +61,25 @@ FigureForge로 실제 생성한 그림입니다. 세부 요소를 편집할 수 
 <td width="50%" valign="top"><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link"><strong>Infistar.cc</strong></a><br><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link"><img src="docs/infistar-banner.png" alt="Infistar.cc" width="430"></a><br><a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link">가입하고 5위안 체험 크레딧 받기 ↗</a><details><summary>상세 소개 및 혜택</summary><ul><li>Claude, OpenAI, DeepSeek 등 다양한 모델로 TikZ / Python 그림 코드, 논문 교정, 그림 분석을 지원합니다.</li><li>일부 모델은 공식 가격의 최저 1%로 안내됩니다. 현재 요금은 플랫폼을 확인하세요.</li><li>높은 동시 처리와 청구서 발급을 지원하며 모델 가용성과 제한은 서비스 상태에 따릅니다.</li><li>제휴 링크로 가입하면 5위안 체험 크레딧과 첫 충전 혜택이 제공되며 행사 조건이 적용됩니다.</li></ul></details></td>
 <td width="50%" valign="top"><a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU"><strong>CrazyToken</strong></a><br><a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU"><img src="docs/crazytoken-banner.png" alt="CrazyToken" width="430"></a><br><a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU">가입하고 20달러 체험 크레딧 받기 ↗</a><details><summary>상세 소개 및 혜택</summary><ul><li>공식 가격의 최저 0.05배 요금과 토큰 단위 청구를 안내합니다.</li><li>Claude, GPT, Gemini, Kimi, GLM, DeepSeek, Qwen, Grok으로 논문 이해, 그림 코드와 영어 교정을 지원합니다.</li><li>공급자는 모델 대체와 긴 문맥 압축이 없는 공식 원본 채널이라고 설명합니다.</li><li>학회 참고 그림과 FigureForge를 결합해 배치 분석, 생성과 수정을 돕습니다.</li><li>가입 시 20달러 체험 크레딧, 충전 보너스, 일대일 원격 설정 지원을 안내합니다.</li></ul></details></td>
 </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <a href="https://nonelinear.com.cn/"><strong>Nonelinear API</strong></a><br>
+      <a href="https://nonelinear.com.cn/"><img src="docs/nonelinear-banner.png" alt="Nonelinear API — nonelinear.com.cn" width="430"></a><br>
+      <sub>통합 모델 API · 연구 도표｜<a href="https://nonelinear.com.cn/"><strong>“灵感画廊” 코드로 체험 크레딧 20위안 ↗</strong></a></sub>
+      <details>
+        <summary><sub>상세 소개 및 혜택</sub></summary>
+        <p>멀티모달 모델 API 연산 자원으로 프로젝트를 지원해 주신 Nonelinear API(nonelinear.com.cn)에 감사드립니다!</p>
+        <ul>
+          <li><strong>최신 모델 통합 접속</strong>：후원사는 VPN 없이 Claude, GPT, DeepSeek 등 모델의 공식 채널 및 전체 기능을 제공하며, 논문 대표 그림 생성, 논문 교정, 복잡한 도표 분석을 지원한다고 안내합니다.</li>
+          <li><strong>연구 비용 절감</strong>：최대 98%의 캐시 적중률을 통해 긴 논문과 고강도 추론의 토큰 비용을 줄인다고 안내합니다.</li>
+          <li><strong>높은 동시 처리</strong>：밀리초 단위 응답과 세금계산서 발행을 지원한다고 안내합니다.</li>
+          <li><strong>전용 체험 혜택</strong>：고객센터에 “灵感画廊” 코드를 전달하면 체험 크레딧 20위안과 첫 충전 혜택을 받을 수 있습니다.</li>
+        </ul>
+        <p>설정 및 사용 안내：<a href="https://docs.nonelinear.com.cn/scenes/overview">Nonelinear API 빠른 시작 가이드 ↗</a></p>
+      </details>
+    </td>
+    <td width="50%" valign="top"></td>
+  </tr>
 </table>
 
 <sub>홍보 설명은 후원사가 제공합니다. 가격, 모델 가용성, 크레딧 및 행사 조건은 각 공식 사이트의 현재 안내를 따릅니다.</sub>
