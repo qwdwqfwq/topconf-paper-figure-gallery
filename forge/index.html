@@ -1780,7 +1780,7 @@ $('#analyzeModel').onchange = e=>localStorage.setItem('ff_amodel_'+$('#provider'
 function initProviders(){
   // The official endpoint restricts browser CORS. The optional local launcher
   // supplies a same-origin, fixed-upstream relay without storing API keys.
-  MAN.providers.nonelinear={label:'非线智能 NoneLinear',base:window.FF_NONELINEAR_BASE||'https://api.nonelinear.com.cn/v1',proto:'oai',cors:!!window.FF_NONELINEAR_BASE,chat:['Qwen3-8B-nothink:free','qwen3-vl-32b-instruct'],vision:['qwen3-vl-32b-instruct'],image:['Qwen-Image']};
+  MAN.providers.nonelinear={label:'非线智能 NoneLinear（推荐）',base:window.FF_NONELINEAR_BASE||'https://api.nonelinear.com.cn/v1',proto:'oai',cors:!!window.FF_NONELINEAR_BASE,chat:['Qwen3-8B-nothink:free','qwen3-vl-32b-instruct'],vision:['qwen3-vl-32b-instruct'],image:['Qwen-Image']};
   // Register independently of the periodically refreshed upstream manifest.
   MAN.providers.infistar={label:'Infistar 无限星河',base:'https://infistar.cc/v1',proto:'oai',cors:true,chat:[],vision:[],image:[]};
   // Retire these providers even when a refreshed manifest still contains them.
