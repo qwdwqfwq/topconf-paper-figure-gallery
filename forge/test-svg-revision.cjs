@@ -38,7 +38,7 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
   output=svg(1);await page.locator('#genBtn').click();
   await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===1,{},{timeout:30000});
   const cards=page.locator('.ff-version'),editor=page.locator('.ff-revision-editor'),submit=editor.locator('[data-submit]');
-  await cards.first().waitFor();assert.match(await editor.locator('[data-model]').innerText(),/gpt-4o/);
+  await cards.first().waitFor();assert.equal(await editor.locator('[data-model]').innerText(),'请在步骤三选择「SVG 可编辑初稿」，并选择视觉模型。');
   async function modify(index,n){output=n;await cards.nth(index).locator('[data-modify]').click();await editor.locator('textarea').fill('调整标题 '+n);await submit.click();await page.locator('[data-revision-accept]').click();}
   const screenshot=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=40;c.height=20;return c.toDataURL();});
   await editor.locator('[data-files]').setInputFiles({name:'locator.png',mimeType:'image/png',buffer:Buffer.from(screenshot.split(',')[1],'base64')});

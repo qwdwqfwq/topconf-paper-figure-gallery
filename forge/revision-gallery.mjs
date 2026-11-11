@@ -177,7 +177,7 @@ function historyStore(){
 
 export function createRevisionGallery(adapter){
   const versions=[],store=historyStore();
-  let active=null,editing=null,job=null,generating=false,reading=0,deleting=false,nextNumber=1,mounted=false,root,panel,list,textarea,error,submit,storageHint,attachments,fileInput,modelConfigObserver=null;
+  let active=null,editing=null,job=null,generating=false,reading=0,deleting=false,nextNumber=1,mounted=false,root,panel,list,textarea,error,submit,storageHint,attachments,fileInput;
   const busy=()=>!!job||adapter.busy();
   function mount(){
     if(mounted){if(!root.isConnected){adapter.output.replaceChildren(root);adapter.output.style.display='block';}return;}mounted=true;
@@ -289,21 +289,10 @@ export function createRevisionGallery(adapter){
   function refresh(){
     if(!mounted)return;
     if(editing){
-      // IndexedDB can restore versions before the provider manifest has loaded.
-      // A display-only label must not reject history restoration or addInitial.
-      try{
-        panel.querySelector('[data-model]').textContent=adapter.modelLabel?.(editing)||'';
-        modelConfigObserver?.disconnect();modelConfigObserver=null;
-      }catch{
-        panel.querySelector('[data-model]').textContent='修改模型：配置加载中…';
-        if(!modelConfigObserver){
-          modelConfigObserver=new MutationObserver(()=>refresh());
-          for(const id of ['provider','model']){
-            const select=document.getElementById(id);
-            if(select)modelConfigObserver.observe(select,{childList:true,subtree:true});
-          }
-        }
-      }
+      // Display guidance depends only on the selected version, not provider loading.
+      panel.querySelector('[data-model]').textContent=editing.source==='svg'
+        ?'请在步骤三选择「SVG 可编辑初稿」，并选择视觉模型。'
+        :'请在步骤三选择「AI 位图初稿」，并选择图像模型。';
     }
     for(const v of versions){
       v.card.querySelector('[data-delete]').disabled=busy()||generating||!!reading||deleting;
