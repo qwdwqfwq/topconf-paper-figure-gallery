@@ -734,6 +734,7 @@ import {fetchReconstructionStream,usesReconstructionStream} from './infistar-rec
 import {prepareQuery,buildIndex,rank} from './retrieval.mjs';
 import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=20261021-unlimited';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261026-nonelinear-resolution';
+import {createRevisionGallery,generateRevision} from './revision-gallery.mjs?v=20261112';
 import {ImageRoutes, safeImageFailover} from './image-routes.mjs?v=20261020';
 const imageRoutes=new ImageRoutes();
 import {buildNativePptx, readNativePptxScene, geometrySegments, editableShapeFrame, expandEditableTextPaths, parseEditablePath, transformEditablePath} from './editable-native.mjs?v=whole-image-20261021-1';
@@ -2498,7 +2499,10 @@ function setStep(n,state){
   if(n===1 && state==='done') $('#stline1').classList.add('active');
 }
 $('#genBtn').onclick = async ()=>{
-  $('#genErr').hidden=true; $('#out').style.display='none';
+  $('#genErr').hidden=true;
+  await revisionGallery.ready;
+  if(!revisionGallery.canGenerate()){showErr('请等待当前任务完成后再生成新的原始图；已有图片仍可继续修改。');return;}
+  if(!$('#out .ff-revisions'))$('#out').style.display='none';
   const content = $('#paper').value.trim();
   if(!content){ showErr(tt('gen.content')); return; }
   if(!refs.size){ showErr(tt('gen.refs')); return; }
@@ -2586,6 +2590,7 @@ async function genOaiSVG(base,model,key,content,p,refIds,layoutGuide){
   if(!code) throw new Error(tt('svg.none'));
   const auditRes = await auditAndRepair(code, {base, model, key, provider:p, anthropic:false},
     (r,n)=>setGenNote(tt('audit.repairing',{r:r, n:n})), parsed.truncated);
+  revisionGallery.leave();
   renderSVG(auditRes.svg, usedVision, useIds, parsed.truncated, auditRes);
 }
 
@@ -2627,6 +2632,7 @@ async function genAnthropicSVG(base,model,key,content,refIds,layoutGuide){
   if(!code) throw new Error(tt('svg.claudeNone'));
   const auditRes = await auditAndRepair(code, {base, model, key, provider:'claude', anthropic:true},
     (r,n)=>setGenNote(tt('audit.repairing',{r:r, n:n})), parsed.truncated);
+  revisionGallery.leave();
   renderSVG(auditRes.svg, usedVision, useIds, parsed.truncated, auditRes);
 }
 /* ---------------- geometry audit: measure the draft before showing it ----------------
@@ -5895,10 +5901,46 @@ function initEditableExport(){
 }
 initEditableExport();
 
-window.__ffRenderSVG = (...args) => renderSVG(...args);
+window.__ffRenderSVG = (...args) => {revisionGallery.leave();return renderSVG(...args);};
 
 /* Exposed the same way as __ffRenderSVG: the rebuild is otherwise module-scoped. */
 window.__ffReconstruct = () => runReconstruction();
+const revisionGallery=createRevisionGallery({
+  output:$('#out'),
+  busy:()=>exportUploadPending || !!ensureExportState().reconPending || $('#exportConfirm')?.classList.contains('is-busy'),
+  getState:()=>ensureExportState(),currentImage:()=>currentStep3Bitmap(),
+  captureView:()=>({status:[...$('#exportStatus').childNodes],reconStatus:$('#reconStatus').textContent,
+    archive:window.__ffReconArchive,responses:window.__ffReconResponses,timing:window.__ffDirectTiming}),
+  activate:v=>{
+    uploadedExportBitmap='';
+    window.__ffExportState=v.state?structuredClone(v.state):{svg:'',baseSvg:'',scene:null,recon:null,reconPending:false,
+      reconFailed:false,reconError:'',source:'bitmap',bitmap:v.image,reconBitmap:v.image,
+      hasStep3Output:true,target:'svg',font:'original',exportMode:'vector'};
+    markStep3Output(v.image);
+    $('#out').querySelectorAll('[data-step3-output]').forEach(img=>img.removeAttribute('data-step3-output'));
+    v.card.querySelector('img').dataset.step3Output='true';
+    $('#reconStatus').textContent=v.view?.reconStatus||'';
+    window.__ffReconArchive=v.view?.archive||null;window.__ffReconResponses=v.view?.responses||[];
+    window.__ffDirectTiming=v.view?.timing||null;
+    renderEditableExportCard();
+    if(v.view?.status)$('#exportStatus').replaceChildren(...v.view.status);
+  },
+  generate:(parent,prompt)=>generateRevision(parent,prompt,{
+    key:cleanKey(parent.route.p===$('#provider').value?$('#key').value:localStorage.getItem('ff_key_'+parent.route.p)),
+    toDataURL:ensureBitmapDataUrl,loadImage}),
+  rebuild:()=>$('#reconBtn').click(),
+  showExport:()=>$('#card4').scrollIntoView({behavior:'smooth',block:'start'}),
+  download:async v=>{try{const response=await fetch(v.image);if(!response.ok)throw new Error('download');
+    const blob=await response.blob(),ext=blob.type.includes('webp')?'webp':/jpe?g/.test(blob.type)?'jpg':'png';
+    downloadBlob('figure-forge-v'+v.number+'.'+ext,blob);
+  }catch{window.open(v.image,'_blank');}}
+});
+// Export may finish after its button was clicked; keep version controls in sync.
+new MutationObserver(()=>revisionGallery.refresh()).observe($('#exportConfirm'),{attributes:true,attributeFilter:['class','disabled']});
+// Save version results before an independent SVG or uploaded-image selection takes over.
+$('#exportBitmapUpload')?.addEventListener('change',()=>revisionGallery.leave(),true);
+$('#exportUseGenerated')?.addEventListener('click',()=>revisionGallery.leave(),true);
+
 /* Kept alongside the other hooks so the card can be re-rendered from outside. */
 window.__ffRefreshExportCard = () => renderEditableExportCard();
 
@@ -5974,8 +6016,10 @@ $('#refineReconBtn')?.addEventListener('click',async()=>{
   try{await runReconstruction({refine:true});}finally{st.reconPending=false;renderEditableExportCard();}
 });
 $('#reconBtn')?.addEventListener('click', async function(){
+  if(revisionGallery.busy())return;
   const btn = $('#reconBtn');
   const st = window.__ffExportState;
+  const versionJob=revisionGallery.begin();
   st.skipReconCacheOnce = true;
   st.reconPending = true;
   renderEditableExportCard();
@@ -5988,6 +6032,7 @@ $('#reconBtn')?.addEventListener('click', async function(){
     st.reconPending = false;
     if(!ok&&!st.scene) st.reconFailed = true;
     renderEditableExportCard();
+    revisionGallery.finish(versionJob);
   }
 });
 
@@ -6088,6 +6133,8 @@ function selectImageRoute(route){
   return route;
 }
 async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted=[]){
+  await revisionGallery.ready;
+  if(!revisionGallery.canGenerate())throw new Error('请等待当前可编辑版处理完成后再生成新的原始图。');
   const useIds = refIds||[...refs];
   const ratio=$('#figureRatio').value, resolution=$('#imageResolution').value;
   const requested={base,model,key,p,ratio,resolution,references:useIds.length>0};
@@ -6262,7 +6309,6 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
     throw error;
   }
   if(!item) throw new Error(tt('img.abnormal',{t:txt.slice(0,200)}));
-  const st = ensureExportState();
   const imageMime=item.mimeType||'image/png';
   const imgSrc = item.url || (`data:${imageMime};base64,`+item.b64_json);
   const exportImgSrc = item.b64_json ? `data:${imageMime};base64,${item.b64_json}` : imgSrc;
@@ -6277,32 +6323,21 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
     throw new Error(tt('img.resolutionMismatch',{resolution,width:actualWidth,height:actualHeight}));
   }
   recordImageRoute({...route,references:usedRefs},'verified');
-  $('#out').style.display='block';
-  $('#out').innerHTML = `<img data-step3-output="true" src="${esc(imgSrc)}" alt="draft">
-    <div class="dl"><button type="button" class="btn-primary" id="dlImg">${tt('img.download')}</button>
-    <span class="hint">${r.referenceFallback?tt('img.referenceFallback'):usedRefs?tt('img.hintRef',{n:useIds.length}):tt('img.hint')} · ${ratio} · ${actualWidth}×${actualHeight}px · ${esc(model)}${attempted.length>1?' · 已切换已验证备用线路':''}</span></div>`;
-  // Bind the bitmap download as soon as Step 3 has its verified image. Step 4
-  // can take minutes and must never gate or replace this button.
-  $('#dlImg').onclick = async ()=>{
-    try{
-      const response=await fetch(exportImgSrc);
-      if(!response.ok) throw new Error('Image download failed');
-      const blob=await response.blob();
-      const ext=blob.type.includes('webp')?'webp':/jpe?g/.test(blob.type)?'jpg':'png';
-      downloadBlob('figure-forge-draft.'+ext,blob);
-    }catch(e){ window.open(exportImgSrc,'_blank'); }
-  };
+  await revisionGallery.addInitial({image:exportImgSrc,width:actualWidth,height:actualHeight,
+    route:{base:route.base,model,p,ratio,resolution}});
+  const st=ensureExportState();
   markStep3Output(exportImgSrc); st.recon = null; st.reconPending = true;
   /* Keep Step 4 visibly pending while the vision API reconstructs the scene.
      Do not expose a raster-wrapped SVG as if it were editable. */
   showEditableExportStep({ svg:'', source:'bitmap', bitmap:exportImgSrc, reconPending:true });
+  const versionJob=revisionGallery.begin();
   /* The Step 3 image is ready immediately; the real vision rebuild continues
      in Step 4 without making the user wait to inspect or download that image. */
   void (async()=>{
   let reconOk = false;
   try{ reconOk = await runReconstruction(); }
   catch(e){ st.reconError=safeExportError(e); console.warn('automatic editable reconstruction failed', e); }
-  if(reconOk===null)return;
+  if(reconOk===null){st.reconPending=false;revisionGallery.finish(versionJob);return;}
   st.reconPending = false;
   if(!reconOk){
     const reconStatus=$('#reconStatus');
@@ -6317,6 +6352,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
   } else {
     renderEditableExportCard();
   }
+  revisionGallery.finish(versionJob);
   })();
 }
 
