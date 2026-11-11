@@ -159,7 +159,7 @@ FigureForge 基于画廊生成你的 Figure 1 初稿：描述论文，3,452 张�
 
    ![两阶段归纳](forge/tutorial/03_analyze.png?v=20261002)
 
-5. **选模式、填 Key（推荐免翻墙直连 [非线智能 API](https://nonelinear.com.cn)，报暗号【灵感画廊】立领 20 元额度）、下载**：SVG 模式文字准确、可用 Figma / draw.io / Illustrator 编辑；位图模式版式地道，在 PPT / Figma 核对即可。Key 只存在本机浏览器。
+5. **选模式、填 Key、下载**：SVG 模式文字准确、可用 Figma / draw.io / Illustrator 编辑；位图模式版式地道，在 PPT / Figma 核对即可。Key 只存在本机浏览器。
 
 > 直接在通用对话框写 prompt，得到的是通用流程图。FigureForge 以顶会图为版式参考，初稿保留论文图的面板网格、对比叙事和克制配色。
 
