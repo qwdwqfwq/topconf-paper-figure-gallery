@@ -123,7 +123,7 @@ A searchable, filterable gallery of Figure 1 / teaser figures. Static HTML/CSS/J
 
 ### 🛠️ FigureForge Beta
 
-FigureForge drafts your Figure 1 from the gallery: describe your paper, and 3,452 top-conference figures provide the layout reference. No sign-up, no server; it runs in your browser. **[Try FigureForge →](forge/index.html)**
+FigureForge drafts your Figure 1 from the gallery: describe your paper, and 3,452 top-conference figures provide the layout reference. No sign-up, no server; it runs in your browser. **[Try FigureForge →](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge/)**
 
 <p align="center">
   <img src="forge/demo-forge.gif?v=20261002" alt="FigureForge walkthrough: describe paper, retrieve references, generate bitmap draft" width="560">
@@ -149,12 +149,6 @@ FigureForge drafts your Figure 1 from the gallery: describe your paper, and 3,45
 
 > ![Comparison](forge/tutorial/compare.png?v=20261002)
 
-- Runs entirely in your browser: the CLIP model and gallery index are bundled locally; paper content and keys stay on your device and the key goes only to the provider you choose.
-- Bring your own key. Presets: Volcengine Ark, SiliconFlow, Zhipu, DeepSeek, OpenAI, Moonshot, Qwen, Tencent Hunyuan, Anthropic, and any OpenAI-compatible relay.
-- The model list updates itself: the bundled manifest refreshes on load and the provider's live `/models` list is fetched once a key is entered. Anthropic has no list endpoint; Hunyuan and Anthropic block browser CORS, so use a relay for those.
-- Scope: a high-quality first draft for the Figure 1 genre. Check text and numbers before submission.
-- Open source forever, no paid version. MIT-licensed; the key pays the model provider directly. PRs are welcome for new papers, venues and label fixes, and the gallery is refreshed yearly with new proceedings.
-
 ### Add a paper or figure
 
 Open a **[Suggest a figure](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/issues/new?template=add-figure-request.md)** issue with the paper link — no coding needed. For PRs, [CONTRIBUTING.md](CONTRIBUTING.md) gives the metadata format and quality bar. New venues such as CHI / RSS / CoRL are welcome.
@@ -176,7 +170,7 @@ Images belong to their authors and publishers; see [IMAGES_POLICY.md](IMAGES_POL
 
 ### 🛠️ FigureForge Beta
 
-FigureForge 基于画廊生成你的 Figure 1 初稿：描述论文，3,452 张顶会主图作为版式参考。免注册、无服务器，全部在浏览器本地运行。**[立即试用 →](forge/index.html)**
+FigureForge 基于画廊生成你的 Figure 1 初稿：描述论文，3,452 张顶会主图作为版式参考。免注册、无服务器，全部在浏览器本地运行。**[立即试用 →](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge/)**
 
 <p align="center">
   <img src="forge/demo-forge.gif?v=20261002" alt="FigureForge 流程演示：输入论文、检索参考图、生成位图初稿" width="560">
@@ -202,12 +196,6 @@ FigureForge 基于画廊生成你的 Figure 1 初稿：描述论文，3,452 张�
 
 > ![效果对比](forge/tutorial/compare.png?v=20261002)
 
-- 全流程浏览器本地运行：CLIP 模型和画廊索引随仓库打包；论文内容和 Key 不离开设备，Key 只发往所选服务商。
-- 自带 Key：预置火山方舟、硅基流动、智谱、DeepSeek、OpenAI、月之暗面、通义千问、腾讯混元、Anthropic，以及任意 OpenAI 兼容中转。
-- 模型列表自动更新：打开时刷新内置清单，填入 Key 后拉取服务商实时 `/models`。Anthropic 无列表接口；混元、Anthropic 不支持浏览器跨域，这两家用中转。
-- 能力边界：Figure 1 场景的高质量初稿，文字和数字提交前需人工核对。
-- 纯开源、永不收费：MIT 许可，Key 费用直接付给模型厂商。欢迎提 PR 补论文、补会议、修标签，画廊每年随新论文集持续更新。
-
 ### 补充论文或图片
 
 不会写代码也可以：开一个 [Suggest a figure](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/issues/new?template=add-figure-request.md) Issue，贴上论文链接。提 PR 前看 [CONTRIBUTING.md](CONTRIBUTING.md)，含元数据格式和收录标准。欢迎 CHI / RSS / CoRL 等新会议。
@@ -218,30 +206,17 @@ FigureForge 基于画廊生成你的 Figure 1 初稿：描述论文，3,452 张�
 
 ## 📊 收录规模 / Coverage
 
-| Venue 会议 | 2023 | 2024 | 2025 | 2026 | Total 合计 |
-|---|---:|---:|---:|---:|---:|
-| 🟣 **ICLR** | 108 | 135 | 274 | 228 | **745** |
-| 🟢 **ICML** | 63 | 131 | 216 | 338 | **748** |
-| 🔴 **NeurIPS** | 236 | 363 | 367 | — | **966** |
-| 🟠 **CVPR** | 65 | 64 | 96 | 83 | **308** |
-| 🔵 **ACL** | 84 | 74 | 168 | 58 | **384** |
-| 🟡 **AAAI** | 59 | 66 | 139 | 37 | **301** |
-| | | | | **Total 总计** | **3452** |
+| Venue 会议 | 2023 | 2024 | 2025 | 2026 | Figures 主图合计 | Best / Outstanding | Oral | Spotlight | Tier total 等级合计 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 🟣 **ICLR** | 108 | 135 | 274 | 228 | **745** | 10 | 337 | 155 | **502** |
+| 🟢 **ICML** | 63 | 131 | 216 | 338 | **748** | 13 | 247 | 558 | **818** |
+| 🔴 **NeurIPS** | 236 | 363 | 367 | — | **966** | 3 | 32 | 237 | **272** |
+| 🟠 **CVPR** | 65 | 64 | 96 | 83 | **308** | — | — | — | — |
+| 🔵 **ACL** | 84 | 74 | 168 | 58 | **384** | — | — | — | — |
+| 🟡 **AAAI** | 59 | 66 | 139 | 37 | **301** | — | — | — | — |
+| **Total 总计** | | | | | **3452** | **26** | **616** | **950** | **1592** |
 
-### 🏅 高等级论文 / High-tier papers
-
-ICLR / ICML 含 2023–2026；NeurIPS 含 2023–2025（2026 名单未公布）。
-
-| Venue 会议 | Best / Outstanding | Oral | Spotlight | Total |
-|---|---:|---:|---:|---:|
-| 🟣 **ICLR** | 10 | 337 | 155 | **502** |
-| 🟢 **ICML** | 13 | 247 | 558 | **818** |
-| 🔴 **NeurIPS** | 3 | 32 | 237 | **272** |
-
-> 角标：<b style="color:#be123c">红 = Best / Outstanding（含 Honorable Mention）</b>、<b style="color:#c8860a">金 = Oral</b>、<b style="color:#64748b">银 = Spotlight</b>。
-> 口径以官方名单为准：ICLR 2023 的 notable top 5% 记为 Oral、top 25% 记为 Spotlight；ICML 2023 只有 OralPoster，记为 Oral；ICLR 2026 只设 Oral 与 Poster，无 Spotlight。
-
-> 图片从正式出版 PDF 裁剪（约 180–216 DPI），网页版压缩为 ≤1500px JPEG，标注标题、全部作者和原文链接。各会议图量差异反映设计型主图的实际占比，与会议水平无关。
+等级统计 / Tier coverage: ICLR、ICML 2023–2026；NeurIPS 2023–2025。— 表示未统计 / not indexed.
 
 ## 🧭 视觉模式 / Visual patterns
 
@@ -306,26 +281,6 @@ python scripts/enum_sheets.py iclr    # 40 格/页联系表，人工逐页复核
 python scripts/sheet_qa.py 31         # 随机抽样复核
 ```
 
-## 🗺️ Roadmap
-
-> 版本对照 / Versioning — releases 遵循 0.x semver：**v0.3**（六个会议，2,298 张，2026-09-20 发布）、**v0.4**（录取等级角标，2,730 张）、**v0.5**（2026 论文，3,528 张）、**v0.6**（FigureForge；去除 12 张跨代重复，3,516 张）。小红书按发帖计数：v1 = v0.3、v2 = v0.4、v3 = v0.6（v0.5 并入 v3 帖）。
-
-- [x] 60 张人工精选种子画廊（v0.1）
-- [x] ICLR / ICML / NeurIPS 自动管线扩量（v0.2–v0.3）
-- [x] CVPR / ACL / AAAI（2023–2025）同管线扩展（v0.3）
-- [x] Oral · Spotlight · Best Paper 等级索引与角标（v0.4）
-- [x] 2026 已公开会议主图与等级角标（v0.5）
-- [x] FigureForge：浏览器端 CLIP+BM25 检索、自有 API 生成初稿（v0.6）
-- [ ] CVPR / ACL / AAAI 的 Oral / Highlight 等级索引
-- [ ] NeurIPS 2026 录用公布后补全（预计 2026 年 12 月）
-- [ ] 持续人工复核，开放社区 PR 补图
-- [ ] CHI / CoRL / RSS / EMNLP 等会议扩展
-- [ ] 相似图推荐、按配色检索、一键导出 BibTeX
-
-## 🤝 贡献 / Contributing
-
-欢迎补图、修标签、修 bug、扩展新会议。不会写代码可直接开 [Suggest a figure](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/issues/new?template=add-figure-request.md) Issue，贴上论文链接。提 PR 前读 [CONTRIBUTING.md](CONTRIBUTING.md)，注意收录标准：不收纯照片墙和默认图表（折线图 / 柱状图 / 散点图 / 热力图这类「脚本就能画出来」的图会在收录时被 `scripts/filter_charts.py` 筛掉）。
-
 ### 🌟 贡献者 / Contributors
 
 感谢以下社区贡献者（按贡献采纳时间排序），他们的实现均已合入当前版本：
@@ -334,8 +289,6 @@ python scripts/sheet_qa.py 31         # 随机抽样复核
 |---|---|---|
 | [@timelic](https://github.com/timelic) | 画廊灯箱共享元素过渡动画（View Transitions），以及作者名单、查看图片 / 论文链接、等级角标、圆角与分隔符等细节打磨 | [#2](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/pull/2) · [#3](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/pull/3) |
 | [@TansyZenix](https://github.com/TansyZenix) | 灯箱 Tab 焦点限制、生成 SVG 预览的 `sandbox` 隔离、参考图卡片键盘选择与 ARIA 状态、数据校验 CI（`scripts/validate_gallery.py` + workflow） | [#5](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/pull/5) · [#6](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/pull/6) · [#7](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/pull/7) · [#8](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/pull/8) |
-
-Thanks to [@timelic](https://github.com/timelic) and [@TansyZenix](https://github.com/TansyZenix) — their lightbox transitions, SVG sandboxing, keyboard accessibility and the data-validation CI all ship in the current release. Contributions are credited in [CHANGELOG.md](CHANGELOG.md) as well; PRs for new papers, venues and label fixes are always welcome.
 
 ## ⚠️ 版权 / Copyright
 
@@ -351,7 +304,8 @@ Thanks to [@timelic](https://github.com/timelic) and [@TansyZenix](https://githu
 }
 ```
 
-## 🖼️ 精选图录 / Curated catalog
+<details>
+<summary><strong>🖼️ 精选图录 / Curated catalog</strong></summary>
 
 每会议-年份评分最高的 2 张；完整 3,452 张见[在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)。
 
@@ -410,6 +364,8 @@ Thanks to [@timelic](https://github.com/timelic) and [@TansyZenix](https://githu
 | <a href="https://ojs.aaai.org/index.php/AAAI/article/view/29496"><img src="images/aaai/final/aaai2024-29496.jpg" width="230"></a><br><sub>2024 · <a href="https://ojs.aaai.org/index.php/AAAI/article/view/29496">Wavelet Dynamic Selection Network for Inertial Sensor Signal Enhancement</a></sub> | <a href="https://ojs.aaai.org/index.php/AAAI/article/view/33754"><img src="images/aaai/final/aaai2025-33754.jpg" width="230"></a><br><sub>2025 · <a href="https://ojs.aaai.org/index.php/AAAI/article/view/33754">EditBoard: Towards a Comprehensive Evaluation Benchmark for Text-Based Video Editing Models</a></sub> | <a href="https://ojs.aaai.org/index.php/AAAI/article/view/33863"><img src="images/aaai/final/aaai2025-33863.jpg" width="230"></a><br><sub>2025 · <a href="https://ojs.aaai.org/index.php/AAAI/article/view/33863">Enhancing Multivariate Time-Series Domain Adaptation via Contrastive Frequency Graph Discov…</a></sub> |
 
 <sub>图片版权归原作者及出版方所有，点击图片跳转原文。</sub>
+
+</details>
 
 ## ⭐ Star History
 
