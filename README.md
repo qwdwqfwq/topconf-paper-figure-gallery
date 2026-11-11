@@ -427,6 +427,13 @@ Thanks to [@timelic](https://github.com/timelic) and [@TansyZenix](https://githu
 
 如果这个画廊帮你找到了论文配图灵感，欢迎随意支持，帮助我持续整理主图、更新数据和维护工具。
 
-[微信扫码支持作者](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/support.html)
+<table>
+  <tr>
+    <td align="center" valign="top"><strong>微信</strong><br><a href="assets/wechat-pay.jpg"><img src="assets/wechat-pay.jpg" alt="微信收款码，点击查看原图" width="220"></a></td>
+    <td align="center" valign="top"><strong>支付宝</strong><br><a href="assets/alipay-pay.jpg"><img src="assets/alipay-pay.jpg" alt="支付宝收款码，点击查看原图" width="220"></a></td>
+  </tr>
+</table>
+
+<sub>点击收款码可查看原图；手机浏览可保存图片，在对应 App 的扫一扫中从相册选择。</sub>
 
 打赏完全自愿，金额随意。感谢你的支持，Star、分享和反馈也同样重要。
