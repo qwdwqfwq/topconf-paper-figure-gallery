@@ -117,7 +117,7 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
      {base:'https://api.example.test/v1',model:'image-model',p:'sf',ratio:'1:1',resolution:'1K'}]){
      window.fetch=async(url,options)=>{
       if(options.body instanceof FormData){seen.push({kind:'multipart',url,images:await Promise.all(options.body.getAll('image[]').map(file=>new Promise(resolve=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.readAsDataURL(file);}))),size:options.body.get('size')});}
-      else{const body=JSON.parse(options.body);seen.push({kind:body.contents?'native':'json',url,body});}
+      else{const body=JSON.parse(options.body);seen.push({kind:body.contents?'native':'json',url,body});if(body.generationConfig?.responseModalities?.length===1&&body.generationConfig.responseModalities[0]==='TEXT')return new Response(JSON.stringify({candidates:[{content:{parts:[{text:'Change the marked area; preserve everything else.'}]}}]}));}
       return new Response(JSON.stringify({data:[{b64_json:source.split(',')[1]}],candidates:[{content:{parts:[{inlineData:{mimeType:'image/png',data:source.split(',')[1]}}]}}]}));
      };
      let rejected=false;
@@ -128,7 +128,9 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
    }finally{window.fetch=originalFetch;}
    return seen;
   },{source:v1,shot:screenshot});
-  assert.deepEqual(formats[0].body.contents[0].parts.slice(1).map(x=>'data:image/png;base64,'+x.inlineData.data),[v1,screenshot]);
+  assert.deepEqual(formats[0].body.contents[0].parts.filter(x=>x.inlineData).map(x=>'data:image/png;base64,'+x.inlineData.data),[v1,screenshot]);
+  assert.deepEqual(formats[0].body.generationConfig.responseModalities,['TEXT','IMAGE']);
+  assert.ok(formats[0].url.includes('gemini-3.1-flash-image:generateContent'));
   assert.deepEqual(formats[0].body.generationConfig.imageConfig,{aspectRatio:'16:9',imageSize:'2K'});
   assert.deepEqual(formats[1].images,[v1,screenshot]);assert.equal(formats[1].size,'2048x1152');assert.ok(formats[1].url.endsWith('/images/edits'));
   assert.deepEqual(formats[2].body.image,[v1,screenshot]);assert.equal(formats[2].body.image_size,'1024x1024');
@@ -142,7 +144,11 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
   assert.equal(await cards.count(),5);assert.equal(requests.length,beforeReview+1);
   assert.equal(await page.locator('.ff-revision-review pre').textContent(),rejectedPrompt);
   assert.equal(await page.evaluate(()=>!!window.reviewInjection),false);
-  assert.equal(await page.locator('.ff-revision-compare img').count(),3);
+  assert.equal(await page.locator('.ff-revision-review img').count(),3);
+  assert.equal(await page.locator('dialog[open]').count(),0);
+  assert.equal(await page.locator('.ff-revision-review').evaluate(el=>el.tagName),'SECTION');
+  assert.equal(await page.locator('.ff-revision-review details').evaluate(el=>el.open),false);
+  assert.equal(await page.locator('.ff-revision-review').evaluate(el=>!!el.closest('.ff-revisions')),true);
   await page.locator('.ff-revision-review').screenshot({path:path.join(require('node:os').tmpdir(),'figureforge-revision-review.png')});
   await page.setViewportSize({width:390,height:844});
   assert.equal(await page.locator('.ff-revision-review').evaluate(el=>el.scrollWidth<=el.clientWidth+1),true);

@@ -77,7 +77,9 @@ async function samePixels(left,right,loadImage){
 }
 
 export async function generateRevision(parent,prompt,{key,toDataURL,loadImage}){
-  const {base,model,p,ratio,resolution}=parent.route;
+  const {base,model:requestedModel,p,ratio,resolution}=parent.route;
+  // Infistar retired the preview ID; this is its current name, not a model-family fallback.
+  const model=usesInfistarGemini(base,requestedModel)&&requestedModel==='gemini-3.1-flash-image-preview'?'gemini-3.1-flash-image':requestedModel;
   if(!key)throw new Error('请先填写该服务商的 API Key。');
   if(typeof prompt!=='string'||!prompt.trim())throw new Error('请填写本次修改要求。');
   const source=await toDataURL(parent.image);
@@ -119,7 +121,7 @@ export async function generateRevision(parent,prompt,{key,toDataURL,loadImage}){
     if(!verifyImageRatio(width,height,ratio)||!verifyImageResolution(width,height,resolution,dimensions.field==='size'?dimensions.value:null))
       throw new Error('修改图的比例或分辨率与所选版本不符，未替换任何已有结果。');
     return {image:output,width,height,revisionAudit:{clientRequestId,startedAt,completedAt:Date.now(),
-      provider:p,model,endpoint:transport.endpoint,format:transport.format,referenceCount:references.length,
+      provider:p,model,requestedModel,apiRequestCount:1,endpoint:transport.endpoint,format:transport.format,referenceCount:references.length,
       referenceTransport:p==='nonelinear'?'https-upload':'inline',uploadedReferenceCount:p==='nonelinear'?apiReferences.length:0,
       inputHashes,promptHash:await fingerprint(prompt),instructionHash:await fingerprint(instruction),
       requestId:String(response.requestId||'').replaceAll(key,'[redacted]').slice(0,160),
@@ -131,13 +133,14 @@ export async function generateRevision(parent,prompt,{key,toDataURL,loadImage}){
 }
 
 // Semantic completion is reviewed by the user; changed pixels alone cannot prove it.
-function reviewRevision(parent,result,prompt,references){
+function reviewRevision(parent,result,prompt,references,host){
   return new Promise(resolve=>{
-    const dialog=document.createElement('dialog');dialog.className='ff-revision-review';
+    const dialog=document.createElement('section');dialog.className='ff-revision-review';dialog.setAttribute('aria-label','本次修改结果');
     const title=document.createElement('h3');title.textContent='核对本次修改结果';
     const hint=document.createElement('p');hint.textContent='请按本次要求逐项检查指定内容和排版。像素有变化不代表所有要求都已完成；确认后才保存新版本。';
     const request=document.createElement('pre');request.textContent=prompt;
     const grid=document.createElement('div');grid.className='ff-revision-compare';
+    const details=document.createElement('details'),summary=document.createElement('summary');summary.textContent='展开原图、截图和请求信息';details.append(summary,request);
     for(const [label,src] of [['待修改图 · V'+parent.number,parent.image],['API 返回的修改图',result.image],...references.map((item,i)=>['参考截图 '+(i+1),item.data])]){
       const figure=document.createElement('figure'),caption=document.createElement('figcaption'),img=document.createElement('img');
       caption.textContent=label;img.src=src;img.alt=label;figure.append(caption,img);grid.append(figure);
@@ -148,10 +151,10 @@ function reviewRevision(parent,result,prompt,references){
     const reject=document.createElement('button'),accept=document.createElement('button');
     reject.type=accept.type='button';reject.dataset.revisionReject='true';accept.dataset.revisionAccept='true';
     reject.textContent='未符合要求，保留输入';accept.textContent='确认符合要求，保存新版本';
-    reject.onclick=()=>dialog.close('reject');accept.onclick=()=>dialog.close('accept');
-    actions.append(reject,accept);dialog.append(title,hint,request,audit,grid,actions);
-    dialog.onclose=()=>{const accepted=dialog.returnValue==='accept';dialog.remove();resolve(accepted);};
-    document.body.append(dialog);dialog.showModal();reject.focus();
+    const finish=accepted=>{dialog.remove();resolve(accepted);};
+    reject.onclick=()=>finish(false);accept.onclick=()=>finish(true);
+    const output=grid.children[1];grid.removeChild(output);details.append(audit,grid);
+    actions.append(reject,accept);dialog.append(title,hint,output,actions,details);host.append(dialog);
   });
 }
 
@@ -182,7 +185,7 @@ export function createRevisionGallery(adapter){
     style.textContent=`.ff-revisions{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}.ff-version{border:1px solid #dedbf5;border-radius:14px;background:white;padding:14px;margin-bottom:18px}.ff-version.selected{border-color:#7860ec;box-shadow:0 0 0 2px #ede9ff}.ff-version header{display:flex;gap:12px;align-items:center;margin-bottom:12px}.ff-version small{color:#73788c}.ff-version img{width:100%;height:auto;border-radius:8px}.ff-version footer{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}.ff-version button,.ff-revision-editor button{padding:9px 14px;border-radius:9px;border:1px solid #ddd6ff;background:#f3efff;color:#6944db;cursor:pointer;font:inherit}.ff-version button:disabled,.ff-revision-editor button:disabled{opacity:.5;cursor:default}.ff-version [data-build]{margin-left:auto}.ff-revision-editor{position:sticky;top:18px;padding:18px;border:1px solid #e1dcff;border-radius:14px;background:#faf9ff}.ff-revision-editor h3{margin:0 0 14px;color:#6642d9}.ff-revision-editor textarea{box-sizing:border-box;width:100%;min-height:165px;resize:vertical;margin:14px 0;padding:12px;border:1px solid #dcd5ef;border-radius:10px;font:inherit}.ff-revision-editor button{width:100%;background:#7552e8;color:white}.ff-revision-error{color:#b42338;font-size:13px;white-space:pre-wrap}.ff-revision-storage{grid-column:1/-1;color:#9b6216;font-size:13px}@media(max-width:850px){.ff-revisions{grid-template-columns:1fr}.ff-revision-editor{position:static;grid-row:1}}`;
     style.textContent+=`.ff-revision-editor.dragging{outline:2px dashed #7552e8;outline-offset:3px}.ff-revision-editor [data-upload]{width:auto;background:#f3efff;color:#6944db;margin-bottom:12px}.ff-revision-attachments{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.ff-revision-attachment{position:relative;width:72px}.ff-revision-editor [data-preview]{padding:0;width:72px;height:64px;background:white;overflow:hidden}.ff-revision-attachment img{width:100%;height:100%;object-fit:contain}.ff-revision-editor [data-remove]{position:absolute;right:-5px;top:-7px;width:24px;height:24px;padding:0;border-radius:50%;background:white;color:#6944db}.ff-revision-preview{border:1px solid #dedbf5;border-radius:14px;max-width:90vw;max-height:90vh;padding:16px}.ff-revision-preview::backdrop{background:#15112699}.ff-revision-preview img{display:block;max-width:80vw;max-height:75vh;object-fit:contain}.ff-revision-preview button{display:block;margin:0 0 12px auto;padding:6px 14px;cursor:pointer}`;
     style.textContent+=`.ff-version [data-delete]{margin-left:auto;padding:6px 10px;font-size:13px}.ff-revision-history{grid-column:1/-1;color:#73788c;font-size:13px}`;
-    style.textContent+=`.ff-revision-review{box-sizing:border-box;width:1200px;max-width:96vw;max-height:94vh;overflow:auto;border:1px solid #dedbf5;border-radius:14px;padding:20px;background:white;color:#29243d}.ff-revision-review::backdrop{background:#151126aa}.ff-revision-review pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;background:#f3efff;padding:12px}.ff-revision-compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.ff-revision-compare figure{min-width:0;margin:0}.ff-revision-compare img{display:block;width:100%;height:auto}.ff-revision-review-actions{display:flex;gap:12px;flex-wrap:wrap;position:sticky;bottom:0;background:white;padding:12px 0}.ff-revision-review button{font:inherit;cursor:pointer;padding:10px;border:1px solid #dcd5ef;border-radius:8px}.ff-revision-review [data-revision-accept]{background:#7552e8;color:white}@media(max-width:650px){.ff-revision-compare{grid-template-columns:1fr}}`;
+    style.textContent+=`.ff-revision-review{box-sizing:border-box;width:100%;min-width:0;margin:18px 0;border:1px solid #dedbf5;border-radius:14px;padding:16px;background:white;color:#29243d;overflow-wrap:anywhere}.ff-revision-review pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;background:#f3efff;padding:12px}.ff-revision-review figure{min-width:0;margin:0}.ff-revision-review img{display:block;width:100%;height:auto}.ff-revision-review details{margin-top:12px}.ff-revision-review summary{cursor:pointer;color:#6944db}.ff-revision-compare{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:12px}.ff-revision-review-actions{display:flex;gap:12px;flex-wrap:wrap;padding:12px 0}.ff-revision-review button{font:inherit;cursor:pointer;padding:10px;border:1px solid #dcd5ef;border-radius:8px}.ff-revision-review [data-revision-accept]{background:#7552e8;color:white}@media(max-width:650px){.ff-revision-compare{grid-template-columns:1fr}}`;
     document.head.append(style);
     root=document.createElement('div');root.className='ff-revisions';
     list=document.createElement('div');panel=document.createElement('aside');panel.className='ff-revision-editor';
@@ -302,7 +305,8 @@ export function createRevisionGallery(adapter){
       // Request-only attachments; never replace a version bitmap or reconstruction state.
       const references=(parent.attachmentsDraft||[]).map(item=>({...item}));
       const result=await adapter.generate({...parent,route:{...parent.route},attachments:references},prompt);
-      if(!await reviewRevision(parent,result,prompt,references)){
+      error.textContent='';
+      if(!await reviewRevision(parent,result,prompt,references,list)){
         edit(parent);error.textContent='本次结果未保存。修改要求和截图已保留；再次生成会发起新的 API 请求。';return;
       }
       if(result.revisionAudit)result.revisionAudit={...result.revisionAudit,review:'user-confirmed',reviewedAt:Date.now()};
