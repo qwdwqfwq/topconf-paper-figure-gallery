@@ -87,9 +87,9 @@ A searchable, filterable gallery of Figure 1 / teaser figures. Static HTML/CSS/J
       </details>
     </td>
     <td width="50%" valign="top">
-      <a href="https://www.aiyoyoo.com/"><strong>CrazyToken</strong></a><br>
-      <a href="https://www.aiyoyoo.com/"><img src="docs/crazytoken-banner.png" alt="CrazyToken 大模型 API 平台，点击访问官网" width="430"></a><br>
-      <sub>多模型 API · 科研创作｜<a href="https://www.aiyoyoo.com/"><strong>官网注册领 $20 ↗</strong></a></sub>
+      <a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU"><strong>CrazyToken</strong></a><br>
+      <a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU"><img src="docs/crazytoken-banner.png" alt="CrazyToken 大模型 API 平台，点击专属注册链接" width="430"></a><br>
+      <sub>多模型 API · 科研创作｜<a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU"><strong>专属注册领 $20 ↗</strong></a></sub>
       <details>
         <summary><sub>详细介绍与活动说明</sub></summary>
         <p>感谢 CrazyToken 对本项目的赞助支持！</p>
@@ -100,7 +100,7 @@ A searchable, filterable gallery of Figure 1 / teaser figures. Static HTML/CSS/J
           <li><strong>高效出图</strong>：稳定高速，结合顶会主图参考与 FigureForge，加速版式分析、主图生成与迭代。</li>
           <li><strong>科研福利</strong>：注册即送 $20 体验额度，充值额外加赠，提供 1 对 1 远程配置服务。</li>
         </ul>
-        <a href="https://www.aiyoyoo.com/">访问官网 ↗</a>
+        <a href="https://www.aiyoyoo.com/register?aff=SAD34WPXTQWU">专属注册 · 领取福利 ↗</a>
       </details>
     </td>
   </tr>
