@@ -45,12 +45,12 @@
 ![Stars](https://img.shields.io/github/stars/qwdwqfwq/topconf-paper-figure-gallery?style=social)
 
 <p align="center">
-  <a href="https://atomgit.com/qq_56538430/topconf-paper-figure-gallery"><img src="docs/atomgit-gstar.svg" alt="AtomGit G-Star selected by" height="80" align="middle"></a>
+  <a href="https://atomgit.com/LiXiao-buaa/topconf-paper-figure-gallery"><img src="https://atomgit.com/LiXiao-buaa/topconf-paper-figure-gallery/star/new_badge.svg" alt="AtomGit G-Star selected by" height="80" align="middle"></a>
   &nbsp;&nbsp;
   <a href="https://github.com/qwdwqfwq/topconf-paper-figure-gallery"><img src="docs/star-hint.gif" alt="点右上角给个 Star · Star us on GitHub" height="80" align="middle"></a>
 </p>
 
-**国内 AtomGit 托管：[访问本项目的 AtomGit 仓库](https://atomgit.com/qq_56538430/topconf-paper-figure-gallery)**
+**国内 AtomGit 托管：[访问本项目的 AtomGit 仓库](https://atomgit.com/LiXiao-buaa/topconf-paper-figure-gallery)**
 
 See how well-designed papers lay out Figure 1 before you draw your own.
 A searchable, filterable gallery of Figure 1 / teaser figures. Static HTML/CSS/JS, no build, works offline.
