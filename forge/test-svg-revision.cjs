@@ -1,21 +1,26 @@
 const assert=require('node:assert/strict');
 const path=require('node:path');
+const fs=require('node:fs');
+const os=require('node:os');
 const {pathToFileURL}=require('node:url');
 const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright-core');
 (async()=>{
  const {createGalleryServer}=await import(pathToFileURL(path.resolve(__dirname,'../scripts/serve-nonelinear.mjs')).href);
  const server=createGalleryServer();await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const origin=`http://127.0.0.1:${server.address().port}`;let browser,output=1;const requests=[],errors=[];
+ const profile=fs.mkdtempSync(path.join(os.tmpdir(),'ff-svg-history-'));
+ const launch=()=>chromium.launchPersistentContext(profile,{headless:true,serviceWorkers:'block',executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'});
  const svg=n=>`<svg xmlns="http://www.w3.org/2000/svg" width="800" height="400" viewBox="0 0 800 400"><rect width="800" height="400" fill="white"/><text x="20" y="60">Version ${n}</text></svg>`;
  try{
-  browser=await chromium.launch({headless:true,executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'});
-  const page=await browser.newPage({serviceWorkers:'block'});page.on('pageerror',e=>errors.push(e.message));
-  await page.route('**/*',async route=>{
+  browser=await launch();
+  const page=await browser.newPage();page.on('pageerror',e=>errors.push(e.stack));
+  const handleRoute=async route=>{
    const req=route.request(),url=new URL(req.url());if(url.origin!==origin)return route.abort();
+   if(url.pathname==='/forge/data/manifest.json')await new Promise(resolve=>setTimeout(resolve,1200));
    if(url.pathname==='/forge/'){
     const response=await route.fetch();let html=await response.text();
     html=html.replace('window.__ffReconstruct = () => runReconstruction();',`window.__ffReconstruct = () => runReconstruction();
-     window.__svgTest={recon:0,configure:(m='svg',model='gpt-4o',key='offline-only')=>{mode=m;$('#provider').value='nonelinear';$('#key').value=key;$('#model').add(new Option(model,model));$('#model').value=model;revisionGallery.refresh();},state:()=>ensureExportState(),records:()=>new Promise(resolve=>{const r=indexedDB.open('figureforge-revisions',1);r.onsuccess=()=>{const q=r.result.transaction('versions').objectStore('versions').getAll();q.onsuccess=()=>resolve(q.result);};})};
+     window.__svgTest={recon:0,configure:(m='svg',model='gpt-4o',key='offline-only')=>{mode=m;$('#provider').value='nonelinear';$('#key').value=key;$('#model').add(new Option(model,model));$('#model').value=model;revisionGallery.refresh();},prepare:()=>{passMode='single';$('#paper').value='Test scientific diagram';},state:()=>ensureExportState(),records:()=>new Promise(resolve=>{const r=indexedDB.open('figureforge-revisions',1);r.onsuccess=()=>{const q=r.result.transaction('versions').objectStore('versions').getAll();q.onsuccess=()=>resolve(q.result);};})};
      runReconstruction=()=>{window.__svgTest.recon++;throw new Error('SVG revision must not reconstruct bitmap');};`);
     return route.fulfill({response,body:html});
    }
@@ -24,9 +29,14 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
     requests.push(req.postDataJSON());return route.fulfill({json:{choices:[{message:{content:typeof output==='string'?output:svg(output).replace('width="800" height="400" viewBox="0 0 800 400"','width="99" height="55" viewBox="0 0 99 55"')}}]}});
    }
    return route.continue();
-  });
+  };
+  await browser.route('**/*',handleRoute);
   await page.goto(origin+'/forge/');await page.waitForFunction(()=>window.__svgTest&&document.querySelector('#provider option[value="nonelinear"]'));
-  await page.evaluate(()=>window.__svgTest.configure());await page.evaluate(s=>window.__ffRenderSVG(s),svg(1));
+  await page.evaluate(()=>{window.__svgTest.configure();window.__svgTest.prepare();});
+  const initialPNG=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aX1sAAAAASUVORK5CYII=','base64');
+  await page.locator('#refsUpload').setInputFiles({name:'reference.png',mimeType:'image/png',buffer:initialPNG});
+  output=svg(1);await page.locator('#genBtn').click();
+  await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===1,{},{timeout:30000});
   const cards=page.locator('.ff-version'),editor=page.locator('.ff-revision-editor'),submit=editor.locator('[data-submit]');
   await cards.first().waitFor();assert.match(await editor.locator('[data-model]').innerText(),/gpt-4o/);
   async function modify(index,n){output=n;await cards.nth(index).locator('[data-modify]').click();await editor.locator('textarea').fill('调整标题 '+n);await submit.click();await page.locator('[data-revision-accept]').click();}
@@ -55,8 +65,31 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
    const v=svgVersion(good);if(v.width!==192||v.height!==96)throw Error('units');
    for(const bad of ['<script/>','<image href="https://example.test/x"/>','<style>rect{fill:url(https://example.test/x)}</style>']){let rejected=false;try{svgVersion(good.replace('</svg>',bad+'</svg>'));}catch{rejected=true;}if(!rejected)throw Error('unsafe SVG');}
    let sent;await generateSVGRevision(v,'change',{route:{proto:'anthropic',model:'claude-test'},key:'test',post:async(path,body)=>{sent={path,body};return{content:[{type:'text',text:good.replace('M0 0L10 10','M0 0L20 20')}]};}});return sent;
-  });assert.equal(moduleChecks.path,'/v1/messages');assert.equal(moduleChecks.body.messages[0].content[1].type,'image');assert.deepEqual(errors,[]);
-  console.log('SVG browser integration passed: vision model routing/display/preflight; full original + locator payload; repeated and branched edits; preserved canvas; review; invalid/unchanged response rejection; IndexedDB reload/deletion; editable SVG without bitmap reconstruction; Anthropic protocol and SVG safety. Zero live API calls.');
- }finally{await browser?.close();await new Promise(r=>server.close(r));}
+  });assert.equal(moduleChecks.path,'/v1/messages');assert.equal(moduleChecks.body.messages[0].content[1].type,'image');
+  await browser.close();browser=await launch();await browser.route('**/*',handleRoute);
+  const reopened=await browser.newPage();reopened.on('pageerror',e=>errors.push(e.stack));
+  await reopened.goto(origin+'/forge/');
+  await reopened.waitForFunction(()=>document.querySelectorAll('.ff-version').length===3);
+  // Restore must complete even while provider configuration is deliberately delayed.
+  await reopened.waitForFunction(()=>window.__svgTest&&document.querySelector('#provider option[value="nonelinear"]'));
+  await reopened.waitForFunction(()=>!document.querySelector('[data-model]').textContent.includes('加载中'));
+  const restored=reopened.locator('.ff-version');
+  assert.deepEqual((await reopened.evaluate(()=>window.__svgTest.records())).map(r=>r.number).sort(),[1,3,4]);
+  for(const [index,number] of [1,3,4].entries()){
+   await restored.nth(index).locator('[data-build]').click();
+   assert.match(await reopened.evaluate(()=>window.__svgTest.state().baseSvg),new RegExp('Version '+number));
+   const waiting=reopened.waitForEvent('download');await restored.nth(index).getByRole('button',{name:'下载图片',exact:true}).click();
+   const download=await waiting;assert.match(fs.readFileSync(await download.path(),'utf8'),new RegExp('Version '+number));
+  }
+  await reopened.evaluate(()=>window.__svgTest.configure());output=5;
+  await restored.first().locator('[data-modify]').click();await reopened.locator('.ff-revision-editor textarea').fill('继续修改已恢复的 V1');
+  await reopened.locator('[data-submit]').click();await reopened.locator('[data-revision-accept]').click();
+  await reopened.waitForFunction(()=>document.querySelectorAll('.ff-version').length===4);
+  assert.match(requests.at(-1).messages[0].content[0].text,/Version 1/);
+  await reopened.waitForFunction(async()=> (await window.__svgTest.records()).length===4);
+  await reopened.reload();await reopened.waitForFunction(()=>document.querySelectorAll('.ff-version').length===4);
+  assert.equal(await reopened.evaluate(()=>window.__svgTest.recon),0);assert.deepEqual(errors,[]);
+  console.log('SVG browser integration passed: actual generation; model display/preflight; full SVG + locator payload; repeated/branched edits; delayed manifest; browser close/reopen persistence; isolated deletion; per-version download/export; modification after restore; no bitmap reconstruction; SVG safety. Zero live API calls.');
+ }finally{await browser?.close();await new Promise(r=>server.close(r));fs.rmSync(profile,{recursive:true,force:true});}
 })().catch(e=>{console.error(e);process.exitCode=1;});
 
