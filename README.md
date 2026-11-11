@@ -71,13 +71,11 @@ A searchable, filterable gallery of Figure 1 / teaser figures. Static HTML/CSS/J
 <table>
   <tr>
     <td width="50%" valign="top">
-      <a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link"><strong>Infistar.cc 无限星河</strong></a><br><br>
+      <a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link"><strong>Infistar.cc 无限星河</strong></a><br>
       <a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link"><img src="docs/infistar-banner.png" alt="Infistar.cc 无限星河 大模型 API 平台，点击专属链接 · 领取福利" width="430"></a><br>
-      <sub>多模型聚合 · 科研绘图与论文辅助</sub><br>
-      <sub><strong>专属注册可领 5 元体验额度</strong></sub><br>
-      <a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link">专属链接 · 领取福利 ↗</a>
+      <sub>多模型聚合 · 科研辅助｜<a href="https://www.infistar.cc/register?aff=RZ4MDTRU&amp;ref_source=link"><strong>专属注册领 5 元 ↗</strong></a></sub>
       <details>
-        <summary>详细介绍与活动说明</summary>
+        <summary><sub>详细介绍与活动说明</sub></summary>
         <p>感谢 Infistar.cc 无限星河 对本项目的赞助支持！</p>
         <ul>
           <li><strong>主流模型一站接入</strong>：聚合 Claude、OpenAI、DeepSeek 等模型，支持图表代码生成（TikZ / Python）、论文润色与图表解析。</li>
@@ -89,13 +87,11 @@ A searchable, filterable gallery of Figure 1 / teaser figures. Static HTML/CSS/J
       </details>
     </td>
     <td width="50%" valign="top">
-      <a href="https://www.aiyoyoo.com/"><strong>CrazyToken</strong></a><br><br>
+      <a href="https://www.aiyoyoo.com/"><strong>CrazyToken</strong></a><br>
       <a href="https://www.aiyoyoo.com/"><img src="docs/crazytoken-banner.png" alt="CrazyToken 大模型 API 平台，点击访问官网" width="430"></a><br>
-      <sub>多模型 API · 论文理解与科研创作</sub><br>
-      <sub><strong>新用户注册可领 $20 体验额度</strong></sub><br>
-      <a href="https://www.aiyoyoo.com/">访问官网 ↗</a>
+      <sub>多模型 API · 科研创作｜<a href="https://www.aiyoyoo.com/"><strong>官网注册领 $20 ↗</strong></a></sub>
       <details>
-        <summary>详细介绍与活动说明</summary>
+        <summary><sub>详细介绍与活动说明</sub></summary>
         <p>感谢 CrazyToken 对本项目的赞助支持！</p>
         <ul>
           <li><strong>超低成本</strong>：最低 0.05× 倍率，低至官方定价的 5%，Token 级账单透明可查。</li>
