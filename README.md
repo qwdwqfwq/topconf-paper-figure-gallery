@@ -1,11 +1,13 @@
 <div align="center">
 
-<img src="docs/banner.jpg" alt="Top-Conf Figure Gallery banner" width="920">
+<p align="center">🌐 <strong>简体中文</strong> · <a href="README.en.md">English</a> · <a href="README.fr.md">Français</a> · <a href="README.ru.md">Русский</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja.md">日本語</a></p>
 
-# 🎨 Top-Conf Figure Gallery
+<img src="docs/banner.jpg" alt="顶会论文主图灵感画廊横幅" width="920">
+
+# 🎨 顶会论文主图灵感画廊
 ### 顶会论文主图灵感画廊 · ICLR · ICML · NeurIPS · CVPR · ACL · AAAI · 2023–2026
 
-### 💖 寻求赞助与资源支持 · Sponsors welcome
+### 💖 寻求赞助与资源支持
 
 **让科研绘图灵感持续开放，让开源工具走得更远。**
 
@@ -13,22 +15,20 @@
 
 **🤝 洽谈赞助 / 提供资源支持：[939123836@qq.com](mailto:939123836@qq.com)**
 
-<sub>Help keep this project open and growing. Financial sponsorship, model API credits, GPU compute, and cloud resources are welcome. Please email us to discuss support.</sub>
+<img src="docs/demo.gif" alt="搜索、筛选和大图预览演示" width="920">
 
-<img src="docs/demo.gif" alt="Search, filter and lightbox demo" width="920">
-
-### ✨ FigureForge 生图成品 · Generated examples
+### ✨ FigureForge 生图成品
 
 以下是画廊 FigureForge 的实际生图示例。<img src="docs/figureforge-examples/editable-details.svg" alt="导出可编辑所有细节。" width="208" height="32" align="middle">
 
 <table>
   <tr>
-    <td width="50%" align="center"><a href="docs/figureforge-examples/robot-policy.png"><img src="docs/figureforge-examples/robot-policy.png" alt="FigureForge 生成的机器人策略与执行论文主图" width="430"></a><br><strong>机器人策略与执行</strong><br><sub>Robot policy &amp; execution</sub></td>
-    <td width="50%" align="center"><a href="docs/figureforge-examples/controllable-video-generation.jpg"><img src="docs/figureforge-examples/controllable-video-generation.jpg" alt="FigureForge 生成的时空扩散 Transformer 可控视频生成论文主图" width="430"></a><br><strong>时空扩散 Transformer · 可控视频生成</strong><br><sub>Controllable video generation via spatio-temporal diffusion transformer</sub></td>
+    <td width="50%" align="center"><a href="docs/figureforge-examples/robot-policy.png"><img src="docs/figureforge-examples/robot-policy.png" alt="FigureForge 生成的机器人策略与执行论文主图" width="430"></a><br><strong>机器人策略与执行</strong></td>
+    <td width="50%" align="center"><a href="docs/figureforge-examples/controllable-video-generation.jpg"><img src="docs/figureforge-examples/controllable-video-generation.jpg" alt="FigureForge 生成的时空扩散 Transformer 可控视频生成论文主图" width="430"></a><br><strong>时空扩散 Transformer · 可控视频生成</strong></td>
   </tr>
   <tr>
-    <td width="50%" align="center"><a href="docs/figureforge-examples/reed-straw-slurry.jpg"><img src="docs/figureforge-examples/reed-straw-slurry.jpg" alt="FigureForge 生成的湿磨芦苇秸秆浆料稳定性与流变控制论文主图" width="430"></a><br><strong>湿磨芦苇秸秆浆料 · 稳定性与流变控制</strong><br><sub>Stability and rheology control of wet-milled reed straw slurries</sub></td>
-    <td width="50%" align="center"><a href="docs/figureforge-examples/sycophancy-analysis.png"><img src="docs/figureforge-examples/sycophancy-analysis.png" alt="FigureForge 生成的 LLM 迎合行为因果分析论文主图" width="430"></a><br><strong>LLM 迎合行为因果分析</strong><br><sub>Internal causes of sycophancy in LLMs</sub></td>
+    <td width="50%" align="center"><a href="docs/figureforge-examples/reed-straw-slurry.jpg"><img src="docs/figureforge-examples/reed-straw-slurry.jpg" alt="FigureForge 生成的湿磨芦苇秸秆浆料稳定性与流变控制论文主图" width="430"></a><br><strong>湿磨芦苇秸秆浆料 · 稳定性与流变控制</strong></td>
+    <td width="50%" align="center"><a href="docs/figureforge-examples/sycophancy-analysis.png"><img src="docs/figureforge-examples/sycophancy-analysis.png" alt="FigureForge 生成的 LLM 迎合行为因果分析论文主图" width="430"></a><br><strong>LLM 迎合行为因果分析</strong></td>
   </tr>
 </table>
 
@@ -44,22 +44,21 @@
 ![Last commit](https://img.shields.io/github/last-commit/qwdwqfwq/topconf-paper-figure-gallery)
 ![Stars](https://img.shields.io/github/stars/qwdwqfwq/topconf-paper-figure-gallery?style=social)
 
+<p align="center">🌐 <strong>简体中文</strong> · <a href="README.en.md">English</a> · <a href="README.fr.md">Français</a> · <a href="README.ru.md">Русский</a> · <a href="README.ko.md">한국어</a> · <a href="README.ja.md">日本語</a></p>
+
 <p align="center">
   <a href="https://atomgit.com/LiXiao-buaa/topconf-paper-figure-gallery"><img src="https://atomgit.com/LiXiao-buaa/topconf-paper-figure-gallery/star/new_badge.svg" alt="AtomGit G-Star selected by" height="80" align="middle"></a>
   &nbsp;&nbsp;
-  <a href="https://github.com/qwdwqfwq/topconf-paper-figure-gallery"><img src="docs/star-hint.gif" alt="点右上角给个 Star · Star us on GitHub" height="80" align="middle"></a>
+  <a href="https://github.com/qwdwqfwq/topconf-paper-figure-gallery"><img src="docs/star-hint.gif" alt="点右上角给个 Star" height="80" align="middle"></a>
 </p>
 
 **国内 AtomGit 托管：[访问本项目的 AtomGit 仓库](https://atomgit.com/LiXiao-buaa/topconf-paper-figure-gallery)**
 
-See how well-designed papers lay out Figure 1 before you draw your own.
-A searchable, filterable gallery of Figure 1 / teaser figures. Static HTML/CSS/JS, no build, works offline.
-
 画论文主图前，先看顶会论文怎么排版。
 一个可搜索、可筛选的 Figure 1 / Teaser 画廊。纯静态、零构建、可离线打开。
 
-[🌐 Live gallery 在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/) · [🛠️ FigureForge 画图](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge) · [🎬 Demo video 演示视频](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html) · [📚 Methodology 数据与方法](docs/METHODOLOGY.md) ·
-[⚖️ Image policy 版权 / 下架](IMAGES_POLICY.md) · [🤝 Contributing 贡献指南](CONTRIBUTING.md)
+[🌐 在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/) · [🛠️ FigureForge 画图](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge) · [🎬 演示视频](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html) · [📚 数据与方法](docs/METHODOLOGY.md) ·
+[⚖️ 版权 / 下架](IMAGES_POLICY.md) · [🤝 贡献指南](CONTRIBUTING.md)
 
 </div>
 
@@ -110,55 +109,6 @@ A searchable, filterable gallery of Figure 1 / teaser figures. Static HTML/CSS/J
 
 ---
 
-## English
-
-**Top-Conf Figure Gallery** collects Figure 1 / teaser figures (concept diagrams, system frameworks, pipelines, architectures, benchmark overviews) from six ML/AI conferences, 2023–2026. It is a design reference, not a paper ranking. Each card links to the source paper and records venue, year, authors and a visual-pattern tag.
-
-- Filter by venue, year, acceptance tier and visual pattern; masonry layout with a lightbox.
-- Oral, Spotlight and Best/Outstanding-paper figures carry gold / silver / red badges (ICLR, ICML, NeurIPS 2023–2026).
-- Full-text search over titles and authors, e.g. `DPO`, `robot`, `gaussian`, `agent`.
-- Every figure is hand-reviewed. Over 25 heuristic rules first remove default matplotlib charts, plain tables, GUI screenshots and unlabeled photo sets; a person then checks the rest page by page. See [METHODOLOGY.md](docs/METHODOLOGY.md).
-- Pure static site, no backend or build; clone and double-click.
-- Open, reproducible pipeline: proceedings index → PDF download → Figure 1 crop → quality scoring → dHash de-duplication → manual review.
-
-### 🛠️ FigureForge Beta
-
-FigureForge drafts your Figure 1 from the gallery: describe your paper, and 3,452 top-conference figures provide the layout reference. No sign-up, no server; it runs in your browser. **[Try FigureForge →](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge/)**
-
-<p align="center">
-  <img src="forge/demo-forge.gif?v=20261002" alt="FigureForge walkthrough: describe paper, retrieve references, generate bitmap draft" width="560">
-</p>
-
-**[▶ Full demo video, 3:23 with audio](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)**
-
-[![▶ FigureForge demo video](assets/figureforge-demo-poster-en.png)](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)
-
-1. **Describe the paper.** Paste the title and abstract, upload the PDF (the Step 1 model reads it and summarizes the sections matching overview / architecture / pipeline / results), or type one sentence giving the "input → method → output" story.
-2. **Pick a pattern.** `framework` for system or multi-agent overviews, `pipeline` for end-to-end flows, `architecture` for internal model structure, `conceptual` for visual metaphors; also `teaser` and `taxonomy`.
-3. **Tick references.** A CLIP + BM25 hybrid search ranks all 3,452 figures; the score is shown on each card. Tick at least 4 same-pattern cards for two-stage mode, or 2–3 for direct mode.
-
-   ![Pick references](forge/tutorial/02_pick_refs.png)
-
-4. **Two stages: summarize, then generate.** A vision model reads the picks, distils their common layout, elements, palette and hierarchy, selects 2–3 representative figures, and only then generates.
-
-   ![Two-stage analysis](forge/tutorial/03_analyze.png?v=20261002)
-
-5. **Choose a mode, add your key, download.** SVG mode gives accurate, editable text (Figma / draw.io / Illustrator); bitmap mode gives a publication-style layout to check in PPT / Figma. The key is stored only in your browser.
-
-> A bare prompt in a general chatbot returns a generic flowchart. FigureForge grounds the draft in top-conference figures, so it keeps the panel grid, comparative narrative and restrained palette of a paper figure.
-
-> ![Comparison](forge/tutorial/compare.png?v=20261002)
-
-### Add a paper or figure
-
-Open a **[Suggest a figure](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/issues/new?template=add-figure-request.md)** issue with the paper link — no coding needed. For PRs, [CONTRIBUTING.md](CONTRIBUTING.md) gives the metadata format and quality bar. New venues such as CHI / RSS / CoRL are welcome.
-
-Images belong to their authors and publishers; see [IMAGES_POLICY.md](IMAGES_POLICY.md) for the educational-use and 72-hour takedown policy.
-
----
-
-## 中文
-
 **顶会论文主图灵感画廊**收录六大 ML/AI 顶会 2023–2026 的 Figure 1 / Teaser：概念图、系统框架、流程图、架构图、任务全景。它是排版设计参考，不是论文排名。每张卡片链接原文，并记录会议、年份、作者和视觉模式标签。
 
 - 按会议、年份、录取等级、视觉模式筛选；瀑布流布局，点击看灯箱大图。
@@ -204,9 +154,9 @@ FigureForge 基于画廊生成你的 Figure 1 初稿：描述论文，3,452 张�
 
 ---
 
-## 📊 收录规模 / Coverage
+## 📊 收录规模
 
-| Venue 会议 | 2023 | 2024 | 2025 | 2026 | Figures 主图合计 | Best / Outstanding | Oral | Spotlight | Tier total 等级合计 |
+| 会议 | 2023 | 2024 | 2025 | 2026 | 主图合计 | Best / Outstanding | Oral | Spotlight | 等级合计 |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | 🟣 **ICLR** | 108 | 135 | 274 | 228 | **745** | 10 | 337 | 155 | **502** |
 | 🟢 **ICML** | 63 | 131 | 216 | 338 | **748** | 13 | 247 | 558 | **818** |
@@ -214,49 +164,48 @@ FigureForge 基于画廊生成你的 Figure 1 初稿：描述论文，3,452 张�
 | 🟠 **CVPR** | 65 | 64 | 96 | 83 | **308** | — | — | — | — |
 | 🔵 **ACL** | 84 | 74 | 168 | 58 | **384** | — | — | — | — |
 | 🟡 **AAAI** | 59 | 66 | 139 | 37 | **301** | — | — | — | — |
-| **Total 总计** | | | | | **3452** | **26** | **616** | **950** | **1592** |
+| **总计** | | | | | **3452** | **26** | **616** | **950** | **1592** |
 
-等级统计 / Tier coverage: ICLR、ICML 2023–2026；NeurIPS 2023–2025。— 表示未统计 / not indexed.
+等级统计： ICLR、ICML 2023–2026；NeurIPS 2023–2025。— 表示未统计。
 
-## 🧭 视觉模式 / Visual patterns
+## 🧭 视觉模式
 
 标签描述图的视觉功能，不是论文领域。
 
-| Tag 标签 | 含义 Meaning | 代表 Examples |
+| 标签 | 含义 | 代表论文 |
 |---|---|---|
-| `conceptual` | 用视觉隐喻讲清核心概念 / visual metaphor for a core idea | DPO, Tree of Thoughts, HippoRAG |
-| `framework` | 系统或智能体模块协作总览 / system or agent overview | HuggingGPT, SWE-agent, MetaGPT |
-| `pipeline` | 端到端阶段式数据流 / staged end-to-end data flow | LRM, VidMan, LiveStar |
-| `architecture` | 模型内部层与张量连接 / internal layers and tensor connections | BLIP-2, Caduceus, Medusa |
-| `taxonomy` | 任务、能力或数据全景 / benchmark overview | EmbodiedBench, SimWorld |
-| `teaser` | 经过版式设计的图文混排主视觉 / designed mixed-layout visual | VIMA, PixArt-α |
+| `conceptual` | 用视觉隐喻讲清核心概念 | DPO, Tree of Thoughts, HippoRAG |
+| `framework` | 系统或智能体模块协作总览 | HuggingGPT, SWE-agent, MetaGPT |
+| `pipeline` | 端到端阶段式数据流 | LRM, VidMan, LiveStar |
+| `architecture` | 模型内部层与张量连接 | BLIP-2, Caduceus, Medusa |
+| `taxonomy` | 任务、能力或数据全景 | EmbodiedBench, SimWorld |
+| `teaser` | 经过版式设计的图文混排主视觉 | VIMA, PixArt-α |
 
-## 🚀 快速开始 / Quick start
+## 🚀 快速开始
 
-在线浏览 / Online: [GitHub Pages](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)。
+在线浏览： [GitHub Pages](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)。
 
-本地运行 / Local server:
+本地运行：
 
 ```bash
 git clone https://github.com/qwdwqfwq/topconf-paper-figure-gallery.git
 cd topconf-paper-figure-gallery
 python -m http.server 8000
-# open http://localhost:8000
+# 打开 http://localhost:8000
 ```
 
 或直接双击 `index.html`（数据内联在 `assets/figures.js`，无需联网）。
-Or double-click `index.html`; data is inlined in `assets/figures.js`.
 
-## 🗃️ 仓库结构 / Structure
+## 🗃️ 仓库结构
 
 ```
-├── index.html               # 画廊主页 gallery shell（搜索 / 筛选 / 灯箱）
+├── index.html               # 画廊主页（搜索 / 筛选 / 灯箱）
 ├── assets/
 │   ├── style.css / app.js   # 样式与交互
 │   └── figures.js           # 图片元数据（由 data/figures.json 生成）
 ├── images/<venue>/final/    # 画廊图片 ≤1500px JPEG
 ├── data/
-│   ├── figures.json         # 画廊唯一权威清单 single source of truth
+│   ├── figures.json         # 画廊唯一权威清单
 │   └── pool/                # 全量候选论文池
 ├── scripts/                 # 数据管线，见 docs/METHODOLOGY.md
 ├── docs/                    # 方法文档、banner、演示
@@ -264,7 +213,7 @@ Or double-click `index.html`; data is inlined in `assets/figures.js`.
 └── .github/workflows/       # GitHub Pages 自动部署
 ```
 
-## 🔧 数据管线与复现 / Reproduce the pipeline
+## 🔧 数据管线与复现
 
 详见 [docs/METHODOLOGY.md](docs/METHODOLOGY.md)：
 
@@ -281,7 +230,7 @@ python scripts/enum_sheets.py iclr    # 40 格/页联系表，人工逐页复核
 python scripts/sheet_qa.py 31         # 随机抽样复核
 ```
 
-### 🌟 贡献者 / Contributors
+### 🌟 贡献者
 
 感谢以下社区贡献者（按贡献采纳时间排序），他们的实现均已合入当前版本：
 
@@ -290,11 +239,11 @@ python scripts/sheet_qa.py 31         # 随机抽样复核
 | [@timelic](https://github.com/timelic) | 画廊灯箱共享元素过渡动画（View Transitions），以及作者名单、查看图片 / 论文链接、等级角标、圆角与分隔符等细节打磨 | [#2](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/pull/2) · [#3](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/pull/3) |
 | [@TansyZenix](https://github.com/TansyZenix) | 灯箱 Tab 焦点限制、生成 SVG 预览的 `sandbox` 隔离、参考图卡片键盘选择与 ARIA 状态、数据校验 CI（`scripts/validate_gallery.py` + workflow） | [#5](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/pull/5) · [#6](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/pull/6) · [#7](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/pull/7) · [#8](https://github.com/qwdwqfwq/topconf-paper-figure-gallery/pull/8) |
 
-## ⚠️ 版权 / Copyright
+## ⚠️ 版权
 
 图片版权归原作者与出版方，本仓库仅作非商业教育、研究用途的署名索引。ICLR / ICML(PMLR) / NeurIPS / CVPR(CVF) / ACL 正式出版论文多为 CC BY 4.0；AAAI 论文为 fair-use 学术参考。如需下架，请提 Issue 或邮件 **939123836@qq.com**，核实后 72 小时内删除。详见 [IMAGES_POLICY.md](IMAGES_POLICY.md)。
 
-## 📌 引用 / Citation
+## 📌 引用
 
 ```bibtex
 @misc{topconf_figure_gallery,
@@ -305,7 +254,7 @@ python scripts/sheet_qa.py 31         # 随机抽样复核
 ```
 
 <details>
-<summary><strong>🖼️ 精选图录 / Curated catalog</strong></summary>
+<summary><strong>🖼️ 精选图录</strong></summary>
 
 每会议-年份评分最高的 2 张；完整 3,452 张见[在线画廊](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/)。
 
@@ -367,13 +316,13 @@ python scripts/sheet_qa.py 31         # 随机抽样复核
 
 </details>
 
-## ⭐ Star History
+## ⭐ 星标历史
 
 <a href="https://star-history.com/#qwdwqfwq/topconf-paper-figure-gallery&Date">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=qwdwqfwq/topconf-paper-figure-gallery&type=Date&theme=dark" />
     <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=qwdwqfwq/topconf-paper-figure-gallery&type=Date" />
-    <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=qwdwqfwq/topconf-paper-figure-gallery&type=Date" width="720" />
+    <img alt="星标历史趋势图" src="https://api.star-history.com/svg?repos=qwdwqfwq/topconf-paper-figure-gallery&type=Date" width="720" />
   </picture>
 </a>
 
