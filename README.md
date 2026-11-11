@@ -108,7 +108,7 @@
       <a href="https://nonelinear.com.cn/"><strong>非线智能 API</strong></a><br>
       <a href="https://nonelinear.com.cn/"><img src="docs/nonelinear-banner.png" alt="非线智能 API — nonelinear.com.cn" width="430"></a><br>
       <sub>多模型一站接入 · 科研绘图</sub><br>
-      <sub><a href="https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge/assets/nonelinear-wechat.png"><strong>扫码添加客服</strong></a> &nbsp;│&nbsp; <a href="https://nonelinear.com.cn/static/models.html"><strong>访问官网 ↗</strong></a><br>报暗号「灵感画廊」领 20 元</sub>
+      <sub><a href="https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge/assets/nonelinear-wechat.png"><strong>扫码添加客服</strong></a> &nbsp;│&nbsp; <a href="https://nonelinear.com.cn/static/models.html"><strong>访问官网 ↗</strong></a><br>给客服发送暗号「灵感画廊」领 20 元</sub>
       <details>
         <summary><sub>详细介绍与活动说明</sub></summary>
         <p>感谢非线智能 API（nonelinear.com.cn）为本项目提供多模态大模型 API 算力支持！</p>
