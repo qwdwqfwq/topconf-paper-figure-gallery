@@ -1,18 +1,19 @@
 import {usesInfistarGemini,geminiImageRequest,geminiImageResult,compatibleImageRequest,requestImageWithRecovery} from './image-api.mjs?v=20261026-nonelinear-resolution';
 import {imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261026-nonelinear-resolution';
 
-// Separate image-edit request: only the chosen generated bitmap is supplied.
+// Separate image-edit request: chosen full bitmap first, optional screenshot references after it.
 // This module never calls or configures the editable reconstruction pipeline.
 export async function generateRevision(parent,prompt,{key,toDataURL,loadImage}){
   const {base,model,p,ratio,resolution}=parent.route;
   if(!key)throw new Error('请先填写该服务商的 API Key。');
   const source=await toDataURL(parent.image);
+  const references=[source,...(parent.attachments||[]).map(item=>item.data)];
   const native=usesInfistarGemini(base,model);
   const dimensions=imageRequestDimensions(p,model,ratio,resolution,native);
-  const instruction='Edit the supplied figure according to the following request. Preserve all content, colors and style not mentioned. Keep the original canvas aspect ratio. Return the complete revised figure.\n\n'+prompt;
-  let body={model,prompt:instruction,image:p==='sf'&&!native?source:[source]};
+  const instruction='Edit the supplied figure according to the following request. Preserve all content, colors and style not mentioned. Keep the original canvas aspect ratio. Return the complete revised figure.'+(references.length>1?' The first image is the complete figure to edit. Additional images are user-provided screenshots for locating areas or illustrating the requested changes. Use them only as guidance; do not replace the full canvas with a screenshot.':'')+'\n\n'+prompt;
+  let body={model,prompt:instruction,image:p==='sf'&&!native&&references.length===1?source:references};
   if(!native){body[dimensions.field]=dimensions.value;if(dimensions.aspectRatio)body.aspect_ratio=dimensions.aspectRatio;}
-  const request=native?geminiImageRequest(base,model,instruction,[source],dimensions):compatibleImageRequest(body,base,p);
+  const request=native?geminiImageRequest(base,model,instruction,references,dimensions):compatibleImageRequest(body,base,p);
   try{
     const response=await requestImageWithRecovery({url:(request.base||base)+request.endpoint,body:request.body,key,usedReferences:true,allowReferenceFallback:false});
     if(!response.ok)throw new Error('修改生图失败（HTTP '+response.status+'）。'+response.text.slice(0,400));
@@ -47,20 +48,55 @@ function historyStore(){
 
 export function createRevisionGallery(adapter){
   const versions=[],store=historyStore();
-  let active=null,editing=null,job=null,generating=false,mounted=false,root,panel,list,textarea,error,submit,storageHint;
+  let active=null,editing=null,job=null,generating=false,reading=0,mounted=false,root,panel,list,textarea,error,submit,storageHint,attachments,fileInput;
   const busy=()=>!!job||adapter.busy();
   function mount(){
     if(mounted){if(!root.isConnected){adapter.output.replaceChildren(root);adapter.output.style.display='block';}return;}mounted=true;
     const style=document.createElement('style');
     style.textContent=`.ff-revisions{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:18px;align-items:start}.ff-version{border:1px solid #dedbf5;border-radius:14px;background:white;padding:14px;margin-bottom:18px}.ff-version.selected{border-color:#7860ec;box-shadow:0 0 0 2px #ede9ff}.ff-version header{display:flex;gap:12px;align-items:center;margin-bottom:12px}.ff-version small{color:#73788c}.ff-version img{width:100%;height:auto;border-radius:8px}.ff-version footer{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:12px}.ff-version button,.ff-revision-editor button{padding:9px 14px;border-radius:9px;border:1px solid #ddd6ff;background:#f3efff;color:#6944db;cursor:pointer;font:inherit}.ff-version button:disabled,.ff-revision-editor button:disabled{opacity:.5;cursor:default}.ff-version [data-build]{margin-left:auto}.ff-revision-editor{position:sticky;top:18px;padding:18px;border:1px solid #e1dcff;border-radius:14px;background:#faf9ff}.ff-revision-editor h3{margin:0 0 14px;color:#6642d9}.ff-revision-editor textarea{box-sizing:border-box;width:100%;min-height:165px;resize:vertical;margin:14px 0;padding:12px;border:1px solid #dcd5ef;border-radius:10px;font:inherit}.ff-revision-editor button{width:100%;background:#7552e8;color:white}.ff-revision-error{color:#b42338;font-size:13px;white-space:pre-wrap}.ff-revision-storage{grid-column:1/-1;color:#9b6216;font-size:13px}@media(max-width:850px){.ff-revisions{grid-template-columns:1fr}.ff-revision-editor{position:static;grid-row:1}}`;
+    style.textContent+=`.ff-revision-editor.dragging{outline:2px dashed #7552e8;outline-offset:3px}.ff-revision-editor [data-upload]{width:auto;background:#f3efff;color:#6944db;margin-bottom:12px}.ff-revision-attachments{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}.ff-revision-attachment{position:relative;width:72px}.ff-revision-editor [data-preview]{padding:0;width:72px;height:64px;background:white;overflow:hidden}.ff-revision-attachment img{width:100%;height:100%;object-fit:contain}.ff-revision-editor [data-remove]{position:absolute;right:-5px;top:-7px;width:24px;height:24px;padding:0;border-radius:50%;background:white;color:#6944db}.ff-revision-preview{border:1px solid #dedbf5;border-radius:14px;max-width:90vw;max-height:90vh;padding:16px}.ff-revision-preview::backdrop{background:#15112699}.ff-revision-preview img{display:block;max-width:80vw;max-height:75vh;object-fit:contain}.ff-revision-preview button{display:block;margin:0 0 12px auto;padding:6px 14px;cursor:pointer}`;
     document.head.append(style);
     root=document.createElement('div');root.className='ff-revisions';
     list=document.createElement('div');panel=document.createElement('aside');panel.className='ff-revision-editor';
-    panel.innerHTML='<h3>继续修改</h3><div data-base></div><textarea aria-label="你希望改哪里？" placeholder="你希望改哪里？"></textarea><button type="button">生成修改版</button><p class="ff-revision-error" role="alert"></p>';
-    textarea=panel.querySelector('textarea');submit=panel.querySelector('button');error=panel.querySelector('[role=alert]');
+    panel.innerHTML='<h3>继续修改</h3><div data-base></div><textarea aria-label="你希望改哪里？" placeholder="输入修改要求，可粘贴或拖入截图"></textarea><input data-files type="file" accept="image/png,image/jpeg,image/webp" multiple hidden><button data-upload type="button">＋ 上传截图</button><div class="ff-revision-attachments"></div><button data-submit type="button">生成修改版</button><p class="ff-revision-error" role="alert"></p>';
+    textarea=panel.querySelector('textarea');submit=panel.querySelector('[data-submit]');error=panel.querySelector('[role=alert]');
+    attachments=panel.querySelector('.ff-revision-attachments');fileInput=panel.querySelector('[data-files]');
+    panel.querySelector('[data-upload]').onclick=()=>fileInput.click();
+    fileInput.onchange=()=>{void receiveFiles([...fileInput.files]);fileInput.value='';};
+    panel.onpaste=event=>{const files=[...(event.clipboardData?.items||[])].filter(item=>item.kind==='file'&&item.type.startsWith('image/')).map(item=>item.getAsFile()).filter(Boolean);if(files.length){event.preventDefault();void receiveFiles(files);}};
+    panel.ondragover=event=>{if([...event.dataTransfer.types].includes('Files')){event.preventDefault();event.dataTransfer.dropEffect='copy';panel.classList.add('dragging');}};
+    panel.ondragleave=event=>{if(!panel.contains(event.relatedTarget))panel.classList.remove('dragging');};
+    panel.ondrop=event=>{panel.classList.remove('dragging');if([...event.dataTransfer.types].includes('Files')){event.preventDefault();void receiveFiles([...event.dataTransfer.files]);}};
     textarea.oninput=()=>{if(editing)editing.draft=textarea.value;};submit.onclick=revise;
     storageHint=document.createElement('div');storageHint.className='ff-revision-storage';storageHint.setAttribute('role','status');
     root.append(list,panel,storageHint);adapter.output.replaceChildren(root);adapter.output.style.display='block';
+  }
+  function renderAttachments(){
+    attachments.replaceChildren();
+    for(const [index,item] of (editing?.attachmentsDraft||[]).entries()){
+      const tile=document.createElement('div');tile.className='ff-revision-attachment';
+      const preview=document.createElement('button');preview.type='button';preview.dataset.preview='true';preview.setAttribute('aria-label','预览截图 '+(index+1));
+      const image=document.createElement('img');image.src=item.data;image.alt=item.name;preview.append(image);
+      preview.onclick=()=>{const dialog=document.createElement('dialog');dialog.className='ff-revision-preview';const close=document.createElement('button');close.type='button';close.textContent='关闭';close.onclick=()=>dialog.close();dialog.append(close,image.cloneNode());dialog.onclose=()=>dialog.remove();dialog.onclick=event=>{if(event.target===dialog)dialog.close();};document.body.append(dialog);dialog.showModal();close.focus();};
+      const remove=document.createElement('button');remove.type='button';remove.dataset.remove='true';remove.textContent='×';remove.setAttribute('aria-label','删除截图 '+(index+1));remove.onclick=()=>{editing.attachmentsDraft.splice(index,1);renderAttachments();};
+      tile.append(preview,remove);attachments.append(tile);
+    }
+  }
+  async function receiveFiles(files){
+    if(!editing||!files.length)return;
+    const target=editing;reading++;error.textContent='';refresh();
+    try{
+      for(const file of files){
+        if(!['image/png','image/jpeg','image/webp'].includes(file.type))throw new Error('请使用 PNG、JPG 或 WebP 截图。');
+        if(file.size>10*1024*1024)throw new Error('单张截图请控制在 10 MB 以内。');
+        const data=await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('截图读取失败，请重新上传。'));reader.readAsDataURL(file);});
+        await new Promise((resolve,reject)=>{const image=new Image();image.onload=resolve;image.onerror=()=>reject(new Error('无法识别该截图，请重新上传。'));image.src=data;});
+        target.attachmentsDraft||=[];
+        if(target.attachmentsDraft.length>=4)throw new Error('每次最多添加 4 张截图。');
+        target.attachmentsDraft.push({name:file.name||'截图',data});
+      }
+    }catch(e){if(editing===target)error.textContent=e.message;}
+    finally{reading--;if(editing===target)renderAttachments();refresh();}
   }
   function savedState(state){
     const result={};
@@ -78,7 +114,7 @@ export function createRevisionGallery(adapter){
     if(busy())return false;
     snapshot();active=v;adapter.activate(v);refresh();return true;
   }
-  function edit(v){editing=v;panel.querySelector('[data-base]').textContent='基于 V'+v.number+(v.parentId?' · 修改版':' · 原始图');textarea.value=v.draft||'';error.textContent='';refresh();}
+  function edit(v){editing=v;panel.querySelector('[data-base]').textContent='基于 V'+v.number+(v.parentId?' · 修改版':' · 原始图');textarea.value=v.draft||'';error.textContent='';renderAttachments();refresh();}
   function append(v){
     mount();versions.push(v);
     const card=document.createElement('article');card.className='ff-version';card.dataset.versionId=v.id;
@@ -101,14 +137,15 @@ export function createRevisionGallery(adapter){
       v.card.querySelector('[data-status]').textContent=pending?'可编辑版生成中…':ready?'可编辑版已就绪':v.state?.reconFailed?'可编辑版生成失败':'';
       const b=v.card.querySelector('[data-build]');b.disabled=busy();b.textContent=pending?'正在生成可编辑版…':ready?'查看可编辑版':v.state?.reconFailed?'重试生成可编辑版':'生成可编辑版';
     }
-    submit.disabled=generating||!editing;submit.textContent=generating?'正在生成修改版…':'生成修改版';
+    submit.disabled=generating||!!reading||!editing;submit.textContent=generating?'正在生成修改版…':reading?'正在读取截图…':'生成修改版';
   }
   async function revise(){
-    if(generating||!editing)return;
+    if(generating||reading||!editing)return;
     const parent=editing,prompt=textarea.value.trim();if(!prompt){textarea.focus();return;}
     generating=true;error.textContent='';refresh();
     try{
-      const result=await adapter.generate(parent,prompt);
+      // Request-only attachments; never replace a version bitmap or reconstruction state.
+      const result=await adapter.generate({...parent,attachments:[...(parent.attachmentsDraft||[])]},prompt);
       const v={...result,id:crypto.randomUUID(),number:versions.length+1,parentId:parent.id,prompt,route:{...parent.route},created:Date.now(),state:null};
       append(v);persist(v);edit(v);v.card.scrollIntoView({block:'nearest',behavior:'smooth'});
     }catch(e){error.textContent=e.message||'修改失败，请重试。';}

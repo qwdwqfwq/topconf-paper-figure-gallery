@@ -43,7 +43,7 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
   await page.evaluate(()=>window.__revisionTest.configure());
   async function bitmap(n){image=await page.evaluate(n=>{const c=document.createElement('canvas');c.width=2048;c.height=1152;const x=c.getContext('2d');x.fillStyle='#f8f7ff';x.fillRect(0,0,c.width,c.height);x.fillStyle='#7351df';x.font='bold 68px sans-serif';x.fillText('FigureForge · V'+n,110,150);for(let i=0;i<3;i++){x.fillStyle=['#d8ebf7','#e6ddf6','#dbf0e0'][i];x.fillRect(110+i*640,300,560,650);x.fillStyle='#41445c';x.font='44px sans-serif';x.fillText(['Input','Method','Results'][i],160+i*640,400);}return c.toDataURL().split(',')[1];},n);}
   const cards=page.locator('.ff-version');
-  async function modify(index,prompt,n){await bitmap(n);await cards.nth(index).locator('[data-modify]').click();await page.locator('.ff-revision-editor textarea').fill(prompt);await page.locator('.ff-revision-editor button').click();}
+  async function modify(index,prompt,n){await bitmap(n);await cards.nth(index).locator('[data-modify]').click();await page.locator('.ff-revision-editor textarea').fill(prompt);await page.locator('.ff-revision-editor [data-submit]').click();}
   async function resolve(index){await page.evaluate(i=>window.__revisionTest.jobs[i].resolve(),index);await page.waitForFunction(()=>!window.__revisionTest.state().reconPending);}
   await bitmap(1);await page.evaluate(()=>window.__revisionTest.generate());
   await page.waitForFunction(()=>window.__revisionTest.jobs.length===1);
@@ -61,16 +61,62 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
   await resolve(1);assert.equal(await page.evaluate(()=>window.__revisionTest.jobs.length),2);
   await cards.nth(0).locator('[data-build]').click();assert.equal(await page.evaluate(()=>window.__revisionTest.state().scene.version),1);
   await cards.nth(1).locator('[data-build]').click();assert.equal(await page.evaluate(()=>window.__revisionTest.state().scene.version),2);
-  await modify(2,'优化标题',4);await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===4);
+  // Screenshot drafts stay with their source version and all three intake paths agree.
+  await cards.nth(2).locator('[data-modify]').click();
+  const screenshot=await page.evaluate(()=>{const c=document.createElement('canvas');c.width=80;c.height=50;c.getContext('2d').fillRect(5,5,50,30);return c.toDataURL();});
+  await page.locator('[data-files]').setInputFiles({name:'region.png',mimeType:'image/png',buffer:Buffer.from(screenshot.split(',')[1],'base64')});
+  await page.waitForFunction(()=>document.querySelectorAll('[data-preview]').length===1);
+  await page.locator('[data-preview]').click();assert.equal(await page.locator('dialog[open] img').getAttribute('src'),screenshot);
+  await page.locator('dialog[open] button').click();
+  await page.evaluate(data=>{const bytes=Uint8Array.from(atob(data.split(',')[1]),c=>c.charCodeAt(0));const dt=new DataTransfer();dt.items.add(new File([bytes],'paste.png',{type:'image/png'}));document.querySelector('textarea[aria-label="你希望改哪里？"]').dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:dt}));},screenshot);
+  await page.waitForFunction(()=>document.querySelectorAll('[data-preview]').length===2);
+  await page.evaluate(data=>{const bytes=Uint8Array.from(atob(data.split(',')[1]),c=>c.charCodeAt(0));const dt=new DataTransfer();dt.items.add(new File([bytes],'drop.png',{type:'image/png'}));document.querySelector('.ff-revision-editor').dispatchEvent(new DragEvent('drop',{bubbles:true,cancelable:true,dataTransfer:dt}));},screenshot);
+  await page.waitForFunction(()=>document.querySelectorAll('[data-preview]').length===3);
+  await page.locator('[data-remove]').nth(1).click();assert.equal(await page.locator('[data-preview]').count(),2);
+  await cards.nth(1).locator('[data-modify]').click();assert.equal(await page.locator('[data-preview]').count(),0);
+  await cards.nth(2).locator('[data-modify]').click();assert.equal(await page.locator('[data-preview]').count(),2);
+  await page.locator('.ff-revision-editor').screenshot({path:path.join(require('node:os').tmpdir(),'figureforge-screenshot-editor.png')});
+  const v3=await cards.nth(2).locator('img').getAttribute('src');
+  await modify(2,'优化标题，参考截图中的位置',4);await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===4);
+  assert.deepEqual(requests.at(-1).image,[v3,screenshot,screenshot]);
+  assert.ok(requests.at(-1).prompt.includes('The first image is the complete figure'));
+  assert.equal(await page.locator('[data-preview]').count(),0);
+  // A failed request retains screenshots for a manual retry.
+  await cards.nth(0).locator('[data-modify]').click();
+  await page.locator('[data-files]').setInputFiles({name:'retry.png',mimeType:'image/png',buffer:Buffer.from(screenshot.split(',')[1],'base64')});
+  await page.waitForFunction(()=>document.querySelectorAll('[data-preview]').length===1);
   const count=requests.length;fail=true;await modify(0,'再次修改',5);
   await page.waitForFunction(()=>document.querySelector('.ff-revision-error').textContent.includes('失败'));
-  assert.equal(await cards.count(),4);assert.equal(requests.length,count+1);assert.deepEqual(requests.at(-1).image,[v1]);
-  fail=false;await page.locator('.ff-revision-editor button').click();await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===5);
+  assert.equal(await cards.count(),4);assert.equal(requests.length,count+1);assert.deepEqual(requests.at(-1).image,[v1,screenshot]);
+  assert.equal(await page.locator('[data-preview]').count(),1);
+  fail=false;await page.locator('.ff-revision-editor [data-submit]').click();await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===5);
   await page.waitForFunction(async()=> (await window.__revisionTest.records()).length===5);
   const records=await page.evaluate(()=>window.__revisionTest.records());
   assert.equal(records.find(v=>v.number===1).state.scene.version,1);assert.equal(records.find(v=>v.number===2).state.scene.version,2);
   assert.equal(records.find(v=>v.number===5).parentId,records.find(v=>v.number===1).id);
   assert.equal(JSON.stringify(records).includes('offline-only'),false);
+  assert.equal(records.some(v=>'attachmentsDraft' in v||'attachments' in v),false);
+  const formats=await page.evaluate(async({source,shot})=>{
+   const {generateRevision}=await import('./revision-gallery.mjs?v=20261112');const originalFetch=window.fetch,seen=[];
+   try{
+    for(const route of [
+     {base:'https://infistar.cc/v1',model:'gemini-3.1-flash-image-preview',p:'infistar',ratio:'16:9',resolution:'2K'},
+     {base:'https://api.example.test/v1',model:'gpt-image-2',p:'oai',ratio:'16:9',resolution:'2K'},
+     {base:'https://api.example.test/v1',model:'image-model',p:'sf',ratio:'1:1',resolution:'1K'}]){
+     window.fetch=async(url,options)=>{
+      if(options.body instanceof FormData){seen.push({kind:'multipart',url,images:await Promise.all(options.body.getAll('image[]').map(file=>new Promise(resolve=>{const r=new FileReader();r.onload=()=>resolve(r.result);r.readAsDataURL(file);}))),size:options.body.get('size')});}
+      else{const body=JSON.parse(options.body);seen.push({kind:body.contents?'native':'json',url,body});}
+      return new Response(JSON.stringify({data:[{b64_json:source.split(',')[1]}],candidates:[{content:{parts:[{inlineData:{mimeType:'image/png',data:source.split(',')[1]}}]}}]}));
+     };
+     await generateRevision({image:source,route,attachments:[{data:shot}]},'change the marked area',{key:'offline-only',toDataURL:async x=>x,loadImage:async()=>({width:route.p==='sf'?1024:2048,height:route.p==='sf'?1024:1152})});
+    }
+   }finally{window.fetch=originalFetch;}
+   return seen;
+  },{source:v1,shot:screenshot});
+  assert.deepEqual(formats[0].body.contents[0].parts.slice(1).map(x=>'data:image/png;base64,'+x.inlineData.data),[v1,screenshot]);
+  assert.deepEqual(formats[0].body.generationConfig.imageConfig,{aspectRatio:'16:9',imageSize:'2K'});
+  assert.deepEqual(formats[1].images,[v1,screenshot]);assert.equal(formats[1].size,'2048x1152');assert.ok(formats[1].url.endsWith('/images/edits'));
+  assert.deepEqual(formats[2].body.image,[v1,screenshot]);assert.equal(formats[2].body.image_size,'1024x1024');
   await page.reload();await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===5);
   await cards.nth(1).locator('[data-build]').click();assert.equal(await page.evaluate(()=>window.__revisionTest.state().scene.version),2);
   await cards.nth(4).locator('[data-modify]').click();
@@ -87,6 +133,6 @@ const {chromium}=require('C:/Users/黎枭/.cache/codex-runtimes/codex-primary-ru
   assert.equal(await page.evaluate(()=>window.__revisionTest.jobs.length),1);
   await resolve(0);
   assert.ok(errors.every(message=>message.includes("Service worker is disabled because the context is sandboxed")));
-  console.log('Revision browser integration passed: continuous/branched edits during conversion; manual revisions; per-version results; failures; reload persistence; SVG return; mobile layout. Zero live API calls.');
+  console.log('Screenshot upload/paste/drop/preview/removal/draft isolation/payload order passed. Revision browser integration passed: continuous/branched edits during conversion; manual revisions; per-version results; failures; reload persistence; SVG return; mobile layout. Zero live API calls.');
  }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});
