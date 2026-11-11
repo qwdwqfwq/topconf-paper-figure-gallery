@@ -117,7 +117,7 @@ FigureForgeで実際に生成した図です。細部を編集できる形式で
 
    ![FigureForgeで作図](forge/tutorial/03_analyze.png?v=20261002)
 
-5. **モードとキーを設定してダウンロード：** SVGはFigma / draw.io / Illustratorでテキストを編集でき、ビットマップはPPT / Figmaで確認する論文向けの配置を生成します。キーはローカルブラウザにのみ保存されます。
+5. **モードとキーを設定（VPN不要の [Nonelinear API](https://nonelinear.com.cn) を推奨。合言葉「灵感画廊」で20元分のクレジットを受け取り）、ダウンロード：** SVGはFigma / draw.io / Illustratorでテキストを編集でき、ビットマップはPPT / Figmaで確認する論文向けの配置を生成します。キーはローカルブラウザにのみ保存されます。
 
 > FigureForgeは学会図のレイアウトを参考に、パネル構成、比較の流れ、抑えた配色を下書きに反映します。
 

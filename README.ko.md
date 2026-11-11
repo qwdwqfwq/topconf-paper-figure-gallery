@@ -117,7 +117,7 @@ FigureForge로 실제 생성한 그림입니다. 세부 요소를 편집할 수 
 
    ![FigureForge로 그리기](forge/tutorial/03_analyze.png?v=20261002)
 
-5. **모드 선택, 키 입력, 다운로드:** SVG는 Figma / draw.io / Illustrator에서 텍스트를 편집할 수 있고 비트맵은 PPT / Figma에서 검토할 논문 스타일 배치를 제공합니다. 키는 로컬 브라우저에만 저장됩니다.
+5. **모드 선택, 키 입력(VPN 없이 접속 가능한 [Nonelinear API](https://nonelinear.com.cn) 추천, 암호「灵感画廊」를 알려주면 20위안 크레딧 지급), 다운로드:** SVG는 Figma / draw.io / Illustrator에서 텍스트를 편집할 수 있고 비트맵은 PPT / Figma에서 검토할 논문 스타일 배치를 제공합니다. 키는 로컬 브라우저에만 저장됩니다.
 
 > FigureForge는 학회 그림의 배치를 참고해 패널 격자, 비교 서사와 절제된 색상을 초안에 반영합니다.
 

@@ -117,7 +117,7 @@ Décrivez votre article et utilisez 3 452 figures comme références de composit
 
    ![Dessiner avec FigureForge](forge/tutorial/03_analyze.png?v=20261002)
 
-5. **Choisir un mode, saisir la clé et télécharger :** le SVG permet de modifier le texte dans Figma / draw.io / Illustrator ; le mode bitmap fournit une composition à vérifier dans PPT / Figma. La clé reste dans votre navigateur local.
+5. **Choisir un mode, saisir la clé (recommandé : [Nonelinear API](https://nonelinear.com.cn), accessible sans VPN ; indiquez「灵感画廊」pour recevoir 20 yuans de crédit) et télécharger :** le SVG permet de modifier le texte dans Figma / draw.io / Illustrator ; le mode bitmap fournit une composition à vérifier dans PPT / Figma. La clé reste dans votre navigateur local.
 
 > FigureForge s’appuie sur des figures de conférence pour conserver la grille des panneaux, la narration comparative et une palette sobre.
 

@@ -117,7 +117,7 @@ Describe your paper and use 3,452 conference figures as layout references for yo
 
    ![Draw with FigureForge](forge/tutorial/03_analyze.png?v=20261002)
 
-5. **Choose a mode, enter your key and download:** SVG mode supports editable text in Figma / draw.io / Illustrator; bitmap mode provides a publication-style layout for checking in PPT / Figma. Your key is stored only in your local browser.
+5. **Choose a mode, enter your key (recommended: [Nonelinear API](https://nonelinear.com.cn), accessible without a VPN; mention「灵感画廊」to receive ¥20 in credits), and download:** SVG mode supports editable text in Figma / draw.io / Illustrator; bitmap mode provides a publication-style layout for checking in PPT / Figma. Your key is stored only in your local browser.
 
 > FigureForge uses top-conference figures as layout references to preserve panel grids, comparison narratives and restrained palettes in the draft.
 
