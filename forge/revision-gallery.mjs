@@ -1,4 +1,4 @@
-import {scopedRevision,selectRevisionRegions,modeInstruction} from './revision-scope.mjs';
+import {scopedRevision,confirmedRevision,selectRevisionRegions,modeInstruction} from './revision-scope.mjs';
 import {usesInfistarGemini,geminiImageRequest,geminiImageResult,compatibleImageRequest,requestImageWithRecovery,imageRequestDiagnostics} from './image-api.mjs?v=20261026-nonelinear-resolution';
 import {imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261026-nonelinear-resolution';
 
@@ -249,7 +249,7 @@ Return ONLY JSON {"passed":boolean,"columnBottoms":[],"nodeChecks":[{"id":"inven
 }
 
 export async function generateRevision(parent,prompt,options){
-  return scopedRevision(parent,prompt,options,generateRegionRevision);
+  return (parent.confirmScope||parent.revisionMode==='auto'?confirmedRevision:scopedRevision)(parent,prompt,options,generateRegionRevision);
 }
 
 async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onProgress}){
@@ -371,12 +371,12 @@ export function createRevisionGallery(adapter){
     root=document.createElement('div');root.className='ff-revisions';
     list=document.createElement('div');panel=document.createElement('aside');panel.className='ff-revision-editor';
     panel.innerHTML='<h3>继续修改</h3><div data-base></div><small data-model style="display:block;margin-top:10px;overflow-wrap:anywhere"></small><textarea aria-label="你希望改哪里？" placeholder="输入修改要求，可粘贴或拖入截图"></textarea><input data-files type="file" accept="image/png,image/jpeg,image/webp" multiple hidden><button data-upload type="button">＋ 上传截图</button><div class="ff-revision-attachments"></div><button data-submit type="button">生成修改版</button><p class="ff-revision-error" role="alert"></p>';
-    const scopeButton=document.createElement('button');scopeButton.type='button';scopeButton.dataset.selectRegions='true';scopeButton.textContent='框选修改区域（必选）';
+    const scopeButton=document.createElement('button');scopeButton.type='button';scopeButton.dataset.selectRegions='true';scopeButton.textContent='手动指定范围（可选）';
     panel.querySelector('[data-submit]').before(scopeButton);
     const modeBox=document.createElement('div');modeBox.dataset.revisionModes='true';
-    modeBox.innerHTML='<label>修改模式 <select data-revision-mode aria-label="修改模式"><option value="local">局部修改</option><option value="reflow">区域重排</option></select></label><p data-mode-hint style="font-size:13px;line-height:1.6"></p>';
+    modeBox.innerHTML='<label>修改模式 <select data-revision-mode aria-label="修改模式"><option value="auto">自动判断（推荐）</option><option value="local">局部修改</option><option value="reflow">区域重排</option></select></label><p data-mode-hint style="font-size:13px;line-height:1.6"></p>';
     panel.querySelector('textarea').before(modeBox);
-    const retainLabel=document.createElement('label');retainLabel.dataset.retainBox='true';retainLabel.innerHTML='<input type="checkbox" data-retain-elements checked> 保留原元素重排（非线智能识别并搬移原图像素；取消勾选则由图像模型重绘）';modeBox.append(retainLabel);
+    const retainLabel=document.createElement('label');retainLabel.dataset.retainBox='true';retainLabel.innerHTML='<input type="checkbox" data-retain-elements checked> 重排时优先保留原元素和文字（适合图标等独立元素）';modeBox.append(retainLabel);
     modeBox.querySelector('select').onchange=e=>{if(editing){editing.revisionModeDraft=e.target.value;refresh();}};
     modeBox.querySelector('[data-retain-elements]').onchange=e=>{if(editing)editing.retainElementsDraft=e.target.checked;};
     scopeButton.onclick=async()=>{if(!editing||generating)return;const target=editing;try{const regions=await selectRevisionRegions(target.image,target.regionsDraft||[]);if(regions){target.regionsDraft=regions;if(editing===target)scopeButton.textContent='已框选 '+regions.length+' 个区域 · 重新框选';}}catch(e){error.textContent=e.message;}};
@@ -440,7 +440,7 @@ export function createRevisionGallery(adapter){
     if(busy())return false;
     snapshot();active=v;adapter.activate(v);refresh();return true;
   }
-  function edit(v){editing=v;panel.querySelector('[data-select-regions]').textContent=v.regionsDraft?.length?'已框选 '+v.regionsDraft.length+' 个区域 · 重新框选':'框选修改区域（必选）';panel.querySelector('[data-base]').textContent='基于 V'+v.number+(v.parentId?' · 修改版':' · 原始图');textarea.value=v.draft||'';error.textContent='';renderAttachments();refresh();}
+  function edit(v){editing=v;panel.querySelector('[data-select-regions]').textContent=v.regionsDraft?.length?'已框选 '+v.regionsDraft.length+' 个区域 · 重新框选':'手动指定范围（可选）';panel.querySelector('[data-base]').textContent='基于 V'+v.number+(v.parentId?' · 修改版':' · 原始图');textarea.value=v.draft||'';error.textContent='';renderAttachments();refresh();}
   function append(v){
     mount();versions.push(v);nextNumber=Math.max(nextNumber,v.number+1);
     const card=document.createElement('article');card.className='ff-version';card.dataset.versionId=v.id;
@@ -481,14 +481,14 @@ export function createRevisionGallery(adapter){
   function refresh(){
     if(!mounted)return;
     if(editing){
-      const mode=editing.revisionModeDraft||editing.revisionMode||'local';
+      const mode=editing.revisionModeDraft||'auto';
       panel.querySelector('[data-revision-modes]').hidden=editing.source==='svg';
       panel.querySelector('[data-revision-mode]').value=mode;
-      panel.querySelector('[data-retain-box]').hidden=mode!=='reflow';
+      panel.querySelector('[data-retain-box]').hidden=mode==='local';
       panel.querySelector('[data-retain-elements]').checked=editing.retainElementsDraft!==false;
       panel.querySelector('[data-retain-elements]').disabled=generating||!!reading||deleting;
       panel.querySelector('[data-revision-mode]').disabled=generating||!!reading||deleting;
-      panel.querySelector('[data-mode-hint]').textContent=(mode==='reflow'?'允许在原图选定区域内增删元素并重新排版。':'只改指定元素，其他元素保留原有布局。')+' 上传截图可提供新增元素或帮助定位要删除的元素，请在要求里说明。先在原图上选择允许修改的范围；范围外逐像素保留，范围内文字、数据和公式需核对。';
+      panel.querySelector('[data-mode-hint]').textContent=(mode==='auto'?'直接描述想改什么，系统自动判断局部修改或区域重排，并在原图上标出建议范围。':mode==='reflow'?'增删元素后，允许调整范围内其余元素的位置和间距。':'只改指定内容，其他元素保留原有布局。')+' 上传截图可提供新增元素或帮助定位。先查看并确认高亮范围，再修改图片；无需提前画框。范围外保留原图像素，范围内尽量保留其他文字、数据和公式。自动判断目前支持非线智能。';
       panel.querySelector('[data-select-regions]').hidden=editing.source==='svg';
       panel.querySelector('[data-select-regions]').disabled=generating||!!reading||deleting;
       // Display guidance depends only on the selected version, not provider loading.
@@ -504,7 +504,7 @@ export function createRevisionGallery(adapter){
       v.card.querySelector('[data-status]').textContent=pending?'可编辑版生成中…':ready?'可编辑版已就绪':v.state?.reconFailed?'可编辑版生成失败':'';
       const b=v.card.querySelector('[data-build]');b.disabled=busy()||deleting;b.textContent=pending?'正在生成可编辑版…':ready?'查看可编辑版':v.state?.reconFailed?'重试生成可编辑版':'生成可编辑版';
     }
-    submit.disabled=generating||!!reading||deleting||!editing;submit.textContent=generating?'正在生成修改版…':reading?'正在读取截图…':'生成修改版';
+    submit.disabled=generating||!!reading||deleting||!editing;submit.textContent=generating?'正在生成修改版…':reading?'正在读取截图…':editing?.source==='svg'?'生成修改版':'分析要求并确认范围';
   }
   async function revise(){
     if(generating||reading||deleting||!editing)return;
@@ -513,8 +513,7 @@ export function createRevisionGallery(adapter){
     try{
       // Request-only attachments; never replace a version bitmap or reconstruction state.
       const references=(parent.attachmentsDraft||[]).map(item=>({...item}));
-      if(parent.source!=='svg'&&!parent.regionsDraft?.length)throw new Error('请先框选要修改的区域，框外文字、数据和公式将逐像素保留。');
-      const result=await adapter.generate({...parent,route:{...parent.route},attachments:references,revisionMode:parent.revisionModeDraft||parent.revisionMode||'local',retainElements:parent.retainElementsDraft!==false,editRegions:parent.regionsDraft?.map(r=>({...r}))},prompt);
+      const result=await adapter.generate({...parent,route:{...parent.route},attachments:references,revisionMode:parent.source==='svg'?(parent.revisionModeDraft||parent.revisionMode||'local'):(parent.revisionModeDraft||'auto'),confirmScope:parent.source!=='svg',retainElements:parent.retainElementsDraft!==false,editRegions:parent.regionsDraft?.map(r=>({...r}))},prompt);
       error.textContent='';
       if(!await reviewRevision(parent,result,prompt,references,list)){
         edit(parent);error.textContent='本次结果未保存。修改要求和截图已保留；再次生成会发起新的 API 请求。';return;
