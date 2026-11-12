@@ -1,4 +1,4 @@
-import {retainedReflow} from './revision-layout.mjs';
+import {retainedReflow,revisionPlanner,revisionPlannerRoute} from './revision-layout.mjs';
 // Used only by Continue modifying. No reconstruction/export state or shared adapters.
 export function revisionMode(value='local'){
   if(!['local','reflow'].includes(value))throw new Error('修改模式无效，请重新选择。');
@@ -87,8 +87,8 @@ function cleanScopeEdges(image,r){
 
 // This planner proposes scope only. It cannot write pixels or start reconstruction.
 export async function planRevision(parent,prompt,options){
-  if(parent.route?.p!=='nonelinear')throw new Error('自动判断范围目前需要选择非线智能；也可手动选择修改模式并框选范围。');
-  if(!options.key)throw new Error('请先填写非线智能 API Key。');
+  revisionPlannerRoute(parent.route);
+  if(!options.key)throw new Error('请先填写当前服务商的 API Key。');
   options.onProgress?.('正在理解要求并定位修改范围，确认前不会修改图片…');
   const source=await options.toDataURL(parent.image),image=await options.loadImage(source);
   const width=image.naturalWidth||image.width,height=image.naturalHeight||image.height;
@@ -106,11 +106,7 @@ export async function planRevision(parent,prompt,options){
   }
   const content=[{type:'text',text:instruction+' Image 0 is the ORIGINAL with a normalized coordinate grid (x labels across the top, y labels down the left). Image 1 is the SAME ORIGINAL without grid. All subsequent images are REFERENCES ONLY: never return coordinates from a reference. Read the grid to locate the complete target group on Image 0; report its left x, top y, width and height in the grid units.'},{type:'image_url',image_url:{url:guide.toDataURL('image/png')}},{type:'image_url',image_url:{url:source}}];
   for(const ref of parent.attachments||[])content.push({type:'image_url',image_url:{url:await options.toDataURL(ref.data)}});
-  const response=await fetch(parent.route.base.replace(/\/$/,'')+'/chat/completions',{method:'POST',headers:{Authorization:'Bearer '+options.key,'Content-Type':'application/json'},body:JSON.stringify({model:'gemini-3-flash-preview',temperature:0,max_tokens:4000,response_format:{type:'json_object'},messages:[{role:'user',content}]}),signal:AbortSignal.timeout(180000)});
-  if(!response.ok)throw new Error('修改范围分析失败（HTTP '+response.status+'），未开始修改图片。');
-  let data;try{data=await response.json();}catch{throw new Error('范围分析接口返回无效内容，未开始修改图片。');}
-  if(data.error)throw new Error(([408,504,524].includes(Number(data.error.code))?'范围分析接口超时':'范围分析接口失败')+(data.error.code?'（'+data.error.code+'）':'')+'，未开始修改图片，请重试。');
-  let plan;try{plan=JSON.parse(data.choices[0].message.content.replace(/^```(?:json)?\s*|\s*```$/g,''));}catch{throw new Error('无法读取建议范围，未开始修改图片，请重试或手动框选。');}
+  const {plan,model:plannerModel}=await revisionPlanner(parent,content,options,4000);
   if(plan.needsClarification===true)throw new Error('请补充修改要求：'+String(plan.question||'需要修改原图中的哪个元素？'));
   if(typeof plan.needsClarification!=='boolean'||typeof plan.summary!=='string'||!plan.summary.trim()||typeof plan.preserve!=='string'||!plan.preserve.trim())throw new Error('建议范围缺少修改说明，未开始修改图片。');
   plan.mode=revisionMode(plan.mode);
@@ -122,12 +118,12 @@ export async function planRevision(parent,prompt,options){
     return {x,y,width:Math.ceil((r.x+r.width)*width/1000)-x,height:Math.ceil((r.y+r.height)*height/1000)-y};
   });
   plan.regions=validateRegions(!manual&&plan.mode==='reflow'&&parent.retainElements?pixels.map(r=>cleanScopeEdges(image,r)):pixels,width,height);
-  return {mode:plan.mode,summary:plan.summary.slice(0,1500),preserve:plan.preserve.slice(0,1500),regions:plan.regions,width,height,plannerModel:'gemini-3-flash-preview',apiRequestCount:1};
+  return {mode:plan.mode,summary:plan.summary.slice(0,1500),preserve:plan.preserve.slice(0,1500),regions:plan.regions,width,height,plannerModel,plannerProvider:parent.route.p,apiRequestCount:1};
 }
 
 export async function confirmedRevision(parent,prompt,options,generate){
   let plan;
-  if(parent.route?.p==='nonelinear'||parent.revisionMode==='auto'||!parent.editRegions?.length)plan=await planRevision(parent,prompt,options);
+  if(['nonelinear','infistar','oai'].includes(parent.route?.p)||parent.revisionMode==='auto'||!parent.editRegions?.length)plan=await planRevision(parent,prompt,options);
   else{const image=await options.loadImage(await options.toDataURL(parent.image));const width=image.naturalWidth||image.width,height=image.naturalHeight||image.height;plan={mode:revisionMode(parent.revisionMode),summary:prompt,preserve:'其他内容',regions:validateRegions(parent.editRegions,width,height),width,height,apiRequestCount:0};}
   const confirmed=await selectRevisionRegions(await options.toDataURL(parent.image),plan.regions,plan);
   if(!confirmed)throw new Error('已取消，本次未修改图片。修改要求和截图已保留。');

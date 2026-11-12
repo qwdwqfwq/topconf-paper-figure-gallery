@@ -29,6 +29,10 @@ jobs:
             exit 0
           fi
 
+          if node scripts/check-revision-provider-release-20261112.mjs; then
+            exit 0
+          fi
+
           if node scripts/check-forge-workflow-lock.mjs; then
             exit 0
           fi
