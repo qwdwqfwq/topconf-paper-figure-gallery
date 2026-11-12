@@ -735,6 +735,7 @@ import {prepareQuery,buildIndex,rank} from './retrieval.mjs';
 import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=20261021-unlimited';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261026-nonelinear-resolution';
 import {createRevisionGallery,generateRevision} from './revision-gallery.mjs?v=20261112-svg';
+import {svgChatResponse} from './svg-chat-response.mjs?v=20261112';
 import {svgVersion,generateSVGRevision} from './svg-revision.mjs?v=20261112';
 import {ImageRoutes, safeImageFailover} from './image-routes.mjs?v=20261020';
 const imageRoutes=new ImageRoutes();
@@ -2586,7 +2587,8 @@ async function genOaiSVG(base,model,key,content,p,refIds,layoutGuide){
   // Preserve references on provider failures; never silently switch to text-only.
   if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
   const d = JSON.parse(txt);
-  const parsed = extractSvgCode(d.choices?.[0]?.message?.content||'', true);
+  const parsed = svgChatResponse(d, {parseXML:code=>new DOMParser().parseFromString(code,'image/svg+xml'),
+    chinese:(window.GAL_I18N?.lang||'en').startsWith('zh')});
   const code = parsed.code;
   if(!code) throw new Error(tt('svg.none'));
   const auditRes = await auditAndRepair(code, {base, model, key, provider:p, anthropic:false},

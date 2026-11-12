@@ -3,19 +3,22 @@ import { adaptReferences, ReferenceError } from './reference-images.mjs';
 import { sourceImage } from './source-image.mjs';
 import { prepareChat, waitingChat } from './chat-stream.mjs';
 import { waitingSSE } from './live-chat.mjs';
-const routes = new Map([['/v1/models', 'GET'], ['/v1/chat/completions', 'POST'], ['/v1/images/generations', 'POST'], ['/v1/images/edits', 'POST'], ['/v1/source-image', 'POST']]);
+const routes = new Map([['/v1/models', 'GET'], ['/v1/responses', 'POST'], ['/v1/chat/completions', 'POST'], ['/v1/images/generations', 'POST'], ['/v1/images/edits', 'POST'], ['/v1/source-image', 'POST']]);
 export function normalizeMedia(body) {
   const data = JSON.parse(body);
-  for (const message of data.messages || []) {
+  for (const message of data.messages || data.input || []) {
     if (!Array.isArray(message.content)) continue;
     for (const part of message.content) {
-      const url = part?.type === 'image_url' && part.image_url?.url;
+      const url = part?.type === 'input_image' ? part.image_url : part?.type === 'image_url' && part.image_url?.url;
       if (typeof url !== 'string' || !url.startsWith('data:application/octet-stream;base64,')) continue;
       const encoded = url.slice(url.indexOf(',') + 1), bytes = atob(encoded.slice(0, 24));
       const mime = bytes.startsWith('\x89PNG\r\n\x1a\n') ? 'image/png'
         : bytes.startsWith('\xff\xd8\xff') ? 'image/jpeg'
         : bytes.startsWith('RIFF') && bytes.slice(8, 12) === 'WEBP' ? 'image/webp' : '';
-      if (mime) part.image_url.url = `data:${mime};base64,${encoded}`;
+      if (mime) {
+        if (part.type === 'input_image') part.image_url = `data:${mime};base64,${encoded}`;
+        else part.image_url.url = `data:${mime};base64,${encoded}`;
+      }
     }
   }
   return JSON.stringify(data);
@@ -62,14 +65,27 @@ export default {
           try { ({body,aggregate} = prepareChat(normalizeMedia(new TextDecoder().decode(body)))); }
           catch { return reply(400, 'Invalid chat JSON'); }
         }
+        if (url.pathname === '/v1/responses') {
+          outgoing.set('Accept', 'text/event-stream');
+          outgoing.set('Accept-Encoding', 'identity');
+          try {
+            body = normalizeMedia(new TextDecoder().decode(body));
+            const data = JSON.parse(body);
+            if (!Array.isArray(data.input) || data.stream !== true) return reply(400, 'Streaming Responses input required');
+          } catch { return reply(400, 'Invalid Responses JSON'); }
+        }
         if (url.pathname === '/v1/images/generations' && contentType?.toLowerCase().includes('application/json')) {
           body = await adaptReferences(body, authorization, request.signal);
         }
       }
+      if (aggregate) return waitingChat(signal => fetch('https://api.nonelinear.com.cn' + url.pathname, {
+        method, headers: outgoing, body, redirect: 'manual', signal: AbortSignal.any([request.signal, signal]),
+      }), headers);
       const pending = fetch('https://api.nonelinear.com.cn' + url.pathname, {
         method, headers: outgoing, body, redirect: 'manual', signal: request.signal,
       });
       if (aggregate) return waitingChat(pending, headers);
+      if (url.pathname === '/v1/responses') return waitingSSE(pending, headers);
       if (url.pathname === '/v1/chat/completions' && JSON.parse(body).stream === true) return waitingSSE(pending, headers);
       const response = await pending;
       // Workers does not support redirect: 'error'. Reject redirects explicitly

@@ -27,6 +27,37 @@ test('chunked UTF8 SSE aggregates content, reasoning, tool calls, usage and CORS
  const result=await response.json();assert.equal(result.choices[0].message.content,'你好');assert.equal(result.choices[0].message.reasoning_content,'思考');assert.deepEqual(result.choices[0].message.tool_calls[0].function,{name:'draw',arguments:'{}'});assert.equal(result.usage.total_tokens,50);
 });
 test('upstream HTTP errors remain errors',async()=>{const r=bufferedChat(new Response('quota',{status:429}),headers);assert.equal(r.status,429);assert.equal(await r.text(),'quota');});
+
+test('nullable provider delta fields aggregate through the gallery JSON transport',async()=>{
+ for(const nullable of [{function_call:null},{tool_calls:null},{function_call:null,tool_calls:null}]){
+  const events=[
+   {id:'nullable-provider',choices:[{index:0,delta:{role:'assistant',content:'',...nullable},finish_reason:null}]},
+   {choices:[{index:0,delta:{content:'{"ok":',reasoning_content:null,...nullable},finish_reason:null}]},
+   {choices:[{index:0,delta:{content:'true}',...nullable},finish_reason:'stop'}]},
+   {choices:[],usage:{total_tokens:23}},
+  ];
+  const payload=events.map(e=>'data: '+JSON.stringify(e)+'\r\n\r\n').join('')+'data: [DONE]\r\n\r\n';
+  const result=await waitingChat(Promise.resolve(sse(payload)),headers).json();
+  assert.equal(result.error,undefined);
+  assert.deepEqual(JSON.parse(result.choices[0].message.content),{ok:true});
+  assert.equal(result.choices[0].finish_reason,'stop');
+  assert.equal(result.usage.total_tokens,23);
+  assert.equal(Object.hasOwn(result.choices[0].message,'tool_calls'),false);
+  assert.equal(Object.hasOwn(result.choices[0].message,'function_call'),false);
+ }
+});
+
+test('nullable delta fields do not interfere with legacy function-call fragments',async()=>{
+ const events=[
+  {choices:[{index:0,delta:{function_call:null,tool_calls:null}}]},
+  {choices:[{index:0,delta:{function_call:{name:'lookup',arguments:'{"a":'},tool_calls:null}}]},
+  {choices:[{index:0,delta:{function_call:{arguments:'1}'},tool_calls:null},finish_reason:'function_call'}]},
+ ];
+ const result=await bufferedChat(sse(events.map(e=>'data: '+JSON.stringify(e)+'\n\n').join('')+'data: [DONE]\n\n'),headers).json();
+ assert.equal(result.error,undefined);
+ assert.deepEqual(result.choices[0].message.function_call,{name:'lookup',arguments:'{"a":1}'});
+ assert.equal(result.choices[0].finish_reason,'function_call');
+});
 test('truncated or error SSE is never accepted as a completed response',async()=>{
  for(const payload of ['data: {"choices":[{"index":0,"delta":{"content":"partial"}}]}\n\n','data: {"error":{"message":"failure"}}\n\n'])assert.equal((await bufferedChat(sse(payload),headers).json()).error.type,'upstream_stream_error');
 });
@@ -36,4 +67,45 @@ test('JSON whitespace heartbeats keep a slow response active and cancellation re
  assert.equal(new TextDecoder().decode((await reader.read()).value),' ');
  assert.equal(new TextDecoder().decode((await reader.read()).value),' ');
  await reader.cancel();assert.equal(cancelled,true);
+});
+
+const event=(content,finish)=>'data: '+JSON.stringify({id:'test-id',choices:[{index:0,delta:{content},finish_reason:finish}]})+'\n\ndata: [DONE]\n\n';
+test('DONE never substitutes for finish_reason, including role-only and partial SVG streams',async()=>{
+ for(const content of [null,'','<svg><g>']){
+  const data=await bufferedChat(sse(event(content,null)),headers).json();
+  assert.equal(data.error.code,'incomplete_stream');assert.equal(data.choices,undefined);
+ }
+ assert.equal((await bufferedChat(sse(event('','stop')),headers).json()).error.code,'empty_completion');
+});
+test('bounded retry discards bad attempts and returns only the completed response',async()=>{
+ let attempts=0;
+ const response=waitingChat(async()=>sse(++attempts<3?event('<svg>',null):event('<svg></svg>','stop')),headers,5);
+ const data=await response.json();assert.equal(attempts,3);assert.equal(data.choices[0].message.content,'<svg></svg>');assert.equal(data.relay.attempts,3);
+});
+test('repeated incomplete completion ends as an actionable error at three attempts',async()=>{
+ let calls=0;const data=await waitingChat(async()=>{calls++;return sse(event(null,null));},headers,5).json();
+ assert.equal(calls,3);assert.equal(data.error.code,'incomplete_stream');assert.equal(data.error.attempts,3);
+});
+test('quota, malformed SSE, length and refusal are not replayed',async()=>{
+ for(const make of [()=>new Response('quota',{status:429}),()=>sse('data: broken\n\n'),()=>sse(event('<svg>','length')),()=>sse('data: '+JSON.stringify({choices:[{delta:{refusal:'refused'},finish_reason:'stop'}]})+'\n\n')]){
+  let calls=0;await waitingChat(async()=>{calls++;return make();},headers,5).json();assert.equal(calls,1);
+ }
+});
+test('cancellation aborts a pending upstream request and prevents retries',async()=>{
+ let signal,calls=0;
+ const response=waitingChat(s=>{signal=s;calls++;return new Promise((resolve,reject)=>s.addEventListener('abort',()=>reject(new Error('cancelled'))));},headers,5);
+ const reader=response.body.getReader();await reader.read();await reader.cancel();
+ assert.equal(signal.aborted,true);await new Promise(r=>setTimeout(r,20));assert.equal(calls,1);
+});
+test('cancellation during upstream body reading cancels that body without retry',async()=>{
+ let calls=0,cancelled=false;
+ const response=waitingChat(async()=>{calls++;return new Response(new ReadableStream({cancel(){cancelled=true;}}),{headers});},headers,5);
+ const reader=response.body.getReader();await reader.read();await new Promise(r=>setTimeout(r,10));await reader.cancel();await new Promise(r=>setTimeout(r,10));assert.equal(cancelled,true);assert.equal(calls,1);
+});
+
+test('provider typed timeout is retried, typed non-timeout errors are not',async()=>{
+ for(const message of ['The read operation timed out','quota exceeded']){
+  let calls=0;const data=await waitingChat(async()=>{calls++;return sse(calls===1?'data: '+JSON.stringify({type:'error',message,code:500})+'\n\ndata: [DONE]\n\n':event('<svg></svg>','stop'));},headers,5).json();
+  assert.equal(calls,message.includes('timed out')?2:1);assert.equal(Boolean(data.choices),calls===2);
+ }
 });
