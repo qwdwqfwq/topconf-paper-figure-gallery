@@ -16,8 +16,8 @@ const expected={
   "forge/revision-layout.mjs": "44c2dc7ab8063ca9c0b3eb2896ef451c2083f79f6bc41849548fe7d98b92ca1e",
   "forge/revision-pixels.mjs": "6cd6ab383a9bcd4087f6ef5df98da305a5cf12da6fe221ba85ba064587932d2b",
   "forge/revision-scope.mjs": "408104e68cef944ae4c191ff523d9c3ce710819ee8823ba52ba88720d27d45b2",
-  ".github/workflows/deploy.yml": "4579d4b271cce387e74602b749398365d6f63e777e93ed1154d10a4a34ee9cfc",
-  ".github/workflows/forge-workflow-lock.yml": "6b1240faf390a355a8f7f0cb8f62978002b0d367abbdd3ae53db3c067a1b9adb",
+  ".github/workflows/deploy.yml": "0727ab437f2afa01dea1f2e981c26ca6a2881f7d9a612c83147f0abcc4322e6a",
+  ".github/workflows/forge-workflow-lock.yml": "b625afa354af88b61cb4e17269f8a8388667c3d1a349d59b240ee4860324de2b",
   "forge/test-revision-compact.cjs": "665e0cbf3dfdad9f704b16a847616c926c1a7282be7eb229bbd994624bbef869",
   "forge/fixtures/revision-connected-panel.json": "dbf19bea4fd5231b305125ae62227d22edbd671b2ccbe9294a2359fe0a208412",
   "forge/fixtures/revision-real-panel-inventory.json": "2b53561f43ff13ed6e61114893377cfaae44c013e470facf5c8dff423e4e2fcb",
@@ -30,8 +30,9 @@ export function assertArtifactDiff(paths){assert.deepEqual([...paths].sort(),pay
 export function verifyBlob(path,data){assert.ok(expected[path],'No reviewed content hash: '+path);assert.equal(createHash('sha256').update(data.toString().replace(/\r\n/g,'\n')).digest('hex'),expected[path],'Unreviewed release content: '+path);}
 function main(){
  const working=process.argv.includes('--working');
- if(working)assert.equal(git('rev-parse','HEAD'),anchor,'Unexpected working base');
- else {assert.equal(git('show','-s','--format=%P','HEAD'),anchor,'Release must directly follow the reviewed production anchor');assert.equal(git('status','--porcelain','--untracked-files=all'),'','Dirty release checkout');}
+ const attempted='a81293a902ae5e34519ebe550cd286aae9155994';
+ if(working)assert.equal(git('rev-parse','HEAD'),attempted,'Unexpected working base');
+ else {assert.equal(git('show','-s','--format=%P','HEAD'),attempted,'Release must directly follow the reviewed failed attempt');assert.equal(git('show','-s','--format=%P',attempted),anchor,'Failed attempt must directly follow the production anchor');assert.deepEqual(changed(attempted,'HEAD'),['.github/workflows/deploy.yml','.github/workflows/forge-workflow-lock.yml','scripts/check-revision-isolated-release.mjs'],'Retry may only pin the CI operating system and its independent acceptance');assert.equal(git('status','--porcelain','--untracked-files=all'),'','Dirty release checkout');}
  const paths=working?[...new Set([...git('diff','--name-only','--no-renames',anchor,'--').split('\n').filter(Boolean),...git('ls-files','--others','--exclude-standard').split('\n').filter(Boolean)])]:changed(anchor,'HEAD');
  assertAllowedPaths(paths);
  for(const path of Object.keys(expected))verifyBlob(path,working?readFileSync(join(root,path)):execFileSync('git',['show','HEAD:'+path],{cwd:root}));
