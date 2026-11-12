@@ -1,4 +1,4 @@
-import {scopedRevision,confirmedRevision,selectRevisionRegions,modeInstruction} from './revision-scope.mjs?v=20261112-panel3';
+import {scopedRevision,confirmedRevision,selectRevisionRegions,modeInstruction} from './revision-scope.mjs?v=20261112-panel4';
 import {usesInfistarGemini,geminiImageRequest,geminiImageResult,compatibleImageRequest,requestImageWithRecovery,imageRequestDiagnostics} from './image-api.mjs?v=20261026-nonelinear-resolution';
 import {imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261026-nonelinear-resolution';
 

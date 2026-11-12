@@ -1,4 +1,4 @@
-import {retainedReflow,revisionPlanner,revisionPlannerRoute} from './revision-layout.mjs?v=20261112-panel3';
+import {retainedReflow,revisionPlanner,revisionPlannerRoute} from './revision-layout.mjs?v=20261112-panel4';
 // Used only by Continue modifying. No reconstruction/export state or shared adapters.
 export function revisionMode(value='local'){
   if(!['local','reflow'].includes(value))throw new Error('修改模式无效，请重新选择。');
