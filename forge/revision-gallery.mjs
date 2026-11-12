@@ -1,4 +1,4 @@
-import {scopedRevision,confirmedRevision,selectRevisionRegions,modeInstruction} from './revision-scope.mjs?v=20261112-panel2';
+import {scopedRevision,confirmedRevision,selectRevisionRegions,modeInstruction} from './revision-scope.mjs?v=20261112-panel3';
 import {usesInfistarGemini,geminiImageRequest,geminiImageResult,compatibleImageRequest,requestImageWithRecovery,imageRequestDiagnostics} from './image-api.mjs?v=20261026-nonelinear-resolution';
 import {imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261026-nonelinear-resolution';
 
@@ -260,12 +260,14 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
   if(typeof prompt!=='string'||!prompt.trim())throw new Error('请填写本次修改要求。');
   const source=await toDataURL(parent.image);
   const references=[source,...(parent.attachments||[]).map(item=>item.data)];
+  // The target draft must be the edit canvas; placing the original first encourages cloning it.
+  if(parent.diagramReflow&&references.length>1)references.unshift(references.pop());
   if(references.length>(p==='nonelinear'?5:parent.focusedRegion?6:5)||references.some(data=>typeof data!=='string'||!imageData.test(data)))
     throw new Error('待修改原图或截图无效，请重新选择；本次未发送请求。');
   const native=usesInfistarGemini(base,model);
   if(native&&(!revisionGeminiRatios.includes(ratio)||!['1K','2K','4K'].includes(resolution)))throw new Error('不支持的修改图比例或分辨率。');
   const dimensions=native?{field:'gemini',aspectRatio:ratio,imageSize:resolution}:imageRequestDimensions(p,model,ratio,resolution,false);
-  const instruction=parent.diagramReflow?`Redesign the INTERNAL layout of this selected diagram panel. Image 0 contains the original panel content; subsequent images are user references. Reconstruct a genuinely NEW compact arrangement: relocate process nodes relative to each other, shorten connectors, reduce large gaps. Copy all original labels, conditions, legend descriptions, equations and numeric values exactly, retaining their logical relationships. Preserve visual style and color coding. Output the redesigned panel only, with readable text. Do not reproduce the original arrangement. User request and content checklist:\n${prompt}`:revisionInstruction(prompt,references.length,parent.revisionMode,parent.focusedRegion);
+  const instruction=parent.diagramReflow?`Redesign the INTERNAL layout of this selected diagram panel. Image 0 is the NEW TARGET LAYOUT canvas to finish. Image 1 is the OLD panel, supplied ONLY as a content/style reference, never as a layout to reproduce. Other images are user references. Reconstruct a genuinely NEW compact arrangement: relocate process nodes relative to each other, shorten connectors, reduce large gaps. Copy all original labels, conditions, legend descriptions, equations and numeric values exactly, retaining their logical relationships. Preserve visual style and color coding. Output the redesigned panel only, with readable text. Do not reproduce the original arrangement. User request and content checklist:\n${prompt}`:revisionInstruction(prompt,references.length,parent.revisionMode,parent.focusedRegion);
   const inputHashes=await Promise.all(references.map(fingerprint));
   const startedAt=Date.now(),clientRequestId=crypto.randomUUID();
   try{
