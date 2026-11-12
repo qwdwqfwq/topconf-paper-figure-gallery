@@ -6144,15 +6144,14 @@ function compactImageGuide(j){
     if(!z || typeof z!=='object') return '';
     const name=String(z.role||z.name||'content module').replace(/^zone\s*\d+\s*[:：.-]?\s*/i,'').slice(0,80);
     const nums=[z.x,z.y,z.w,z.h].map(Number);
-    const position=nums.every(Number.isFinite)
-      ? ` (${['upper','middle','lower'][Math.min(2,Math.max(0,Math.floor((nums[1]+nums[3]/2)/300)))]} ${['left','center','right'][Math.min(2,Math.max(0,Math.floor((nums[0]+nums[2]/2)/(1600/3))))]})` : '';
+    const position=nums.every(Number.isFinite) ? ` bbox=(${nums.join(',')})` : '';
     return `${name}${position}`;
   }).filter(Boolean);
   const palette=Array.isArray(j.palette)?j.palette.slice(0,5).join(',')
     : j.palette && typeof j.palette==='object'
       ? ['background','primary','accent','neutral'].map(k=>j.palette[k]).filter(Boolean).slice(0,5).join(',')
       : '';
-  return zones.length ? `Internal composition plan, never visible text; reflow these modules to fill the rectangle: ${zones.join(' | ')}.\n${palette?`Palette: ${palette}.\n`:''}` : '';
+  return zones.length ? `Internal composition plan, never visible text. bbox=(x,y,width,height) on the source 1600x900 grid; preserve these precise relative positions and sizes when scaling to the selected aspect ratio. Adjust spacing/sizes only as needed to fill the full rectangle with even margins; no missing corner. Never print bbox values, Zone IDs or planning instructions; visible labels must name paper components: ${zones.join(' | ')}.\n${palette?`Palette: ${palette}.\n`:''}` : '';
 }
 function selectImageRoute(route){
   const status=imageRoutes.status(route);

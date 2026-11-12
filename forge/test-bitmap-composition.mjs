@@ -29,13 +29,17 @@ function harness(){
   return ctx;
 }
 
-test('blueprint guidance preserves semantic roles without Zone IDs or coordinate tuples',()=>{
+test('blueprint guidance preserves exact internal coordinates and excludes Zone IDs',()=>{
   const ctx=harness();
   const guide=ctx.compactImageGuide(ctx.analysis.j);
   assert.match(guide,/Stacked robot demonstrations/);
   assert.match(guide,/Closed-loop feedback/);
   assert.match(guide,/never visible text/);
-  assert.doesNotMatch(guide,/Zone\s*\d|@|\d+(?:,\d+){3}%/);
+  assert.match(guide,/bbox=\(48,126,288,504\)/);
+  assert.match(guide,/bbox=\(1056,657,496,189\)/);
+  assert.match(guide,/source 1600x900 grid/);
+  assert.match(guide,/Never print bbox values, Zone IDs or planning instructions/);
+  assert.doesNotMatch(guide,/Zone\s*\d|@/);
 });
 
 for(const model of ['gpt-image-2.5-sunburst','qwen-image','qwen-image-2.0']){
@@ -51,6 +55,11 @@ for(const model of ['gpt-image-2.5-sunburst','qwen-image','qwen-image-2.0']){
         assert.match(prompt,/Never draw planning metadata: Zone labels\/numbers, layout coordinates\/percentages, role codes or instructions/);
         assert.match(prompt,/genuine chart axes\/measurements are allowed/);
         assert.match(prompt,/encoder to robot controller/);
+        if(analyzed){
+          assert.match(prompt,/bbox=\(48,126,288,504\)/);
+          assert.match(prompt,/bbox=\(1056,657,496,189\)/);
+          assert.match(prompt,/Never print bbox values, Zone IDs or planning instructions/);
+        }
         assert.ok(ctx.imagePromptSize(prompt,ctx.imagePromptBudget(model))<=ctx.imagePromptBudget(model).limit);
       });
     }
@@ -60,4 +69,12 @@ for(const model of ['gpt-image-2.5-sunburst','qwen-image','qwen-image-2.0']){
 test('composition follows the selected aspect ratio without forcing square output',()=>{
   const prompt=harness().imagePrompt('Method: encoder to output.','gpt-image','4:3','');
   assert.match(prompt,/Fill the complete 4:3 rectangular canvas/);
+});
+
+test('internal geometry retains fractional precision without percentage rounding',()=>{
+  const ctx=harness();
+  ctx.analysis.j.layoutBlueprint=[{role:'Zone 7: Visual encoder',x:48.125,y:126.375,w:288.625,h:504.875}];
+  const guide=ctx.compactImageGuide(ctx.analysis.j);
+  assert.match(guide,/Visual encoder bbox=\(48\.125,126\.375,288\.625,504\.875\)/);
+  assert.doesNotMatch(guide,/Zone 7/);
 });
