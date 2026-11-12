@@ -129,14 +129,14 @@ Ouvrez une issue [Suggest a figure](https://github.com/qwdwqfwq/topconf-paper-fi
 
 ## 📊 Couverture
 
-| Conférence | 2023 | 2024 | 2025 | 2026 | Figures | Best / Outstanding | Oral | Spotlight | Total par niveau |
+| Conférence | 2023 | 2024 | 2025 | 2026 | Figures | Best&nbsp;/&nbsp;Outstanding | Oral | Spotlight | Total&nbsp;par&nbsp;niveau |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| 🟣 **ICLR** | 108 | 135 | 274 | 228 | **745** | 10 | 337 | 155 | **502** |
-| 🟢 **ICML** | 63 | 131 | 216 | 338 | **748** | 13 | 247 | 558 | **818** |
-| 🔴 **NeurIPS** | 236 | 363 | 367 | — | **966** | 3 | 32 | 237 | **272** |
-| 🟠 **CVPR** | 65 | 64 | 96 | 83 | **308** | — | — | — | — |
-| 🔵 **ACL** | 84 | 74 | 168 | 58 | **384** | — | — | — | — |
-| 🟡 **AAAI** | 59 | 66 | 139 | 37 | **301** | — | — | — | — |
+| 🟣&nbsp;**ICLR** | 108 | 135 | 274 | 228 | **745** | 10 | 337 | 155 | **502** |
+| 🟢&nbsp;**ICML** | 63 | 131 | 216 | 338 | **748** | 13 | 247 | 558 | **818** |
+| 🔴&nbsp;**NeurIPS** | 236 | 363 | 367 | — | **966** | 3 | 32 | 237 | **272** |
+| 🟠&nbsp;**CVPR** | 65 | 64 | 96 | 83 | **308** | — | — | — | — |
+| 🔵&nbsp;**ACL** | 84 | 74 | 168 | 58 | **384** | — | — | — | — |
+| 🟡&nbsp;**AAAI** | 59 | 66 | 139 | 37 | **301** | — | — | — | — |
 | **Total** | | | | | **3452** | **26** | **616** | **950** | **1592** |
 
 Statistiques par niveau : ICLR et ICML 2023–2026 ; NeurIPS 2023–2025. — signifie non indexé.
