@@ -1,4 +1,4 @@
-import {retainedReflow,revisionPlanner,revisionPlannerRoute} from './revision-layout.mjs';
+import {retainedReflow,revisionPlanner,revisionPlannerRoute} from './revision-layout.mjs?v=20261112-panel2';
 // Used only by Continue modifying. No reconstruction/export state or shared adapters.
 export function revisionMode(value='local'){
   if(!['local','reflow'].includes(value))throw new Error('修改模式无效，请重新选择。');
@@ -37,7 +37,7 @@ export async function scopedRevision(parent,prompt,options,generate){
   const mode=revisionMode(parent.revisionMode);
   if(mode==='reflow'&&parent.route?.p==='nonelinear'&&(parent.attachments||[]).length>3)
     throw new Error('非线智能区域重排最多添加 3 张截图（另需区域特写和完整原图）；请移除多余截图，本次未发送请求。');
-  const original=await options.loadImage(await options.toDataURL(parent.image));
+  const original=await options.loadImage(await readRevisionSource(parent.image,options));
   const width=original.naturalWidth||original.width,height=original.naturalHeight||original.height;
   const regions=validateRegions(parent.editRegions,width,height);
   // Copy the original once. Only explicit rectangles are ever written below.
@@ -56,12 +56,12 @@ export async function scopedRevision(parent,prompt,options,generate){
       const ratios=['1:1','4:3','3:4','16:9','9:16'];
       const distance=v=>Math.abs(Math.log((+v.split(':')[0]/+v.split(':')[1])/(r.width/r.height)));
       const ratio=ratios.sort((a,b)=>distance(a)-distance(b))[0];
-      request={...request,image:crop.toDataURL('image/png'),focusedRegion:true,route:{...parent.route,ratio},attachments:[...(parent.attachments||[]),{data:await options.toDataURL(parent.image),name:'完整原图（仅供上下文参考）'}]};
+      request={...request,image:crop.toDataURL('image/png'),focusedRegion:true,route:{...parent.route,ratio},attachments:[...(parent.attachments||[]),{data:await readRevisionSource(parent.image,options),name:'完整原图（仅供上下文参考）'}]};
     }
     const outputInstruction=mode==='reflow'
       ?'第一张图是唯一需要输出的区域特写，最后一张是完整原图，仅用于理解上下文；中间图片是用户上传截图。只输出第一张图对应的区域新布局，不要输出整张主图或重复原来的网格。'
       :'第一张是完整原图。输出完整画布，尺寸及区域外内容保持原样。';
-    const run=mode==='reflow'&&parent.retainElements?retainedReflow:generate;
+    const run=mode==='reflow'&&parent.retainElements?(request,prompt,options)=>retainedReflow(request,prompt,options,generate):generate;
     const result=await run(request,
       `修改第 ${index+1}/${regions.length} 个区域。完整原图尺寸 ${width}×${height}，区域在原图的像素坐标为 ${JSON.stringify(r)}（左上角为原点）。${outputInstruction}${modeInstruction(mode)} 上传截图用于提供待添加的元素或定位待删除的原图元素，具体操作以用户要求为准；不要把截图界面和标注画入结果。区域内未被明确删除或替换的文字、数字、公式、符号逐字保留。\n用户要求：${prompt}`,options);
     const edited=await options.loadImage(result.image);
@@ -114,7 +114,7 @@ export async function planRevision(parent,prompt,options){
   revisionPlannerRoute(parent.route);
   if(!options.key)throw new Error('请先填写当前服务商的 API Key。');
   options.onProgress?.('正在理解要求并定位修改范围，确认前不会修改图片…');
-  const source=await options.toDataURL(parent.image),image=await options.loadImage(source);
+  const source=await readRevisionSource(parent.image,options),image=await options.loadImage(source);
   const width=image.naturalWidth||image.width,height=image.naturalHeight||image.height;
   const manual=parent.editRegions?.length?validateRegions(parent.editRegions,width,height):null;
   const requestedMode=requestedRevisionMode(parent.revisionMode,prompt);
@@ -131,7 +131,7 @@ export async function planRevision(parent,prompt,options){
     gc.fillStyle='#00516a';gc.fillText(String(n),Math.min(x,gw-32),13);gc.fillText(String(n),0,Math.min(y+13,gh-3));
   }
   const content=[{type:'text',text:instruction+' Image 0 is the ORIGINAL with a normalized coordinate grid (x labels across the top, y labels down the left). Image 1 is the SAME ORIGINAL without grid. All subsequent images are REFERENCES ONLY: never return coordinates from a reference. Read the grid to locate the complete target group on Image 0; report its left x, top y, width and height in the grid units.'},{type:'image_url',image_url:{url:guide.toDataURL('image/jpeg',.92)}},{type:'image_url',image_url:{url:preview}}];
-  for(const ref of parent.attachments||[]){const refImage=await options.loadImage(await options.toDataURL(ref.data));content.push({type:'image_url',image_url:{url:revisionAnalysisPreview(refImage).toDataURL('image/jpeg',.92)}});}
+  for(const ref of parent.attachments||[]){const refImage=await options.loadImage(await readRevisionSource(ref.data,options));content.push({type:'image_url',image_url:{url:revisionAnalysisPreview(refImage).toDataURL('image/jpeg',.92)}});}
   if(requestedMode)content[0].text+=' The request explicitly requires '+requestedMode+' mode. Return mode="'+requestedMode+'" and select the complete affected group for that operation.';
   const {plan,model:plannerModel}=await revisionPlanner(parent,content,options,4000);
   if(plan.needsClarification===true)throw new Error('请补充修改要求：'+String(plan.question||'需要修改原图中的哪个元素？'));
@@ -151,8 +151,8 @@ export async function planRevision(parent,prompt,options){
 export async function confirmedRevision(parent,prompt,options,generate){
   let plan;
   if(['nonelinear','infistar','oai'].includes(parent.route?.p)||parent.revisionMode==='auto'||!parent.editRegions?.length)plan=await planRevision(parent,prompt,options);
-  else{const image=await options.loadImage(await options.toDataURL(parent.image));const width=image.naturalWidth||image.width,height=image.naturalHeight||image.height;plan={mode:revisionMode(parent.revisionMode),summary:prompt,preserve:'其他内容',regions:validateRegions(parent.editRegions,width,height),width,height,apiRequestCount:0};}
-  const confirmed=await selectRevisionRegions(await options.toDataURL(parent.image),plan.regions,plan);
+  else{const image=await options.loadImage(await readRevisionSource(parent.image,options));const width=image.naturalWidth||image.width,height=image.naturalHeight||image.height;plan={mode:revisionMode(parent.revisionMode),summary:prompt,preserve:'其他内容',regions:validateRegions(parent.editRegions,width,height),width,height,apiRequestCount:0};}
+  const confirmed=await selectRevisionRegions(await readRevisionSource(parent.image,options),plan.regions,plan);
   if(!confirmed)throw new Error('已取消，本次未修改图片。修改要求和截图已保留。');
   const result=await scopedRevision({...parent,revisionMode:plan.mode,editRegions:confirmed},prompt,options,generate);
   result.revisionAudit={...result.revisionAudit,apiRequestCount:result.revisionAudit.apiRequestCount+plan.apiRequestCount,scopePlan:{...plan,regions:confirmed,confirmedAt:Date.now(),adjusted:JSON.stringify(confirmed)!==JSON.stringify(plan.regions)}};
@@ -178,4 +178,24 @@ export async function selectRevisionRegions(src,initial=[],plan=null){
     for(const [label,handler] of [['撤销上一个框',()=>{if(adjusting){regions.pop();draw();}}],['清空框选',()=>{if(adjusting){regions=[];draw();}}],[plan?'返回修改描述':'取消',()=>dialog.close()],[plan?'确认范围并修改':'使用这些区域',()=>{try{validateRegions(regions,canvas.width,canvas.height);resolve(regions);dialog.close();}catch(e){text.textContent=e.message;}}]]){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=handler;button.style.margin='10px';if(label==='确认范围并修改')button.dataset.confirmScope='true';actions.append(button);}
     dialog.append(text,canvas,actions);dialog.onclose=()=>{resolve(null);dialog.remove();};document.body.append(dialog);dialog.showModal();draw();
   });
+}
+
+// Isolated diagnostics: loading a historical image can fail before any model request.
+export async function readRevisionSource(source,options){
+  try{return await options.toDataURL(source);}catch(error){
+    // Historical NoneLinear storage can deny browser CORS after switching provider.
+    // Fetch only its known public image URL through the EXISTING revision-only relay;
+    // never attach the current provider's key or touch the frozen bitmap source path.
+    let url;try{url=new URL(source);}catch{}
+    if(url?.protocol==='https:'&&url.hostname==='imagen-nonelinear-2025.tos-cn-beijing.volces.com'&&!url.port&&!url.username&&!url.password&&!url.search&&!url.hash&&/^\/(?:others|gemini)\/[A-Za-z0-9_-]+\.(?:png|jpe?g|webp)$/.test(url.pathname)){
+      try{
+        const response=await fetch('https://gallery-revision-images.lixiao-gallery.workers.dev/revision-image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url.href}),credentials:'omit',redirect:'error',signal:AbortSignal.timeout(90000)});
+        if(!response.ok)throw Error('HTTP '+response.status);
+        const blob=await response.blob();if(!/^image\/(?:png|jpeg|webp)/.test(blob.type))throw Error('非图片响应');
+        return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('图片读取失败'));reader.readAsDataURL(blob);});
+      }catch(relayError){error=new Error('独立改图图片中转也未能读取：'+String(relayError?.message||'网络失败').slice(0,100));}
+    }
+    let host='原图地址';try{host=new URL(source).host||'本地图片';}catch{}
+    throw Error('读取待修改图片失败（'+host+'），未能读取改图所需图片。历史图片链接可能已过期，或图片存储不允许浏览器读取；请下载原图后从“上传图片修改”入口重新上传再试。原始错误：'+(error?.name==='TypeError'?'网络连接或跨域读取失败':String(error?.message||'图片读取失败').slice(0,120)));
+  }
 }

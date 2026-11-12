@@ -1,4 +1,4 @@
-import {scopedRevision,confirmedRevision,selectRevisionRegions,modeInstruction} from './revision-scope.mjs';
+import {scopedRevision,confirmedRevision,selectRevisionRegions,modeInstruction} from './revision-scope.mjs?v=20261112-panel2';
 import {usesInfistarGemini,geminiImageRequest,geminiImageResult,compatibleImageRequest,requestImageWithRecovery,imageRequestDiagnostics} from './image-api.mjs?v=20261026-nonelinear-resolution';
 import {imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261026-nonelinear-resolution';
 
@@ -265,7 +265,7 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
   const native=usesInfistarGemini(base,model);
   if(native&&(!revisionGeminiRatios.includes(ratio)||!['1K','2K','4K'].includes(resolution)))throw new Error('不支持的修改图比例或分辨率。');
   const dimensions=native?{field:'gemini',aspectRatio:ratio,imageSize:resolution}:imageRequestDimensions(p,model,ratio,resolution,false);
-  const instruction=revisionInstruction(prompt,references.length,parent.revisionMode,parent.focusedRegion);
+  const instruction=parent.diagramReflow?`Redesign the INTERNAL layout of this selected diagram panel. Image 0 contains the original panel content; subsequent images are user references. Reconstruct a genuinely NEW compact arrangement: relocate process nodes relative to each other, shorten connectors, reduce large gaps. Copy all original labels, conditions, legend descriptions, equations and numeric values exactly, retaining their logical relationships. Preserve visual style and color coding. Output the redesigned panel only, with readable text. Do not reproduce the original arrangement. User request and content checklist:\n${prompt}`:revisionInstruction(prompt,references.length,parent.revisionMode,parent.focusedRegion);
   const inputHashes=await Promise.all(references.map(fingerprint));
   const startedAt=Date.now(),clientRequestId=crypto.randomUUID();
   try{
@@ -282,7 +282,7 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
     const url=revisionBase+request.endpoint;
     const transport=imageRequestDiagnostics(url,request.body);
     if(transport.referenceCount!==references.length)throw new Error('修改请求未完整包含原图和截图，本次未发送。');
-    const staged=native?await stagedGeminiRevision({base,model,prompt,references,dimensions,key,onProgress,loadImage}):null;
+    const staged=native&&!parent.diagramReflow?await stagedGeminiRevision({base,model,prompt,references,dimensions,key,onProgress,loadImage}):null;
     const response=staged?.response||await requestImageWithRecovery({url,body:request.body,key,usedReferences:true,allowReferenceFallback:false});
     if(!response.ok)throw new Error('修改生图失败（HTTP '+response.status+'）。'+response.text.slice(0,400));
     const data=staged?.data||JSON.parse(response.text);
@@ -376,7 +376,7 @@ export function createRevisionGallery(adapter){
     const modeBox=document.createElement('div');modeBox.dataset.revisionModes='true';
     modeBox.innerHTML='<label>修改模式 <select data-revision-mode aria-label="修改模式"><option value="auto">自动判断（推荐）</option><option value="local">局部修改</option><option value="reflow">区域重排</option></select></label><p data-mode-hint style="font-size:13px;line-height:1.6"></p>';
     panel.querySelector('textarea').before(modeBox);
-    const retainLabel=document.createElement('label');retainLabel.dataset.retainBox='true';retainLabel.innerHTML='<input type="checkbox" data-retain-elements checked> 重排时优先保留原元素和文字（适合图标等独立元素）';modeBox.append(retainLabel);
+    const retainLabel=document.createElement('label');retainLabel.dataset.retainBox='true';retainLabel.innerHTML='<input type="checkbox" data-retain-elements checked> 优先保留原元素和文字（独立图标搬移原像素；相连面板逐项核对后重排）';modeBox.append(retainLabel);
     modeBox.querySelector('select').onchange=e=>{if(editing){editing.revisionModeDraft=e.target.value;refresh();}};
     modeBox.querySelector('[data-retain-elements]').onchange=e=>{if(editing)editing.retainElementsDraft=e.target.checked;};
     scopeButton.onclick=async()=>{if(!editing||generating)return;const target=editing;try{const regions=await selectRevisionRegions(target.image,target.regionsDraft||[]);if(regions){target.regionsDraft=regions;if(editing===target)scopeButton.textContent='已框选 '+regions.length+' 个区域 · 重新框选';}}catch(e){error.textContent=e.message;}};
