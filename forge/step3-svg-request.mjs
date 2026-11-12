@@ -8,7 +8,7 @@ function upstreamError(data) {
   if (!data || typeof data !== 'object') return;
   const e = data.error ?? (data.type === 'error' ? data : null);
   if (!e) return;
-  const message = typeof e === 'string' ? e : String(e.message || '模型服务返回错误');
+  const message = Number(e.code) === 402 ? '非线智能账号余额不足，请充值后重试' : typeof e === 'string' ? e : String(e.message || '模型服务返回错误');
   const code = e.code ?? (/timed?\s*out|timeout/i.test(message) ? 'upstream_timeout'
     : e.type === 'upstream_stream_error' && /connection interrupted/i.test(message) ? 'network_error' : 'upstream_error');
   const details = [code, e.attempts && `attempts=${e.attempts}`, (e.request_id || data.request_id) && `request_id=${e.request_id || data.request_id}`].filter(Boolean).join(', ');
@@ -48,7 +48,7 @@ async function readCompletion(response) {
     const choice = Array.isArray(data?.choices) ? data.choices.find(c => c && typeof c === 'object' && (c.index == null || c.index === 0)) : null;
     if (!choice) throw failure('模型未返回 SVG 内容', 'empty_completion', true);
     if ('finish_reason' in choice && choice.finish_reason !== 'stop') {
-      throw failure(`SVG 生成未完成 (${choice.finish_reason ?? 'missing finish_reason'})`, 'incomplete_stream', choice.finish_reason !== 'content_filter');
+      throw Object.assign(failure(`SVG 生成未完成 (${choice.finish_reason ?? 'missing finish_reason'})`, 'incomplete_stream', choice.finish_reason !== 'content_filter'),{finishReason:choice.finish_reason});
     }
     return textContent(choice.message?.content);
   }
@@ -81,7 +81,7 @@ async function readCompletion(response) {
       }
       if (part.done) { if (!done && buffer.trim()) event(buffer); break; }
     }
-    if (finish !== 'stop') throw failure(`SVG 响应中断或未完成 (${finish ?? 'missing finish_reason'})`, 'incomplete_stream', finish !== 'content_filter');
+    if (finish !== 'stop') throw Object.assign(failure(`SVG 响应中断或未完成 (${finish ?? 'missing finish_reason'})`, 'incomplete_stream', finish !== 'content_filter'),{finishReason:finish});
     return content;
   } finally {
     // Also close a connection that remains open after [DONE] or an error.
@@ -100,9 +100,19 @@ function delay(ms, signal) {
 }
 export async function requestStep3Svg({base,modelBody,key,parseXML,signal,onRetry=()=>{},fetchImpl=globalThis.fetch,sleep=delay,maxAttempts=3,attemptTimeoutMs=600000}) {
   if (typeof parseXML !== 'function') throw new TypeError('parseXML is required');
-  // Explicit streaming bypasses relay buffered-chat aggregation and its nested
-  // retries. Each retry preserves the complete original prompt and references.
-  const body=JSON.stringify({...modelBody,stream:true});
+  // This helper is called only by NoneLinear Step 3. Fable 5.2 requires adaptive
+  // thinking; reasoning_effort/disabled thinking do not provide this control.
+  // Keep every prompt/reference intact, and never mutate the caller's request.
+  const adapted={...modelBody,stream:true};
+  const fable=modelBody?.model==='claude-fable-5.2';
+  const ceiling=Number.isSafeInteger(modelBody?.max_tokens)&&modelBody.max_tokens>0?modelBody.max_tokens:96000;
+  if(fable){
+    delete adapted.temperature;
+    delete adapted.reasoning_effort;
+    adapted.thinking={type:'adaptive'};
+    adapted.output_config={...modelBody.output_config,effort:'low'};
+    adapted.max_tokens=Math.min(16000,ceiling);
+  }
   for (let attempt=1; attempt<=maxAttempts; attempt++) {
     signal?.throwIfAborted();
     const controller=new AbortController();
@@ -111,7 +121,7 @@ export async function requestStep3Svg({base,modelBody,key,parseXML,signal,onRetr
     const timer=setTimeout(()=>controller.abort(failure('SVG 请求等待超时', 'timeout', true)),attemptTimeoutMs);
     try {
       const response=await fetchImpl(base.replace(/\/+$/,'')+'/chat/completions', {
-        method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${key}`},body,signal:controller.signal
+        method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${key}`},body:JSON.stringify(adapted),signal:controller.signal
       });
       const raw=await readCompletion(response);
       return completeStep3Svg(raw,parseXML);
@@ -123,6 +133,9 @@ export async function requestStep3Svg({base,modelBody,key,parseXML,signal,onRetr
         error.message+=`；SVG 未生成，未显示不完整结果（本次尝试 ${attempt}/${maxAttempts}）`;
         throw error;
       }
+      // Regenerate the whole SVG with a larger allowance after a token limit.
+      // Never append fragments, drop references or display a partial document.
+      if(fable && error.finishReason==='length') adapted.max_tokens=Math.min(ceiling,adapted.max_tokens*2);
       onRetry({attempt,nextAttempt:attempt+1,maxAttempts,error});
     } finally {
       clearTimeout(timer); signal?.removeEventListener('abort',abort);

@@ -41,6 +41,33 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/黎枭/.cach
         {choices:[{index:0,delta:{content:svg.slice(60)},finish_reason:'stop'}]},'[DONE]']);
       const opts={base:'https://fixture.invalid/v1/',modelBody:body,key:'fixture-only',parseXML,sleep:async()=>{}};
       const json=data=>new Response(JSON.stringify(data),{headers:{'content-type':'application/json'}});
+      await test('Fable adaptive request preserves full references and grows after length',async()=>{
+        const original={...body,model:'claude-fable-5.2',reasoning_effort:'high',output_config:{format:'fixture'}};
+        const snapshot=JSON.stringify(original),sent=[];
+        const result=await requestStep3Svg({...opts,modelBody:original,fetchImpl:async(url,init)=>{
+          sent.push(JSON.parse(init.body));
+          return sent.length===1?sse([{type:'error',message:'The read operation timed out',code:500}]):sent.length===2?sse([{choices:[{delta:{content:'<svg>'},finish_reason:'length'}]}]):success();
+        }});
+        check(result.code===svg && sent.length===3,'recovery');
+        check(sent.map(s=>s.max_tokens).join(',')==='16000,16000,32000','token growth');
+        for(const s of sent){
+          check(s.thinking.type==='adaptive' && s.output_config.effort==='low' && s.output_config.format==='fixture','adaptive settings');
+          check(!('temperature' in s) && !('reasoning_effort' in s),'unsupported thinking parameters');
+          check(JSON.stringify(s.messages)===JSON.stringify(original.messages),'prompt/reference loss');
+        }
+        check(JSON.stringify(original)===snapshot,'caller mutation');
+        let captured;
+        await requestStep3Svg({...opts,modelBody:{...original,max_tokens:8000},fetchImpl:async(url,init)=>{captured=JSON.parse(init.body);return success();}});
+        check(captured.max_tokens===8000,'explicit smaller limit overwritten');
+      });
+      await test('other models retain parameters; exhausted balance is not retried',async()=>{
+        let captured;
+        await requestStep3Svg({...opts,fetchImpl:async(url,init)=>{captured=JSON.parse(init.body);return success();}});
+        check(captured.temperature===body.temperature && captured.max_tokens===body.max_tokens && !captured.thinking,'other model changed');
+        let count=0;
+        try{await requestStep3Svg({...opts,fetchImpl:async()=>{count++;return sse([{error:{message:'NoneLinear upstream HTTP 402',code:402}}]);}});throw Error('accepted balance failure');}
+        catch(e){check(count===1 && e.code===402 && e.message.includes('余额不足'),'balance recovery');}
+      });
       await test('null-safe fragmented SSE and nested SVG',async()=>{
         const result=await requestStep3Svg({...opts,fetchImpl:async()=>success()});
         check(result.code===svg && !result.truncated,'must preserve full XML/UTF-8');
@@ -148,7 +175,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/黎枭/.cach
       });
       return results;
     },generationSource);
-    assert.equal(results.length,13);
+    assert.equal(results.length,15);
     for(const name of results) console.log('PASS '+name);
   }finally{await browser?.close();await new Promise(r=>server.close(r));}
 })().catch(error=>{console.error(error);process.exitCode=1;});

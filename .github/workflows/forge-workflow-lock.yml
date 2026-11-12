@@ -21,6 +21,10 @@ jobs:
             exit 0
           fi
 
+          if node scripts/check-step3-claude-adaptive-release-20261112.mjs; then
+            exit 0
+          fi
+
           if node scripts/check-revision-auto-scope-release-20261112.mjs; then
             exit 0
           fi
