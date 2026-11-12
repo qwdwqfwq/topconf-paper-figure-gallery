@@ -143,7 +143,7 @@
 FigureForge 基于画廊生成你的 Figure 1 初稿：描述论文，3,452 张顶会主图作为版式参考。免注册、无服务器，全部在浏览器本地运行。**[立即试用 →](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge/)**
 
 <p align="center">
-  <img src="forge/demo-forge.gif?v=20261002" alt="FigureForge 流程演示：输入论文、检索参考图、生成位图初稿" width="560">
+  <img src="docs/figureforge-examples/figureforge-workflow.gif" alt="FigureForge 流程演示：输入论文、检索参考图、生成位图初稿" width="920">
 </p>
 
 **[▶ 完整演示视频，3 分 23 秒，有声音](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)**

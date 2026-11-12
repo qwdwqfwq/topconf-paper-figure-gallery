@@ -99,7 +99,7 @@ FigureForgeで実際に生成した図です。細部を編集できる形式で
 
 論文を説明すると、3,452枚の学会図をレイアウトの参考にしてFigure 1の下書きを作成します。登録不要で、自分のAPIキーを使いブラウザ上で実行します。 **[FigureForgeを試す →](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge/)**
 
-<p align="center"><img src="forge/demo-forge.gif?v=20261002" alt="FigureForge" width="560"></p>
+<p align="center"><img src="docs/figureforge-examples/figureforge-workflow.gif" alt="FigureForge" width="920"></p>
 
 **[▶ 完全デモ動画 · 3分23秒 · 音声あり](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)**
 

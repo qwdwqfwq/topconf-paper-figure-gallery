@@ -99,7 +99,7 @@
 
 Опишите статью и используйте 3 452 иллюстрации как образцы композиции для черновика Figure 1. Регистрация не нужна; процесс работает в браузере с вашим API-ключом. **[Открыть FigureForge →](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge/)**
 
-<p align="center"><img src="forge/demo-forge.gif?v=20261002" alt="FigureForge" width="560"></p>
+<p align="center"><img src="docs/figureforge-examples/figureforge-workflow.gif" alt="FigureForge" width="920"></p>
 
 **[▶ Полная демонстрация · 3:23 · со звуком](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)**
 

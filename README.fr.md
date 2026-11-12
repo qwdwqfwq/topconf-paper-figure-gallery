@@ -99,7 +99,7 @@ Cette galerie rassemble les figures 1 et les illustrations de présentation de s
 
 Décrivez votre article et utilisez 3 452 figures comme références de composition pour créer une première version. Sans inscription ; le flux s’exécute dans votre navigateur avec votre clé API. **[Essayer FigureForge →](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge/)**
 
-<p align="center"><img src="forge/demo-forge.gif?v=20261002" alt="FigureForge" width="560"></p>
+<p align="center"><img src="docs/figureforge-examples/figureforge-workflow.gif" alt="FigureForge" width="920"></p>
 
 **[▶ Démonstration complète · 3 min 23 · avec son](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)**
 

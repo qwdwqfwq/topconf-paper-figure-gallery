@@ -99,7 +99,7 @@ Top-Conf Figure Gallery collects Figure 1 and teaser figures from six ML/AI conf
 
 Describe your paper and use 3,452 conference figures as layout references for your Figure 1 draft. No registration is required; the workflow runs in your browser and uses your API key. **[Try FigureForge →](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge/)**
 
-<p align="center"><img src="forge/demo-forge.gif?v=20261002" alt="FigureForge" width="560"></p>
+<p align="center"><img src="docs/figureforge-examples/figureforge-workflow.gif" alt="FigureForge" width="920"></p>
 
 **[▶ Full demo video · 3:23 · with audio](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)**
 

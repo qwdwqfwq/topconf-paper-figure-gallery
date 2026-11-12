@@ -99,7 +99,7 @@ FigureForge로 실제 생성한 그림입니다. 세부 요소를 편집할 수 
 
 논문을 설명하면 3,452개 학회 그림의 배치를 참고해 Figure 1 초안을 만듭니다. 가입이 필요 없으며 브라우저에서 본인의 API 키로 실행됩니다. **[FigureForge 사용하기 →](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/forge/)**
 
-<p align="center"><img src="forge/demo-forge.gif?v=20261002" alt="FigureForge" width="560"></p>
+<p align="center"><img src="docs/figureforge-examples/figureforge-workflow.gif" alt="FigureForge" width="920"></p>
 
 **[▶ 전체 시연 영상 · 3분 23초 · 소리 포함](https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/demo.html)**
 
