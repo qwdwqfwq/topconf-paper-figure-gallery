@@ -6140,18 +6140,19 @@ function prioritizedImagePaper(content,budget,available){
 }
 function compactImageGuide(j){
   if(!j || !Array.isArray(j.layoutBlueprint)) return '';
-  const zones=j.layoutBlueprint.slice(0,16).map((z,i)=>{
+  const zones=j.layoutBlueprint.slice(0,16).map(z=>{
     if(!z || typeof z!=='object') return '';
-    const name=String(z.role||z.id||z.name||'module').slice(0,10);
+    const name=String(z.role||z.name||'content module').replace(/^zone\s*\d+\s*[:：.-]?\s*/i,'').slice(0,80);
     const nums=[z.x,z.y,z.w,z.h].map(Number);
-    const box=nums.every(Number.isFinite)?` @${nums.map((n,k)=>Math.round(n/(k%2?900:1600)*100)).join(',')}%`:'';
-    return `${i+1}:${name}${box}`;
+    const position=nums.every(Number.isFinite)
+      ? ` (${['upper','middle','lower'][Math.min(2,Math.max(0,Math.floor((nums[1]+nums[3]/2)/300)))]} ${['left','center','right'][Math.min(2,Math.max(0,Math.floor((nums[0]+nums[2]/2)/(1600/3))))]})` : '';
+    return `${name}${position}`;
   }).filter(Boolean);
   const palette=Array.isArray(j.palette)?j.palette.slice(0,5).join(',')
     : j.palette && typeof j.palette==='object'
       ? ['background','primary','accent','neutral'].map(k=>j.palette[k]).filter(Boolean).slice(0,5).join(',')
       : '';
-  return zones.length ? `Layout zones (${zones.length}; preserve every zone): ${zones.join(' | ')}.\n${palette?`Palette: ${palette}.\n`:''}` : '';
+  return zones.length ? `Internal composition plan, never visible text; reflow these modules to fill the rectangle: ${zones.join(' | ')}.\n${palette?`Palette: ${palette}.\n`:''}` : '';
 }
 function selectImageRoute(route){
   const status=imageRoutes.status(route);
@@ -6174,7 +6175,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
   const dimensions=imageRequestDimensions(p,model,ratio,resolution,nativeGemini);
   const tg = TARGETS[$('#target').value] || TARGETS.overview;
   const guide = layoutGuide
-    ? `COMMON VISUAL GRAMMAR extracted across all selected references (highest priority; synthesize recurring panel topology, relative geometry, density, palette, spacing, arrows and hierarchy):\n${layoutGuide}\n\n`
+    ? `INTERNAL REFERENCE GUIDE, never render its planning text or coordinates. Synthesize panel topology, density, palette, spacing, arrows and hierarchy; reflow geometry to fill the requested rectangle:\n${layoutGuide}\n\n`
     : '';
   const logicalCanvas=figureCanvas(ratio);
   const hasAnalyzedLayout=passMode==='two' && !!analysis?.j;
@@ -6188,8 +6189,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
     + `Use a prominent bold TITLE line when that is a recurring convention in the references, otherwise keep a compact top region. `
     + `Use the recurring zone count, order, relative widths/heights and module-slot density from the design contract, allowing a new arrangement that combines the shared structure. `
     + `Do not collapse the shared structure into a sparse or symmetric generic grid. Treat the blueprint as a construction plan; every defined slot must receive `
-    + `one concrete content module from this paper, with the same nesting and approximate occupied area as the shared blueprint. Each zone carries its `
-    + `own header only when the shared blueprint calls for one. `
+    + `one concrete content module from this paper. Preserve nesting, but resize and reflow modules to fill the full rectangular composition. Headers must name actual paper components, never blueprint zone names or coordinates. `
     + `Use nested grouping where the shared blueprint shows it: section containers, grouping frames and module boxes are not interchangeable. `
     + `Inside each prescribed slot, use the module kind named by the blueprint — illustration, mini chart, table, formula, photo thumbnail, icon, `
     + `matrix, timeline or flow strip — and keep its footprint and alignment. Do not collapse several slots into one large generic card. `
@@ -6238,8 +6238,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
     + `White background, clean flat vector illustration, crisp aligned shapes, clearly readable short `
     + `English labels. `
     + `FINAL CHECK before you finish. Read the figure as a reviewer would. `
-    + `Is any section still holding a large empty area? Fill it with further module boxes that show `
-    + `this method's own parts. `
+    + `Is a corner or section still holding a large empty area? Resize and redistribute the existing paper-specific modules to fill the rectangle; do not invent results or filler. `
     + `Is any box a near-duplicate of its neighbour, or an element that could sit in any paper? `
     + `Replace it with a different kind of element that is specific to this method. `
     + `Can a reader name what every box contains by looking at it? If a box is generic, make it `
@@ -6250,6 +6249,8 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
     + `The goal is a figure that is full, varied and specific to this paper — what a top-conference `
     + `reviewer would find clear and well judged. `;
   const budget=imagePromptBudget(model);
+  // Mandatory bitmap-only rules stay outside style compression on every route.
+  const compositionRules=`COMPOSITION RULES: Fill the complete ${ratio} rectangular canvas with balanced panels and small even margins/gutters. No missing corner, L-shaped content, or large blank region. Resize/reflow existing modules without inventing content. Never draw planning metadata: Zone labels/numbers, layout coordinates/percentages, role codes or instructions. Show only paper-specific labels; genuine chart axes/measurements are allowed.\n`;
   const compact=`Create a publication-quality ${ratio} paper figure. Preserve panel hierarchy, arrows, palette and dense meaningful modules.\n`
     +zonePriority
     +`Populate every zone with this paper's actual method and results. ${tg.img.slice(0,100)}. Short legible labels.\n`
@@ -6257,7 +6258,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
       ? fitImagePrompt(layoutGuide||'',budget,Math.floor(budget.limit*(hasAnalyzedLayout?.35:.3)))+'\n'
       : '');
   // Keep the selected intent outside style compression, including custom text.
-  const intent=generationIntent(content)+'\n';
+  const intent=generationIntent(content)+'\n'+compositionRules;
   const paperReserve=Math.min(imagePromptSize(content,budget),Math.floor(budget.limit*(budget.unit==='tokens'?.25:.35)));
   const paperHeader='\nPaper content (figure-critical facts first):\n';
   if(imagePromptSize(intent+paperHeader,budget)+paperReserve>=budget.limit){
