@@ -12,11 +12,24 @@ export function revisionPlannerRoute(route){
 export async function revisionPlanner(parent,content,options,maxTokens){
   const {model,url}=revisionPlannerRoute(parent.route);
   if(!options.key)throw Error('请先填写当前服务商的 API Key。');
-  const response=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+options.key,'Content-Type':'application/json'},body:JSON.stringify({model,messages:[{role:'user',content}],temperature:0,max_tokens:maxTokens,response_format:{type:'json_object'}}),signal:AbortSignal.timeout(180000)});
-  if(!response.ok)throw Error('改图分析请求失败（HTTP '+response.status+'），未生成修改版。');
+  const provider={nonelinear:'非线智能',infistar:'无限星河',oai:'OpenAI'}[parent.route.p];
+  let response;
+  try{
+    response=await fetch(url,{method:'POST',headers:{Authorization:'Bearer '+options.key,'Content-Type':'application/json'},body:JSON.stringify({model,messages:[{role:'user',content}],temperature:0,max_tokens:maxTokens,response_format:{type:'json_object'}}),signal:AbortSignal.timeout(180000)});
+  }catch(error){
+    if(error?.name==='TimeoutError'||error?.name==='AbortError')throw Error(provider+'改图分析请求超时，未收到完整方案。请稍后重试或手动指定范围；未生成修改版。');
+    throw Error(provider+'改图分析连接失败：浏览器未收到可读取的 HTTP 响应（'+new URL(url).host+'）。请检查网络、代理或服务商跨域访问；这不是已确认的欠费或密钥错误。未生成修改版，可恢复连接后重试。');
+  }
+  if(!response.ok){
+    const hint=response.status===401?'请检查当前服务商的 API Key。':response.status===402?'请检查服务商账户余额。':response.status===413?'分析图片请求过大，请减少参考截图。':response.status===429?'请求过于频繁或额度受限，请检查服务商额度后重试。':'请稍后重试或检查服务商状态。';
+    throw Error(provider+'改图分析请求失败（HTTP '+response.status+'）。'+hint+'未生成修改版。');
+  }
   let data;try{data=await response.json();}catch{throw Error('改图分析接口返回无效内容，未生成修改版。');}
   if(data.error||data.choices?.[0]?.message?.refusal||data.choices?.[0]?.finish_reason==='length')throw Error('改图分析未完成，未生成修改版，请重试或手动指定范围。');
   let plan;try{plan=JSON.parse(data.choices[0].message.content.replace(/^\s*```(?:json)?\s*/,'').replace(/\s*```\s*$/,''));}catch{throw Error('模型未返回有效修改方案，未生成修改版。');}
+  // Some OpenAI-compatible gateways wrap a single JSON object in an array.
+  // Unwrap only one object; never guess between multiple candidate plans.
+  if(Array.isArray(plan)&&plan.length===1&&plan[0]&&typeof plan[0]==='object'&&!Array.isArray(plan[0]))plan=plan[0];
   return {plan,model};
 }
 export function validateLayout(plan,width,height,imageSizes){

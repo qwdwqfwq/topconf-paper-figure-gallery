@@ -488,7 +488,7 @@ export function createRevisionGallery(adapter){
       panel.querySelector('[data-retain-elements]').checked=editing.retainElementsDraft!==false;
       panel.querySelector('[data-retain-elements]').disabled=generating||!!reading||deleting;
       panel.querySelector('[data-revision-mode]').disabled=generating||!!reading||deleting;
-      panel.querySelector('[data-mode-hint]').textContent=(mode==='auto'?'直接描述想改什么，系统自动判断局部修改或区域重排，并在原图上标出建议范围。':mode==='reflow'?'增删元素后，允许调整范围内其余元素的位置和间距。':'只改指定内容，其他元素保留原有布局。')+' 上传截图可提供新增元素或帮助定位。先查看并确认高亮范围，再修改图片；无需提前画框。范围外保留原图像素，范围内尽量保留其他文字、数据和公式。自动判断目前支持非线智能。';
+      panel.querySelector('[data-mode-hint]').textContent=(mode==='auto'?'直接描述想改什么，系统自动判断局部修改或区域重排，并在原图上标出建议范围。':mode==='reflow'?'增删元素后，允许调整范围内其余元素的位置和间距。':'只改指定内容，其他元素保留原有布局。')+' 上传截图可提供新增元素或帮助定位。先查看并确认高亮范围，再修改图片；无需提前画框。范围外保留原图像素，范围内尽量保留其他文字、数据和公式。自动判断和范围确认支持非线智能、无限星河及 OpenAI 官方 API Key，分析请求使用当前服务商；请先选择对应服务商并填写密钥。';
       panel.querySelector('[data-select-regions]').hidden=editing.source==='svg';
       panel.querySelector('[data-select-regions]').disabled=generating||!!reading||deleting;
       // Display guidance depends only on the selected version, not provider loading.
