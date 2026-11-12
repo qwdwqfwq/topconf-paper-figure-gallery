@@ -381,7 +381,7 @@ zh:{
  "provider.infistar":"Infistar 无限星河（推荐）",
  "infistar.signup":"通过专属推广链接注册，领取 5 元体验额度，畅享 GPT、Gemini、Claude →",
  "mode.svg":"SVG 可编辑初稿",
- "mode.image":"AI 位图初稿（需要图像模型）",
+ "mode.image":"AI 位图初稿（强烈推荐） · 需要图像模型",
  "modelLabel":"模型",
  "hint.model":"API Key 与服务商在步骤一配置。SVG 用对话 / 视觉模型，位图用图像模型。",
  "analyzemodel":"归纳 / 可编辑重建视觉模型",
