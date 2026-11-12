@@ -7,6 +7,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/黎枭/.cach
 (async()=>{
   const moduleSource=fs.readFileSync(path.join(__dirname,'step3-svg-request.mjs'));
   const html=fs.readFileSync(path.join(__dirname,'index.html'),'utf8');
+  const normalizerSource=html.slice(html.indexOf('function normalizeChatTokenLimit('),html.indexOf('function withReasoning('));
   const generationSource=html.slice(html.indexOf('async function genOaiSVG('),html.indexOf('async function genAnthropicSVG('));
   const server=http.createServer((req,res)=>{
     res.setHeader('Content-Type',req.url==='/module.mjs'?'text/javascript':'text/html');
@@ -18,7 +19,8 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/黎枭/.cach
     browser=await chromium.launch({headless:true,executablePath:process.env.CHROME_PATH || 'C:/Program Files/Google/Chrome/Application/chrome.exe'});
     const page=await browser.newPage();
     await page.goto(`http://127.0.0.1:${server.address().port}`);
-    const results=await page.evaluate(async generationSource=>{
+    const results=await page.evaluate(async ({generationSource,normalizerSource})=>{
+      const normalizeChatTokenLimit=new Function(normalizerSource+';return normalizeChatTokenLimit;')();
       const {requestStep3Svg,completeStep3Svg}=await import('/module.mjs');
       const parseXML=code=>new DOMParser().parseFromString(code,'image/svg+xml');
       const svg='<svg xmlns="http://www.w3.org/2000/svg" width="800" height="600"><text>完整中文</text><svg><rect width="1" height="1"/></svg></svg>';
@@ -159,6 +161,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/黎枭/.cach
       await test('actual genOaiSVG renders only after recovery and audit',async()=>{
         let calls=0,renders=0;const notes=[];
         const dependencies={
+          normalizeChatTokenLimit,
           requestStep3Svg:o=>requestStep3Svg({...o,sleep:async()=>{},fetchImpl:async()=>++calls===1?json({error:{message:'timed out'}}):success()}),
           SVG_SYS:'fixture system prompt',refs:new Set(['ref1']),buildPrompt:()=> 'prompt',refDataURIs:async()=>['data:image/png;base64,fixture'],relayBase:()=>'',
           setGenNote:n=>notes.push(n),postJSON:()=>{throw Error('must bypass shared request');},tt:k=>k,diagnoseConnection:()=>'',friendlyHttp:()=>'',extractSvgCode:()=>{throw Error('must not auto-close');},
@@ -174,7 +177,7 @@ const {chromium}=require(process.env.PLAYWRIGHT_MODULE || 'C:/Users/黎枭/.cach
         check(renders===1,'failure overwrote previous drawing');
       });
       return results;
-    },generationSource);
+    },{generationSource,normalizerSource});
     assert.equal(results.length,15);
     for(const name of results) console.log('PASS '+name);
   }finally{await browser?.close();await new Promise(r=>server.close(r));}

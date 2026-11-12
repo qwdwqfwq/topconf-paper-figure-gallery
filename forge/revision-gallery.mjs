@@ -525,7 +525,7 @@ export function createRevisionGallery(adapter){
     finally{generating=false;refresh();}
   }
   const uploadBar=document.createElement('div');uploadBar.className='ff-revision-upload-entry';uploadBar.style.cssText='margin:16px 0;padding:16px;border:1px solid #ddd6ff;border-radius:12px';
-  const uploadButton=document.createElement('button');uploadButton.type='button';uploadButton.dataset.uploadOriginal='true';uploadButton.textContent='上传自己的图片进行修改';
+  const uploadButton=document.createElement('button');uploadButton.type='button';uploadButton.className='btn-primary';uploadButton.dataset.uploadOriginal='true';uploadButton.textContent='上传自己的图片进行修改';
   const originalInput=document.createElement('input');originalInput.type='file';originalInput.accept='image/png,image/jpeg,image/webp';originalInput.hidden=true;originalInput.dataset.originalFile='true';
   const uploadHint=document.createElement('p');uploadHint.setAttribute('role','status');uploadHint.textContent='无需先生成图片。上传后可局部修改、区域重排、保存版本，并使用相同的下载和可编辑导出入口。';
   uploadButton.onclick=()=>originalInput.click();

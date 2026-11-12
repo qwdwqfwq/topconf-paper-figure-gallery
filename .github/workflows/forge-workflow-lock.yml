@@ -17,6 +17,10 @@ jobs:
       - name: Verify FigureForge workflow lock
         shell: bash
         run: |
+          if node scripts/check-openai-token-purple-release-20261112.mjs; then
+            exit 0
+          fi
+
           if node scripts/check-step3-svg-recovery-release-20261112.mjs; then
             exit 0
           fi

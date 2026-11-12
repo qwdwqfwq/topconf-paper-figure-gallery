@@ -1422,7 +1422,17 @@ function anthropicHeaders(key){
 function reasoningEffort(scope){
   return $(scope==='parse'?'#parseReasoningEffort':scope==='recon'?'#reconReasoningEffort':'#visualReasoningEffort').value;
 }
+function normalizeChatTokenLimit(body){
+  // Chat Completions token limits are independent of the reasoning selector.
+  // Keep native Anthropic and Responses payloads in their own formats.
+  if(body.system || body.input!==undefined || !/^(gpt-|chatgpt-|o[134](?:-|$))/i.test(body.model) || !Object.hasOwn(body,'max_tokens')) return body;
+  const result={...body};
+  if(result.max_completion_tokens==null) result.max_completion_tokens=result.max_tokens;
+  delete result.max_tokens;
+  return result;
+}
 function withReasoning(body,scope){
+  body=normalizeChatTokenLimit(body);
   const effort=reasoningEffort(scope);
   if(!effort) return body;
   if(!['medium','high','xhigh'].includes(effort)) throw new Error('HTTP 400: 无效的推理强度');
@@ -1433,10 +1443,6 @@ function withReasoning(body,scope){
   delete result.temperature;
   delete result.top_p;
   delete result.thinking;
-  if(!body.input && /^(gpt-|o[134](?:-|$))/i.test(body.model) && body.max_tokens){
-    result.max_completion_tokens=body.max_tokens;
-    delete result.max_tokens;
-  }
   return result;
 }
 for(const [id,key] of [['parseReasoningEffort','ff_parse_reasoning_effort'],['visualReasoningEffort','ff_visual_reasoning_effort']]){
@@ -2453,6 +2459,7 @@ function friendlyHttp(status, txt){
   return tt('err.http',{s:status,t:txt.slice(0,200)})+apiContext();
 }
 function postJSON(base, path, body, key, extraHeaders, timeoutMs=Infinity){
+  if(path==='/chat/completions') body=normalizeChatTokenLimit(body);
   return (path==='/chat/completions'?requestChat:fetchWithTimeout)(base+path,{method:'POST',
     headers:{'Content-Type':'application/json',Authorization:'Bearer '+key,...extraHeaders},
     body:JSON.stringify(body)},timeoutMs);
@@ -2603,7 +2610,7 @@ $('#genBtn').onclick = async ()=>{
 async function genOaiSVG(base,model,key,content,p,refIds,layoutGuide){
   const useIds = refIds||[...refs];
   const prompt = buildPrompt(content,layoutGuide,useIds);
-  let body = {model,temperature:0.3,max_tokens:96000}, usedVision=false;
+  let body = normalizeChatTokenLimit({model,temperature:0.3,max_tokens:96000}), usedVision=false;
   if(p==='ark' && !relayBase()) body.thinking={type:'disabled'};
   if(useIds.length && p!=='ds'){
     const uris = await refDataURIs(useIds);

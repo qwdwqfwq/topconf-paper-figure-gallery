@@ -58,7 +58,8 @@ const server=http.createServer((req,res)=>{
           await page.evaluate(mode=>window.__test.parse(mode,{text:'test paper',pages:1,total:1,imgs:['data:image/png;base64,dGVzdA==']}),mode);
           const body=requests.at(-1),responses=endpoint.includes('openai.com');
           assert.equal(responses?body.reasoning?.effort:body.reasoning_effort,effort||undefined);
-          if(effort){assert.equal(body.temperature,undefined);if(!responses){assert.equal(body.max_tokens,undefined);assert.equal(body.max_completion_tokens,5000);}}
+          if(effort) assert.equal(body.temperature,undefined);
+          if(!responses){assert.equal(body.max_tokens,undefined);assert.equal(body.max_completion_tokens,5000);}
         }
       }
     }
