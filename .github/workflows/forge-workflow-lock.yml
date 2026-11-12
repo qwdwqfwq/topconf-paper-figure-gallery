@@ -80,6 +80,10 @@ jobs:
             exit 0
           fi
 
+          if node scripts/check-english-banner-release-20261112.mjs; then
+            exit 0
+          fi
+
           # Allow only the one CI-only follow-up to the approved release.
           approved=c8f26bc17383a60ddb23be0f2665dfa539990cf9
           expected_paths=$(printf '%s\n' .github/workflows/deploy.yml .github/workflows/forge-workflow-lock.yml)
