@@ -17,7 +17,7 @@ jobs:
       - name: Verify FigureForge workflow lock
         shell: bash
         run: |
-          if node scripts/check-revision-panel-clean-release-20261112.mjs; then
+          if node scripts/check-revision-fetch-followup-release-20261113.mjs || node scripts/check-revision-panel-clean-release-20261112.mjs; then
             exit 0
           fi
 

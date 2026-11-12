@@ -1,4 +1,4 @@
-import {scopedRevision,confirmedRevision,selectRevisionRegions,modeInstruction} from './revision-scope.mjs?v=20261112-panel4';
+import {scopedRevision,confirmedRevision,selectRevisionRegions,modeInstruction,readRevisionSource} from './revision-scope.mjs?v=20261112-panel4';
 import {usesInfistarGemini,geminiImageRequest,geminiImageResult,compatibleImageRequest,requestImageWithRecovery,imageRequestDiagnostics} from './image-api.mjs?v=20261026-nonelinear-resolution';
 import {imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261026-nonelinear-resolution';
 
@@ -249,6 +249,7 @@ Return ONLY JSON {"passed":boolean,"columnBottoms":[],"nodeChecks":[{"id":"inven
 }
 
 export async function generateRevision(parent,prompt,options){
+  options={...options,onProgress:parent.onRevisionProgress||options.onProgress};
   return (parent.confirmScope||parent.revisionMode==='auto'?confirmedRevision:scopedRevision)(parent,prompt,options,generateRegionRevision);
 }
 
@@ -258,16 +259,15 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
   const model=usesInfistarGemini(base,requestedModel)&&requestedModel==='gemini-3.1-flash-image-preview'?'gemini-3.1-flash-image':requestedModel;
   if(!key)throw new Error('请先填写该服务商的 API Key。');
   if(typeof prompt!=='string'||!prompt.trim())throw new Error('请填写本次修改要求。');
-  const source=await toDataURL(parent.image);
-  const references=[source,...(parent.attachments||[]).map(item=>item.data)];
+  const source=await readRevisionSource(parent.image,{toDataURL});
+  const references=[parent.diagramReflow&&parent.diagramContentReference||source,...(parent.attachments||[]).map(item=>item.data)];
   // The target draft must be the edit canvas; placing the original first encourages cloning it.
-  if(parent.diagramReflow&&references.length>1)references.unshift(references.pop());
   if(references.length>(p==='nonelinear'?5:parent.focusedRegion?6:5)||references.some(data=>typeof data!=='string'||!imageData.test(data)))
     throw new Error('待修改原图或截图无效，请重新选择；本次未发送请求。');
   const native=usesInfistarGemini(base,model);
   if(native&&(!revisionGeminiRatios.includes(ratio)||!['1K','2K','4K'].includes(resolution)))throw new Error('不支持的修改图比例或分辨率。');
   const dimensions=native?{field:'gemini',aspectRatio:ratio,imageSize:resolution}:imageRequestDimensions(p,model,ratio,resolution,false);
-  const instruction=parent.diagramReflow?`Redesign the INTERNAL layout of this selected diagram panel. Image 0 is the NEW TARGET LAYOUT canvas to finish. Image 1 is the OLD panel, supplied ONLY as a content/style reference, never as a layout to reproduce. Other images are user references. Reconstruct a genuinely NEW compact arrangement: relocate process nodes relative to each other, shorten connectors, reduce large gaps. Copy all original labels, conditions, legend descriptions, equations and numeric values exactly, retaining their logical relationships. Preserve visual style and color coding. Output the redesigned panel only, with readable text. Do not reproduce the original arrangement. User request and content checklist:\n${prompt}`:revisionInstruction(prompt,references.length,parent.revisionMode,parent.focusedRegion);
+  const instruction=parent.diagramReflow?`Redesign the INTERNAL layout of this selected diagram panel. Image 0 (FIRST) is the NEW TARGET LAYOUT canvas to finish. The content checklist transcribes the original text, math, styles and relationships. Follow the draft geometry. Reconstruct a genuinely NEW compact arrangement: relocate process nodes relative to each other, shorten connectors, reduce large gaps. Copy all original labels, conditions, legend descriptions, equations and numeric values exactly, retaining their logical relationships. Preserve visual style and color coding. Output the redesigned panel only, with readable text. Do not reproduce the original arrangement. User request and content checklist:\n${prompt}`:revisionInstruction(prompt,references.length,parent.revisionMode,parent.focusedRegion);
   const inputHashes=await Promise.all(references.map(fingerprint));
   const startedAt=Date.now(),clientRequestId=crypto.randomUUID();
   try{
@@ -496,7 +496,7 @@ export function createRevisionGallery(adapter){
       // Display guidance depends only on the selected version, not provider loading.
       panel.querySelector('[data-model]').textContent=editing.source==='svg'
         ?'请在步骤三选择「SVG 可编辑初稿」，并选择视觉模型。'
-        :'请在步骤三选择「AI 位图初稿」，并选择图像模型。';
+        :'请在步骤三选择服务商、填写对应密钥，并选择「AI 位图初稿」的图像模型。先分析范围，确认后再生成修改图。';
     }
     for(const v of versions){
       v.card.querySelector('[data-delete]').disabled=busy()||generating||!!reading||deleting;
@@ -506,16 +506,20 @@ export function createRevisionGallery(adapter){
       v.card.querySelector('[data-status]').textContent=pending?'可编辑版生成中…':ready?'可编辑版已就绪':v.state?.reconFailed?'可编辑版生成失败':'';
       const b=v.card.querySelector('[data-build]');b.disabled=busy()||deleting;b.textContent=pending?'正在生成可编辑版…':ready?'查看可编辑版':v.state?.reconFailed?'重试生成可编辑版':'生成可编辑版';
     }
-    submit.disabled=generating||!!reading||deleting||!editing;submit.textContent=generating?'正在生成修改版…':reading?'正在读取截图…':editing?.source==='svg'?'生成修改版':'分析要求并确认范围';
+    submit.disabled=generating||!!reading||deleting||!editing;submit.textContent=generating?'正在处理，请查看下方进度…':reading?'正在读取截图…':editing?.source==='svg'?'生成修改版':'① 分析要求，查看修改范围';
   }
   async function revise(){
     if(generating||reading||deleting||!editing)return;
     const parent=editing,prompt=textarea.value.trim();if(!prompt){textarea.focus();return;}
     generating=true;error.textContent='';refresh();
+    let progress=panel.querySelector('[data-revision-progress]');
+    if(!progress){progress=document.createElement('p');progress.dataset.revisionProgress='true';progress.setAttribute('role','status');error.before(progress);}
+    progress.textContent='正在读取原图并分析要求；下一步会显示范围供你确认，尚未开始生图。';
+    const onRevisionProgress=message=>{progress.textContent=message;};
     try{
       // Request-only attachments; never replace a version bitmap or reconstruction state.
       const references=(parent.attachmentsDraft||[]).map(item=>({...item}));
-      const result=await adapter.generate({...parent,route:{...parent.route},attachments:references,revisionMode:parent.source==='svg'?(parent.revisionModeDraft||parent.revisionMode||'local'):(parent.revisionModeDraft||'auto'),confirmScope:parent.source!=='svg',retainElements:parent.retainElementsDraft!==false,editRegions:parent.regionsDraft?.map(r=>({...r}))},prompt);
+      const result=await adapter.generate({...parent,onRevisionProgress,route:{...parent.route},attachments:references,revisionMode:parent.source==='svg'?(parent.revisionModeDraft||parent.revisionMode||'local'):(parent.revisionModeDraft||'auto'),confirmScope:parent.source!=='svg',retainElements:parent.retainElementsDraft!==false,editRegions:parent.regionsDraft?.map(r=>({...r}))},prompt);
       error.textContent='';
       if(!await reviewRevision(parent,result,prompt,references,list)){
         edit(parent);error.textContent='本次结果未保存。修改要求和截图已保留；再次生成会发起新的 API 请求。';return;
@@ -523,8 +527,11 @@ export function createRevisionGallery(adapter){
       if(result.revisionAudit)result.revisionAudit={...result.revisionAudit,review:'user-confirmed',reviewedAt:Date.now()};
       const v={...result,id:crypto.randomUUID(),number:nextNumber,parentId:parent.id,prompt,route:{...(result.route||parent.route)},created:Date.now(),state:null};
       append(v);persist(v);edit(v);v.card.scrollIntoView({block:'nearest',behavior:'smooth'});
-    }catch(e){error.textContent=e.message||'修改失败，请重试。';}
-    finally{generating=false;refresh();}
+    }catch(e){
+      const message=e?.message||'未知错误';
+      error.textContent=/Failed to fetch|NetworkError|Load failed/i.test(message)?'改图连接中断：浏览器未收到可读取的响应。请检查网络、代理和服务商状态后重试。原图、修改要求和截图已保留；如果已进入生图阶段，请先核对服务商记录，避免重复扣费。':message;
+    }
+    finally{progress.textContent='';generating=false;refresh();}
   }
   const uploadBar=document.createElement('div');uploadBar.className='ff-revision-upload-entry';uploadBar.style.cssText='margin:16px 0;padding:16px;border:1px solid #ddd6ff;border-radius:12px';
   const uploadButton=document.createElement('button');uploadButton.type='button';uploadButton.className='btn-primary';uploadButton.dataset.uploadOriginal='true';uploadButton.textContent='上传自己的图片进行修改';
