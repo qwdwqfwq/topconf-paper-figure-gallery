@@ -12,8 +12,8 @@ const parent="dccaf8602d658858ddcbfc367e4f81956ae460d8";
 const online=["forge/revision-gallery.mjs","forge/revision-layout.mjs","forge/revision-scope.mjs"];
 const check="scripts/check-revision-fetch-followup-release-20261113.mjs";
 const expected={
-  "forge/revision-gallery.mjs": "545d0b5b9e8a4f8cf0d155ee8c145a46d8478a950ed3dcd688c6aa4091db9239",
-  "forge/revision-layout.mjs": "f0efc8ef5c4fb643a2e32a2ba7815123017ada2415d432d643c16619abac27b6",
+  "forge/revision-gallery.mjs": "d72434d30075e080763834cbfc1ba56cbd84d4a601b49a120022cc98bf093850",
+  "forge/revision-layout.mjs": "d292c22dddcbc26626399cf5fb4486f5cab8ce7802e2417f1b609bfe9ce0aa0a",
   "forge/revision-scope.mjs": "2db5a6626f8b970c64ba1c8bf8496fbc43f3b98934c45106251c4849c8a39037",
   ".github/workflows/deploy.yml": "09d2cd09889136f340e06caad3875b5254dea5894da76ea133b4e077129c46d2",
   ".github/workflows/forge-workflow-lock.yml": "4b4ed39ce4ef13ea1f343c635ab0f59e34cca321f59eb36d6478294164465d4e"
@@ -21,10 +21,11 @@ const expected={
 const changed=(...args)=>git('diff','--name-only','--no-renames',...args,'--').split('\n').filter(Boolean).sort();
 const staged=process.argv.includes('--staged');
 const revision=staged?':':'HEAD:';
-assert.equal(staged?git('rev-parse','HEAD'):git('show','-s','--format=%P','HEAD'),'82fe8f3caf6e6ab0bdf9548edae44815212107e8','Unexpected follow-up parent');
+assert.equal(staged?git('rev-parse','HEAD'):git('show','-s','--format=%P','HEAD'),'d29d5f05c40bc10492c610ae65f532a3dee3198f','Unexpected follow-up parent');
+assert.equal(git('show','-s','--format=%P','d29d5f05c40bc10492c610ae65f532a3dee3198f'),'82fe8f3caf6e6ab0bdf9548edae44815212107e8','Unexpected release checker parent');
 assert.equal(git('show','-s','--format=%P','82fe8f3caf6e6ab0bdf9548edae44815212107e8'),parent,'Unexpected original release parent');
 assert.deepEqual(changed(...(staged?['--cached',parent]:[parent,'HEAD'])),[...Object.keys(expected),check].sort(),'Unexpected release scope');
-assert.equal(git('status','--porcelain','--untracked-files=all').split('\n').filter(Boolean).length,staged?1:0,'Unexpected working tree changes');
+assert.equal(git('status','--porcelain','--untracked-files=all').split('\n').filter(Boolean).length,staged?3:0,'Unexpected working tree changes');
 for(const [path,hash] of Object.entries(expected)){
  const committed=execFileSync('git',['show',revision+path],{cwd:root,encoding:'utf8'}).replace(/\r\n/g,'\n');
  assert.equal(createHash('sha256').update(committed).digest('hex'),hash,'Unreviewed patch: '+path);
