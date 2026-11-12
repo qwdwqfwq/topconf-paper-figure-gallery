@@ -232,7 +232,18 @@ For this reflow, preserve original title and the bottom legend/equation/footer b
     for(const item of plan.items){const r=item.source;if(r&&['x','y','width','height'].every(k=>Number.isInteger(r[k]))&&r.x>=0&&r.y>=0&&r.x<1000&&r.y<1000&&r.x+r.width<=1030&&r.y+r.height<=1030){r.width=Math.min(r.width,1000-r.x);r.height=Math.min(r.height,1000-r.y);}}
     for(const item of plan.items.filter(i=>i.keep)){const t=item.target;if(t&&Number.isInteger(t.cx)&&!('x' in t)&&!('cy' in t)&&Number.isInteger(t.y)){t.cy=t.y;delete t.y;}if(!t||!['cx','cy','width','height'].every(k=>Number.isInteger(t[k])))throw Error('面板新布局缺少中心坐标，请重新分析。');item.target={x:Math.floor(t.cx-t.width/2),y:Math.floor(t.cy-t.height/2),width:t.width,height:t.height};}
     for(const item of plan.items)for(const key of ['source',...(item.keep?['target']:[])]){const r=item[key];if(r&&['x','y','width','height'].every(k=>Number.isInteger(r[k]))&&r.x>=0&&r.y>=0&&r.width>0&&r.height>0&&r.x+r.width<=1000&&r.y+r.height<=1000)item[key]={x:Math.floor(r.x*width/1000),y:Math.floor(r.y*height/1000),width:Math.max(2,Math.floor(r.width*width/1000)),height:Math.max(2,Math.floor(r.height*height/1000))};else throw Error('面板内部元素坐标无效，请重新分析。');}
-    if(plan.preserveBands){const b=plan.preserveBands;if(!Number.isInteger(b.topEnd)||!Number.isInteger(b.bottomStart)||b.topEnd<0||b.bottomStart>1000||b.bottomStart-b.topEnd<250)throw Error('保留区域与流程区域边界无效，请重新分析。');plan.preserveBands={topEnd:Math.floor(b.topEnd*height/1000),bottomStart:Math.floor(b.bottomStart*height/1000)};for(const i of plan.items.filter(i=>i.keep)){if(i.source.y+i.source.height<=plan.preserveBands.topEnd||i.source.y>=plan.preserveBands.bottomStart)i.target={...i.source};else if(i.target.y<plan.preserveBands.topEnd||i.target.y+i.target.height>plan.preserveBands.bottomStart)throw Error('流程节点侵入保留的标题、图例或公式区域，请重新排布。');}}
+    if(plan.preserveBands){const b=plan.preserveBands;
+      // Vision bounds may straddle a static-band edge by a few pixels. Expand
+      // preservation to the complete source item before validating new positions.
+      // Never trim a title/legend, or move an actual process node into a band.
+      const tolerance=Math.ceil(height*.03);
+      let top=Math.floor(b.topEnd*height/1000),bottom=Math.floor(b.bottomStart*height/1000);
+      for(const i of plan.items.filter(i=>i.keep)){const s=i.source,end=s.y+s.height;
+        if(s.y<top&&end>top&&end-top<=tolerance)top=end;
+        if(end>bottom&&s.y<bottom&&bottom-s.y<=tolerance)bottom=s.y;
+      }
+      b.topEnd=Math.ceil(top*1000/height);b.bottomStart=Math.floor(bottom*1000/height);
+      if(!Number.isInteger(b.topEnd)||!Number.isInteger(b.bottomStart)||b.topEnd<0||b.bottomStart>1000||b.bottomStart-b.topEnd<250)throw Error('保留区域与流程区域边界无效，请重新分析。');plan.preserveBands={topEnd:Math.floor(b.topEnd*height/1000),bottomStart:Math.floor(b.bottomStart*height/1000)};for(const i of plan.items.filter(i=>i.keep)){if(i.source.y+i.source.height<=plan.preserveBands.topEnd||i.source.y>=plan.preserveBands.bottomStart)i.target={...i.source};else if(i.target.y<plan.preserveBands.topEnd||i.target.y+i.target.height>plan.preserveBands.bottomStart)throw Error('流程节点侵入保留的标题、图例或公式区域，请重新排布。');}}
     plan.coordinateSpace='pixels';
   }
   if(Array.isArray(plan?.edges))for(const edge of plan.edges)if(edge.label===undefined)edge.label='';

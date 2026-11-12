@@ -13,7 +13,7 @@ const online=["forge/revision-gallery.mjs","forge/revision-layout.mjs","forge/re
 const check="scripts/check-revision-fetch-followup-release-20261113.mjs";
 const expected={
   "forge/revision-gallery.mjs": "d72434d30075e080763834cbfc1ba56cbd84d4a601b49a120022cc98bf093850",
-  "forge/revision-layout.mjs": "9ce0d8c1e34de5b41bbff76e3777430f15803523c662b65dde23507f7cbf51e1",
+  "forge/revision-layout.mjs": "0548a494953796bf24c4aa602ffd475adfaa9efb19cdc2b856dc857d1a23cdfd",
   "forge/revision-scope.mjs": "2db5a6626f8b970c64ba1c8bf8496fbc43f3b98934c45106251c4849c8a39037",
   ".github/workflows/deploy.yml": "09d2cd09889136f340e06caad3875b5254dea5894da76ea133b4e077129c46d2",
   ".github/workflows/forge-workflow-lock.yml": "4b4ed39ce4ef13ea1f343c635ab0f59e34cca321f59eb36d6478294164465d4e"
@@ -21,7 +21,7 @@ const expected={
 const changed=(...args)=>git('diff','--name-only','--no-renames',...args,'--').split('\n').filter(Boolean).sort();
 const staged=process.argv.includes('--staged');
 const revision=staged?':':'HEAD:';
-assert.equal(staged?git('rev-parse','HEAD'):git('show','-s','--format=%P','HEAD'),'26ff1138da40fb0a291243510fa2667cfdcb8748','Unexpected follow-up parent');
+assert.equal(staged?git('rev-parse','HEAD'):git('show','-s','--format=%P','HEAD'),'eb2d406f45e3b2380e97ed201692904634333a28','Unexpected follow-up parent');
 assert.equal(git('show','-s','--format=%P','d29d5f05c40bc10492c610ae65f532a3dee3198f'),'82fe8f3caf6e6ab0bdf9548edae44815212107e8','Unexpected release checker parent');
 assert.equal(git('show','-s','--format=%P','82fe8f3caf6e6ab0bdf9548edae44815212107e8'),parent,'Unexpected original release parent');
 assert.deepEqual(changed(...(staged?['--cached',parent]:[parent,'HEAD'])),[...Object.keys(expected),check].sort(),'Unexpected release scope');
