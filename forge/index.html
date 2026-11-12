@@ -429,6 +429,7 @@
             <span class="blab" data-i18n="src.query"></span>
             <input type="text" id="contentQuery" data-i18n-ph="src.queryPh">
           </div>
+          <button type="button" class="btn-ghost btn-sm" id="parsePdfBtn" hidden disabled>按当前描述重新解析（调用模型）</button>
           <div class="status-line" id="contentModeHint" data-state="idle" data-i18n-title="hint.label" role="status" aria-live="polite"></div>
           <div class="meta-line warn" id="pdfExtractionMeta" data-i18n="meta.nopdf"></div>
           <p class="bnote err" id="parseErr" hidden></p>
@@ -1264,6 +1265,9 @@ $('#targetDesc').oninput = ()=>localStorage.setItem('ff_target_desc', $('#target
 /* ---------------- PDF parsing (model-first; no PDF.js semantic fallback) ---------------- */
 let pdfContext = null;
 let pdfIntentSeq = 0;
+let pdfParseBusy = false;
+let pdfUploadBusy = false;
+let pdfParseDirty = false;
 const TARGET_SECTION_HINTS = {
   overview:'研究问题、核心方法、主要贡献、主要结果与应用价值',
   architecture:'模型模块、编码器/解码器、组件连接关系、数据流与张量或输入输出',
@@ -1525,9 +1529,34 @@ function setParseStatus(state){
   const el=$('#contentModeHint'); el.dataset.state=state;
   el.dataset.label={idle:tt('hint.label'),loading:tt('ps.loading'),success:tt('ps.success'),error:tt('ps.error')}[state];
 }
+// Step 1 only: edits invalidate pending results without submitting model work.
+function syncPdfParseButton(){
+  const btn=$('#parsePdfBtn'), busy=pdfParseBusy||pdfUploadBusy;
+  btn.hidden=!pdfContext || $('#contentMode').value==='free';
+  btn.disabled=busy || btn.hidden;
+  btn.setAttribute('aria-busy',String(busy));
+  btn.textContent=busy?refsText('解析中…','Parsing…'):refsText('按当前描述重新解析（调用模型）','Reparse current description (calls model)');
+  $('#uploadBtn').disabled=busy;
+  if(pdfParseDirty && pdfContext && $('#contentMode').value!=='free'){
+    setParseStatus('idle');
+    $('#contentModeHint').textContent=busy
+      ?refsText('描述已修改；当前解析结束后请点击重新解析，不会自动提交。','Description changed. Reparse after the current request finishes; no automatic submission.')
+      :refsText('描述已修改，尚未重新解析；点击重新解析会调用模型。','Description changed. Click Reparse to call the model.');
+  }
+}
+function markPdfParseDirty(){
+  ++pdfIntentSeq;
+  pdfParseDirty=!!pdfContext && $('#contentMode').value!=='free';
+  clearParseErr();
+  syncPdfParseButton();
+}
 async function selectPdfContext(){
-  if(!pdfContext || $('#contentMode').value==='free') return;
+  if(pdfParseBusy || !pdfContext || $('#contentMode').value==='free') return;
+  pdfParseBusy=true;
+  pdfParseDirty=false;
   const seq=++pdfIntentSeq;
+  try{
+  syncPdfParseButton();
   const setHint = (key,vars)=>{ setParseStatus('loading'); $('#contentModeHint').textContent=tt(key,vars||{}); };
   clearParseErr();
   setHint('ps.sending');
@@ -1539,7 +1568,6 @@ async function selectPdfContext(){
   order.push('text');
   if(modelSeesImages()) order.push('img');
   const failures=[];
-  try{
     let result=null, used=null;
     for(const ch of order){
       if(seq!==pdfIntentSeq) return;
@@ -1558,6 +1586,7 @@ async function selectPdfContext(){
           setExtractMetaKey('ps.meta1c', {m:parserModel()||'–'}, false);
           payload = await extractPdfImages();
         }
+        if(seq!==pdfIntentSeq) return;
         result = await callPdfParser(ch, payload);
         used = ch;
         break;
@@ -1584,21 +1613,28 @@ async function selectPdfContext(){
     setExtractMetaKey('ps.meta3', null, true);
     showParseErr(err.message);
     showErr(tt('err.pdfparse',{m:err.message}));
+  }finally{
+    pdfParseBusy=false;
+    syncPdfParseButton();
   }
 }
-function syncContentMode(reparse=true){
+function syncContentMode(){
   const mode=$('#contentMode').value; $('#contentQueryRow').hidden=mode!=='custom';
   setParseStatus('idle');
   $('#contentModeHint').textContent=contentModeText(mode);
-  if(reparse && pdfContext && mode!=='free') selectPdfContext();
+  markPdfParseDirty();
 }
 $('#contentMode').onchange=()=>syncContentMode();
-$('#contentQuery').oninput=()=>{ if($('#contentMode').value==='custom'&&pdfContext) selectPdfContext(); };
-$('#target').addEventListener('change',()=>{ if(pdfContext && $('#contentMode').value!=='free') selectPdfContext(); });
-$('#targetDesc').addEventListener('input',()=>{ if(pdfContext && $('#contentMode').value!=='free') selectPdfContext(); });
-$('#uploadBtn').onclick=()=>$('#pdfFile').click();
+$('#contentQuery').oninput=markPdfParseDirty;
+$('#target').addEventListener('change',markPdfParseDirty);
+$('#targetDesc').addEventListener('input',markPdfParseDirty);
+$('#parsePdfBtn').onclick=()=>selectPdfContext();
+document.addEventListener('langchange',syncPdfParseButton);
+$('#uploadBtn').onclick=()=>{ if(!pdfParseBusy && !pdfUploadBusy) $('#pdfFile').click(); };
 $('#pdfFile').onchange=async e=>{
-  const file=e.target.files[0]; if(!file)return;
+  const file=e.target.files[0]; if(!file || pdfParseBusy || pdfUploadBusy)return;
+  pdfUploadBusy=true;
+  syncPdfParseButton();
   const btn=$('#uploadBtn'); btn.disabled=true; btn.setAttribute('aria-busy','true'); $('#uploadLabel').textContent=tt('up.reading');
   try{
     if(file.size>25*1024*1024) throw new Error(tt('up.size'));
@@ -1606,10 +1642,11 @@ $('#pdfFile').onchange=async e=>{
     const buf=await file.arrayBuffer();
     pdfContext={fileName:file.name,mime:file.type||'application/pdf',dataUri,buf,size:file.size};
     pdfText=null;
+    markPdfParseDirty();
     setExtractMetaKey('up.meta', {f:file.name,s:Math.round(file.size/1024)}, false);
     if($('#contentMode').value!=='free') await selectPdfContext();
   }catch(err){ showErr(tt('up.fail',{m:err.message})); showParseErr(tt('up.fail',{m:err.message})); }
-  finally{ btn.disabled=false; btn.removeAttribute('aria-busy'); $('#uploadLabel').textContent=tt('upload'); e.target.value=''; }
+  finally{ pdfUploadBusy=false; syncPdfParseButton(); btn.removeAttribute('aria-busy'); $('#uploadLabel').textContent=tt('upload'); e.target.value=''; }
 };
 
 /* ---------------- reference images -> data URI ---------------- */
