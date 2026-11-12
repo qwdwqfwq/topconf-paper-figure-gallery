@@ -8,7 +8,7 @@ export function revisionMode(value='local'){
 export function requestedRevisionMode(selected,prompt){
   if(selected&&selected!=='auto')return revisionMode(selected);
   for(const clause of String(prompt).split(/[，,。；;！!？?\n]/)){
-    const intent=/(?:重新|重新进行|重新调整|调整)(?:排版|排列|布局)|重排|reflow|rearrang\w*|re-?layout/i.exec(clause);
+    const intent=/(?:重新|重新进行|重新调整|调整|优化)(?:排版|排列|布局)|(?:排版|布局)(?:布局)?(?:稍微|稍稍|再|进一步|适当)?优化|重排|reflow|rearrang\w*|re-?layout/i.exec(clause);
     if(!intent)continue;
     const before=clause.slice(0,intent.index);
     if(!/(?:不要|无需|不用|不必|禁止|不需要|别|保持原有|保持原来|保持现有|不|without|do not|don't)\s*(?:再|进行|做|任何|重新|调整|the|any)?\s*$/i.test(before))return 'reflow';
@@ -109,6 +109,43 @@ export function revisionAnalysisPreview(image){
   return canvas;
 }
 
+// Resolve a background-named container from an explicit hierarchy, rather than
+// asking a second model to agree with the first model's (possibly nested) crop.
+export function resolveRevisionContainer(plan){
+  if(!Array.isArray(plan.containerCandidates)||!plan.containerCandidates.length)throw new Error('未能核对背景面板的完整边界，请明确面板标题或手动框选；未开始修改。');
+  const candidates=plan.containerCandidates.filter(c=>c.matchesRequestedBackground===true&&c.kind==='panel');
+  for(const c of candidates)validateRegions([c.region],1000,1000);
+  const contains=(a,b)=>a.x<=b.x+3&&a.y<=b.y+3&&a.x+a.width>=b.x+b.width-3&&a.y+a.height>=b.y+b.height-3;
+  const outer=candidates.filter(c=>!candidates.some(p=>p!==c&&p.region.width*p.region.height>c.region.width*c.region.height&&contains(p.region,c.region)));
+  if(outer.length!==1)throw new Error('存在多个符合背景描述的面板，请明确面板标题或手动框选；未开始修改。');
+  const selected=outer[0];
+  if(typeof selected.title!=='string'||!selected.title.trim())throw new Error('完整面板缺少定位标题，未开始修改。');
+  return {...plan,scopeType:'container',regions:[selected.region],summary:'重排完整面板“'+selected.title+'”内的元素，保留原有内容并优化间距和空白。',preserve:'该完整面板内的原有文字、数据、公式和连线关系；面板外全部内容逐像素保留'};
+}
+
+// Verify a gray-background description against source pixels, rather than a
+// model confusing a neutral inset with the warm background of its parent.
+function verifyGrayCandidates(plan,image,prompt){
+  if(!/灰色|gr[ae]y/i.test(prompt)||!Array.isArray(plan.containerCandidates))return plan;
+  const canvas=revisionAnalysisPreview(image),ctx=canvas.getContext('2d',{willReadFrequently:true});
+  const {data}=ctx.getImageData(0,0,canvas.width,canvas.height);
+  return {...plan,containerCandidates:plan.containerCandidates.map(c=>{
+    if(c.matchesRequestedBackground!==true||c.kind!=='panel')return c;
+    validateRegions([c.region],1000,1000);
+    const r=c.region,spreads=[];
+    for(let yy=5;yy<100;yy+=3)for(let xx=5;xx<100;xx+=3){
+      const x=Math.min(canvas.width-1,Math.floor((r.x+r.width*xx/100)*canvas.width/1000));
+      const y=Math.min(canvas.height-1,Math.floor((r.y+r.height*yy/100)*canvas.height/1000));
+      const i=(y*canvas.width+x)*4,channels=[data[i],data[i+1],data[i+2]];
+      const lo=Math.min(...channels),spread=Math.max(...channels)-lo;
+      if(lo>=190&&spread<=80)spreads.push(spread);
+    }
+    spreads.sort((a,b)=>a-b);
+    // Insufficient background evidence remains ambiguous; never infer a match.
+    return spreads.length>=50&&spreads[Math.floor(spreads.length/2)]>12?{...c,matchesRequestedBackground:false}:c;
+  })};
+}
+
 // This planner proposes scope only. It cannot write pixels or start reconstruction.
 export async function planRevision(parent,prompt,options){
   revisionPlannerRoute(parent.route);
@@ -133,7 +170,13 @@ export async function planRevision(parent,prompt,options){
   const content=[{type:'text',text:instruction+' Image 0 is the ORIGINAL with a normalized coordinate grid (x labels across the top, y labels down the left). Image 1 is the SAME ORIGINAL without grid. All subsequent images are REFERENCES ONLY: never return coordinates from a reference. Read the grid to locate the complete target group on Image 0; report its left x, top y, width and height in the grid units.'},{type:'image_url',image_url:{url:guide.toDataURL('image/jpeg',.92)}},{type:'image_url',image_url:{url:preview}}];
   for(const ref of parent.attachments||[]){const refImage=await options.loadImage(await readRevisionSource(ref.data,options));content.push({type:'image_url',image_url:{url:revisionAnalysisPreview(refImage).toDataURL('image/jpeg',.92)}});}
   if(requestedMode)content[0].text+=' The request explicitly requires '+requestedMode+' mode. Return mode="'+requestedMode+'" and select the complete affected group for that operation.';
-  const {plan,model:plannerModel}=await revisionPlanner(parent,content,options,4000);
+  let {plan,model:plannerModel}=await revisionPlanner(parent,content,options,4000);
+  let scopeRequests=1;
+  if(!manual&&requestedMode==='reflow'&&/(灰色|背景|面板|模块|panel|background)/i.test(prompt)){
+    const review=await revisionPlanner(parent,[{type:'text',text:instruction+'\nINDEPENDENT CONTAINER INVENTORY: Inspect the original independently. The first proposal is deliberately withheld to prevent anchoring on an incorrect inset. Add containerCandidates:[{title:string,kind:"panel"|"inset",background:string,matchesRequestedBackground:boolean,region:{x,y,width,height}}] to the JSON. Inventory ALL top-level titled panels and any nested shaded insets that could match the user background description. A panel is an enclosing section with its own section heading and internal diagram; a formula box or legend inside it is an inset. Include BOTH parent and child when nested. Use normalized-1000 coordinates. Match the actual panel background color, not the color of a small box inside another panel. For a generic request about the gray block, include the whole gray enclosing section as a matching panel even when a nested box is also gray. Do not invent a title for an inset. If multiple separate panels genuinely match, ask for clarification. Return the full schema including containerCandidates.'},...content.slice(1)],options,5000);
+    plan=review.plan;plannerModel=review.model;scopeRequests++;
+    if(!plan.needsClarification)plan=resolveRevisionContainer(verifyGrayCandidates(plan,image,prompt));
+  }
   if(plan.needsClarification===true)throw new Error('请补充修改要求：'+String(plan.question||'需要修改原图中的哪个元素？'));
   if(typeof plan.needsClarification!=='boolean'||typeof plan.summary!=='string'||!plan.summary.trim()||typeof plan.preserve!=='string'||!plan.preserve.trim())throw new Error('建议范围缺少修改说明，未开始修改图片。');
   plan.mode=revisionMode(plan.mode);
@@ -153,7 +196,7 @@ export async function planRevision(parent,prompt,options){
     if(r.y<=height*.02){r.height+=r.y;r.y=0;}
   }
   plan.regions=validateRegions(!manual&&plan.mode==='reflow'&&parent.retainElements?pixels.map(r=>plan.scopeType==='element-group'?cleanScopeEdges(image,r):r):pixels,width,height);
-  return {mode:plan.mode,summary:plan.summary.slice(0,1500),preserve:plan.preserve.slice(0,1500),regions:plan.regions,width,height,plannerModel,plannerProvider:parent.route.p,apiRequestCount:1};
+  return {mode:plan.mode,summary:plan.summary.slice(0,1500),preserve:plan.preserve.slice(0,1500),regions:plan.regions,width,height,plannerModel,plannerProvider:parent.route.p,apiRequestCount:scopeRequests};
 }
 
 export async function confirmedRevision(parent,prompt,options,generate){
@@ -162,7 +205,7 @@ export async function confirmedRevision(parent,prompt,options,generate){
   else{const image=await options.loadImage(await readRevisionSource(parent.image,options));const width=image.naturalWidth||image.width,height=image.naturalHeight||image.height;plan={mode:revisionMode(parent.revisionMode),summary:prompt,preserve:'其他内容',regions:validateRegions(parent.editRegions,width,height),width,height,apiRequestCount:0};}
   const confirmed=await selectRevisionRegions(await readRevisionSource(parent.image,options),plan.regions,plan);
   if(!confirmed)throw new Error('已取消，本次未修改图片。修改要求和截图已保留。');
-  const result=await scopedRevision({...parent,revisionMode:plan.mode,editRegions:confirmed},prompt,options,generate);
+  const result=await scopedRevision({...parent,revisionMode:plan.mode,editRegions:confirmed,confirmedRevisionScope:{summary:plan.summary,preserve:plan.preserve}},prompt,options,generate);
   result.revisionAudit={...result.revisionAudit,apiRequestCount:result.revisionAudit.apiRequestCount+plan.apiRequestCount,scopePlan:{...plan,regions:confirmed,confirmedAt:Date.now(),adjusted:JSON.stringify(confirmed)!==JSON.stringify(plan.regions)}};
   return result;
 }
