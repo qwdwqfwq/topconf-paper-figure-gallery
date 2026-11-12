@@ -737,6 +737,7 @@ import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=2026
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261026-nonelinear-resolution';
 import {createRevisionGallery,generateRevision} from './revision-gallery.mjs?v=20261112-svg';
 import {svgChatResponse} from './svg-chat-response.mjs?v=20261112';
+import {requestStep3Svg} from './step3-svg-request.mjs?v=20261112-svg-recovery';
 import {svgVersion,generateSVGRevision} from './svg-revision.mjs?v=20261112';
 import {ImageRoutes, safeImageFailover} from './image-routes.mjs?v=20261020';
 const imageRoutes=new ImageRoutes();
@@ -2613,19 +2614,28 @@ async function genOaiSVG(base,model,key,content,p,refIds,layoutGuide){
   }else{
     body.messages=[{role:'system',content:SVG_SYS},{role:'user',content:prompt}];
   }
-  let r;
-  try{ r = await postJSON(base,'/chat/completions',body,key); }
-  catch(e){
-    if(e.name==='TimeoutError') throw new Error(tt('svg.timeout'));
-    const diag=await diagnoseConnection(base,key,model);
-    throw new Error(diag || tt('svg.blocked'));
+  let parsed;
+  if(p==='nonelinear'){
+    parsed=await requestStep3Svg({base,modelBody:body,key,
+      parseXML:code=>new DOMParser().parseFromString(code,'image/svg+xml'),
+      onRetry:({nextAttempt,maxAttempts})=>setGenNote((window.GAL_I18N?.lang||'en').startsWith('zh')
+        ? `SVG 响应暂未完整返回，正在恢复（${nextAttempt}/${maxAttempts}）...`
+        : `Recovering SVG generation (${nextAttempt}/${maxAttempts})...`)});
+  }else{
+    let r;
+    try{ r = await postJSON(base,'/chat/completions',body,key); }
+    catch(e){
+      if(e.name==='TimeoutError') throw new Error(tt('svg.timeout'));
+      const diag=await diagnoseConnection(base,key,model);
+      throw new Error(diag || tt('svg.blocked'));
+    }
+    let txt = await r.text();
+    // Preserve references on provider failures; never silently switch to text-only.
+    if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
+    const d = JSON.parse(txt);
+    parsed = svgChatResponse(d, {parseXML:code=>new DOMParser().parseFromString(code,'image/svg+xml'),
+      chinese:(window.GAL_I18N?.lang||'en').startsWith('zh')});
   }
-  let txt = await r.text();
-  // Preserve references on provider failures; never silently switch to text-only.
-  if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
-  const d = JSON.parse(txt);
-  const parsed = svgChatResponse(d, {parseXML:code=>new DOMParser().parseFromString(code,'image/svg+xml'),
-    chinese:(window.GAL_I18N?.lang||'en').startsWith('zh')});
   const code = parsed.code;
   if(!code) throw new Error(tt('svg.none'));
   const auditRes = await auditAndRepair(code, {base, model, key, provider:p, anthropic:false},
