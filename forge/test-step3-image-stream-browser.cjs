@@ -40,12 +40,15 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
       window.fetch=(url,init)=>{
        if(init?.method!=='POST')return original(url,init);
        calls++;request={url:String(url),body:JSON.parse(init.body)};
-       const bytes=new TextEncoder().encode(stream);let offset=0;
+       const synchronous=provider==='nonelinear';
+       if(synchronous && Object.hasOwn(request.body,'stream'))return Promise.resolve(new Response('不支持流式，请勿设置stream参数',{status:400}));
+       const payload=synchronous?JSON.stringify(incomplete?{data:[]}:{data:[{b64_json:pixels}]}):stream;
+       const bytes=new TextEncoder().encode(payload);let offset=0;
        return Promise.resolve(new Response(new ReadableStream({async pull(controller){
         await new Promise(resolve=>setTimeout(resolve,1));
         if(offset===bytes.length){controller.close();return;}
         controller.enqueue(bytes.slice(offset,offset+=Math.min(2039,bytes.length-offset)));
-       }}),{headers:{'content-type':'text/event-stream','x-request-id':'trace-ui-stream'}}));
+       }}),{headers:{'content-type':synchronous?'application/json':'text/event-stream','x-request-id':'trace-ui-stream'}}));
       };
       let error='';
       try{await genOaiImage(native?'https://infistar.cc/v1':provider==='oai'?'https://api.openai.com/v1':window.FF_NONELINEAR_BASE,
@@ -70,10 +73,11 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
     assert.match(result.request.url,/:streamGenerateContent\?alt=sse$/);
     assert.deepEqual(result.request.body.generationConfig.imageConfig,{aspectRatio:'16:9',imageSize:'2K'});
    }else{
-    assert.equal(result.request.body.stream,true);
+    assert.equal(Object.hasOwn(result.request.body,'stream'),provider!=='nonelinear');
+    if(provider!=='nonelinear')assert.equal(result.request.body.stream,true);
     assert.equal(result.request.body.size,provider==='oai'?'2048x1152':'2K');
    }
-   if(incomplete){assert.match(result.error,/complete final image/);assert.equal(result.imageUnchanged,true);}
+   if(incomplete){assert.ok(result.error);if(provider!=='nonelinear')assert.match(result.error,/complete final image/);assert.equal(result.imageUnchanged,true);}
    else{assert.equal(result.error,'');assert.deepEqual(result.image,{width:2048,height:1152});}
    console.log(provider+': '+(incomplete?'truncated stream rejected':'final image displayed at 2048×1152'));
   }

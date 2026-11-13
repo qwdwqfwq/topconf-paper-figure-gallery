@@ -3,6 +3,20 @@ import {imageRequestDiagnostics} from './image-api.mjs';
 
 export function step3StreamingRequest(url,body){
   const target=new URL(url);
+  // NoneLinear image generation rejects even stream:false. Both project relays
+  // preserve the upstream's synchronous image contract.
+  const synchronousImage=/\/images\/(?:generations|edits)$/.test(target.pathname) &&
+    (['api.nonelinear.com.cn','gallery-nonelinear-relay.lixiao-gallery.workers.dev'].includes(target.hostname) ||
+      (['localhost','127.0.0.1','[::1]'].includes(target.hostname) && target.pathname.startsWith('/api/nonelinear/v1/')));
+  if(synchronousImage){
+    if(body instanceof FormData){
+      const form=new FormData();
+      for(const [name,value] of body) if(name!=='stream') form.append(name,value);
+      return {url:target.href,body:form,nativeGemini:false};
+    }
+    const {stream,...parameters}=body;
+    return {url:target.href,body:parameters,nativeGemini:false};
+  }
   if(/:(?:streamGenerateContent|generateContent)$/.test(target.pathname)){
     target.pathname=target.pathname.replace(/:generateContent$/,':streamGenerateContent');
     target.searchParams.set('alt','sse');
@@ -127,7 +141,7 @@ const transportCodes=new Set(['UND_ERR_SOCKET','UND_ERR_CONNECT_TIMEOUT','UND_ER
   'UND_ERR_BODY_TIMEOUT','ECONNRESET','ETIMEDOUT','ENOTFOUND','ECONNREFUSED']);
 
 // One request and one body reader for every Step 3 image provider. Providers
-// that ignore stream:true may still return JSON; receive that through the same
+// with synchronous image APIs return JSON; receive that through the same
 // reader without resubmitting the generation or altering image parameters.
 export async function requestStep3ImageStream({url,body,key,usedReferences=false,
   timeoutMs=Infinity,fetchImpl=fetch,onProgress=()=>{}}){
