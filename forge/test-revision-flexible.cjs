@@ -29,12 +29,29 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
    return {verified,rejected};
   });
   assert.deepEqual(pixelChecks,{verified:3,rejected:9});console.log(JSON.stringify({pixelChecks,passed:true}));
-  for(const mode of ['resize','reshape','redesign','retry']){
+  const geometryChecks=await page.evaluate(async()=>{
+   const {repairRevisionGeometry,revisionGeometryIssues}=await import('./revision-layout.mjs');
+   let repaired=0;
+   for(const count of [3,22,40])for(const outside of [false,true]){
+    const plan={items:Array.from({length:count},(_,n)=>({id:'node-'+n,label:'Exact label '+n,keep:true,source:{x:n*3,y:n*5,width:120,height:45},target:{x:outside?-90+n*18:80+n%4*80,y:outside?980+n*12:80+Math.floor(n/4)*40,width:n===0?800:230,height:n===0?90:125}})),edges:[{from:'node-0',to:'node-1',label:'risk = false & base = 1.0'}]};
+    const inventory=JSON.stringify(plan.items.map(({target,...item})=>item)),edges=JSON.stringify(plan.edges);
+    if(!revisionGeometryIssues(plan,1000,1100).length)throw Error('fixture does not overlap');
+    if(!repairRevisionGeometry(plan,1000,1100)||revisionGeometryIssues(plan,1000,1100).length)throw Error('automatic geometry repair failed');
+    if(JSON.stringify(plan.items.map(({target,...item})=>item))!==inventory||JSON.stringify(plan.edges)!==edges)throw Error('repair changed source content/topology');
+    const once=JSON.stringify(plan);if(repairRevisionGeometry(plan,1000,1100)||JSON.stringify(plan)!==once)throw Error('repair is not stable');repaired++;
+   }
+   return {repaired};
+  });
+  assert.equal(geometryChecks.repaired,6);console.log(JSON.stringify({geometryChecks,passed:true}));
+  for(const mode of ['resize','reshape','redesign','retry','overlap','outside']){
    const result=await page.evaluate(async mode=>{
-    const {retainedReflow}=await import('./revision-layout.mjs');
+    const {retainedReflow,repairRevisionGeometry}=await import('./revision-layout.mjs');
     const prompt='保留所有原元素，优化整个区域的设计，允许缩小放大、改变形状和换行，把原来的从左到右改为从上到下。';
     const items=['A','B','C'].map((id,n)=>({id,label:id,appearance:'purple filled box',keep:true,source:{x:80+n*320,y:150,width:160,height:80},target:[{x:420,y:70,width:160,height:80},{x:440,y:360,width:120,height:60},{x:360,y:700,width:240,height:120}][n]}));
     if(mode==='reshape')items[1].target={x:400,y:360,width:200,height:60};
+    if(mode==='overlap')items.forEach((i,n)=>i.target={...i.target,y:70+n*55});
+    if(mode==='outside')items[2].target={...items[2].target,x:990,y:1100};
+    const expected={items:structuredClone(items)};repairRevisionGeometry(expected,1000,1000);
     const edges=[{from:'A',to:'B',label:'risk = true and base = 1.0'},{from:'B',to:'C',label:''}];
     const requirements=[{id:'vertical',request:'从左到右改为从上到下'}];
     const plan={kind:'connected-diagram',layout:prompt,redesign:mode==='redesign',design:mode==='redesign'?'Retypeset labels with a new readable font and rounded node shapes.':'',coordinateSpace:'normalized-1000',items,edges,requirements};
@@ -58,7 +75,7 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
      }else{
       if(!text.includes('Expected positions are deliberately withheld'))throw Error('audit leaked plan');
       const center=r=>({x:r.x+r.width/2,y:r.y+r.height/2});
-      response={passed:true,layoutChanged:true,moreCompact:false,requestSatisfied:true,requirements:requirements.map(r=>({...r,satisfied:true,evidence:'Measured vertical ordering'})),unmetRequirements:[],items:items.map(i=>({id:i.id,matches:true,observedCount:1,originalCenter:center(i.source),observedCenter:center(i.target),evidence:'Visible content'})),connections:edges.map(e=>({...e,matches:true,evidence:'Directed connection'}))};
+      response={passed:true,layoutChanged:true,moreCompact:false,requestSatisfied:true,requirements:requirements.map(r=>({...r,satisfied:true,evidence:'Measured vertical ordering'})),unmetRequirements:[],items:items.map(i=>({id:i.id,matches:true,observedCount:1,originalCenter:center(i.source),observedCenter:center(expected.items.find(e=>e.id===i.id).target),evidence:'Visible content'})),connections:edges.map(e=>({...e,matches:true,evidence:'Directed connection'}))};
      }
      return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(response)}}]}));
     };
@@ -77,6 +94,7 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
    assert.ok(result.items[1].target.height<result.items[1].source.height,'smaller target must survive crop refinement');
    assert.ok(result.items[2].target.width>result.items[2].source.width,'larger target must survive crop refinement');
    assert.equal(result.retention,['reshape','redesign'].includes(mode)?'semantic-internal-nodes':'pixel-internal-nodes');
+   if(mode==='resize')assert.deepEqual(result.items.map(i=>({width:i.target.width,height:i.target.height})),[{width:160,height:80},{width:120,height:60},{width:240,height:120}],'recovering source pixels must not enlarge proposed destinations');
    console.log(JSON.stringify({passed:true,...result}));
   }
   for(const mode of ['standalone-resize','standalone-reshape','standalone-redesign']){
