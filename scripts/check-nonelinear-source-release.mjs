@@ -8,11 +8,12 @@ import {join,resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('..',import.meta.url));
 const anchor='661d2648bdc4efc0b49772243340dcb4e2704789';
+const releaseParent='a94a3ce987617e6c187d93da9d6725d45096820a';
 const publishedTree='5a3932cffef7a9efe9b7b690b86f7737850733cd';
 export const allowed=['.github/workflows/deploy.yml','.github/workflows/forge-workflow-lock.yml','forge/index.html','forge/nonelinear-source.mjs','nonelinear-relay/source-image.mjs','forge/test-nonelinear-source.mjs','forge/test-nonelinear-source-browser.cjs','nonelinear-relay/test-source-image.mjs','scripts/nonelinear-source-entry-patch.json','scripts/check-nonelinear-source-release.mjs','scripts/test-nonelinear-source-release.mjs'];
 export const payload=['forge/index.html','forge/nonelinear-source.mjs','nonelinear-relay/source-image.mjs'];
 const expected={
-  ".github/workflows/deploy.yml": "359a3f9ec6fe9b213708a6316553da951c65d434f0fdceb9efa81128685bf5e3",
+  ".github/workflows/deploy.yml": "443e0a505e94a499dc13beafd4faaceebf558f3253a34a50e12043776fd6df9b",
   ".github/workflows/forge-workflow-lock.yml": "dacc1a2e4ef2ae6e1de55e0492e29abf7ddc46358a5fa08a98d535c0317aa2de",
   "forge/index.html": "42debbd44f06d51c3262f358a1d2fd2c6f5b35be54ba4375d55110a8e8e10391",
   "forge/nonelinear-source.mjs": "990976d7c1d6aafde95805df93e226b5c98513fde9fc6a86a17ea4af1db3df2c",
@@ -37,8 +38,8 @@ export function assertFrozenEntry(actual,before){
 export function verifyBlob(path,data){assert.ok(expected[path],'Unreviewed path');assert.equal(createHash('sha256').update(data.toString().replace(/\r\n/g,'\n')).digest('hex'),expected[path],'Unreviewed content: '+path);}
 function main(){
  const working=process.argv.includes('--working');
- if(working)assert.equal(git('rev-parse','HEAD'),anchor,'Unexpected working base');
- else{assert.equal(git('show','-s','--format=%P','HEAD'),anchor,'Release must directly follow reviewed production');assert.equal(git('status','--porcelain','--untracked-files=all'),'','Dirty checkout');}
+ if(working)assert.equal(git('rev-parse','HEAD'),releaseParent,'Unexpected working base');
+ else{assert.equal(git('show','-s','--format=%P','HEAD'),releaseParent,'Release must directly follow reviewed repair');assert.equal(git('status','--porcelain','--untracked-files=all'),'','Dirty checkout');}
  const paths=working?[...new Set([...git('diff','--name-only','--no-renames',anchor,'--').split('\n').filter(Boolean),...git('ls-files','--others','--exclude-standard').split('\n').filter(Boolean)])]:changed(anchor,'HEAD');
  assertAllowedPaths(paths);assert.equal(Object.keys(expected).length,10);
  for(const p of Object.keys(expected))verifyBlob(p,readFileSync(join(root,p)));

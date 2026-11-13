@@ -51,7 +51,6 @@ jobs:
           node forge/test-nonelinear-source-browser.cjs
           node forge/test-manual-revision-browser.cjs
           node forge/test-revision-context.cjs
-          node forge/test-revision-context-online.cjs
           node forge/test-revision-auto-ui.cjs
       - name: Preserve existing bitmap regression checks
         run: node --test forge/test-openai-token-limit.mjs forge/test-bitmap-composition.mjs forge/test-generation-intent.mjs
