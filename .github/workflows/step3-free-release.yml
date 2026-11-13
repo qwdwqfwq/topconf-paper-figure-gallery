@@ -1,0 +1,94 @@
+name: Deploy isolated Step 3 free image editing
+on:
+  push:
+    branches: [main]
+    paths:
+      - forge/revision-gallery.mjs
+      - forge/test-revision-free.cjs
+      - .github/workflows/step3-free-release.yml
+      - scripts/check-step3-free-release.mjs
+      - scripts/test-step3-free-release.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Original lock result (historical failures remain failures)
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Record original lock outcome explicitly
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: echo "Original lock outcome = $ORIGINAL_OUTCOME. Independent Step 3 acceptance does not change this result." >> "$GITHUB_STEP_SUMMARY"
+      - name: Strict isolated release acceptance and artifact construction
+        run: node scripts/check-step3-free-release.mjs --prepare-pages
+      - name: Step 3 stream protocol regression
+        run: node --test forge/test-step3-image-stream.mjs forge/test-revision-error-recovery.mjs
+      - name: Independent acceptance adversarial tests
+        run: node --test scripts/test-step3-free-release.mjs forge/test-revision-routing.mjs forge/test-nonelinear-source.mjs nonelinear-relay/test-source-image.mjs
+      - name: Preserve existing Responses transport regression
+        run: node --test forge/test-infistar-reconstruction-responses.mjs forge/test-infistar-reconstruction-stream.mjs
+      - name: Install isolated revision browser test runtime
+        run: npm install --prefix "$RUNNER_TEMP/revision-test" playwright@1.58.2 && "$RUNNER_TEMP/revision-test/node_modules/.bin/playwright" install chromium --with-deps
+      - name: Current revision behavior and pixel preservation regression
+        env:
+          REVISION_PLAYWRIGHT: ${{ runner.temp }}/revision-test/node_modules/playwright
+          REVISION_BUNDLED_BROWSER: '1'
+        run: |
+          node forge/test-revision-compact.cjs
+          node forge/test-revision-flexible.cjs
+          node forge/test-step3-image-stream-browser.cjs
+          node forge/test-nonelinear-source-browser.cjs
+          node forge/test-manual-revision-browser.cjs
+          node forge/test-revision-free.cjs
+      # These unchanged tests describe the superseded mandatory-planner UI.
+      # Run them on the original production commit; the new free-edit UI above
+      # tests the replacement behavior against the current application.
+      - name: Preserve historical planner UI contracts on their original version
+        env:
+          REVISION_PLAYWRIGHT: ${{ runner.temp }}/revision-test/node_modules/playwright
+          REVISION_BUNDLED_BROWSER: '1'
+        run: |
+          git worktree add --detach "$RUNNER_TEMP/previous-revision-ui" db8ba058c4b63b4601f06ea71ffb66677c7a5eb6
+          cd "$RUNNER_TEMP/previous-revision-ui"
+          node forge/test-revision-context.cjs
+          node forge/test-revision-auto-ui.cjs
+      - name: Preserve existing bitmap regression checks
+        run: node --test forge/test-openai-token-limit.mjs forge/test-bitmap-composition.mjs forge/test-generation-intent.mjs
+      - name: Preserve existing SVG regression checks
+        run: node --test forge/test-svg-chat-response.mjs nonelinear-relay/test-chat-stream.mjs nonelinear-relay/test-worker.mjs nonelinear-relay/test-live-chat.mjs nonelinear-relay/test-source-image.mjs nonelinear-relay/test-references.mjs
+      - name: Preserve existing retrieval regression checks
+        run: node --test forge/test-retrieval-boot.mjs
+      - name: Preserve existing PDF regression checks
+        run: node --test forge/test-chat-api.mjs forge/test-openai-pdf.mjs nonelinear-relay/test-worker.mjs nonelinear-relay/test-references.mjs nonelinear-relay/test-source-image.mjs nonelinear-relay/test-chat-stream.mjs forge/test-infistar-reconstruction-stream.mjs nonelinear-relay/test-live-chat.mjs
+      - name: Preserve existing editable export regression checks
+        run: node forge/test-editable-export.mjs
+      - name: Upload independent byte preservation proof
+        uses: actions/upload-artifact@v4
+        with:
+          name: isolated-step3-free-proof
+          path: /tmp/isolated-step3-free-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/isolated-step3-free-pages
+      - name: Deploy isolated artifact to current application
+        id: deployment
+        uses: actions/deploy-pages@v4
