@@ -1,4 +1,4 @@
-name: Deploy authorized Infistar Responses repair
+name: Deploy isolated Step 3 image stream
 on:
   push:
     branches: [main]
@@ -30,12 +30,14 @@ jobs:
       - name: Record original lock outcome explicitly
         env:
           ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
-        run: echo "Original lock outcome = $ORIGINAL_OUTCOME. Independent revision acceptance does not change this result." >> "$GITHUB_STEP_SUMMARY"
+        run: echo "Original lock outcome = $ORIGINAL_OUTCOME. Independent Step 3 acceptance does not change this result." >> "$GITHUB_STEP_SUMMARY"
       - name: Strict isolated release acceptance and artifact construction
-        run: node scripts/check-infistar-responses-release.mjs --prepare-pages
+        run: node scripts/check-step3-stream-release.mjs --prepare-pages
+      - name: Step 3 stream protocol regression
+        run: node --test forge/test-step3-image-stream.mjs
       - name: Independent acceptance adversarial tests
-        run: node --test scripts/test-infistar-responses-release.mjs
-      - name: Responses transport and existing stream regression
+        run: node --test scripts/test-step3-stream-release.mjs
+      - name: Preserve existing Responses transport regression
         run: node --test forge/test-infistar-reconstruction-responses.mjs forge/test-infistar-reconstruction-stream.mjs
       - name: Install isolated revision browser test runtime
         run: npm install --prefix "$RUNNER_TEMP/revision-test" playwright@1.58.2 && "$RUNNER_TEMP/revision-test/node_modules/.bin/playwright" install chromium --with-deps
@@ -43,7 +45,9 @@ jobs:
         env:
           REVISION_PLAYWRIGHT: ${{ runner.temp }}/revision-test/node_modules/playwright
           REVISION_BUNDLED_BROWSER: '1'
-        run: node forge/test-revision-compact.cjs
+        run: |
+          node forge/test-revision-compact.cjs
+          node forge/test-step3-image-stream-browser.cjs
       - name: Preserve existing bitmap regression checks
         run: node --test forge/test-openai-token-limit.mjs forge/test-bitmap-composition.mjs forge/test-generation-intent.mjs
       - name: Preserve existing SVG regression checks
@@ -57,12 +61,12 @@ jobs:
       - name: Upload independent byte preservation proof
         uses: actions/upload-artifact@v4
         with:
-          name: isolated-infistar-proof
-          path: /tmp/isolated-infistar-proof.json
+          name: isolated-step3-stream-proof
+          path: /tmp/isolated-step3-stream-proof.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: /tmp/isolated-infistar-pages
+          path: /tmp/isolated-step3-stream-pages
       - name: Deploy isolated artifact to current application
         id: deployment
         uses: actions/deploy-pages@v4

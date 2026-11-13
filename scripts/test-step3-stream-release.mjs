@@ -1,0 +1,10 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {readFileSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
+import {assertAllowedPaths,assertArtifactDiff,assertIndexIsolation,verifyBlob} from './check-step3-stream-release.mjs';
+const allowed=[".github/workflows/deploy.yml",".github/workflows/forge-workflow-lock.yml","forge/index.html","forge/step3-image-stream.mjs","forge/test-step3-image-stream-browser.cjs","forge/test-step3-image-stream.mjs","scripts/check-step3-stream-release.mjs","scripts/test-step3-stream-release.mjs"];
+test('release scope rejects frozen/shared/unrelated changes',()=>{assertAllowedPaths(allowed);for(const p of ['forge/image-api.mjs','forge/i18n_forge.js','forge/sw.js','package.json','scripts/check-forge-workflow-lock.mjs','.github/forge-workflow-lock.json'])assert.throws(()=>assertAllowedPaths([...allowed,p]));assert.throws(()=>assertAllowedPaths(allowed.slice(1)));});
+test('artifact scope excludes every unrelated file',()=>{assertArtifactDiff(['forge/index.html','forge/step3-image-stream.mjs']);assert.throws(()=>assertArtifactDiff(['forge/index.html','forge/step3-image-stream.mjs','forge/revision-scope.mjs']));});
+test('exact inverse of three Step 3 patches preserves all Step 4 code',()=>{const html=readFileSync(new URL('../forge/index.html',import.meta.url),'utf8');const before=execFileSync('git',['show','7c86e3ac1825a5cc38e066f5b69dbd89048987db:forge/index.html'],{encoding:'utf8',maxBuffer:4*1024*1024});assertIndexIsolation(html,before);assert.throws(()=>assertIndexIsolation(html+'\n<!-- unrelated -->',before));assert.throws(()=>assertIndexIsolation(html.replace('requestStep3ImageStream({','unexpectedTransport({'),before));});
+test('reviewed module hash rejects arbitrary payload changes',()=>{const p='forge/step3-image-stream.mjs',data=readFileSync(new URL('../'+p,import.meta.url));verifyBlob(p,data);assert.throws(()=>verifyBlob(p,Buffer.concat([data,Buffer.from('changed')])));assert.throws(()=>verifyBlob('forge/image-api.mjs',data));});
