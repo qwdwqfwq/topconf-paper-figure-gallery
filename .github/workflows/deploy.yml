@@ -1,4 +1,4 @@
-name: Deploy unlocked Step 3 layout intent
+name: Deploy isolated revision context
 on:
   push:
     branches: [main]
@@ -32,11 +32,11 @@ jobs:
           ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
         run: echo "Original lock outcome = $ORIGINAL_OUTCOME. Independent Step 3 acceptance does not change this result." >> "$GITHUB_STEP_SUMMARY"
       - name: Strict isolated release acceptance and artifact construction
-        run: node scripts/check-layout-intent-release.mjs --prepare-pages
+        run: node scripts/check-revision-context-release.mjs --prepare-pages
       - name: Step 3 stream protocol regression
         run: node --test forge/test-step3-image-stream.mjs forge/test-revision-error-recovery.mjs
       - name: Independent acceptance adversarial tests
-        run: node --test scripts/test-layout-intent-release.mjs forge/test-revision-routing.mjs
+        run: node --test scripts/test-revision-context-release.mjs forge/test-revision-routing.mjs
       - name: Preserve existing Responses transport regression
         run: node --test forge/test-infistar-reconstruction-responses.mjs forge/test-infistar-reconstruction-stream.mjs
       - name: Install isolated revision browser test runtime
@@ -49,6 +49,8 @@ jobs:
           node forge/test-revision-compact.cjs
           node forge/test-step3-image-stream-browser.cjs
           node forge/test-manual-revision-browser.cjs
+          node forge/test-revision-context.cjs
+          node forge/test-revision-context-online.cjs
       - name: Preserve existing bitmap regression checks
         run: node --test forge/test-openai-token-limit.mjs forge/test-bitmap-composition.mjs forge/test-generation-intent.mjs
       - name: Preserve existing SVG regression checks
@@ -62,12 +64,12 @@ jobs:
       - name: Upload independent byte preservation proof
         uses: actions/upload-artifact@v4
         with:
-          name: isolated-step3-stream-proof
-          path: /tmp/isolated-step3-stream-proof.json
+          name: isolated-revision-context-proof
+          path: /tmp/isolated-revision-context-proof.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: /tmp/isolated-step3-stream-pages
+          path: /tmp/isolated-revision-context-pages
       - name: Deploy isolated artifact to current application
         id: deployment
         uses: actions/deploy-pages@v4

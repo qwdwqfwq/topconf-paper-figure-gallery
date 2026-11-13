@@ -1,5 +1,6 @@
 import {routeRevisionEdges,placeRevisionLabels} from './revision-routing.mjs';
 import {refineRevisionPixels, verifyRevisionPixels, revisionBackground, revisionEdgeColor} from './revision-pixels.mjs';
+import {revisionContextInstruction} from './revision-context.mjs';
 // Private revision-only pixel-preserving layout; never imports reconstruction/export code.
 // Isolated vision planning for the selected revision provider. Never fall back across providers.
 export function revisionPlannerRoute(route){
@@ -12,6 +13,8 @@ export function revisionPlannerRoute(route){
   return {model,url:base.href.replace(/\/$/,'')+'/chat/completions'};
 }
 export async function revisionPlanner(parent,content,options,maxTokens){
+  // Keep archived paper text separate from the user's request and scope heuristics.
+  content=[...content,{type:'text',text:revisionContextInstruction(parent)}];
   for(let attempt=0;attempt<2;attempt++){
     try{return await revisionPlannerAttempt(parent,attempt?[...content,{type:'text',text:'Your previous response was not valid JSON. Return exactly one valid JSON object matching the requested schema. No markdown, annotations or stray characters.'}]:content,options,maxTokens);}
     catch(error){if(error.code!=='REVISION_PLAN_FORMAT'||attempt)throw error;options.onProgress?.('分析结果格式异常，正在重新分析一次；不会重复提交生图请求…');}
