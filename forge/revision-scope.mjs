@@ -1,4 +1,4 @@
-import {retainedReflow,revisionPlanner,revisionPlannerRoute,verifyRevisionIntent} from './revision-layout.mjs?v=20261114-errors';
+import {retainedReflow,revisionPlanner,revisionPlannerRoute,verifyRevisionIntent} from './revision-layout.mjs?v=20261114-layout';
 // Used only by Continue modifying. No reconstruction/export state or shared adapters.
 export function revisionMode(value='local'){
   if(!['local','reflow'].includes(value))throw new Error('修改模式无效，请重新选择。');
@@ -8,7 +8,7 @@ export function revisionMode(value='local'){
 export function requestedRevisionMode(selected,prompt){
   if(selected&&selected!=='auto')return revisionMode(selected);
   for(const clause of String(prompt).split(/[，,。；;！!？?\n]/)){
-    const intent=/(?:重新|重新进行|重新调整|调整|优化)(?:排版|排列|布局)|(?:排版|布局)(?:布局)?(?:稍微|稍稍|再|进一步|适当)?优化|重排|reflow|rearrang\w*|re-?layout/i.exec(clause);
+    const intent=/(?:重新|重新进行|重新调整|调整|优化)(?:排版|排列|布局)|(?:排版|布局)(?:布局)?(?:稍微|稍稍|再|进一步|适当)?优化|重排|(?:移|挪|放)(?:动|到|至|向)|(?:横向|纵向|水平|垂直|左右|上下)(?:排列|排布|布局)|分组|调换|交换|(?:从左到右|从右到左|从上到下|从下到上)|(?:放在|置于|居中)|(?:按|依照).*(?:排列|排布|顺序)|reorder|regroup|move.+(?:left|right|above|below)|reflow|rearrang\w*|re-?layout/i.exec(clause);
     if(!intent)continue;
     const before=clause.slice(0,intent.index);
     if(!/(?:不要|无需|不用|不必|禁止|不需要|别|保持原有|保持原来|保持现有|不|without|do not|don't)\s*(?:再|进行|做|任何|重新|调整|the|any)?\s*$/i.test(before))return 'reflow';
