@@ -36,6 +36,7 @@ const prompt='将三种图例移到上方并倒序排列；两个阶段并排；
   browser=await chromium.launch({headless:true,...(process.env.REVISION_BUNDLED_BROWSER==='1'?{}:{executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})});
   const page=await browser.newPage({serviceWorkers:'block'}),origin=`http://127.0.0.1:${server.address().port}`;
   await page.route('**/*',r=>new URL(r.request().url()).origin===origin?r.continue():r.abort());await page.goto(origin+'/forge/');
+  await page.evaluate(()=>{HTMLDialogElement.prototype.showModal=function(){throw Error('Step 3 must continue automatically without a review dialog');};});
   const result=await page.evaluate(async({prompt,planned})=>{
    const {retainedReflow}=await import('./revision-layout.mjs');
    const c=document.createElement('canvas');c.width=1000;c.height=1000;const ctx=c.getContext('2d');ctx.fillStyle='#f5f5f5';ctx.fillRect(0,0,1000,1000);ctx.strokeStyle='black';ctx.strokeRect(1,1,998,998);
@@ -57,13 +58,12 @@ const prompt='将三种图例移到上方并倒序排列；两个阶段并排；
     }
     return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(response)}}]}));
    };
-   const timer=setInterval(()=>document.querySelector('[data-layout-accept="true"]')?.click(),20);
    try{
     const result=await retainedReflow({image:source,confirmedRevisionScope:{summary:'confirmed whole grey C panel'},route:{p:'infistar',base:'https://example.invalid/v1'}},prompt,{key:'offline-test',loadImage},async()=>{generated++;throw Error('native content should not be regenerated');});
     const decoded=await loadImage(result.image),after=document.createElement('canvas');after.width=1000;after.height=1000;after.getContext('2d').drawImage(decoded,0,0);
     const oldFooter=after.getContext('2d').getImageData(120,870,1,1).data,restoredOldBands=oldFooter[0]===103&&oldFooter[1]===71;
     return {calls,generated,restoredOldBands,targets:result.revisionAudit.layout.items.map(i=>({id:i.id,target:i.target})),geometry:result.revisionAudit.layout.geometry,retention:result.revisionAudit.retention};
-   }finally{clearInterval(timer);window.fetch=originalFetch;}
+   }finally{window.fetch=originalFetch;}
   },{prompt,planned:plan});
   const pixelRegression=await page.evaluate(async()=>{
    const {refineRevisionPixels,verifyRevisionPixels,revisionBackground}=await import('./revision-pixels.mjs');

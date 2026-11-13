@@ -32,17 +32,37 @@ export function routeRevisionEdges(plan,width,height){
   return routes;
 }
 
+// Preserve label text while offering different line breaks to the layout solver.
+export function revisionLabelSizes(text,measureText,fontSize,padding){
+  const original=text.split(/\\n|\n/),variants=[original];
+  const natural=Math.max(...original.map(measureText));
+  for(const fraction of [.75,.5,.35]){
+    const limit=natural*fraction,lines=[];
+    for(const line of original){
+      // Break between Latin words and between CJK glyphs, retaining all text.
+      const words=line.match(/[^\s\u3000-\u9fff]+(?:\s+|$)|[\u3000-\u9fff]|\s+/gu)||[''];
+      let current='';
+      for(const word of words){if(current&&measureText(current+word)>limit){lines.push(current);current='';}current+=word;}
+      lines.push(current);
+    }
+    if(!variants.some(v=>JSON.stringify(v)===JSON.stringify(lines)))variants.push(lines);
+  }
+  return variants.map(lines=>({lines,width:Math.max(...lines.map(measureText))+padding*2,height:lines.length*fontSize*1.12+padding*2}));
+}
+
 // Branch text belongs beside its own path. Shared stems must not cause all
 // conditions to be painted at the same longest-segment midpoint.
 export function placeRevisionLabels(routes,items,width,height,measure){
-  const occupied=items.filter(i=>i.keep).map(i=>i.target),placed=[],gap=Math.max(2,width/500*2);
+  const occupied=items.filter(i=>i.keep).map(i=>i.target),gap=Math.max(2,width/500*2),choices=[];
   const overlaps=(a,b)=>a.x<b.x+b.width+gap&&a.x+a.width+gap>b.x&&a.y<b.y+b.height+gap&&a.y+a.height+gap>b.y;
   const crosses=(a,b,r)=>a.x===b.x
     ?a.x>r.x-gap&&a.x<r.x+r.width+gap&&Math.max(a.y,b.y)>r.y-gap&&Math.min(a.y,b.y)<r.y+r.height+gap
     :a.y>r.y-gap&&a.y<r.y+r.height+gap&&Math.max(a.x,b.x)>r.x-gap&&Math.min(a.x,b.x)<r.x+r.width+gap;
   for(const route of routes){
+    delete route.labelBox;
     if(!route.edge.label)continue;
-    const size=measure(route.edge.label),candidates=[];
+    const measured=measure(route.edge.label),sizes=Array.isArray(measured)?measured:[measured],candidates=[];
+    for(const [variant,size] of sizes.entries()){
     for(let n=1;n<route.points.length;n++){
       const a=route.points[n-1],b=route.points[n],horizontal=a.y===b.y,length=Math.hypot(b.x-a.x,b.y-a.y);
       if(length<(horizontal?size.width:size.height)+gap*2)continue;
@@ -50,15 +70,32 @@ export function placeRevisionLabels(routes,items,width,height,measure){
         const mx=a.x+(b.x-a.x)*fraction,my=a.y+(b.y-a.y)*fraction;
         const box={x:horizontal?mx-size.width/2:mx+(side<0?-size.width-gap:gap),y:horizontal?my+(side<0?-size.height-gap:gap):my-size.height/2,...size};
         if(box.x<gap||box.y<gap||box.x+box.width>width-gap||box.y+box.height>height-gap)continue;
-        if([...occupied,...placed].some(r=>overlaps(box,r)))continue;
+        if(occupied.some(r=>overlaps(box,r)))continue;
         if(routes.some(r=>r.points.slice(1).some((p,i)=>crosses(r.points[i],p,box))))continue;
         // Prefer the destination approach so parallel branches remain distinct.
-        candidates.push({box,score:(route.points.length-n)*1000+(horizontal?0:100)+Math.abs(fraction-.5)});
+        candidates.push({box,score:variant*30+(route.points.length-n)*1000+(horizontal?0:100)+Math.abs(fraction-.5)});
       }
     }
+    }
     candidates.sort((a,b)=>a.score-b.score);
-    if(!candidates.length)throw Error('新布局没有足够空间清晰放置分支条件，请扩大节点间距后重新规划。');
-    route.labelBox=candidates[0].box;placed.push(route.labelBox);
+    if(!candidates.length)throw Error('分支条件 '+JSON.stringify(route.edge.label)+' 缺少清晰放置空间；请调整节点尺寸、间距或流程方向后重新规划。');
+    choices.push({route,candidates});
   }
+  // Place constrained labels first and revisit earlier choices when necessary.
+  choices.sort((a,b)=>a.candidates.length-b.candidates.length);
+  const placed=[];let searches=0;
+  const place=index=>{
+    if(index===choices.length)return true;
+    if(++searches>10000)return false;
+    const {route,candidates}=choices[index];
+    for(const {box} of candidates){
+      if(placed.some(r=>overlaps(box,r)))continue;
+      route.labelBox=box;placed.push(box);
+      if(place(index+1))return true;
+      placed.pop();delete route.labelBox;
+    }
+    return false;
+  };
+  if(!place(0))throw Error('分支条件之间缺少清晰放置空间；请联合调整节点、文字和连线路径后重新规划。');
   return routes;
 }

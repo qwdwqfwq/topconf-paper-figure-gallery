@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {routeRevisionEdges,placeRevisionLabels} from './revision-routing.mjs';
+import {routeRevisionEdges,placeRevisionLabels,revisionLabelSizes} from './revision-routing.mjs';
 const item=(id,x,y,width=70,height=45)=>({id,keep:true,target:{x,y,width,height}});
 const intersects=(a,b,r)=>a.x===b.x
  ?a.x>r.x&&a.x<r.x+r.width&&Math.max(a.y,b.y)>r.y&&Math.min(a.y,b.y)<r.y+r.height
@@ -43,4 +43,18 @@ test('parallel branch conditions avoid shared stems, nodes and each other',()=>{
   assert.equal(routes.slice(0,i).some(other=>overlap(other.labelBox,r.labelBox)),false);
  });
  assert.throws(()=>placeRevisionLabels([{edge:{label:'long'},points:[{x:10,y:10},{x:11,y:10}]}],[],50,50,()=>({width:100,height:28})),/分支条件/);
+});
+
+test('branch labels wrap without losing Latin, formula or Chinese content',()=>{
+ for(const text of ['risk = false & base = 1.0','条件成立后进入第二阶段']){
+  const sizes=revisionLabelSizes(text,s=>s.length*8,12,3);
+  assert.ok(sizes.length>1);
+  for(const size of sizes)assert.equal(size.lines.join(''),text);
+  assert.ok(sizes.at(-1).width<sizes[0].width);
+ }
+ const sizes=revisionLabelSizes('risk = false & base = 1.0',s=>s.length*8,12,3);
+ const routes=[{edge:{label:'risk = false & base = 1.0'},points:[{x:20,y:60},{x:140,y:60}]}];
+ placeRevisionLabels(routes,[],180,180,()=>sizes);
+ assert.ok(routes[0].labelBox.lines.length>1,'use wrapped variant when original cannot fit');
+ assert.equal(routes[0].labelBox.lines.join(''),routes[0].edge.label);
 });

@@ -92,14 +92,21 @@ export function refineRevisionPixels(image,plan){
 
 // Verify the final raster, rather than trusting draw commands or model centers.
 export function verifyRevisionPixels(canvas,plan,crops){
-  const ctx=canvas.getContext('2d',{willReadFrequently:true});let checkedBytes=0;
-  for(const item of plan.items){
+  const ctx=canvas.getContext('2d',{willReadFrequently:true});let checkedBytes=0,scaledNodes=0;
+  for(const item of plan.items.filter(i=>i.keep)){
     const crop=crops.get(item.id),t=item.target;if(!crop)throw Error('缺少完整节点原像素，未保存修改版。');
-    if(t.width!==crop.width||t.height!==crop.height)throw Error('原像素节点被缩放，未保存修改版。');
-    const expected=crop.getContext('2d').getImageData(0,0,crop.width,crop.height).data;
+    if(!t||!['x','y','width','height'].every(k=>Number.isInteger(t[k]))||t.width<2||t.height<2||t.x<0||t.y<0||t.x+t.width>canvas.width||t.y+t.height>canvas.height)throw Error('节点目标尺寸或位置无效，未保存修改版。');
+    let reference=crop;
+    if(t.width!==crop.width||t.height!==crop.height){
+      scaledNodes++;reference=document.createElement('canvas');reference.width=t.width;reference.height=t.height;
+      reference.getContext('2d').drawImage(crop,0,0,t.width,t.height);
+    }
+    const expected=reference.getContext('2d').getImageData(0,0,t.width,t.height).data;
     const actual=ctx.getImageData(t.x,t.y,t.width,t.height).data;
-    for(let p=0;p<expected.length;p+=4)if(expected[p+3]===255){for(let k=0;k<4;k++){if(expected[p+k]!==actual[p+k])throw Error('节点像素覆盖或位置不符，未保存修改版。');checkedBytes++;}}
+    let itemBytes=0;
+    for(let p=0;p<expected.length;p+=4)if(expected[p+3]===255){for(let k=0;k<4;k++){if(expected[p+k]!==actual[p+k])throw Error('节点像素覆盖或位置不符，未保存修改版。');checkedBytes++;itemBytes++;}}
+    if(!itemBytes)throw Error('节点缩放后没有可验证的内容，请重新规划可读尺寸。');
   }
   if(!checkedBytes)throw Error('没有可验证的节点像素，未保存修改版。');
-  return {verified:true,checkedBytes,nodeCount:plan.items.length,method:'final-raster-exact-source-pixels-at-confirmed-targets'};
+  return {verified:true,checkedBytes,nodeCount:plan.items.filter(i=>i.keep).length,scaledNodes,method:scaledNodes?'final-raster-resampled-source-pixels-at-confirmed-targets':'final-raster-exact-source-pixels-at-confirmed-targets'};
 }
