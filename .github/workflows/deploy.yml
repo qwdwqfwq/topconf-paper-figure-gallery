@@ -1,4 +1,4 @@
-name: Deploy automatic revision UI
+name: Deploy isolated NoneLinear original source repair
 on:
   push:
     branches: [main]
@@ -32,11 +32,11 @@ jobs:
           ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
         run: echo "Original lock outcome = $ORIGINAL_OUTCOME. Independent Step 3 acceptance does not change this result." >> "$GITHUB_STEP_SUMMARY"
       - name: Strict isolated release acceptance and artifact construction
-        run: node scripts/check-revision-auto-ui-release.mjs --prepare-pages
+        run: node scripts/check-nonelinear-source-release.mjs --prepare-pages
       - name: Step 3 stream protocol regression
         run: node --test forge/test-step3-image-stream.mjs forge/test-revision-error-recovery.mjs
       - name: Independent acceptance adversarial tests
-        run: node --test scripts/test-revision-auto-ui-release.mjs forge/test-revision-routing.mjs
+        run: node --test scripts/test-nonelinear-source-release.mjs forge/test-revision-routing.mjs forge/test-nonelinear-source.mjs nonelinear-relay/test-source-image.mjs
       - name: Preserve existing Responses transport regression
         run: node --test forge/test-infistar-reconstruction-responses.mjs forge/test-infistar-reconstruction-stream.mjs
       - name: Install isolated revision browser test runtime
@@ -48,8 +48,10 @@ jobs:
         run: |
           node forge/test-revision-compact.cjs
           node forge/test-step3-image-stream-browser.cjs
+          node forge/test-nonelinear-source-browser.cjs
           node forge/test-manual-revision-browser.cjs
           node forge/test-revision-context.cjs
+          node forge/test-revision-context-online.cjs
           node forge/test-revision-auto-ui.cjs
       - name: Preserve existing bitmap regression checks
         run: node --test forge/test-openai-token-limit.mjs forge/test-bitmap-composition.mjs forge/test-generation-intent.mjs
@@ -64,12 +66,12 @@ jobs:
       - name: Upload independent byte preservation proof
         uses: actions/upload-artifact@v4
         with:
-          name: isolated-revision-auto-ui-proof
-          path: /tmp/isolated-revision-auto-ui-proof.json
+          name: isolated-nonelinear-source-proof
+          path: /tmp/isolated-nonelinear-source-proof.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: /tmp/isolated-revision-auto-ui-pages
+          path: /tmp/isolated-nonelinear-source-pages
       - name: Deploy isolated artifact to current application
         id: deployment
         uses: actions/deploy-pages@v4

@@ -1,4 +1,4 @@
-name: Strict unlocked Step 3 layout intent release protection
+name: Strict unlocked NoneLinear source release protection
 on:
   push:
   pull_request:
@@ -21,11 +21,11 @@ jobs:
           ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
         run: echo "Original lock outcome = $ORIGINAL_OUTCOME. Required independent acceptance follows separately." >> "$GITHUB_STEP_SUMMARY"
       - name: Required strict independent release acceptance
-        run: node scripts/check-layout-intent-release.mjs
+        run: node scripts/check-nonelinear-source-release.mjs
       - name: Step 3 stream protocol regression
         run: node --test forge/test-step3-image-stream.mjs forge/test-revision-error-recovery.mjs
       - name: Independent acceptance adversarial tests
-        run: node --test scripts/test-layout-intent-release.mjs forge/test-revision-routing.mjs
+        run: node --test scripts/test-nonelinear-source-release.mjs forge/test-revision-routing.mjs forge/test-nonelinear-source.mjs nonelinear-relay/test-source-image.mjs
       - name: Preserve existing Responses transport regression
         run: node --test forge/test-infistar-reconstruction-responses.mjs forge/test-infistar-reconstruction-stream.mjs
       - name: Install isolated browser test runtime (no repository dependencies changed)
@@ -37,4 +37,5 @@ jobs:
         run: |
           node forge/test-revision-compact.cjs
           node forge/test-step3-image-stream-browser.cjs
+          node forge/test-nonelinear-source-browser.cjs
           node forge/test-manual-revision-browser.cjs

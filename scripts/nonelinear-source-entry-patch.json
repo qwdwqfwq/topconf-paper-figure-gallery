@@ -1,0 +1,22 @@
+[
+  [
+    "import {fetchBitmapSource} from './nonelinear-source.mjs';",
+    "import {readBitmapSource} from './nonelinear-source.mjs';"
+  ],
+  [
+    "async function ensureBitmapDataUrl(src){\n  if(!src) return null;\n  if(/^data:image\\//i.test(String(src))) return String(src);\n  const r = await fetchBitmapSource(src,{provider:$('#provider').value,base:baseURL(),key:$('#key').value.trim()});\n  if(!r.ok) throw new Error('Reference image could not be read');\n  return fileToDataURI(await r.blob());\n}",
+    "async function ensureBitmapDataUrl(src,signal){\n  return readBitmapSource(src,{provider:$('#provider').value,base:baseURL(),key:$('#key').value.trim(),signal},fileToDataURI);\n}"
+  ],
+  [
+    "const src=await ensureBitmapDataUrl(syncStep3Bitmap());",
+    "const src=await ensureBitmapDataUrl(syncStep3Bitmap(),controller.signal);"
+  ],
+  [
+    "  const exportImgSrc = item.b64_json ? `data:${imageMime};base64,${item.b64_json}` : imgSrc;\n  const actualImage=await loadImage(exportImgSrc);",
+    "  let exportImgSrc = item.b64_json ? `data:${imageMime};base64,${item.b64_json}` : imgSrc;\n  let sourceReadError=null;\n  if(p==='nonelinear' && !item.b64_json){\n    try{ exportImgSrc=await readBitmapSource(exportImgSrc,{provider:p,base:route.base,key},fileToDataURI); }\n    catch(error){ sourceReadError=error; }\n  }\n  const actualImage=await loadImage(exportImgSrc);"
+  ],
+  [
+    "  try{ reconOk = await runReconstruction(); }",
+    "  try{ if(sourceReadError) throw sourceReadError; reconOk = await runReconstruction(); }"
+  ]
+]
