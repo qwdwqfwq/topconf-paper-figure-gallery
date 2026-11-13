@@ -8,11 +8,14 @@ export async function fetchReconstructionStream(url,options={},timeoutMs=Infinit
   if(options.signal?.aborted)cancel();
   const timer=Number.isFinite(timeoutMs)?setTimeout(()=>controller.abort(),timeoutMs):null;
   let reader;
+  const credential=new Headers(options.headers).get('authorization')?.replace(/^Bearer\s+/i,'')||'\0';
+  const safe=value=>String(value||'').split(credential).join('[redacted]').replace(/Bearer\s+\S+|sk-[A-Za-z0-9_-]+/gi,'[redacted]').replace(/[\x00-\x1f\x7f]/g,'').slice(0,300);
+  const transport={stage:'waiting_response',headersMs:null,firstBodyChunkMs:null,responseBytes:0,events:0,stream:true};
   try{
     // Change only delivery mode, after the original parameter/image preparation.
     const body=JSON.stringify({...JSON.parse(options.body),stream:true});
     const response=await fetchImpl(url,{...options,body,signal:controller.signal});
-    const transport={headersMs:performance.now()-started,firstBodyChunkMs:null,responseBytes:0,events:0,stream:true};
+    Object.assign(transport,{stage:'reading_response',headersMs:performance.now()-started,status:response.status,requestId:safe(response.headers.get('x-request-id')||response.headers.get('request-id')||response.headers.get('x-oneapi-request-id'))});
     const sse=response.ok&&/text\/event-stream/i.test(response.headers.get('content-type')||'');
     let pending='',text='',terminal=false;
     const result={object:'chat.completion',choices:[]},choices=new Map();
@@ -33,6 +36,9 @@ export async function fetchReconstructionStream(url,options={},timeoutMs=Infinit
         if(delta.role)choice.message.role=delta.role;
         if(item.finish_reason!=null)choice.finish_reason=item.finish_reason;
       }
+      // A finish reason is the per-choice terminal event. Some gateways keep
+      // the socket open or omit DONE after it; neither invalidates that result.
+      if(choices.size&&[...choices.values()].every(choice=>choice.finish_reason))terminal=true;
     }
     reader=response.body?.getReader();
     const decoder=new TextDecoder();
@@ -50,7 +56,7 @@ export async function fetchReconstructionStream(url,options={},timeoutMs=Infinit
           pending=pending.replace(/\r\n/g,'\n');
           let end;
           while(!terminal&&(end=pending.indexOf('\n\n'))!==-1){event(pending.slice(0,end));pending=pending.slice(end+2);}
-          if(terminal){pending='';await reader.cancel();break;}
+          if(terminal){pending='';void reader.cancel().catch(()=>{});break;}
         }else text+=decoded;
         if(done)break;
       }
@@ -62,12 +68,14 @@ export async function fetchReconstructionStream(url,options={},timeoutMs=Infinit
       result.choices=[...choices.values()].sort((a,b)=>a.index-b.index);
       text=JSON.stringify(result);
     }
+    transport.stage='response_received';
     transport.elapsedMs=performance.now()-started;
     return {ok:response.ok,status:response.status,retryAfter:response.headers.get('retry-after'),text,transport};
   }catch(error){
-    if(reader)await reader.cancel().catch(()=>{});
-    if(options.signal?.aborted)throw new DOMException('Reconstruction stopped','AbortError');
-    if(controller.signal.aborted)throw Object.assign(new Error('Vision API timed out after '+Math.round(timeoutMs/1000)+' seconds'),{visionTimeout:true});
-    throw error;
+    if(reader)void reader.cancel().catch(()=>{});
+    const failure=options.signal?.aborted?new DOMException('Reconstruction stopped','AbortError'):controller.signal.aborted?Object.assign(new Error('Vision API timed out after '+Math.round(timeoutMs/1000)+' seconds'),{visionTimeout:true}):error;
+    failure.reconstructionTransport={...transport,elapsedMs:performance.now()-started};
+    if(failure.name!=='AbortError')failure.message=safe(failure.message)+(transport.requestId?' [request-id: '+transport.requestId+']':'');
+    throw failure;
   }finally{reader?.releaseLock();clearTimeout(timer);options.signal?.removeEventListener('abort',cancel);}
 }

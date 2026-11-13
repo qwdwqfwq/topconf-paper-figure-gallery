@@ -1,4 +1,4 @@
-name: Deploy isolated Step 3 image stream
+name: Deploy unlocked error recovery
 on:
   push:
     branches: [main]
@@ -32,11 +32,11 @@ jobs:
           ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
         run: echo "Original lock outcome = $ORIGINAL_OUTCOME. Independent Step 3 acceptance does not change this result." >> "$GITHUB_STEP_SUMMARY"
       - name: Strict isolated release acceptance and artifact construction
-        run: node scripts/check-step3-completion-release.mjs --prepare-pages
+        run: node scripts/check-error-recovery-release.mjs --prepare-pages
       - name: Step 3 stream protocol regression
-        run: node --test forge/test-step3-image-stream.mjs
+        run: node --test forge/test-step3-image-stream.mjs forge/test-revision-error-recovery.mjs
       - name: Independent acceptance adversarial tests
-        run: node --test scripts/test-step3-completion-release.mjs
+        run: node --test scripts/test-error-recovery-release.mjs
       - name: Preserve existing Responses transport regression
         run: node --test forge/test-infistar-reconstruction-responses.mjs forge/test-infistar-reconstruction-stream.mjs
       - name: Install isolated revision browser test runtime
@@ -48,6 +48,7 @@ jobs:
         run: |
           node forge/test-revision-compact.cjs
           node forge/test-step3-image-stream-browser.cjs
+          node forge/test-manual-revision-browser.cjs
       - name: Preserve existing bitmap regression checks
         run: node --test forge/test-openai-token-limit.mjs forge/test-bitmap-composition.mjs forge/test-generation-intent.mjs
       - name: Preserve existing SVG regression checks

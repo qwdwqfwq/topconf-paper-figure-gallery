@@ -50,3 +50,9 @@ test('propagates caller cancellation',async()=>{
   const controller=new AbortController();controller.abort();
   await assert.rejects(fetchReconstructionResponses('/responses',{...options,signal:controller.signal},Infinity,async(url,opts)=>{opts.signal.throwIfAborted();}),{name:'AbortError'});
 });
+test('completed response survives cancellation that rejects or never settles',async()=>{
+ for(const cancel of [()=>new Promise(()=>{}),()=>Promise.reject(Error('late cancel failure'))]){
+  const r=await fetchReconstructionResponses('/responses',options,1000,async()=>new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode(stream));},cancel}),{headers:{'content-type':'text/event-stream','x-oneapi-request-id':'responses-completed'}}));
+  assert.equal(JSON.parse(r.text).choices[0].message.content,scene);assert.equal(r.transport.stage,'response_received');assert.equal(r.transport.requestId,'responses-completed');
+ }
+});

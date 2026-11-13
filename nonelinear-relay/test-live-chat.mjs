@@ -15,13 +15,13 @@ test('SSE headers and periodic heartbeat arrive before upstream headers',async()
  let text='';for(;;){const x=await reader.read();if(x.done)break;text+=new TextDecoder().decode(x.value);}assert.match(text,/"code":524/);
 });
 test('heartbeats during slow split events cannot corrupt UTF8, content, usage or completion',async()=>{
- let upstream;
- const source=new Response(new ReadableStream({start(c){upstream=c;}}),{headers:{'Content-Type':'text/event-stream'}});
+ let upstream,cancelled=false;
+ const source=new Response(new ReadableStream({start(c){upstream=c;},cancel(){cancelled=true;}}),{headers:{'Content-Type':'text/event-stream'}});
  const result=fetchReconstructionStream('test',opts,1000,async()=>waitingSSE(Promise.resolve(source),headers,3));
  const text='data: '+JSON.stringify({choices:[{index:0,delta:{content:'原尺寸中文'},finish_reason:'stop'}],usage:{total_tokens:20}})+'\r\n\r\ndata: [DONE]\n\n';
  const bytes=enc.encode(text);
- for(let i=0;i<bytes.length;i+=7){upstream.enqueue(bytes.slice(i,i+7));await new Promise(r=>setTimeout(r,1));}
- const r=await result,d=JSON.parse(r.text);assert.equal(d.choices[0].message.content,'原尺寸中文');assert.equal(d.usage.total_tokens,20);assert.equal(r.transport.events,1);
+ for(let i=0;i<bytes.length&&!cancelled;i+=7){upstream.enqueue(bytes.slice(i,i+7));await new Promise(r=>setTimeout(r,1));}
+ const r=await result,d=JSON.parse(r.text);assert.equal(d.choices[0].message.content,'原尺寸中文');assert.equal(d.usage.total_tokens,20);assert.equal(r.transport.events,1);assert.equal(cancelled,true);
 });
 test('HTTP failures, rejected fetches, truncated streams and invalid fallback never succeed',async()=>{
  for(const source of [()=>Promise.resolve(new Response('524',{status:524})),()=>Promise.reject(new Error('secret')),()=>Promise.resolve(new Response('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n',{headers:{'Content-Type':'text/event-stream'}})),()=>Promise.resolve(new Response('invalid'))]){

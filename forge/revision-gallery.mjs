@@ -1,4 +1,4 @@
-import {scopedRevision,confirmedRevision,selectRevisionRegions,modeInstruction,readRevisionSource} from './revision-scope.mjs?v=20261112-panel4';
+import {scopedRevision,confirmedRevision,selectRevisionRegions,modeInstruction,readRevisionSource} from './revision-scope.mjs?v=20261114-errors';
 import {usesInfistarGemini,geminiImageRequest,geminiImageResult,compatibleImageRequest,requestImageWithRecovery,imageRequestDiagnostics} from './image-api.mjs?v=20261026-nonelinear-resolution';
 import {imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261026-nonelinear-resolution';
 
@@ -375,13 +375,14 @@ export function createRevisionGallery(adapter){
     panel.innerHTML='<h3>继续修改</h3><div data-base></div><small data-model style="display:block;margin-top:10px;overflow-wrap:anywhere"></small><textarea aria-label="你希望改哪里？" placeholder="输入修改要求，可粘贴或拖入截图"></textarea><input data-files type="file" accept="image/png,image/jpeg,image/webp" multiple hidden><button data-upload type="button">＋ 上传截图</button><div class="ff-revision-attachments"></div><button data-submit type="button">生成修改版</button><p class="ff-revision-error" role="alert"></p>';
     const scopeButton=document.createElement('button');scopeButton.type='button';scopeButton.dataset.selectRegions='true';scopeButton.textContent='手动指定范围（可选）';
     panel.querySelector('[data-submit]').before(scopeButton);
+    const manualButton=document.createElement('button');manualButton.type='button';manualButton.dataset.manualRevision='true';manualButton.textContent='按已框选范围局部修改';manualButton.onclick=()=>revise(true);scopeButton.after(manualButton);
     const modeBox=document.createElement('div');modeBox.dataset.revisionModes='true';
     modeBox.innerHTML='<label>修改模式 <select data-revision-mode aria-label="修改模式"><option value="auto">自动判断（推荐）</option><option value="local">局部修改</option><option value="reflow">区域重排</option></select></label><p data-mode-hint style="font-size:13px;line-height:1.6"></p>';
     panel.querySelector('textarea').before(modeBox);
     const retainLabel=document.createElement('label');retainLabel.dataset.retainBox='true';retainLabel.innerHTML='<input type="checkbox" data-retain-elements checked> 优先保留原元素和文字（独立图标搬移原像素；相连面板逐项核对后重排）';modeBox.append(retainLabel);
     modeBox.querySelector('select').onchange=e=>{if(editing){editing.revisionModeDraft=e.target.value;refresh();}};
     modeBox.querySelector('[data-retain-elements]').onchange=e=>{if(editing)editing.retainElementsDraft=e.target.checked;};
-    scopeButton.onclick=async()=>{if(!editing||generating)return;const target=editing;try{const regions=await selectRevisionRegions(target.image,target.regionsDraft||[]);if(regions){target.regionsDraft=regions;if(editing===target)scopeButton.textContent='已框选 '+regions.length+' 个区域 · 重新框选';}}catch(e){error.textContent=e.message;}};
+    scopeButton.onclick=async()=>{if(!editing||generating)return;const target=editing;try{const regions=await selectRevisionRegions(target.image,target.regionsDraft||[]);if(regions){target.regionsDraft=regions;if(editing===target){scopeButton.textContent='已框选 '+regions.length+' 个区域 · 重新框选';refresh();}}}catch(e){error.textContent=e.message;}};
     textarea=panel.querySelector('textarea');submit=panel.querySelector('[data-submit]');error=panel.querySelector('[role=alert]');
     attachments=panel.querySelector('.ff-revision-attachments');fileInput=panel.querySelector('[data-files]');
     panel.querySelector('[data-upload]').onclick=()=>fileInput.click();
@@ -390,7 +391,7 @@ export function createRevisionGallery(adapter){
     panel.ondragover=event=>{if([...event.dataTransfer.types].includes('Files')){event.preventDefault();event.dataTransfer.dropEffect='copy';panel.classList.add('dragging');}};
     panel.ondragleave=event=>{if(!panel.contains(event.relatedTarget))panel.classList.remove('dragging');};
     panel.ondrop=event=>{panel.classList.remove('dragging');if([...event.dataTransfer.types].includes('Files')){event.preventDefault();void receiveFiles([...event.dataTransfer.files]);}};
-    textarea.oninput=()=>{if(editing)editing.draft=textarea.value;};submit.onclick=revise;
+    textarea.oninput=()=>{if(editing)editing.draft=textarea.value;};submit.onclick=()=>revise(false);
     storageHint=document.createElement('div');storageHint.className='ff-revision-storage';storageHint.setAttribute('role','status');
     const historyHint=document.createElement('div');historyHint.className='ff-revision-history';historyHint.textContent='本机历史版本 · 下次使用同一浏览器打开此页面，自动恢复在这里。';
     root.append(historyHint,list,panel,storageHint);adapter.output.replaceChildren(root);adapter.output.style.display='block';
@@ -491,6 +492,8 @@ export function createRevisionGallery(adapter){
       panel.querySelector('[data-retain-elements]').disabled=generating||!!reading||deleting;
       panel.querySelector('[data-revision-mode]').disabled=generating||!!reading||deleting;
       panel.querySelector('[data-mode-hint]').textContent=(mode==='auto'?'直接描述想改什么，系统自动判断局部修改或区域重排，并在原图上标出建议范围。':mode==='reflow'?'增删元素后，允许调整范围内其余元素的位置和间距。':'只改指定内容，其他元素保留原有布局。')+' 上传截图可提供新增元素或帮助定位。先查看并确认高亮范围，再修改图片；无需提前画框。范围外保留原图像素，范围内尽量保留其他文字、数据和公式。自动判断和范围确认支持非线智能、无限星河及 OpenAI 官方 API Key，分析请求使用当前服务商；请先选择对应服务商并填写密钥。';
+      panel.querySelector('[data-manual-revision]').hidden=editing.source==='svg'||!editing.regionsDraft?.length||mode==='reflow';
+      panel.querySelector('[data-manual-revision]').disabled=generating||!!reading||deleting;
       panel.querySelector('[data-select-regions]').hidden=editing.source==='svg';
       panel.querySelector('[data-select-regions]').disabled=generating||!!reading||deleting;
       // Display guidance depends only on the selected version, not provider loading.
@@ -508,18 +511,18 @@ export function createRevisionGallery(adapter){
     }
     submit.disabled=generating||!!reading||deleting||!editing;submit.textContent=generating?'正在处理，请查看下方进度…':reading?'正在读取截图…':editing?.source==='svg'?'生成修改版':'① 分析要求，查看修改范围';
   }
-  async function revise(){
+  async function revise(manualScope=false){
     if(generating||reading||deleting||!editing)return;
     const parent=editing,prompt=textarea.value.trim();if(!prompt){textarea.focus();return;}
     generating=true;error.textContent='';refresh();
     let progress=panel.querySelector('[data-revision-progress]');
     if(!progress){progress=document.createElement('p');progress.dataset.revisionProgress='true';progress.setAttribute('role','status');error.before(progress);}
-    progress.textContent='正在读取原图并分析要求；下一步会显示范围供你确认，尚未开始生图。';
+    progress.textContent=manualScope?'请确认已框选的局部修改范围，尚未开始生图。':'正在读取原图并分析要求；下一步会显示范围供你确认，尚未开始生图。';
     const onRevisionProgress=message=>{progress.textContent=message;};
     try{
       // Request-only attachments; never replace a version bitmap or reconstruction state.
       const references=(parent.attachmentsDraft||[]).map(item=>({...item}));
-      const result=await adapter.generate({...parent,onRevisionProgress,route:{...parent.route},attachments:references,revisionMode:parent.source==='svg'?(parent.revisionModeDraft||parent.revisionMode||'local'):(parent.revisionModeDraft||'auto'),confirmScope:parent.source!=='svg',retainElements:parent.retainElementsDraft!==false,editRegions:parent.regionsDraft?.map(r=>({...r}))},prompt);
+      const result=await adapter.generate({...parent,manualScope,onRevisionProgress,route:{...parent.route},attachments:references,revisionMode:manualScope?'local':parent.source==='svg'?(parent.revisionModeDraft||parent.revisionMode||'local'):(parent.revisionModeDraft||'auto'),confirmScope:parent.source!=='svg',retainElements:parent.retainElementsDraft!==false,editRegions:parent.regionsDraft?.map(r=>({...r}))},prompt);
       error.textContent='';
       if(!await reviewRevision(parent,result,prompt,references,list)){
         edit(parent);error.textContent='本次结果未保存。修改要求和截图已保留；再次生成会发起新的 API 请求。';return;

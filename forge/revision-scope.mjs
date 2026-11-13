@@ -1,4 +1,4 @@
-import {retainedReflow,revisionPlanner,revisionPlannerRoute} from './revision-layout.mjs?v=20261112-panel4';
+import {retainedReflow,revisionPlanner,revisionPlannerRoute,verifyRevisionIntent} from './revision-layout.mjs?v=20261114-errors';
 // Used only by Continue modifying. No reconstruction/export state or shared adapters.
 export function revisionMode(value='local'){
   if(!['local','reflow'].includes(value))throw new Error('修改模式无效，请重新选择。');
@@ -64,6 +64,10 @@ export async function scopedRevision(parent,prompt,options,generate){
     const run=mode==='reflow'&&parent.retainElements?(request,prompt,options)=>retainedReflow(request,prompt,options,generate):generate;
     const result=await run(request,
       `修改第 ${index+1}/${regions.length} 个区域。完整原图尺寸 ${width}×${height}，区域在原图的像素坐标为 ${JSON.stringify(r)}（左上角为原点）。${outputInstruction}${modeInstruction(mode)} 上传截图用于提供待添加的元素或定位待删除的原图元素，具体操作以用户要求为准；不要把截图界面和标注画入结果。区域内未被明确删除或替换的文字、数字、公式、符号逐字保留。\n用户要求：${prompt}`,options);
+    if(mode==='reflow'&&!result.revisionAudit?.contentCheck){
+      const contentCheck=await verifyRevisionIntent(request,prompt,result.image,options);
+      result.revisionAudit={...result.revisionAudit,contentCheck,apiRequestCount:(result.revisionAudit?.apiRequestCount||1)+1};
+    }
     const edited=await options.loadImage(result.image);
     const ew=edited.naturalWidth||edited.width,eh=edited.naturalHeight||edited.height;
     if(mode==='reflow')ctx.drawImage(edited,0,0,ew,eh,r.x,r.y,r.width,r.height);
@@ -201,8 +205,10 @@ export async function planRevision(parent,prompt,options){
 
 export async function confirmedRevision(parent,prompt,options,generate){
   let plan;
-  if(['nonelinear','infistar','oai'].includes(parent.route?.p)||parent.revisionMode==='auto'||!parent.editRegions?.length)plan=await planRevision(parent,prompt,options);
+  const manual=parent.manualScope===true&&parent.revisionMode==='local'&&parent.editRegions?.length;
+  if(!manual&&(['nonelinear','infistar','oai'].includes(parent.route?.p)||parent.revisionMode==='auto'||!parent.editRegions?.length))plan=await planRevision(parent,prompt,options);
   else{const image=await options.loadImage(await readRevisionSource(parent.image,options));const width=image.naturalWidth||image.width,height=image.naturalHeight||image.height;plan={mode:revisionMode(parent.revisionMode),summary:prompt,preserve:'其他内容',regions:validateRegions(parent.editRegions,width,height),width,height,apiRequestCount:0};}
+  if(manual)plan.manual=true;
   const confirmed=await selectRevisionRegions(await readRevisionSource(parent.image,options),plan.regions,plan);
   if(!confirmed)throw new Error('已取消，本次未修改图片。修改要求和截图已保留。');
   const result=await scopedRevision({...parent,revisionMode:plan.mode,editRegions:confirmed,confirmedRevisionScope:{summary:plan.summary,preserve:plan.preserve}},prompt,options,generate);
@@ -215,7 +221,7 @@ export async function selectRevisionRegions(src,initial=[],plan=null){
   return new Promise(resolve=>{
     const dialog=document.createElement('dialog');dialog.dataset.scopeReview=plan?'true':'manual';dialog.style.cssText='max-width:95vw;width:1200px;max-height:94vh;overflow:auto;border:1px solid #c4b5fd;border-radius:12px';
     const text=document.createElement('p');text.textContent='拖动框选要修改的内容，可画多个框。框外逐像素保留；请把不需要改的文字、数据和公式留在框外。';
-    if(plan){const heading=document.createElement('h3');heading.textContent='请确认修改范围 · '+(plan.mode==='reflow'?'区域重排':'局部修改');const changes=document.createElement('p');changes.textContent='将修改：'+plan.summary;const preserve=document.createElement('p');preserve.textContent='将保留：'+plan.preserve.replace(/[。；;]+$/,'')+'。高亮范围外保留原图像素；范围内尽量保留未指定修改的文字、数据和公式，生成后仍需核对。';dialog.append(heading,changes,preserve);text.textContent='这是系统建议的范围，请先查看。范围不对可点“调整范围”；要求理解不对请返回修改描述。确认后才开始修改图片。';}
+    if(plan){const heading=document.createElement('h3');heading.textContent='请确认修改范围 · '+(plan.mode==='reflow'?'区域重排':'局部修改');const changes=document.createElement('p');changes.textContent='将修改：'+plan.summary;const preserve=document.createElement('p');preserve.textContent='将保留：'+plan.preserve.replace(/[。；;]+$/,'')+'。高亮范围外保留原图像素；范围内尽量保留未指定修改的文字、数据和公式，生成后仍需核对。';dialog.append(heading,changes,preserve);text.textContent=plan.manual?'这是你已框选的范围，请确认后继续局部修改；也可调整范围或返回修改描述。':'这是系统建议的范围，请先查看。范围不对可点“调整范围”；要求理解不对请返回修改描述。确认后才开始修改图片。';}
     const canvas=document.createElement('canvas');canvas.width=image.naturalWidth;canvas.height=image.naturalHeight;canvas.dataset.scopeCanvas='true';canvas.style.cssText='display:block;width:100%;touch-action:none;cursor:crosshair';
     let regions=initial.map(r=>({...r})),start=null,preview=null,adjusting=!plan;
     const draw=()=>{const ctx=canvas.getContext('2d');ctx.drawImage(image,0,0);ctx.strokeStyle='#7c3aed';ctx.fillStyle='#7c3aed22';ctx.lineWidth=Math.max(3,canvas.width/400);for(const [i,r] of [...regions,...(preview?[preview]:[])].entries()){ctx.fillRect(r.x,r.y,r.width,r.height);ctx.strokeRect(r.x,r.y,r.width,r.height);ctx.save();ctx.fillStyle='#6d28d9';ctx.font=Math.max(16,canvas.width/65)+'px sans-serif';ctx.fillText(String(i+1),r.x+4,r.y+22);ctx.restore();}};
@@ -225,7 +231,7 @@ export async function selectRevisionRegions(src,initial=[],plan=null){
     canvas.onpointerup=e=>{if(!start)return;canvas.onpointermove(e);if(preview.width>=2&&preview.height>=2&&regions.length<8)regions.push(preview);start=null;preview=null;draw();};
     canvas.onpointercancel=()=>{start=null;preview=null;draw();};
     const actions=document.createElement('div');
-    if(plan){const adjust=document.createElement('button');adjust.type='button';adjust.textContent='调整范围';adjust.onclick=()=>{adjusting=true;text.textContent='先清空或撤销不正确的框，再拖动画出完整范围；也可恢复系统建议。';canvas.style.cursor='crosshair';};actions.append(adjust);const reset=document.createElement('button');reset.type='button';reset.textContent='恢复系统建议';reset.onclick=()=>{regions=initial.map(r=>({...r}));draw();};actions.append(reset);canvas.style.cursor='default';}
+    if(plan){const adjust=document.createElement('button');adjust.type='button';adjust.textContent='调整范围';adjust.onclick=()=>{adjusting=true;text.textContent='先清空或撤销不正确的框，再拖动画出完整范围；也可恢复初始范围。';canvas.style.cursor='crosshair';};actions.append(adjust);const reset=document.createElement('button');reset.type='button';reset.textContent=plan.manual?'恢复已框选范围':'恢复系统建议';reset.onclick=()=>{regions=initial.map(r=>({...r}));draw();};actions.append(reset);canvas.style.cursor='default';}
     for(const [label,handler] of [['撤销上一个框',()=>{if(adjusting){regions.pop();draw();}}],['清空框选',()=>{if(adjusting){regions=[];draw();}}],[plan?'返回修改描述':'取消',()=>dialog.close()],[plan?'② 确认范围，继续修改':'使用这些区域',()=>{try{validateRegions(regions,canvas.width,canvas.height);resolve(regions);dialog.close();}catch(e){text.textContent=e.message;}}]]){const button=document.createElement('button');button.type='button';button.textContent=label;button.onclick=handler;button.style.margin='10px';if(label==='② 确认范围，继续修改')button.dataset.confirmScope='true';actions.append(button);}
     dialog.append(text,canvas,actions);dialog.onclose=()=>{resolve(null);dialog.remove();};document.body.append(dialog);dialog.showModal();draw();
   });

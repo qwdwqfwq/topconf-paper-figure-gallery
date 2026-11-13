@@ -18,3 +18,15 @@ test('EOF with explicit finish preserves length for existing truncation rejectio
 test('truncated, malformed, empty and provider-error streams fail without partial result',async()=>{for(const s of [event(chunk('partial')),event(chunk('partial'))+'data: [DONE]\n\n','data: invalid\n\n',': heartbeat\n\n',event({error:{message:'upstream failed'}})])await assert.rejects(fetchReconstructionStream('x',options,Infinity,async()=>response(s)));});
 test('HTTP errors and nonstream JSON fallback retain response',async()=>{for(const status of [200,524]){const text=status===200?' {"choices":[]}':'error code: 524';const r=await fetchReconstructionStream('x',options,Infinity,async()=>response(text,status,'application/json'));assert.equal(r.text,text);assert.equal(r.status,status);assert.equal(r.ok,status===200);}});
 test('caller cancellation and explicit timeout abort fetch',async()=>{const fetcher=async(_u,o)=>new Promise((_r,reject)=>{if(o.signal.aborted)reject(new DOMException('aborted','AbortError'));o.signal.addEventListener('abort',()=>reject(new DOMException('aborted','AbortError')));});const c=new AbortController();const pending=fetchReconstructionStream('x',{...options,signal:c.signal},Infinity,fetcher);c.abort();await assert.rejects(pending,{name:'AbortError'});await assert.rejects(fetchReconstructionStream('x',options,10,fetcher),e=>e.visionTimeout===true);});
+test('explicit finish returns despite a never-settling or rejected cancel and no DONE',async()=>{
+ for(const cancel of [()=>new Promise(()=>{}),()=>Promise.reject(Error('late cancel failure'))]){
+  const r=await fetchReconstructionStream('x',options,1000,async()=>new Response(new ReadableStream({start(c){c.enqueue(enc.encode(event(chunk('{}','stop'))));},cancel}),{headers:{'content-type':'text/event-stream','x-oneapi-request-id':'test-completed'}}));
+  assert.equal(JSON.parse(r.text).choices[0].finish_reason,'stop');assert.equal(r.transport.stage,'response_received');assert.equal(r.transport.requestId,'test-completed');
+ }
+});
+test('broken body retains sanitized request ID and byte/stage diagnostics',async()=>{
+ const key='private-test-credential';let reads=0;
+ await assert.rejects(fetchReconstructionStream('x',{...options,headers:{Authorization:'Bearer '+key}},Infinity,async()=>new Response(new ReadableStream({pull(c){if(reads++)c.error(Error('connection reset '+key));else c.enqueue(enc.encode(event(chunk('partial'))));}}),{headers:{'content-type':'text/event-stream','x-oneapi-request-id':'id-'+key}})),e=>{
+  assert.equal(e.reconstructionTransport.stage,'reading_response');assert.ok(e.reconstructionTransport.responseBytes>0);assert.ok(!JSON.stringify(e.reconstructionTransport).includes(key));assert.ok(!e.message.includes(key));return true;
+ });
+});

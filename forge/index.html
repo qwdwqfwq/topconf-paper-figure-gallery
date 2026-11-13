@@ -731,13 +731,14 @@
 <script type="module">
 import {createRetrievalBoot,createSemanticWorker} from './retrieval-boot.mjs';
 import {fetchBitmapSource} from './nonelinear-source.mjs';
-import {fetchReconstructionStream,usesReconstructionStream} from './infistar-reconstruction-stream.mjs';
-import {fetchReconstructionResponses,usesReconstructionResponses} from './infistar-reconstruction-responses.mjs';
+import {fetchReconstructionStream,usesReconstructionStream} from './infistar-reconstruction-stream.mjs?v=20261114-errors';
+import {fetchReconstructionResponses,usesReconstructionResponses} from './infistar-reconstruction-responses.mjs?v=20261114-errors';
 import {prepareQuery,buildIndex,rank} from './retrieval.mjs';
 import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=20261021-unlimited';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261026-nonelinear-resolution';
-import {requestStep3ImageStream} from './step3-image-stream.mjs?v=20261114-nonelinear';
-import {createRevisionGallery,generateRevision} from './revision-gallery.mjs?v=20261112-svg';
+import {requestStep3ImageStream} from './step3-image-stream.mjs?v=20261114-errors';
+import {step3ReferenceInputs} from './step3-reference-input.mjs?v=20261114-errors';
+import {createRevisionGallery,generateRevision} from './revision-gallery.mjs?v=20261114-errors';
 import {svgChatResponse} from './svg-chat-response.mjs?v=20261112';
 import {requestStep3Svg} from './step3-svg-request.mjs?v=20261112-svg-recovery';
 import {svgVersion,generateSVGRevision} from './svg-revision.mjs?v=20261112';
@@ -5279,6 +5280,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
       return scene;
     }catch(err){
       lastError=err;
+      if(err.reconstructionTransport)audit.transport={...err.reconstructionTransport};
       if(responseRecord){responseRecord.error=String(err.message||err);await persistReconArchive();}
       audit.lastError=String(err&&err.message||err);
       const delay=err.imageTransportFailure?null:reconstructionRetryDelay(err,attempt,formatAttempts);
@@ -5293,6 +5295,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   audit.durationMs=audit.finishedAt-audit.startedAt;
   audit.attempts=audit.attempt||maxAttempts;
   if(lastError)lastError.message=reconstructionFailureMessage(lastError,audit.attempts,GAL_I18N.lang==='zh',audit)||lastError.message;
+  if(lastError&&audit.transport?.requestId&&!lastError.message.includes(audit.transport.requestId))lastError.message+=' [request-id: '+audit.transport.requestId+']';
   audit.error=String(lastError&&lastError.message||lastError||tt('recon.badjson'));
   throw lastError||new Error(tt('recon.badjson'));
 }
@@ -6337,7 +6340,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
   }
   if(p==='ark' && !relayBase()){ body.response_format='b64_json'; body.watermark=false; }
   if(useIds.length && (nativeGemini || p!=='glm')){
-    const uris = await refDataURIs(useIds);
+    const uris = await step3ReferenceInputs(p,useIds,referenceFigure,refDataURIs);
     body.image = (p==='sf' && !nativeGemini) ? uris[0] : uris;
     usedRefs=true;
   }
@@ -6352,9 +6355,10 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
   try{
     r=await requestStep3ImageStream({url:base+endpoint,body,key,usedReferences:usedRefs});
   }catch(e){
-    if(/^IMAGE_STREAM_/.test(e.code||'')) throw new Error(tt('img.abnormal',{t:e.message})+apiContext());
-    if(e.name==='TimeoutError') throw new Error(tt('img.timeout')+apiContext());
-    throw new Error(tt('img.connection')+apiContext());
+    const diagnostic=e.imageDiagnostics;
+    const hint=diagnostic?' [stage: '+diagnostic.stage+(diagnostic.requestId?'; request-id: '+diagnostic.requestId:'')+']':'';
+    const message=/^IMAGE_STREAM_/.test(e.code||'')?tt('img.abnormal',{t:e.message}):e.name==='TimeoutError'?tt('img.timeout'):tt('img.connection');
+    throw Object.assign(new Error(message+hint+apiContext()),{imageDiagnostics:diagnostic});
   }
   usedRefs=r.usedReferences;
   const txt=r.text;

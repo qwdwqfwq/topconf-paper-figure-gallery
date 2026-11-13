@@ -40,10 +40,13 @@ export async function fetchReconstructionResponses(url,options={},timeoutMs=Infi
   if(options.signal?.aborted)cancel();
   const timer=Number.isFinite(timeoutMs)?setTimeout(()=>controller.abort(),timeoutMs):null;
   let reader;
+  const credential=new Headers(options.headers).get('authorization')?.replace(/^Bearer\s+/i,'')||'\0';
+  const safe=value=>String(value||'').split(credential).join('[redacted]').replace(/Bearer\s+\S+|sk-[A-Za-z0-9_-]+/gi,'[redacted]').replace(/[\x00-\x1f\x7f]/g,'').slice(0,300);
+  const transport={stage:'waiting_response',headersMs:null,firstBodyChunkMs:null,responseBytes:0,events:0,stream:true};
   try{
     const body=JSON.stringify(reconstructionResponsesBody(JSON.parse(options.body)));
     const response=await fetchImpl(url,{...options,body,signal:controller.signal});
-    const transport={headersMs:performance.now()-started,firstBodyChunkMs:null,responseBytes:0,events:0,stream:true,protocol:'responses'};
+    Object.assign(transport,{stage:'reading_response',headersMs:performance.now()-started,status:response.status,requestId:safe(response.headers.get('x-request-id')||response.headers.get('request-id')||response.headers.get('x-oneapi-request-id')),protocol:'responses'});
     const sse=response.ok&&/text\/event-stream/i.test(response.headers.get('content-type')||'');
     let pending='',text='',completed=null;
     const deltas=new Map();
@@ -69,7 +72,7 @@ export async function fetchReconstructionResponses(url,options={},timeoutMs=Infi
           pending=(pending+decoded).replace(/\r\n/g,'\n');
           let end;
           while(!completed&&(end=pending.indexOf('\n\n'))!==-1){event(pending.slice(0,end));pending=pending.slice(end+2);}
-          if(completed){await reader.cancel();break;}
+          if(completed){void reader.cancel().catch(()=>{});break;}
         }else text+=decoded;
         if(done)break;
       }
@@ -79,12 +82,14 @@ export async function fetchReconstructionResponses(url,options={},timeoutMs=Infi
       if(!completed)throw new Error('Responses 流式响应提前中断，未将不完整内容交给重建流程');
       text=completionEnvelope(completed,deltas);
     }else if(response.ok)text=completionEnvelope(JSON.parse(text),deltas);
+    transport.stage='response_received';
     transport.elapsedMs=performance.now()-started;
     return {ok:response.ok,status:response.status,retryAfter:response.headers.get('retry-after'),text,transport};
   }catch(error){
-    if(reader)await reader.cancel().catch(()=>{});
-    if(options.signal?.aborted)throw new DOMException('Reconstruction stopped','AbortError');
-    if(controller.signal.aborted)throw Object.assign(new Error('Vision API timed out after '+Math.round(timeoutMs/1000)+' seconds'),{visionTimeout:true});
-    throw error;
+    if(reader)void reader.cancel().catch(()=>{});
+    const failure=options.signal?.aborted?new DOMException('Reconstruction stopped','AbortError'):controller.signal.aborted?Object.assign(new Error('Vision API timed out after '+Math.round(timeoutMs/1000)+' seconds'),{visionTimeout:true}):error;
+    failure.reconstructionTransport={...transport,elapsedMs:performance.now()-started};
+    if(failure.name!=='AbortError')failure.message=safe(failure.message)+(transport.requestId?' [request-id: '+transport.requestId+']':'');
+    throw failure;
   }finally{reader?.releaseLock();clearTimeout(timer);options.signal?.removeEventListener('abort',cancel);}
 }

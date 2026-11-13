@@ -7,7 +7,7 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
 const prompt='这一块灰色的，我觉得里面的内容可以保持，但是让里面的排版布局稍微优化一些，不要出现大块的空余的空间，显得不好看';
 const fixture=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/revision-connected-panel.json'),'utf8'));
 (async()=>{
- const {compactDiagramPlan,validateDiagramPlan,validateDiagramCheck}=await import('./revision-layout.mjs');
+ const {compactDiagramPlan,validateDiagramPlan,validateDiagramCheck,validateRevisionIntent}=await import('./revision-layout.mjs');
  const {requestedRevisionMode,resolveRevisionContainer}=await import('./revision-scope.mjs');
  const inset={x:688,y:648,width:302,height:132},panel={x:678,y:90,width:320,height:720};
  const candidate=(title,kind,region,match=true)=>({title,kind,region,matchesRequestedBackground:match});
@@ -43,6 +43,11 @@ const fixture=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/revision-
  const center=r=>({x:r.x+r.width/2,y:r.y+r.height/2});
  const audit=()=>({passed:true,layoutChanged:true,moreCompact:true,unmetRequirements:[],items:plan.items.map(i=>({id:i.id,matches:true,observedCount:1,originalCenter:center(i.source),observedCenter:center(i.target),evidence:'Measured visible text '+i.label})),connections:plan.edges.map(e=>({...e,matches:true,evidence:'Visible direct arrow'}))});
  validateDiagramCheck(audit(),plan,{width:1000,height:1000},plan.preserveBands);
+ const intent={...audit(),requestSatisfied:true,requirements:[{request:prompt,satisfied:true,evidence:'Internal process rows have shorter measured gaps, content retained.'}]};
+ validateRevisionIntent(intent);
+ const cosmetic=structuredClone(intent);cosmetic.items.forEach(i=>i.observedCenter={...i.originalCenter});assert.throws(()=>validateRevisionIntent(cosmetic),/实质改变/);
+ const unmet=structuredClone(intent);unmet.requirements[0].satisfied=false;assert.throws(()=>validateRevisionIntent(unmet),/具体布局要求/);
+ const plannerPlan=structuredClone(plan);plannerPlan.geometry={...plannerPlan.geometry,coordinateOwner:'planner',requireIntentAudit:true};validateDiagramCheck(structuredClone(intent),plannerPlan,{width:1000,height:1000},plan.preserveBands);
  const unchanged=audit();unchanged.items.forEach(i=>i.observedCenter={...i.originalCenter});assert.throws(()=>validateDiagramCheck(unchanged,plan,{width:1000,height:1000},plan.preserveBands),/相对位置|实际位移/);
  const translated=audit();translated.items.forEach(i=>i.observedCenter={x:i.originalCenter.x+5,y:i.originalCenter.y+5});assert.throws(()=>validateDiagramCheck(translated,plan,{width:1000,height:1000},plan.preserveBands),/相对位置|实际位移/);
  const duplicate=audit();duplicate.items[1].observedCount=2;assert.throws(()=>validateDiagramCheck(duplicate,plan),/未通过/);
@@ -54,13 +59,14 @@ const fixture=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/revision-
   const scaled=structuredClone(fixture);for(const i of scaled.items){i.source={x:Math.floor(i.source.x*width/1000),y:Math.floor(i.source.y*height/1000),width:Math.floor(i.source.width*width/1000),height:Math.floor(i.source.height*height/1000)};i.target={...i.source};}scaled.preserveBands={topEnd:Math.floor(120*height/1000),bottomStart:Math.floor(650*height/1000)};
   compactDiagramPlan(scaled,width,height,prompt);validateDiagramPlan(scaled,width,height);
  }
+ const browserPlan=structuredClone(plan);browserPlan.items.find(i=>i.id==='stage_1').target.x+=5;validateDiagramPlan(browserPlan,1000,1000);
  const {createGalleryServer}=await import(pathToFileURL(path.resolve(__dirname,'../scripts/serve-nonelinear.mjs')).href);
  const server=createGalleryServer();await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
  try{
   browser=await chromium.launch({headless:true,...(process.env.REVISION_BUNDLED_BROWSER==='1'?{}:{executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})});
   const page=await browser.newPage({serviceWorkers:'block'}),origin=`http://127.0.0.1:${server.address().port}`;
   await page.route('**/*',r=>new URL(r.request().url()).origin===origin?r.continue():r.abort());await page.goto(origin+'/forge/');
-  const result=await page.evaluate(async({fixture,prompt})=>{
+  const result=await page.evaluate(async({fixture,prompt,planned})=>{
    const {retainedReflow}=await import('./revision-layout.mjs');
    const c=document.createElement('canvas');c.width=1000;c.height=1000;const ctx=c.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,1000,1000);ctx.fillStyle='#6747b5';ctx.fillRect(0,0,1000,120);ctx.fillStyle='#579e61';ctx.fillRect(0,650,1000,350);ctx.strokeStyle='black';ctx.strokeRect(1,1,998,998);const source=c.toDataURL();
    const loadImage=src=>new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src=src;});
@@ -68,14 +74,15 @@ const fixture=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/revision-
    window.fetch=async(url,init)=>{
     const request=JSON.parse(init.body),content=request.messages[0].content,text=content[0].text;calls++;
     if(request.model==='gemini-3.1-pro-preview'&&request.reasoning_effort!=='low')throw Error('Gemini 3.1 revision analysis missed low reasoning configuration');
-    if(calls===1){if(!text.includes(prompt)||/more than 100|>150|at least 150/i.test(text))throw Error('conflicting planner prompt');return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(fixture)}}]}));}
+    if(calls===1){if(!text.includes(prompt)||/more than 100|>150|at least 150/i.test(text))throw Error('conflicting planner prompt');return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({...fixture,items:fixture.items.map(i=>{const t=planned.items.find(p=>p.id===i.id).target;return {...i,target:{cx:Math.ceil(t.x+t.width/2),cy:Math.ceil(t.y+t.height/2),width:t.width,height:t.height}};})})}}]}));}
     if(calls===2){if(!text.includes(prompt)||!text.includes('SOURCE INVENTORY REVIEW')||content.filter(c=>c.type==='image_url').length!==4)throw Error('missing independent source review');const reviewed={...fixture,preserveBands:{topEnd:100,bottomStart:850},items:fixture.items.map(i=>({...i,bounds:{left:i.source.x,top:i.source.y,right:i.source.x+i.source.width,bottom:i.source.y+i.source.height}}))};return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(reviewed)}}]}));}
+    if(text.includes('FAILED validation'))throw Error(text.split('FAILED validation:')[1].slice(0,300));
     if(!text.includes('Expected positions are deliberately withheld')||text.includes('\"target\"')||text.includes('\"source\"'))throw Error('audit leaked expected coordinates');
     if(!text.includes(prompt)||!text.includes('originalCenter'))throw Error('missing audit request');
     if(!text.includes('CONFIRMED EDIT SCOPE')||!text.includes('confirmed whole grey C panel')||!text.includes('never to a smaller nested formula inset'))throw Error('confirmed scope lost during audit');
-    const {compactDiagramPlan}=await import('./revision-layout.mjs');currentPlan=structuredClone(fixture);currentPlan.items.forEach(i=>i.target={...i.source});compactDiagramPlan(currentPlan,1000,1000,prompt);
+    currentPlan=structuredClone(planned);
     const center=r=>({x:(r.x+r.width/2),y:(r.y+r.height/2)});
-    const check={passed:true,layoutChanged:true,moreCompact:true,unmetRequirements:[],items:currentPlan.items.map(i=>({id:i.id,matches:true,observedCount:1,originalCenter:center(i.source),observedCenter:center(i.target),evidence:'mock measured '+i.label})),connections:currentPlan.edges.map(e=>({...e,matches:true,evidence:'mock direct arrow'}))};
+    const check={passed:true,layoutChanged:true,moreCompact:true,requestSatisfied:true,requirements:[{request:prompt,satisfied:true,evidence:"Measured shorter gaps between internal process nodes"}],unmetRequirements:[],items:currentPlan.items.map(i=>({id:i.id,matches:true,observedCount:1,originalCenter:center(i.source),observedCenter:center(i.target),evidence:'mock measured '+i.label})),connections:currentPlan.edges.map(e=>({...e,matches:true,evidence:'mock direct arrow'}))};
     return new Response(JSON.stringify({choices:[{message:{content:JSON.stringify(check)}}]}));
    };
    const timer=setInterval(()=>{const d=document.querySelector('[data-layout-review]');if(!d)return;if(!d.querySelector('[data-layout-preview]'))throw Error('missing actual preview');d.querySelector('[data-layout-accept="true"]').click();},20);
@@ -84,14 +91,14 @@ const fixture=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/revision-
      generated++;if(!instruction.includes(prompt))throw Error('user request lost before generation');if(!parent.diagramContentReference)throw Error('target draft missing');
      // The public visual checklist contains flow-relative targets; recover full
      // panel plan independently using the same fixture for this protocol test.
-     const {compactDiagramPlan}=await import('./revision-layout.mjs');currentPlan=structuredClone(fixture);currentPlan.items.forEach(i=>i.target={...i.source});compactDiagramPlan(currentPlan,1000,1000,prompt);
+     currentPlan=structuredClone(planned);
      return {image:parent.diagramContentReference};
     });
     const decoded=await loadImage(result.image),after=document.createElement('canvas');after.width=1000;after.height=1000;after.getContext('2d').drawImage(decoded,0,0);const beforePixels=ctx.getImageData(0,0,1000,1000).data,afterPixels=after.getContext('2d').getImageData(0,0,1000,1000).data;let preservedBytes=0;
     for(let y=0;y<1000;y++)if(y<120||y>=650)for(let x=0;x<4000;x++){const index=y*4000+x;if(beforePixels[index]!==afterPixels[index])throw Error('static-band pixels changed');preservedBytes++;}
-    return {calls,generated,preservedBytes,geometry:result.revisionAudit.layout.geometry,retention:result.revisionAudit.retention};
+    return {calls,generated,preservedBytes,targets:result.revisionAudit.layout.items.map(i=>({id:i.id,target:i.target})),geometry:result.revisionAudit.layout.geometry,retention:result.revisionAudit.retention};
    }finally{clearInterval(timer);window.fetch=originalFetch;}
-  },{fixture,prompt});
+  },{fixture,prompt,planned:browserPlan});
   const pixelRegression=await page.evaluate(async()=>{
    const {refineRevisionPixels,verifyRevisionPixels,revisionBackground}=await import('./revision-pixels.mjs');
    const c=document.createElement('canvas');c.width=500;c.height=500;const ctx=c.getContext('2d');ctx.fillStyle='#f5f5f5';ctx.fillRect(0,0,500,500);ctx.fillStyle='#8844aa';ctx.fillRect(100,150,120,70);ctx.fillStyle='white';ctx.font='20px sans-serif';ctx.fillText('Exact',110,185);
@@ -117,6 +124,27 @@ const fixture=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/revision-
    const proof=verifyRevisionPixels(out,plan,crops);out.getContext('2d').clearRect(item.target.x,item.target.y,item.target.width,item.target.height);let rejected=false;try{verifyRevisionPixels(out,plan,crops);}catch{rejected=true;}if(!rejected)throw Error('missing actual pixels accepted');return proof;
   });
   assert.equal(pixelRegression.verified,true);
+  await page.evaluate(async()=>{
+   const {refineRevisionPixels}=await import('./revision-pixels.mjs');
+   const {verifyDiagramRaster,validateDiagramCheck}=await import('./revision-layout.mjs');
+   const source=document.createElement('canvas');source.width=500;source.height=500;const ctx=source.getContext('2d');ctx.fillStyle='white';ctx.fillRect(0,0,500,500);
+   for(const [x,label] of [[100,'A'],[300,'B']]){ctx.fillStyle='#8844aa';ctx.fillRect(x,150,100,70);ctx.fillStyle='white';ctx.font='20px sans-serif';ctx.fillText(label,x+20,185);}
+   const image=await new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=source.toDataURL();});
+   const plan={items:['a','b'].map((id,n)=>({id,keep:true,appearance:'purple box',source:{x:100+n*200,y:150,width:100,height:70}})),edges:[],preserveBands:{topEnd:50,bottomStart:400},geometry:{coordinateOwner:'planner',compactRequired:false,requireIntentAudit:true}};
+   const crops=refineRevisionPixels(image,plan);plan.items[0].target.x+=10;
+   const final=document.createElement('canvas');final.width=500;final.height=500;const fc=final.getContext('2d');fc.fillStyle='white';fc.fillRect(0,0,500,500);for(const i of plan.items)fc.drawImage(crops.get(i.id),i.target.x,i.target.y);
+   const center=r=>({x:(r.x+r.width/2)*2,y:(r.y+r.height/2)*2});
+   const audit={passed:true,layoutChanged:true,moreCompact:true,requestSatisfied:true,requirements:[{request:'move A closer to B',satisfied:true,evidence:'A moves right; B remains fixed'}],unmetRequirements:[],items:plan.items.map(i=>({id:i.id,matches:true,observedCount:1,evidence:'visible original text',originalCenter:center(i.source),observedCenter:{...center(i.target),y:center(i.target).y+20}}))};
+   const reject=(fn,label)=>{let failed=false;try{fn();}catch{failed=true;}if(!failed)throw Error(label);};
+   reject(()=>validateDiagramCheck(structuredClone(audit),plan,{width:500,height:500},plan.preserveBands),'uncertified noisy measurements accepted');
+   reject(()=>verifyDiagramRaster(source,plan,crops),'unchanged actual raster accepted');
+   const proof=verifyDiagramRaster(final,plan,crops);validateDiagramCheck(structuredClone(audit),plan,{width:500,height:500},plan.preserveBands,proof);
+   reject(()=>validateDiagramCheck(structuredClone(audit),plan,{width:500,height:500},plan.preserveBands,{...proof}),'forged serialized proof accepted');
+   const wrong=structuredClone(audit);wrong.items[0].observedCount=2;reject(()=>validateDiagramCheck(wrong,plan,{width:500,height:500},plan.preserveBands,proof),'pixel proof bypassed independent content audit');
+   const misplaced=structuredClone(audit);misplaced.items[0].observedCenter.x+=100;reject(()=>validateDiagramCheck(misplaced,plan,{width:500,height:500},plan.preserveBands,proof),'pixel proof bypassed visual placement audit');
+   const moved=structuredClone(plan);moved.items[0].target.x+=1;reject(()=>validateDiagramCheck(structuredClone(audit),moved,{width:500,height:500},moved.preserveBands,proof),'stale plan certificate accepted');
+   fc.clearRect(plan.items[0].target.x,plan.items[0].target.y,1,1);reject(()=>verifyDiagramRaster(final,plan,crops),'final composition overwrite accepted');
+  });
   const scope=await page.evaluate(async(prompt)=>{
    const {planRevision}=await import('./revision-scope.mjs');
    const c=document.createElement('canvas');c.width=1000;c.height=1000;const bg=c.getContext('2d');bg.fillStyle='#f3f3f3';bg.fillRect(0,0,1000,1000);bg.fillStyle='#fae8d8';bg.fillRect(0,850,1000,150);
@@ -133,6 +161,6 @@ const fixture=JSON.parse(fs.readFileSync(path.join(__dirname,'fixtures/revision-
    catch(e){return e.message;}finally{window.fetch=prior;}
   });
   assert.match(quotaError,/账户余额不足/);assert.doesNotMatch(quotaError,/untrusted provider detail|offline-test/);
-  assert.equal(result.calls,3);assert.equal(result.generated,0);assert.equal(result.retention,'pixel-internal-nodes');console.log(JSON.stringify({passed:true,exactPrompt:prompt,geometry:plan.geometry,browser:result,adversarial:['unchanged','translation','duplicate','wrong arrow','missing measurement'],liveAPICalls:0},null,2));
+  for(const p of browserPlan.items){const actual=result.targets.find(i=>i.id===p.id).target;assert.ok(Math.abs(actual.x-p.target.x)<=1&&Math.abs(actual.y-p.target.y)<=1,'application must preserve model destinations, including non-template positions');}assert.equal(result.geometry.coordinateOwner,'planner');assert.equal(result.calls,3);assert.equal(result.generated,0);assert.equal(result.retention,'pixel-internal-nodes');console.log(JSON.stringify({passed:true,exactPrompt:prompt,geometry:plan.geometry,browser:result,adversarial:['unchanged','translation','duplicate','wrong arrow','missing measurement'],liveAPICalls:0},null,2));
  }finally{if(browser)await browser.close();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});
