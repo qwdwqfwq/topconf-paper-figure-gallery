@@ -16,7 +16,7 @@ ${modeInstruction(mode)} 严禁改变画布或扩边。修改范围以原图上�
 USER REQUEST (verbatim):\n${prompt}`;
 }
 
-// Bitmap edits follow the latest request directly; the user reviews the output.
+// Bitmap edits follow the latest request directly and save without a review gate.
 export function freeRevisionInstruction(parent,prompt,count){
   const context=copyStep1Context(parent.step1Context);
   return `根据用户的最新要求修改图片，输出修改后的图片。
@@ -268,7 +268,7 @@ export async function generateRevision(parent,prompt,options){
   if(parent.freeRevision){
     parent={...parent,freeRevisionPrompt:prompt,freeRevisionRegions:parent.editRegions};
     if(!parent.manualScope){
-      options.onProgress?.('正在按你的要求生成修改图，生成后可预览并决定是否保存。');
+      options.onProgress?.('正在按你的要求生成修改图，完成后将自动保存新版本。');
       return generateRegionRevision(parent,prompt,options);
     }
     // Only an explicit manual scope preserves outside pixels; no semantic planner.
@@ -545,7 +545,7 @@ export function createRevisionGallery(adapter){
       // Display guidance depends only on the selected version, not provider loading.
       panel.querySelector('[data-model]').textContent=editing.source==='svg'
         ?'请在步骤三选择「SVG 可编辑初稿」，并选择视觉模型。'
-        :'请在步骤三选择服务商、填写对应密钥，并选择「AI 位图初稿」的图像模型。直接按你的要求改图，生成后预览保存；手动指定范围为可选。';
+        :'请在步骤三选择服务商、填写对应密钥，并选择「AI 位图初稿」的图像模型。直接按你的要求改图，完成后自动保存新版本；手动指定范围为可选。';
     }
     for(const v of versions){
       v.card.querySelector('[data-delete]').disabled=busy()||generating||!!reading||deleting;
@@ -563,17 +563,17 @@ export function createRevisionGallery(adapter){
     generating=true;error.textContent='';refresh();
     let progress=panel.querySelector('[data-revision-progress]');
     if(!progress){progress=document.createElement('p');progress.dataset.revisionProgress='true';progress.setAttribute('role','status');error.before(progress);}
-    progress.textContent=manualScope?'请确认已框选的局部修改范围，尚未开始生图。':'正在按你的要求生成修改图，生成后可预览并决定是否保存。';
+    progress.textContent=manualScope?'请确认已框选的局部修改范围，尚未开始生图。':'正在按你的要求生成修改图，完成后将自动保存新版本。';
     const onRevisionProgress=message=>{progress.textContent=message;};
     try{
       // Request-only attachments; never replace a version bitmap or reconstruction state.
       const references=(parent.attachmentsDraft||[]).map(item=>({...item}));
       const result=await adapter.generate({...parent,step1Context:copyStep1Context(parent.step1Context),freeRevision:parent.source!=='svg',manualScope,onRevisionProgress,route:{...parent.route},attachments:references,revisionMode:manualScope?'local':parent.source==='svg'?(parent.revisionModeDraft||parent.revisionMode||'local'):'auto',confirmScope:parent.source!=='svg',retainElements:parent.source==='svg'?parent.retainElementsDraft!==false:true,editRegions:parent.regionsDraft?.map(r=>({...r}))},parent.source==='svg'?prompt+'\n\n'+revisionContextInstruction(parent):prompt);
       error.textContent='';
-      if(!await reviewRevision(parent,result,prompt,references,list)){
+      if(parent.source==='svg'&&!await reviewRevision(parent,result,prompt,references,list)){
         edit(parent);error.textContent='本次结果未保存。修改要求和截图已保留；再次生成会发起新的 API 请求。';return;
       }
-      if(result.revisionAudit)result.revisionAudit={...result.revisionAudit,review:'user-confirmed',reviewedAt:Date.now()};
+      if(result.revisionAudit)result.revisionAudit={...result.revisionAudit,review:parent.source==='svg'?'user-confirmed':'automatic',reviewedAt:Date.now()};
       const v={...result,step1Context:copyStep1Context(parent.step1Context),id:crypto.randomUUID(),number:nextNumber,parentId:parent.id,prompt,route:{...(result.route||parent.route)},created:Date.now(),state:null};
       append(v);persist(v);edit(v);v.card.scrollIntoView({block:'nearest',behavior:'smooth'});
     }catch(e){
