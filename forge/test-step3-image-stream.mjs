@@ -127,7 +127,7 @@ test('HTTP 500 is preserved verbatim with safe request/transport metadata',async
 });
 
 test('stream errors, malformed events and missing completion never expose partial output or private text',async()=>{
-  for(const text of [event(complete)+event({error:{message:'offline-secret private paper'}}),
+  for(const text of [event({error:{message:'offline-secret private paper'}})+event(complete),
     event({type:'image_generation.failed'}),'data: {broken}\n\n',': heartbeat\n\n',event({candidates:[{content:{parts:[{inlineData:{data:'incomplete'}}]}}]})]){
     await assert.rejects(run(text),error=>{
       assert.match(error.code,/^IMAGE_STREAM_/);assert.doesNotMatch(error.message,/offline-secret|private paper|incomplete"/);return true;
@@ -170,4 +170,54 @@ test('transport diagnostics allow only known error names/codes and redact reques
       assert.doesNotMatch(JSON.stringify(error.imageDiagnostics),/offline-secret|private paper/);return true;
     });
   }
+});
+
+test('NoneLinear image endpoints omit even stream:false, without changing parameters',()=>{
+  for(const base of ['https://api.nonelinear.com.cn/v1','https://gallery-nonelinear-relay.lixiao-gallery.workers.dev/v1','http://localhost:8123/api/nonelinear/v1']){
+    for(const endpoint of ['/images/generations','/images/edits']){
+      assert.deepEqual(step3StreamingRequest(base+endpoint,{...body,stream:false}).body,body);
+    }
+  }
+});
+test('final image resolves without EOF, ignores trailing events and cancellation failure',async()=>{
+  for(const trailing of ['',event({error:{message:'late error'}})]){
+    let cancelled=false;
+    const result=await requestStep3ImageStream({url:'https://example.invalid/v1/images/generations',body,key:'test',timeoutMs:1000,
+      fetchImpl:async()=>new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode(event(complete)+trailing));},cancel(){cancelled=true;throw Error('cleanup failed');}}),{headers:{'content-type':'text/event-stream'}})});
+    assert.equal(cancelled,true);assert.equal(JSON.parse(result.text).data[0].b64_json,complete.b64_json);
+  }
+});
+
+test('Gemini final image and STOP resolve before a hanging or subsequently reset connection',async()=>{
+  for(const splitStop of [false,true]) for(const tail of ['hang','reset','pending-cancel']){
+    let cancelled=false,timer,calls=0;
+    const image={candidates:[{index:0,content:{parts:[{inlineData:{mimeType:'image/jpeg',data:'ZmluYWw='}}]},...(!splitStop?{finishReason:'STOP'}:{})}]};
+    const stop={candidates:[{index:0,finishReason:'STOP',content:{parts:[{text:''}]}}]};
+    const result=await requestStep3ImageStream({url:'https://infistar.cc/v1beta/models/gemini-3.1-flash-image:generateContent',body,key:'offline-secret',timeoutMs:1000,
+      fetchImpl:async()=>{
+        calls++;
+        return new Response(new ReadableStream({start(controller){
+          controller.enqueue(new TextEncoder().encode(event(image)+(splitStop?event(stop):'')));
+          if(tail==='reset') timer=setTimeout(()=>controller.error(new TypeError('late reset')),20);
+        },cancel(){cancelled=true;clearTimeout(timer);if(tail==='pending-cancel')return new Promise(()=>{});}}),{headers:{'content-type':'text/event-stream'}});
+      }});
+    assert.equal(calls,1);assert.equal(cancelled,true);
+    assert.equal(result.events,splitStop?2:1);
+    assert.deepEqual(geminiImageResult(JSON.parse(result.text)),{mimeType:'image/jpeg',b64_json:'ZmluYWw='});
+  }
+});
+
+test('Infistar trace header is retained on success and HTTP 500/504 without reclassifying the provider error',async()=>{
+  for(const status of [200,500,504]){
+    let calls=0;
+    const text=JSON.stringify(status===200?{data:[{b64_json:'final'}]}:{error:{code:'bad_response_body',message:'暂时供应不足，请稍后重试'}});
+    const result=await requestStep3ImageStream({url:'https://infistar.cc/v1beta/models/gemini:generateContent',body,key:'offline-secret',fetchImpl:async()=>{
+      calls++;return new Response(text,{status,headers:{'content-type':'application/json','x-oneapi-request-id':'infistar-trace-123'}});
+    }});
+    assert.equal(calls,1);assert.equal(result.ok,status===200);assert.equal(result.status,status);assert.equal(result.text,text);
+    assert.equal(result.requestId,'infistar-trace-123');assert.equal(result.transport.requestId,'infistar-trace-123');
+  }
+  const redacted=await requestStep3ImageStream({url:'https://infistar.cc/v1beta/models/gemini:generateContent',body,key:'offline-secret',fetchImpl:async()=>
+    new Response('{}',{status:500,headers:{'x-oneapi-request-id':'offline-secret Bearer hidden sk-hidden'}})});
+  assert.doesNotMatch(JSON.stringify(redacted.transport),/offline-secret|Bearer hidden|sk-hidden/);
 });

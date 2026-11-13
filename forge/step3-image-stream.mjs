@@ -83,8 +83,11 @@ function eventDecoder(onEvent){
 function imageEvents(nativeGemini){
   let image=null,completed=false,events=0,latest={};
   const candidates=new Map();
+  const ready=()=>nativeGemini?[...candidates.values()].some(c=>c.finishReason==='STOP'&&c.content?.parts?.some(p=>!p.thought&&(p.inlineData?.data||p.inline_data?.data))):completed&&!!image;
   return {
+    get ready(){return ready();},
     accept(raw,event){
+      if(ready())return;
       if(raw.trim()==='[DONE]') return;
       let value;
       try{value=JSON.parse(raw);}catch{throw streamFailure('IMAGE_STREAM_INVALID_EVENT');}
@@ -159,7 +162,9 @@ export async function requestStep3ImageStream({url,body,key,usedReferences=false
       const response=await fetchImpl(request.url,{method:'POST',
         headers:{...(multipart?{}:{'Content-Type':'application/json'}),Authorization:'Bearer '+key},
         body:multipart?request.body:JSON.stringify(request.body),signal:controller.signal});
-      const requestId=safeId(response.headers.get('x-request-id')||response.headers.get('request-id'),key);
+      // Infistar's native Gemini endpoint uses x-oneapi-request-id, including
+      // on HTTP 500 responses. Keep the upstream trace with the original error.
+      const requestId=safeId(response.headers.get('x-request-id')||response.headers.get('request-id')||response.headers.get('x-oneapi-request-id'),key);
       progress={stage:'reading_response',headersMs:Math.round(performance.now()-started),status:response.status,requestId,responseBytes:0};
       let mode=response.ok && /text\/event-stream/i.test(response.headers.get('content-type')||'')?'sse':null;
       const collector=imageEvents(request.nativeGemini),parser=eventDecoder((data,event)=>collector.accept(data,event));
@@ -187,10 +192,11 @@ export async function requestStep3ImageStream({url,body,key,usedReferences=false
             progress.responseBytes+=value.byteLength;
             if(progress.firstBodyChunkMs===undefined) progress.firstBodyChunkMs=Math.round(performance.now()-started);
             consume(decoder.decode(value,{stream:true}));onProgress(snapshot());
+            if(collector.ready){void reader.cancel().catch(()=>{});break;}
           }
           consume(decoder.decode());
         }catch(error){
-          await reader.cancel().catch(()=>{});throw error;
+          void reader.cancel().catch(()=>{});throw error;
         }finally{reader.releaseLock();}
       }
       let events=0;
