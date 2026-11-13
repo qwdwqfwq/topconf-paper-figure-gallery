@@ -90,17 +90,26 @@ export function refineRevisionPixels(image,plan){
   return crops;
 }
 
+// Resample at the origin before positioning. Scaling during translated drawing
+// can choose different sampling phases across browser raster backends.
+export function revisionTargetRaster(crop,target){
+  if(target.width===crop.width&&target.height===crop.height)return crop;
+  const scaled=document.createElement('canvas');scaled.width=target.width;scaled.height=target.height;
+  scaled.getContext('2d').drawImage(crop,0,0,target.width,target.height);
+  return scaled;
+}
+export function drawRevisionPixels(ctx,crop,target){
+  ctx.drawImage(revisionTargetRaster(crop,target),target.x,target.y);
+}
+
 // Verify the final raster, rather than trusting draw commands or model centers.
 export function verifyRevisionPixels(canvas,plan,crops){
   const ctx=canvas.getContext('2d',{willReadFrequently:true});let checkedBytes=0,scaledNodes=0;
   for(const item of plan.items.filter(i=>i.keep)){
     const crop=crops.get(item.id),t=item.target;if(!crop)throw Error('缺少完整节点原像素，未保存修改版。');
     if(!t||!['x','y','width','height'].every(k=>Number.isInteger(t[k]))||t.width<2||t.height<2||t.x<0||t.y<0||t.x+t.width>canvas.width||t.y+t.height>canvas.height)throw Error('节点目标尺寸或位置无效，未保存修改版。');
-    let reference=crop;
-    if(t.width!==crop.width||t.height!==crop.height){
-      scaledNodes++;reference=document.createElement('canvas');reference.width=t.width;reference.height=t.height;
-      reference.getContext('2d').drawImage(crop,0,0,t.width,t.height);
-    }
+    if(t.width!==crop.width||t.height!==crop.height)scaledNodes++;
+    const reference=revisionTargetRaster(crop,t);
     const expected=reference.getContext('2d').getImageData(0,0,t.width,t.height).data;
     const actual=ctx.getImageData(t.x,t.y,t.width,t.height).data;
     let itemBytes=0;

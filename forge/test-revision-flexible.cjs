@@ -12,6 +12,23 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
   await page.route('**/*',r=>new URL(r.request().url()).origin===origin?r.continue():r.abort());await page.goto(origin+'/forge/');
   // No simulated acceptance: every reflow must finish without a review popup.
   await page.evaluate(()=>{HTMLDialogElement.prototype.showModal=function(){throw Error('Step 3 must continue automatically without a review dialog');};});
+  const pixelChecks=await page.evaluate(async()=>{
+   const {drawRevisionPixels,verifyRevisionPixels}=await import('./revision-pixels.mjs');
+   const crop=document.createElement('canvas');crop.width=164;crop.height=84;
+   const cc=crop.getContext('2d');cc.fillStyle='#6747b5';cc.fillRect(0,0,164,84);cc.fillStyle='white';cc.font='24px sans-serif';cc.fillText('Label',20,40);
+   let verified=0,rejected=0;
+   for(const target of [{x:420,y:70,width:160,height:80},{x:440,y:360,width:120,height:60},{x:360,y:700,width:240,height:120}]){
+    const canvas=document.createElement('canvas');canvas.width=1000;canvas.height=1000;const ctx=canvas.getContext('2d');
+    const plan={items:[{id:'node',keep:true,target}]},crops=new Map([['node',crop]]);
+    drawRevisionPixels(ctx,crop,target);if(!verifyRevisionPixels(canvas,plan,crops).verified)throw Error('valid resized raster rejected');verified++;
+    const fail=()=>{try{verifyRevisionPixels(canvas,plan,crops);}catch(e){if(e.message.includes('像素覆盖或位置不符')){rejected++;return; }throw e;}throw Error('corrupted raster accepted');};
+    ctx.fillStyle='#00ff00';ctx.fillRect(target.x+10,target.y+10,1,1);fail();
+    ctx.clearRect(0,0,1000,1000);drawRevisionPixels(ctx,crop,{...target,x:target.x+1});fail();
+    ctx.clearRect(0,0,1000,1000);drawRevisionPixels(ctx,crop,{...target,width:target.width-5});fail();
+   }
+   return {verified,rejected};
+  });
+  assert.deepEqual(pixelChecks,{verified:3,rejected:9});console.log(JSON.stringify({pixelChecks,passed:true}));
   for(const mode of ['resize','reshape','redesign','retry']){
    const result=await page.evaluate(async mode=>{
     const {retainedReflow}=await import('./revision-layout.mjs');

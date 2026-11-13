@@ -1,6 +1,6 @@
 import {revisionContextInstruction} from './revision-context.mjs';
 import {routeRevisionEdges,placeRevisionLabels,revisionLabelSizes} from './revision-routing.mjs';
-import {refineRevisionPixels, verifyRevisionPixels, revisionBackground, revisionEdgeColor} from './revision-pixels.mjs';
+import {refineRevisionPixels, verifyRevisionPixels, drawRevisionPixels, revisionBackground, revisionEdgeColor} from './revision-pixels.mjs';
 const revisionDesignInstruction=' Also return top-level redesign:boolean and design:string. Set redesign=true when the requested or planned design needs new typography, line wrapping, node shapes or visual styling beyond relocating and uniformly scaling original crops. Use design to describe those changes concretely. Retaining original elements means retaining their identities, exact information and relationships, not freezing their appearance. The renderer will retypeset/redraw when redesign=true, even if target aspect ratios are unchanged. For a purely positional/proportional reflow, redesign may be false.';
 // Private revision-only pixel-preserving layout; never imports reconstruction/export code.
 // Isolated vision planning for the selected revision provider. Never fall back across providers.
@@ -388,7 +388,7 @@ Return JSON {items:[{id,label,appearance,keep:true,bounds:{left:integer,top:inte
     // This is a visual guide only; the independent content audit still applies.
     const originalItem=plan.items.find(i=>i.id===item.id),s=originalItem.source;
     const crop=pixelCrops?.get(item.id);
-    if(crop)gc.drawImage(crop,t.x,t.y,t.width,t.height);else gc.drawImage(panelImage,s.x,s.y,s.width,s.height,t.x,t.y,t.width,t.height);
+    if(crop)drawRevisionPixels(gc,crop,t);else gc.drawImage(panelImage,s.x,s.y,s.width,s.height,t.x,t.y,t.width,t.height);
   }
   // A changed node shape needs retypesetting, not stretched original glyphs.
   // Its semantic content and topology still undergo the independent audit.

@@ -9,17 +9,18 @@ import {join,resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('..',import.meta.url));
 export const anchor='f9bfba3d6c318ec79593a7e3240ad72adbf6f1ee';
+const releaseParent='77dbdc5b4f371e4f6beb493dcaff09eaae8163f1';
 export const publishedTree='90313784e6c8080769c71a39ef6c7b011b11bade';
 export const payload=['forge/revision-gallery.mjs','forge/revision-layout.mjs','forge/revision-pixels.mjs','forge/revision-routing.mjs'];
 export const allowed=[...payload,'forge/test-revision-compact.cjs','forge/test-revision-routing.mjs','forge/test-revision-flexible.cjs','.github/workflows/step3-flexible-release.yml','scripts/check-step3-flexible-release.mjs','scripts/test-step3-flexible-release.mjs'];
 const expected={
   "forge/revision-gallery.mjs": "8e6172bd98d1a38ec9363bfae849ac8a6287b470890b0c7a08af65ee2e53c3e0",
-  "forge/revision-layout.mjs": "b318be155da9b007e763f9e0a48b7d82ee441b5f9cb2dd38bd448d86f9d8da61",
-  "forge/revision-pixels.mjs": "35180c2fd1290d891d0df904675cd8a29a59d39d295b66494894bdf3a86f7860",
+  "forge/revision-layout.mjs": "b73cfe43c23133c83f36c1b79972e534fd8139002473366744195495ef4b22b6",
+  "forge/revision-pixels.mjs": "8c8bda61b56f3358c5b6ddc4e1b8f0e53aa5991d20bee058cc1fc51c54cc3fcc",
   "forge/revision-routing.mjs": "273630897cd396edda70749071803ab4af9f483772c1c1658b95d8d56285c1c9",
   "forge/test-revision-compact.cjs": "16ca3521ed904024807e969c7133a195c5407c2dfecd69ed86b236dc030ec9ed",
   "forge/test-revision-routing.mjs": "7ebc26b4b856fa5b478bcb63c6a14df8d1e34a6db5e309c09b91227e79716b95",
-  "forge/test-revision-flexible.cjs": "e1722058618b784423689e1115c34348aefcf20f250e01a6c099646906ff9425",
+  "forge/test-revision-flexible.cjs": "3ee687bcde0ef8a3afd3fedce6e368117b65586d744b0204c9ca1c789198e98b",
   ".github/workflows/step3-flexible-release.yml": "2aa929581f340e92c9ab6d3af7a02ce1f30664b9042dad9936eb9eca6c675b47",
   "scripts/test-step3-flexible-release.mjs": "bdb46620c8d361e02e67874a86df00ed0aa46c951c36a0b6a4b8ffce15cb06b4"
 };
@@ -30,8 +31,8 @@ export function assertArtifactDiff(paths){assert.deepEqual([...paths].sort(),[..
 export function verifyBlob(path,data){assert.ok(expected[path],'Unreviewed path');assert.equal(createHash('sha256').update(data.toString().replace(/\r\n/g,'\n')).digest('hex'),expected[path],'Unreviewed content: '+path);}
 function main(){
  const working=process.argv.includes('--working');
- if(working)assert.equal(git('rev-parse','HEAD'),anchor,'Unexpected working base');
- else {assert.equal(git('show','-s','--format=%P','HEAD'),anchor,'Release must directly follow current production');assert.equal(git('status','--porcelain','--untracked-files=all'),'','Dirty checkout');}
+ if(working)assert.equal(git('rev-parse','HEAD'),releaseParent,'Unexpected working base');
+ else {assert.equal(git('show','-s','--format=%P','HEAD'),releaseParent,'Release must directly follow the reviewed Step 3 candidate');assert.equal(git('status','--porcelain','--untracked-files=all'),'','Dirty checkout');}
  const paths=working?[...new Set([...git('diff','--name-only','--no-renames',anchor,'--').split('\n').filter(Boolean),...git('ls-files','--others','--exclude-standard').split('\n').filter(Boolean)])]:changed(anchor,'HEAD');
  assertAllowedPaths(paths);
  assert.equal(Object.keys(expected).length,allowed.length-1);
