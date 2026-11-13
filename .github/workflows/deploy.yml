@@ -1,4 +1,4 @@
-name: Deploy isolated revision update
+name: Deploy authorized Infistar Responses repair
 on:
   push:
     branches: [main]
@@ -32,9 +32,11 @@ jobs:
           ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
         run: echo "Original lock outcome = $ORIGINAL_OUTCOME. Independent revision acceptance does not change this result." >> "$GITHUB_STEP_SUMMARY"
       - name: Strict isolated release acceptance and artifact construction
-        run: node scripts/check-revision-isolated-release.mjs --prepare-pages
+        run: node scripts/check-infistar-responses-release.mjs --prepare-pages
       - name: Independent acceptance adversarial tests
-        run: node --test scripts/test-revision-isolated-release.mjs
+        run: node --test scripts/test-infistar-responses-release.mjs
+      - name: Responses transport and existing stream regression
+        run: node --test forge/test-infistar-reconstruction-responses.mjs forge/test-infistar-reconstruction-stream.mjs
       - name: Install isolated revision browser test runtime
         run: npm install --prefix "$RUNNER_TEMP/revision-test" playwright@1.58.2 && "$RUNNER_TEMP/revision-test/node_modules/.bin/playwright" install chromium --with-deps
       - name: Required revision behavior and pixel preservation regression
@@ -55,12 +57,12 @@ jobs:
       - name: Upload independent byte preservation proof
         uses: actions/upload-artifact@v4
         with:
-          name: isolated-revision-proof
-          path: /tmp/isolated-revision-proof.json
+          name: isolated-infistar-proof
+          path: /tmp/isolated-infistar-proof.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: /tmp/isolated-revision-pages
+          path: /tmp/isolated-infistar-pages
       - name: Deploy isolated artifact to current application
         id: deployment
         uses: actions/deploy-pages@v4
