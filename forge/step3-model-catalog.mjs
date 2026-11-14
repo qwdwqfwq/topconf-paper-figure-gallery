@@ -7,13 +7,13 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
   kindOf,isVisualModel,onLiveModels=()=>{},onRender=()=>{},
   storage=globalThis.localStorage,fetchImpl=globalThis.fetch,transportOptions={},debounceMs=650,
   language=()=>document.documentElement.lang,now=()=>Date.now(),autoRefreshMs=300000}){
-  let revision=0,scheduled,state,lastConfig,lastRefresh=0,officialKinds={};
+  let revision=0,scheduled,state,lastConfig,lastRefresh=0,officialKinds={},officialVisual={};
   const inflight=new Map();
   const text=(zh,en)=>String(language()).startsWith('en')?en:zh;
   const identity=c=>JSON.stringify([c.provider,c.base,c.proto,c.key]); // Never persisted.
   const current=(id,version,mode)=>version===revision&&identity(readConfig())===id&&readConfig().mode===mode;
   const unique=list=>[...new Set(list)];
-  const filter=(list,c,analysis=false)=>unique(list.filter(m=>analysis?isVisualModel(m,c.vision||[]):(officialKinds[m]==='image'?'image':kindOf(m))===(c.mode==='svg'?'chat':'image')));
+  const filter=(list,c,analysis=false)=>unique(list.filter(m=>analysis?(Object.hasOwn(officialVisual,m)?officialVisual[m]:isVisualModel(m,c.vision||[])):(Object.hasOwn(officialKinds,m)?officialKinds[m]:kindOf(m))===(c.mode==='svg'?'chat':'image')));
   const permissionNote=()=>text('目录不代表当前 Key 的调用权限。','The catalog does not confirm this key’s inference access.');
   const bundledLabel=()=>text(`内置目录（${nonelinearCatalog.updated}，非实时）`,`Bundled catalog (${nonelinearCatalog.updated}, not live)`);
   function initial(c){
@@ -55,7 +55,7 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
     return 'ff_step3_catalog_v1_'+Array.from(new Uint8Array(hash),x=>x.toString(16).padStart(2,'0')).join('');
   };
   async function refreshOfficial(c,id,version){
-    const fallback=initial(c),publicKey='ff_step3_official_v1_infistar';
+    const fallback=initial(c),publicKey='ff_step3_official_v1_'+c.provider;
     let publicResult,keyResult,publicCache,keyCache,fingerprint;
     const valid=cache=>cache&&now()-cache.updated>=0&&now()-cache.updated<24*60*60*1000;
     const date=cache=>new Date(cache.updated).toLocaleString(String(language()).startsWith('en')?'en-US':'zh-CN');
@@ -73,6 +73,7 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
       const published=publicResult?.ok?publicResult:publicCache;
       const permitted=keyResult?.ok?keyResult:keyCache;
       officialKinds=published?.kinds||{};
+      officialVisual=published?.visual||{};
       const rows=unique([...(published?.list||[]),...(permitted?.list||[])]);
       const source=publicResult?.ok?text('官网实时目录 + Key 目录','Live official catalog + key catalog'):
         publicCache?text(`官网缓存（${date(publicCache)}，非实时）`,`Official cache (${date(publicCache)}, not live)`):
@@ -88,8 +89,9 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
     }
     function parseCachedOfficial(stored){
       const list=normalizeModels({data:stored.models});
-      const kinds=Object.fromEntries(list.filter(name=>['image','chat'].includes(stored.kinds?.[name])).map(name=>[name,stored.kinds[name]]));
-      return {list,kinds};
+      const kinds=Object.fromEntries(list.filter(name=>['image','chat','other'].includes(stored.kinds?.[name])).map(name=>[name,stored.kinds[name]]));
+      const visual=Object.fromEntries(list.filter(name=>typeof stored.visual?.[name]==='boolean').map(name=>[name,stored.visual[name]]));
+      return {list,kinds,visual};
     }
     if(!current(id,version,c.mode))return;
     show();
@@ -97,7 +99,7 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
       fetchOfficialCatalog(c,{fetchImpl,timeoutMs:transportOptions.officialTimeoutMs||6000}).then(result=>{
         if(!current(id,version,c.mode))return;
         publicResult=result;
-        if(result.ok)try{storage.setItem(publicKey,JSON.stringify({updated:now(),models:result.list,kinds:result.kinds}));}catch{}
+        if(result.ok)try{storage.setItem(publicKey,JSON.stringify({updated:now(),models:result.list,kinds:result.kinds,visual:result.visual}));}catch{}
         show();
       }),
       (c.key?fetchParserCatalog(c,{fetchImpl,...transportOptions}):Promise.resolve(null)).then(result=>{
@@ -109,7 +111,7 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
     ]);
   }
   async function refresh(){
-    clearTimeout(scheduled);const version=++revision,c=readConfig(),id=identity(c);lastRefresh=now();officialKinds={};
+    clearTimeout(scheduled);const version=++revision,c=readConfig(),id=identity(c);lastRefresh=now();officialKinds={};officialVisual={};
     onLiveModels(null);
     let fallback=initial(c);
     const loading=c.key?text('正在刷新步骤三模型…','Refreshing Step 3 models…'):text('填写 Key 后自动刷新实时目录。','Enter a key to refresh the live catalog automatically.');
@@ -151,7 +153,7 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
   globalThis.addEventListener?.('focus',checkFreshness);
   globalThis.document?.addEventListener('visibilitychange',checkFreshness);
   return {refresh,dispose(){++revision;clearTimeout(scheduled);clearInterval(timer);globalThis.removeEventListener?.('focus',checkFreshness);globalThis.document?.removeEventListener('visibilitychange',checkFreshness);},schedule(){
-    ++revision;clearTimeout(scheduled);onLiveModels(null);officialKinds={};
+    ++revision;clearTimeout(scheduled);onLiveModels(null);officialKinds={};officialVisual={};
     const c=readConfig(),fallback=initial(c);render(c,fallback.list,fallback.source,text('设置已更新，即将刷新步骤三模型…','Settings updated; refreshing Step 3 models shortly…'));
     scheduled=setTimeout(refresh,debounceMs);
   },getState:()=>state};
