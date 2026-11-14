@@ -8,15 +8,17 @@ import {join,resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('..',import.meta.url));
 export const anchor='2f6dfc535573016eb278425cc69fcdf60a093857';
+const reviewedParent='e23884823d440d69917e6df455edf69aaa5ee523';
 export const publishedTree='6ad4d648504f4f2e71bdaf6999bb6698b94281b9';
 export const payload=['forge/step3-model-catalog.mjs','forge/step3-official-catalog.mjs'];
-export const allowed=[...payload,'forge/test-step3-official-catalog.mjs','forge/test-step3-official-catalog-browser.cjs','.github/workflows/step3-official-catalog-release.yml','scripts/check-step3-official-catalog-release.mjs','scripts/test-step3-official-catalog-release.mjs'];
+export const allowed=[...payload,'forge/test-step3-official-catalog.mjs','forge/test-step3-official-catalog-browser.cjs','forge/test-step3-official-catalog-compat.cjs','.github/workflows/step3-official-catalog-release.yml','scripts/check-step3-official-catalog-release.mjs','scripts/test-step3-official-catalog-release.mjs'];
 const expected={
+  "forge/test-step3-official-catalog-compat.cjs": "6833f53a7100f0813b365b9d51e7cf40adf433d5859b4f0c5bba0a5fb9722845",
   "forge/step3-model-catalog.mjs": "a9adb975034445511a3883b59f7e48f05eca0d91652b878fcfeee2b3f5e41bfc",
   "forge/step3-official-catalog.mjs": "db981cab60c5e99a321438868dbb520b59037ee16f1919dfffb4eebfdfd08e89",
   "forge/test-step3-official-catalog.mjs": "8fa6f44f3740e7346ba06176c24479406eedd6624cda8566e3c445fb866f4e1a",
   "forge/test-step3-official-catalog-browser.cjs": "e97ff70139c6d505ede88b629fb0b8a40e3177cd6b4c49bc0ac596c4ca89eca2",
-  ".github/workflows/step3-official-catalog-release.yml": "2c748d21096d64e4b823add569829025e4887de39a32604ecf95c8928933250f",
+  ".github/workflows/step3-official-catalog-release.yml": "59383db79a7cd3b21713d283e4d512bbbb4842b1cdb832816d01e7a37c778179",
   "scripts/test-step3-official-catalog-release.mjs": "547ef1e94759d98af200d8842ca00d08d4532c7e9326650645e7637929ab1a53"
 };
 const git=(...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8',maxBuffer:40*1024*1024}).trim();
@@ -26,8 +28,9 @@ export function assertArtifactDiff(paths){assert.deepEqual([...paths].sort(),pay
 export function verifyBlob(path,data){assert.ok(expected[path],'Unreviewed path');assert.equal(createHash('sha256').update(data.toString().replace(/\r\n/g,'\n')).digest('hex'),expected[path],'Unreviewed content: '+path);}
 function main(){
  const working=process.argv.includes('--working');
- if(working)assert.equal(git('rev-parse','HEAD'),anchor,'Unexpected working base');
- else {assert.equal(git('show','-s','--format=%P','HEAD'),anchor,'Release must directly follow the reviewed production commit');assert.equal(git('status','--porcelain','--untracked-files=all'),'','Dirty checkout');}
+ assert.equal(git('show','-s','--format=%P',reviewedParent),anchor,'Discovery commit must directly follow reviewed production');
+ if(working)assert.equal(git('rev-parse','HEAD'),reviewedParent,'Unexpected working base');
+ else {assert.equal(git('show','-s','--format=%P','HEAD'),reviewedParent,'Release must directly follow the reviewed discovery commit');assert.equal(git('status','--porcelain','--untracked-files=all'),'','Dirty checkout');}
  const paths=working?[...new Set([...git('diff','--name-only','--no-renames',anchor,'--').split('\n').filter(Boolean),...git('ls-files','--others','--exclude-standard').split('\n').filter(Boolean)])]:changed(anchor,'HEAD');
  assertAllowedPaths(paths);assert.equal(Object.keys(expected).length,allowed.length-1);
  for(const p of Object.keys(expected))verifyBlob(p,readFileSync(join(root,p)));

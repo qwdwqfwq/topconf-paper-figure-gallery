@@ -55,7 +55,7 @@ jobs:
           node forge/test-step3-model-catalog-browser.cjs
           node forge/test-step3-official-catalog-browser.cjs
           node forge/test-manual-revision-browser.cjs
-          node forge/test-revision-user-directed-r2.cjs
+          node forge/test-step3-official-catalog-compat.cjs
       # The old fixtures intercept direct provider POSTs. Their original UI
       # contract is retained here; current durable PUT/GET behavior is tested above.
       - name: Preserve prior direct transport UI contracts on their original version
