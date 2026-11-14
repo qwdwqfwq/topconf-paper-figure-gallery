@@ -741,6 +741,9 @@ import {prepareQuery,buildIndex,rank} from './retrieval.mjs';
 import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=20261021-unlimited';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261026-nonelinear-resolution';
 import {requestStep3ImageStream} from './step3-image-stream.mjs?v=20261114-errors';
+import {step3ImageResolutions,assertStep3ImageResolution,step3ImageDimensions,step3NativePixelsMatch} from './step3-image-capabilities.mjs?v=20261114-model-resolution';
+import {usesInfistarImageJob,requestInfistarImageJob,acknowledgeInfistarImageJob,showInfistarJobProgress} from './step3-infistar-job.mjs?v=20261114-durable-jobs';
+import {prepareStep3ImageBody,protocolFetch,imageResultItem} from './step3-image-protocol.mjs?v=20261114-protocol';
 import {step3ReferenceInputs} from './step3-reference-input.mjs?v=20261114-errors';
 import {createRevisionGallery,generateRevision} from './revision-gallery.mjs?v=20261114-layout';
 import {svgChatResponse} from './svg-chat-response.mjs?v=20261112';
@@ -1926,24 +1929,17 @@ document.querySelectorAll('#passTabs button').forEach(b=>b.onclick=()=>{
 function syncImageRatioSupport(){
   const warn=$('#imageRatioWarn');
   if(!warn) return;
-  for(const option of $('#imageResolution').options) option.disabled=false;
   warn.hidden=true;warn.textContent='';warn.classList.remove('audit-ok');
   if(mode!=='image') return;
   const p=$('#provider').value,model=p==='custom'?$('#customModel').value.trim():$('#model').value;
   if(!model) return;
-  if(p==='nonelinear'){
-    for(const option of $('#imageResolution').options){
-      try{imageRequestDimensions(p,model,$('#figureRatio').value,option.value);}
-      catch{option.disabled=true;}
-    }
-    const selected=$('#imageResolution').selectedOptions[0];
-    if(selected?.disabled){
-      const supported=Array.from($('#imageResolution').options).find(option=>!option.disabled);
-      if(supported) $('#imageResolution').value=supported.value;
-    }
-  }
+  const select=$('#imageResolution'),previous=select.value;
+  const supported=step3ImageResolutions(p,model,$('#figureRatio').value,usesInfistarGemini(baseURL(),model));
+  select.replaceChildren(...supported.map(value=>new Option(value,value)));
+  if(supported.includes(previous))select.value=previous;
+  select.disabled=!supported.length;
   try{
-    imageRequestDimensions(p,model,$('#figureRatio').value,$('#imageResolution').value,usesInfistarGemini(baseURL(),model));
+    assertStep3ImageResolution(p,model,$('#figureRatio').value,select.value,usesInfistarGemini(baseURL(),model),GAL_I18N.lang==='en');
   }catch(error){
     warn.textContent=tt('img.unsupported',{model,ratio:$('#figureRatio').value,resolution:$('#imageResolution').value});
     if(p==='nonelinear') warn.textContent=`${model} 的非线智能接口未声明支持当前比例与分辨率组合，请选择可用配置。`;
@@ -1951,6 +1947,11 @@ function syncImageRatioSupport(){
     return;
   }
   if(p==='infistar'){
+    if(/^gemini-3\.1-flash-lite-image(?:$|-)/i.test(model)){
+      warn.textContent=refsText('该模型仅支持 1K，已只显示可用分辨率。','This model supports 1K only. Only available resolutions are shown.');
+      warn.hidden=false;
+      return;
+    }
     const status=infistarAuditStatus(model,$('#figureRatio').value,$('#imageResolution').value);
     const key={verified:'img.auditVerified',rejected:'img.auditRejected',unavailable:'img.auditUnavailable',limited:'img.auditLimited',wrongSize:'img.auditWrongSize',inconclusive:'img.auditInconclusive',untested:'img.auditUntested'}[status];
     warn.textContent=tt(key,{model,ratio:$('#figureRatio').value,resolution:$('#imageResolution').value});
@@ -6210,7 +6211,8 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
     return genOaiImage(route.base,route.model,route.key,content,route.p,useIds,layoutGuide,[...attempted,requested]);
   attempted=[...attempted,route];
   const nativeGemini=usesInfistarGemini(base,model);
-  const dimensions=imageRequestDimensions(p,model,ratio,resolution,nativeGemini);
+  assertStep3ImageResolution(p,model,ratio,resolution,nativeGemini,GAL_I18N.lang==='en');
+  const dimensions=step3ImageDimensions(p,model,ratio,resolution,nativeGemini);
   const tg = TARGETS[$('#target').value] || TARGETS.overview;
   const guide = layoutGuide
     ? `INTERNAL REFERENCE GUIDE, never render its planning text or coordinates. Synthesize panel topology, density, palette, spacing, arrows and hierarchy; reflow geometry to fill the requested rectangle:\n${layoutGuide}\n\n`
@@ -6332,8 +6334,12 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
   }
   let r;
   try{
-    r=await requestStep3ImageStream({url:base+endpoint,body,key,usedReferences:usedRefs});
+    body=prepareStep3ImageBody(body,model,nativeGemini);
+    r=usesInfistarImageJob(base+endpoint,model)
+      ? await requestInfistarImageJob({url:base+endpoint,body,key,usedReferences:usedRefs,onProgress:showInfistarJobProgress})
+      : await requestStep3ImageStream({url:base+endpoint,body,key,usedReferences:usedRefs,fetchImpl:protocolFetch()});
   }catch(e){
+    if(e.code?.startsWith('JOB_'))throw e;
     const diagnostic=e.imageDiagnostics;
     const hint=diagnostic?' [stage: '+diagnostic.stage+(diagnostic.requestId?'; request-id: '+diagnostic.requestId:'')+']':'';
     const message=/^IMAGE_STREAM_/.test(e.code||'')?tt('img.abnormal',{t:e.message}):e.name==='TimeoutError'?tt('img.timeout'):tt('img.connection');
@@ -6360,14 +6366,14 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
     const diagnostic=transport?` ${zh?'本次请求':'Request'}: POST ${transport.endpoint}; ${transport.format}; ${zh?'参考图':'references'}=${transport.referenceCount}; size=${transport.size||'default'}.`:'';
     const referenceHint=imageFailureKind(r.status,txt)==='reference'
       ?(zh?' 此响应只说明本次请求方式被拒绝，不能据此判断模型不支持参考图；需核对成功客户端的接口路径和上传格式。':' This rejects the submitted request mode; it does not establish that the model lacks reference-image support. Compare the endpoint and upload format with a working client.'):'';
-    const message=friendlyHttp(r.status,txt)+diagnostic+referenceHint+(r.requestId?' Request ID: '+r.requestId:'');
+    const message=(r.resultError?'服务商响应已收到，但图片结果无效：'+r.resultError+'。原任务记录已保留，请先核查，勿重复生成。':friendlyHttp(r.status,txt))+diagnostic+referenceHint+(r.requestId?' Request ID: '+r.requestId:'');
     throw new Error((key?message.split(key).join('[redacted]'):message).replace(/Bearer\s+\S+/gi,'Bearer [redacted]'));
   }
   let d,item;
   try{
     try{ d=JSON.parse(txt); }
     catch{ throw new Error(tt('img.abnormal',{t:'HTTP '+r.status+'; response is not JSON; Request ID: '+(r.requestId||'unavailable')})); }
-    item=nativeGemini ? geminiImageResult(d,{requestId:r.requestId,locale:window.GAL_I18N?.lang}) : (d?.data?.[0] || d?.images?.[0]);
+    item=imageResultItem(d)||(nativeGemini ? geminiImageResult(d,{requestId:r.requestId,locale:window.GAL_I18N?.lang}) : null);
   }catch(error){
     // A prior success must not keep advertising this combination as healthy.
     recordImageRoute({...route,references:usedRefs},'blocked');
@@ -6385,7 +6391,7 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
   }
   const actualImage=await loadImage(exportImgSrc);
   const actualWidth=actualImage.naturalWidth||actualImage.width, actualHeight=actualImage.naturalHeight||actualImage.height;
-  if(!verifyImageRatio(actualWidth,actualHeight,ratio)){
+  if(!verifyImageRatio(actualWidth,actualHeight,ratio)&&!step3NativePixelsMatch(model,ratio,actualWidth,actualHeight)){
     recordImageRoute({...route,references:usedRefs},'blocked');
     throw new Error(tt('img.ratioMismatch',{ratio,width:actualWidth,height:actualHeight}));
   }
@@ -6394,6 +6400,8 @@ async function genOaiImage(base,model,key,content,p,refIds,layoutGuide,attempted
     throw new Error(tt('img.resolutionMismatch',{resolution,width:actualWidth,height:actualHeight}));
   }
   recordImageRoute({...route,references:usedRefs},'verified');
+  // Retain a recoverable result even if applying it to the editor later fails.
+  if(r.job)await acknowledgeInfistarImageJob(key,r.job.id);
   await revisionGallery.addInitial({image:exportImgSrc,width:actualWidth,height:actualHeight,
     route:{base:route.base,model,p,ratio,resolution}});
   const st=ensureExportState();

@@ -14,7 +14,7 @@
     "forge/i18n_forge.js": "9a5f935ff5c61ebb0a1358e1e3211d8d007379bb3808e28bea50133159aa6830",
     "forge/image-api.mjs": "471ef776cc1492932646b380d05093a95f71fc1985db02eb2145a9a1746964d2",
     "forge/image-routes.mjs": "8724ef2c278d5dfa5975126c7374f013687f9c3fbd72a000ca9af027c6c44546",
-    "forge/index.html": "0308257e7b6f698dbd9089ede93512fbddf7b716c2ed0a5e89e6596213cc9bbe",
+    "forge/index.html": "cf09be5355bb41fb2c10eeab36e72ff8a1dc1e270a18c069dd623ac6937bc1e5",
     "forge/infistar-audit.mjs": "145679bef9bf4251261e03a9eeb7868c1f83d3b5e57f2642c7767f12dee69f8d",
     "forge/nonelinear-config.js": "14dc2049e85f22de0da5a1f412d74db26fdc5a9fba3cdc85131e51cc743d747d",
     "forge/nonelinear-image.mjs": "b497936b4022e9fd55cf33010f666d56d464b2653e266f01d5bcc48f9970f1c0",
@@ -27,7 +27,10 @@
     "forge/repair-queue.mjs": "fd168a3c77c32706a20ecbaa6b65fc0f53da7ddb0ad1c8316980da8dddef574b",
     "forge/retrieval.mjs": "fed62f0dfc3abd06817bf986865a320dffe64ef9750097b8a1e12dd30b373ba1",
     "forge/source-fidelity.mjs": "58abadd0e0c2dc845419b7b211897728de99370e4a772132f6a743ab36896cb1",
+    "forge/step3-image-capabilities.mjs": "f6d51a756e0dbbe8d017371a438fa8eca3a74c48a6ec1ad851c17d09e0224d24",
     "forge/sw.js": "74447c7c5dd48783a9b04f91e48b2bd5e143482dca73024d601550fbbcb9769c",
-    "forge/text-calibration.mjs": "94ae769599820967cb7aafdfcd8a75639fa28c65ff32631ad52670ebd594e0bf"
+    "forge/text-calibration.mjs": "94ae769599820967cb7aafdfcd8a75639fa28c65ff32631ad52670ebd594e0bf",
+    "forge/step3-image-protocol.mjs": "3255a0b47423b37368df64d3b116d47d1de5cab99e4ead95492c8b5b9aa87b02",
+    "forge/step3-infistar-job.mjs": "1007fce94912a02b2fecf1bd19ccf756ebac54644983267ec54fcf781ccb2962"
   }
 }

@@ -1,0 +1,11 @@
+{
+  "name": "gallery-infistar-image-jobs",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-14",
+  "workers_dev": true,
+  "browser": { "binding": "BROWSER" },
+  "vars": { "ALLOWED_ORIGINS": "https://qwdwqfwq.github.io" },
+  "durable_objects": { "bindings": [{ "name": "IMAGE_JOBS", "class_name": "ImageJob" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ImageJob"] }],
+  "observability": { "enabled": false }
+}
