@@ -8,7 +8,8 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
  const origin=`http://127.0.0.1:${server.address().port}`;let browser,posts=0;
  try{
   browser=await chromium.launch({headless:true,...(process.env.REVISION_BUNDLED_BROWSER==='1'?{}:{executablePath:process.env.CHROME_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe'})});
-  const page=await browser.newPage({serviceWorkers:'block'});
+  for(const locale of ['zh-CN','en-US']){
+  const page=await browser.newPage({serviceWorkers:'block',locale});
   await page.route('**/*',async route=>{
    const req=route.request(),url=new URL(req.url());
    if(req.method()==='POST'){posts++;return route.abort();}
@@ -38,8 +39,10 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
   await page.goto(origin+'/forge/');await page.waitForFunction(()=>window.__capabilityTest&&document.querySelector('#provider option[value="infistar"]'));
   const r=await page.evaluate(()=>window.__capabilityTest());
   assert.deepEqual(r.gpt.values,['1K','2K','4K']);assert.deepEqual(r.lite,{values:['1K'],selected:'1K'});
-  assert.deepEqual(r.square,['1K']);assert.match(r.staleError,/不支持.*2K/);assert.deepEqual(r.restored.values,['1K','2K','4K']);
+  assert.deepEqual(r.square,['1K']);assert.match(r.staleError,locale==='zh-CN'?/不支持.*2K/:/does not support.*2K/);assert.deepEqual(r.restored.values,['1K','2K','4K']);
   assert.deepEqual(r.unsupported.values,[]);assert.equal(r.disabled,true);assert.deepEqual(r.recovered,{values:['1K'],disabled:false});assert.equal(posts,0);
-  console.log('PASS real UI model switches, ratio changes, restored choices, stale 2K blocked before POST');
+  console.log('PASS '+locale+' real UI model switches, ratio changes, restored choices, stale 2K blocked before POST');
+  await page.close();
+  }
  }finally{if(browser)await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

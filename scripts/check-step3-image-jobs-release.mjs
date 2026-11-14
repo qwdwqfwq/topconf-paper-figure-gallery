@@ -19,7 +19,7 @@ const expected={
   "forge/step3-image-capabilities.mjs": "f6d51a756e0dbbe8d017371a438fa8eca3a74c48a6ec1ad851c17d09e0224d24",
   "forge/step3-image-protocol.mjs": "3255a0b47423b37368df64d3b116d47d1de5cab99e4ead95492c8b5b9aa87b02",
   "forge/step3-infistar-job.mjs": "1007fce94912a02b2fecf1bd19ccf756ebac54644983267ec54fcf781ccb2962",
-  "forge/test-step3-image-capabilities-browser.cjs": "54576cd9b2510361c72dd591395893300482f1e7194d5418c500ac98fa69b851",
+  "forge/test-step3-image-capabilities-browser.cjs": "587eb41d1722d1db5632d93660ce9d2438a0c7ffcba9cf9d721d279b1af0b398",
   "forge/test-step3-image-capabilities.mjs": "5be5c86781289786b9b741c4128fdf677406ff5f5472c35b8dc8bf1a96cc1c4b",
   "forge/test-step3-image-protocol.mjs": "431c864254dfd055442cfb9dacd1cd276c7ce794ead87bb0e1d1b8c6244c4f29",
   "forge/test-step3-image-recovery-browser.cjs": "315805e83f5b93d0e5458409bf9ace3eb619c4d91a996316b32fbb0687158874",
@@ -65,9 +65,12 @@ export function assertManifestScope(before,after){
 }
 
 function main(){
+ // Preserve the pushed implementation commit; only this reviewed locale-test correction follows it.
+ const reviewedImplementation='46de131dd3d6a03c9f0b9192e967e4bb14a3afdc';
+ assert.equal(git('show','-s','--format=%P',reviewedImplementation),anchor,'Implementation must directly follow the original production anchor');
  const working=process.argv.includes('--working');
- if(working)assert.equal(git('rev-parse','HEAD'),anchor,'Unexpected working base');
- else {assert.equal(git('show','-s','--format=%P','HEAD'),anchor,'Release must directly follow the reviewed production commit');assert.equal(git('status','--porcelain','--untracked-files=all'),'','Dirty checkout');}
+ if(working)assert.equal(git('rev-parse','HEAD'),reviewedImplementation,'Unexpected working base');
+ else {assert.equal(git('show','-s','--format=%P','HEAD'),reviewedImplementation,'Release must directly follow the reviewed implementation commit');assert.equal(git('status','--porcelain','--untracked-files=all'),'','Dirty checkout');}
  const paths=working?[...new Set([...git('diff','--name-only','--no-renames',anchor,'--').split('\n').filter(Boolean),...git('ls-files','--others','--exclude-standard').split('\n').filter(Boolean)])]:changed(anchor,'HEAD');
  assertAllowedPaths(paths);assert.equal(Object.keys(expected).length,allowed.length-1);
  for(const p of Object.keys(expected))verifyBlob(p,readFileSync(join(root,p)));
