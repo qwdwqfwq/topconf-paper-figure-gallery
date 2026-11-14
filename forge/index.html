@@ -457,6 +457,7 @@
           <div class="bfield"><span class="blab">解析推理强度</span><select id="parseReasoningEffort" aria-label="解析推理强度"><option value="">服务商默认</option><option value="medium">中</option><option value="high">高</option><option value="xhigh">极高</option></select></div>
           <p class="bnote">默认不指定强度；其他档位需模型及服务商支持，可能增加耗时与费用。</p>
           <p class="bnote warn-inline" id="parseModelWarn" hidden></p>
+          <p class="bnote" id="parserCatalogStatus" role="status" aria-live="polite"></p>
           <div class="bfield" id="parseCustomModelRow" hidden>
             <span class="blab" data-i18n="parseid"></span>
             <input type="text" id="parseCustomModel" data-i18n-ph="parseidPh">
@@ -729,6 +730,7 @@
 <script src="./i18n.js"></script>
 <script src="./i18n_forge.js?v=20261021-pdf-status"></script>
 <script type="module">
+import {createParserModelCatalog} from './parser-model-catalog.mjs?v=20261114';
 import {createRetrievalBoot,createSemanticWorker} from './retrieval-boot.mjs';
 import {readBitmapSource} from './nonelinear-source.mjs';
 import {fetchReconstructionStream,usesReconstructionStream} from './infistar-reconstruction-stream.mjs?v=20261114-errors';
@@ -1791,26 +1793,24 @@ function populateReconstructionModels(res={list:[]}){
   else if(current && [...s.options].some(o=>o.value===current))s.value=current;
 }
 $('#reconModel').onchange=e=>localStorage.setItem('ff_recon_model_'+$('#provider').value,e.target.value);
-async function populateParserModels(){
-  const p=$('#provider').value, c=cfg(), s=$('#parseModel'); s.innerHTML='';
-  if(p==='custom'){
-    s.appendChild(option(tt('og.fillid'))); s.options[0].disabled=true;
-    $('#parseCustomModelRow').hidden=false;
-    return;
-  }
-  $('#parseCustomModelRow').hidden=true;
-  const models=[...(c.chat||[]),...(c.vision||[])];
-  if(models.length){ const g=optgroup(tt('og.parser')); [...new Set(models)].forEach(m=>g.appendChild(option(m))); s.appendChild(g); }
-  const requestBase=baseURL(), requestKey=cleanKey($('#key').value);
-  const res=await fetchOnlineModels();
-  if(p!==$('#provider').value || requestBase!==baseURL() || requestKey!==cleanKey($('#key').value)) return;
-  const online=res.list.filter(m=>kindOf(m)==='chat');
-  if(online.length){ const g=optgroup(tt('og.live')); [...new Set(online)].forEach(m=>g.appendChild(option(m))); s.appendChild(g); }
-  const saved=localStorage.getItem('ff_parse_model_'+p);
-  if(saved && [...s.options].some(o=>o.value===saved)) s.value=saved;
-  liveModels.parser = res.ok ? res.list : null;
-  checkModelEnabled('#parseModel','#parseModelWarn',liveModels.parser);
+let parserCatalogController;
+function parserCatalog(){
+  return parserCatalogController ||= createParserModelCatalog({
+    select:$('#parseModel'),status:$('#parserCatalogStatus'),
+    readConfig:()=>{
+      const provider=$('#provider').value,c=cfg(),base=baseURL();
+      $('#parseCustomModelRow').hidden=provider!=='custom';
+      return {provider,base,key:cleanKey($('#key').value),proto:c.proto,
+        defaults:[...(c.chat||[]),...(c.vision||[])],
+        snapshotAllowed:provider==='nonelinear'&&base===(MAN.providers.nonelinear.base||'').replace(/\/+$/,''),
+        placeholder:provider==='custom'?tt('og.fillid'):!provider?refsText('请选择服务商','Select a provider'):''};
+    },
+    readSaved:p=>localStorage.getItem('ff_parse_model_'+p),
+    isParserModel:m=>kindOf(m)==='chat',
+    onLiveModels:list=>{liveModels.parser=list;checkModelEnabled('#parseModel','#parseModelWarn',list);}
+  });
 }
+function populateParserModels(){return parserCatalog().refresh();}
 async function populateAnalyzeModels(){
   const c=cfg(), s=$('#analyzeModel'); s.innerHTML='';
   if(c.vision.length){ const g=optgroup(tt('og.amodel')); c.vision.forEach(m=>g.appendChild(option(m))); s.appendChild(g); }
@@ -1890,8 +1890,8 @@ $('#provider').onchange = async e=>{
   restoreProviderState(e.target.value);
   await Promise.all([populateModels(),populateParserModels()]);
 };
-$('#key').oninput = e=>{ e.target.value=cleanKey(e.target.value); localStorage.setItem('ff_key_'+$('#provider').value, e.target.value); };
-  $('#baseOverride').oninput = e=>{ localStorage.setItem('ff_base_'+$('#provider').value, e.target.value); syncRelayPreset(); syncBaseHint(); };
+$('#key').oninput = e=>{ e.target.value=cleanKey(e.target.value); localStorage.setItem('ff_key_'+$('#provider').value, e.target.value); parserCatalog().schedule(); };
+  $('#baseOverride').oninput = e=>{ localStorage.setItem('ff_base_'+$('#provider').value, e.target.value); syncRelayPreset(); syncBaseHint(); parserCatalog().schedule(); };
 $('#customModel').oninput = e=>localStorage.setItem('ff_cmodel_'+$('#provider').value, e.target.value);
 $('#parseModel').onchange = e=>localStorage.setItem('ff_parse_model_'+$('#provider').value,e.target.value);
 $('#parseCustomModel').oninput = e=>localStorage.setItem('ff_parse_cmodel_'+$('#provider').value,e.target.value);
@@ -1899,6 +1899,7 @@ $('#useRelay').onchange = e=>{
   $('#relayRow').hidden = !e.target.checked;
   localStorage.setItem('ff_relay_'+$('#provider').value, e.target.checked?'1':'0');
   syncBaseHint();
+  parserCatalog().schedule();
 };
 function syncRelayPreset(){
   const base=baseURL();

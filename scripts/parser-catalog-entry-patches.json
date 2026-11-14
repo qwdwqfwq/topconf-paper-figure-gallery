@@ -1,0 +1,26 @@
+[
+  {
+    "before": "import {createRetrievalBoot,createSemanticWorker} from './retrieval-boot.mjs';",
+    "after": "import {createParserModelCatalog} from './parser-model-catalog.mjs?v=20261114';\nimport {createRetrievalBoot,createSemanticWorker} from './retrieval-boot.mjs';"
+  },
+  {
+    "before": "<p class=\"bnote warn-inline\" id=\"parseModelWarn\" hidden></p>",
+    "after": "<p class=\"bnote warn-inline\" id=\"parseModelWarn\" hidden></p>\n          <p class=\"bnote\" id=\"parserCatalogStatus\" role=\"status\" aria-live=\"polite\"></p>"
+  },
+  {
+    "before": "async function populateParserModels(){\n  const p=$('#provider').value, c=cfg(), s=$('#parseModel'); s.innerHTML='';\n  if(p==='custom'){\n    s.appendChild(option(tt('og.fillid'))); s.options[0].disabled=true;\n    $('#parseCustomModelRow').hidden=false;\n    return;\n  }\n  $('#parseCustomModelRow').hidden=true;\n  const models=[...(c.chat||[]),...(c.vision||[])];\n  if(models.length){ const g=optgroup(tt('og.parser')); [...new Set(models)].forEach(m=>g.appendChild(option(m))); s.appendChild(g); }\n  const requestBase=baseURL(), requestKey=cleanKey($('#key').value);\n  const res=await fetchOnlineModels();\n  if(p!==$('#provider').value || requestBase!==baseURL() || requestKey!==cleanKey($('#key').value)) return;\n  const online=res.list.filter(m=>kindOf(m)==='chat');\n  if(online.length){ const g=optgroup(tt('og.live')); [...new Set(online)].forEach(m=>g.appendChild(option(m))); s.appendChild(g); }\n  const saved=localStorage.getItem('ff_parse_model_'+p);\n  if(saved && [...s.options].some(o=>o.value===saved)) s.value=saved;\n  liveModels.parser = res.ok ? res.list : null;\n  checkModelEnabled('#parseModel','#parseModelWarn',liveModels.parser);\n}\n",
+    "after": "let parserCatalogController;\nfunction parserCatalog(){\n  return parserCatalogController ||= createParserModelCatalog({\n    select:$('#parseModel'),status:$('#parserCatalogStatus'),\n    readConfig:()=>{\n      const provider=$('#provider').value,c=cfg(),base=baseURL();\n      $('#parseCustomModelRow').hidden=provider!=='custom';\n      return {provider,base,key:cleanKey($('#key').value),proto:c.proto,\n        defaults:[...(c.chat||[]),...(c.vision||[])],\n        snapshotAllowed:provider==='nonelinear'&&base===(MAN.providers.nonelinear.base||'').replace(/\\/+$/,''),\n        placeholder:provider==='custom'?tt('og.fillid'):!provider?refsText('请选择服务商','Select a provider'):''};\n    },\n    readSaved:p=>localStorage.getItem('ff_parse_model_'+p),\n    isParserModel:m=>kindOf(m)==='chat',\n    onLiveModels:list=>{liveModels.parser=list;checkModelEnabled('#parseModel','#parseModelWarn',list);}\n  });\n}\nfunction populateParserModels(){return parserCatalog().refresh();}\n"
+  },
+  {
+    "before": "localStorage.setItem('ff_key_'+$('#provider').value, e.target.value); };",
+    "after": "localStorage.setItem('ff_key_'+$('#provider').value, e.target.value); parserCatalog().schedule(); };"
+  },
+  {
+    "before": "syncRelayPreset(); syncBaseHint(); };",
+    "after": "syncRelayPreset(); syncBaseHint(); parserCatalog().schedule(); };"
+  },
+  {
+    "before": "localStorage.setItem('ff_relay_'+$('#provider').value, e.target.checked?'1':'0');\n  syncBaseHint();",
+    "after": "localStorage.setItem('ff_relay_'+$('#provider').value, e.target.checked?'1':'0');\n  syncBaseHint();\n  parserCatalog().schedule();"
+  }
+]
