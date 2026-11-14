@@ -1,0 +1,34 @@
+[
+  {
+    "before": "import {createParserModelCatalog} from './parser-model-catalog.mjs?v=20261114';",
+    "after": "import {createParserModelCatalog} from './parser-model-catalog.mjs?v=20261114';\nimport {createStep3ModelCatalog} from './step3-model-catalog.mjs?v=20261114';"
+  },
+  {
+    "before": "      <p class=\"bnote warn-inline\" id=\"modelWarn\" hidden></p>",
+    "after": "      <p class=\"bnote warn-inline\" id=\"modelWarn\" hidden></p>\n      <p class=\"bnote\" id=\"step3CatalogStatus\" role=\"status\" aria-live=\"polite\"></p>"
+  },
+  {
+    "before": "async function populateModels(){\n  const p = $('#provider').value, c = cfg();\n  const s = $('#model'); s.innerHTML='';\n  if(p==='custom'){\n    s.appendChild(optgroup(tt('og.custom')));\n  }else if(mode==='svg'){\n    if(c.chat.length){ const g=optgroup(tt('og.chat')); c.chat.forEach(m=>g.appendChild(option(m))); s.appendChild(g); }\n    if(c.vision.length){ const g=optgroup(tt('og.vision')); c.vision.forEach(m=>g.appendChild(option(m))); s.appendChild(g); }\n  }else{\n    if(c.image.length){ const g=optgroup(tt('og.image')); c.image.forEach(m=>g.appendChild(option(m))); s.appendChild(g); }\n  }\n  const wanted = mode==='svg' ? 'chat' : 'image';\n  const requestBase=baseURL(), requestKey=cleanKey($('#key').value);\n  const res = await fetchOnlineModels();\n  if(p!==$('#provider').value || requestBase!==baseURL() || requestKey!==cleanKey($('#key').value) || wanted!==(mode==='svg'?'chat':'image')) return;\n  const online = res.list;\n  const yours = online.filter(m=>kindOf(m)===wanted);\n  if(yours.length){\n    const g=optgroup(tt('og.yours',{d:new Date().toLocaleDateString()}));\n    [...new Set(yours)].forEach(m=>g.appendChild(option(m))); s.appendChild(g);\n  }else if(key_present() && !res.ok){\n    const g=optgroup(tt('og.nolive'));\n    const o=option(tt('og.hosted')); o.disabled=true; g.appendChild(o); s.appendChild(g);\n  }\n  const saved = localStorage.getItem('ff_model_'+p);\n  if(saved && [...s.options].some(o=>o.value===saved)) s.value=saved;\n  liveModels.model = res.ok ? online : null;\n  checkModelEnabled('#model','#modelWarn',liveModels.model);\n  syncImageRatioSupport();\n  if(mode==='image') await populateAnalyzeModels();\n  populateReconstructionModels(res);\n}\n",
+    "after": "let step3CatalogController;\nfunction step3Catalog(){\n  return step3CatalogController ||= createStep3ModelCatalog({\n    select:$('#model'),analysisSelect:$('#analyzeModel'),status:$('#step3CatalogStatus'),\n    readConfig:()=>{\n      const provider=$('#provider').value,c=cfg(),base=baseURL();\n      return {provider,base,key:cleanKey($('#key').value),proto:c.proto,mode,\n        chat:c.chat||[],image:c.image||[],vision:c.vision||[],\n        snapshotAllowed:provider==='nonelinear'&&base===(MAN.providers.nonelinear.base||'').replace(/\\/+$/,'')};\n    },\n    readSaved:(p,analysis)=>localStorage.getItem((analysis?'ff_amodel_':'ff_model_')+p),\n    kindOf,isVisualModel:isVisualChatModel,\n    onLiveModels:list=>{liveModels.model=list;checkModelEnabled('#model','#modelWarn',list);},\n    onRender:()=>syncImageRatioSupport()\n  });\n}\nasync function populateModels(){\n  // Step 3 owns its discovery/display. Keep Step 4's original request and guard.\n  const p = $('#provider').value;\n  const wanted = mode==='svg' ? 'chat' : 'image';\n  const requestBase=baseURL(), requestKey=cleanKey($('#key').value);\n  const step3=step3Catalog().refresh();\n  const res = await fetchOnlineModels();\n  if(p!==$('#provider').value || requestBase!==baseURL() || requestKey!==cleanKey($('#key').value) || wanted!==(mode==='svg'?'chat':'image')) return;\n  populateReconstructionModels(res);\n  await step3;\n}\n"
+  },
+  {
+    "before": "async function populateAnalyzeModels(){\n  const c=cfg(), s=$('#analyzeModel'); s.innerHTML='';\n  if(c.vision.length){ const g=optgroup(tt('og.amodel')); c.vision.forEach(m=>g.appendChild(option(m))); s.appendChild(g); }\n  const requestBase=baseURL(), requestKey=cleanKey($('#key').value), requestProvider=$('#provider').value;\n  const res = await fetchOnlineModels();\n  if(requestProvider!==$('#provider').value || requestBase!==baseURL() || requestKey!==cleanKey($('#key').value)) return;\n  const vis = res.list.filter(m=>isVisualChatModel(m,c.vision));\n  if(vis.length){ const g=optgroup(tt('og.live')); [...new Set(vis)].forEach(m=>g.appendChild(option(m))); s.appendChild(g); }\n  else if(key_present() && !res.ok && !c.vision.length){\n    const g=optgroup(tt('og.nolive'));\n    const o=option(tt('og.hosted')); o.disabled=true; g.appendChild(o); s.appendChild(g);\n  }\n  const saved = localStorage.getItem('ff_amodel_'+$('#provider').value);\n  if(saved && [...s.options].some(o=>o.value===saved)) s.value=saved;\n}\n",
+    "after": ""
+  },
+  {
+    "before": "localStorage.setItem('ff_key_'+$('#provider').value, e.target.value); parserCatalog().schedule();",
+    "after": "localStorage.setItem('ff_key_'+$('#provider').value, e.target.value); parserCatalog().schedule(); step3Catalog().schedule();"
+  },
+  {
+    "before": "syncRelayPreset(); syncBaseHint(); parserCatalog().schedule();",
+    "after": "syncRelayPreset(); syncBaseHint(); parserCatalog().schedule(); step3Catalog().schedule();"
+  },
+  {
+    "before": "  syncBaseHint();\n  parserCatalog().schedule();\n};",
+    "after": "  syncBaseHint();\n  parserCatalog().schedule(); step3Catalog().schedule();\n};"
+  },
+  {
+    "before": "  await populateModels();\n  syncPassUI();",
+    "after": "  syncPassUI();\n  await populateModels();"
+  }
+]
