@@ -2,6 +2,7 @@ import {scopedRevision,confirmedRevision,selectRevisionRegions,validateRegions,m
 import {usesInfistarGemini,geminiImageRequest,geminiImageResult,compatibleImageRequest,requestImageWithRecovery,imageRequestDiagnostics} from './image-api.mjs?v=20261026-nonelinear-resolution';
 import {imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261026-nonelinear-resolution';
 import {captureGenerationContext,copyStep1Context,revisionContextInstruction} from './revision-context.mjs';
+import {requestStep3ImageStream} from './step3-image-stream.mjs?v=20261114-errors';
 
 // Separate image-edit request: chosen full bitmap first, optional screenshot references after it.
 // This module never calls or configures the editable reconstruction pipeline.
@@ -331,8 +332,20 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
     const transport=imageRequestDiagnostics(url,request.body);
     if(transport.referenceCount!==references.length)throw new Error('修改请求未完整包含原图和截图，本次未发送。');
     const staged=native&&!parent.diagramReflow&&!parent.freeRevision?await stagedGeminiRevision({base,model,prompt,semanticContext,references,dimensions,key,onProgress,loadImage}):null;
-    const response=staged?.response||await requestImageWithRecovery({url,body:request.body,key,usedReferences:true,allowReferenceFallback:false});
-    if(!response.ok)throw new Error('修改生图失败（HTTP '+response.status+'）。'+response.text.slice(0,400));
+    // The current bitmap editor previously missed the Step 3 stream transport.
+    // Reuse it only here: preserve the native body, references and one-call policy;
+    // leave legacy staged edits, other providers and Step 4 unchanged.
+    const streamedRevision=native&&parent.freeRevision;
+    const response=staged?.response||await (streamedRevision?requestStep3ImageStream({url,body:request.body,key,usedReferences:true,onProgress:state=>{
+      onProgress?.(state.stage==='waiting_response'?'请求已发送，正在等待修改图响应。':state.stage==='response_received'?'修改图已接收，正在校验并保存。':`已收到接口响应，正在接收修改图（${Math.ceil((state.responseBytes||0)/1024)} KB）。`);
+    }}):requestImageWithRecovery({url,body:request.body,key,usedReferences:true,allowReferenceFallback:false}));
+    if(!response.ok){
+      if(!streamedRevision)throw new Error('修改生图失败（HTTP '+response.status+'）。'+response.text.slice(0,400));
+      let detail;try{detail=JSON.parse(response.text)?.error;}catch{}
+      const message=typeof detail?.message==='string'?detail.message.slice(0,300):'接口未返回有效的错误说明。';
+      const code=typeof detail?.code==='string'?` [${detail.code.slice(0,80)}]`:'';
+      throw new Error(`修改生图失败（HTTP ${response.status}）${code}。${message}${response.requestId?'\n请求 ID：'+response.requestId:''}\n原图、修改要求和截图已保留，未自动重复提交。`);
+    }
     const data=staged?.data||JSON.parse(response.text);
     if(data._revisionUpstreamStatus>=400)throw new Error('修改生图失败（HTTP '+data._revisionUpstreamStatus+'）。'+JSON.stringify(data.error||{}).slice(0,400));
     const item=native?geminiImageResult(data,{locale:'zh',requestId:response.requestId}):(data?.data?.[0]||data?.images?.[0]);
@@ -355,12 +368,17 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
       warnings.push(`返回图片尺寸为 ${width} × ${height}，与请求的比例或分辨率不同。`);
     }
     return {image:output,width,height,route:{...parent.route,ratio:outputRatio},revisionAudit:{clientRequestId,startedAt,completedAt:Date.now(),
-      provider:p,model,requestedModel,inputAspectRatio:ratio,outputAspectRatio:outputRatio,apiRequestCount:staged?.stages.length||1,stages:staged?.stages,contentCheck:staged?'passed':undefined,endpoint:transport.endpoint,format:transport.format,referenceCount:references.length,
+      provider:p,model,requestedModel,inputAspectRatio:ratio,outputAspectRatio:outputRatio,apiRequestCount:staged?.stages.length||1,stages:staged?.stages,contentCheck:staged?'passed':undefined,endpoint:response.request?.endpoint||transport.endpoint,format:transport.format,referenceCount:references.length,
+      ...(streamedRevision?{streaming:response.streaming,streamEvents:response.events,transport:response.transport}:{}),
       referenceTransport:p==='nonelinear'?'https-upload':'inline',uploadedReferenceCount:p==='nonelinear'?apiReferences.length:0,
       inputHashes,promptHash:await fingerprint(prompt),instructionHash:await fingerprint(instruction),
       requestId:String(response.requestId||'').replaceAll(key,'[redacted]').slice(0,160),
       status:response.status,pixelCheck:unchanged?'unchanged':'changed',editingPolicy:parent.freeRevision?'user-directed':undefined,warnings,review:'pending'}};
   }catch(error){
+    if(native&&parent.freeRevision&&/^IMAGE_STREAM_/.test(error.code||'')){
+      const messages={IMAGE_STREAM_INCOMPLETE:'修改图未完整返回，未保存新版本。',IMAGE_STREAM_INVALID_EVENT:'修改图响应格式无效，未保存新版本。',IMAGE_STREAM_UPSTREAM_ERROR:'接口在接收修改图时返回错误，未保存新版本。'};
+      error.message=(messages[error.code]||'修改图接收失败。')+' 原图和输入已保留，未自动重复提交。'+(error.imageDiagnostics?.requestId?'\n请求 ID：'+error.imageDiagnostics.requestId:'');
+    }
     error.message=String(error.message).split(key).join('[redacted]').replace(/Bearer\s+\S+/gi,'Bearer [redacted]');
     throw error;
   }

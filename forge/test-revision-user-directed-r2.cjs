@@ -9,7 +9,7 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
  try{
   browser=await chromium.launch({headless:true,...(process.env.REVISION_BUNDLED_BROWSER==='1'?{}:{executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})});
   const page=await browser.newPage({serviceWorkers:'block',viewport:{width:1440,height:1100}});
-  const origin=new URL(base).origin,calls=[],unexpected=[],errors=[];let fixtures,outputIndex=1;
+  const origin=new URL(base).origin,calls=[],unexpected=[],errors=[];let fixtures,outputIndex=1,responseMode='success';
   page.on('pageerror',e=>errors.push(e.message));
   await page.route('**/*',async route=>{
    const req=route.request(),url=new URL(req.url());
@@ -19,13 +19,22 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
    if(/\/images\/edits$/.test(url.pathname)){
     const form=await new Response(req.postDataBuffer(),{headers:{'content-type':req.headers()['content-type']}}).formData();
     prompt=form.get('prompt');for(const [k,v] of form)if(k.startsWith('image')&&typeof v!=='string')images.push(Buffer.from(await v.arrayBuffer()).toString('base64'));
-   }else if(url.pathname.endsWith(':generateContent')){
+   }else if(/:(?:streamGenerateContent|generateContent)$/.test(url.pathname)){
     native=true;const body=req.postDataJSON(),parts=body.contents.flatMap(c=>c.parts);
+    assert.ok(url.pathname.endsWith(':streamGenerateContent'),'Continue editing must use the existing Step 3 stream receiver');
+    assert.equal(url.searchParams.get('alt'),'sse');
     assert.deepEqual(body.generationConfig.responseModalities,['TEXT','IMAGE']);
+    assert.deepEqual(body.generationConfig.imageConfig,{aspectRatio:'1:1',imageSize:'1K'});
     prompt=parts.filter(p=>p.text).map(p=>p.text).join('\n');images=parts.filter(p=>p.inlineData).map(p=>p.inlineData.data);
    }else{unexpected.push(url.pathname);return route.fulfill({status:400,json:{error:{message:'Unexpected offline request'}}});}
    calls.push({prompt,images,native});const data=fixtures[outputIndex].split(',')[1];
-   return route.fulfill({json:native?{candidates:[{content:{parts:[{inlineData:{mimeType:'image/png',data}}]}}]}:{data:[{b64_json:data}]}});
+   if(responseMode==='http500')return route.fulfill({status:500,headers:{'x-oneapi-request-id':'offline-trace-500','access-control-expose-headers':'x-oneapi-request-id'},json:{error:{message:'暂时供应不足，请稍后重试',type:'server_error',code:'bad_response_body'}}});
+   if(native){
+    const chunks=[{candidates:[{index:0,content:{parts:[{inlineData:{mimeType:'image/png',data}}]}}]}];
+    if(responseMode!=='incomplete')chunks.push({candidates:[{index:0,finishReason:'STOP'}]});
+    return route.fulfill({contentType:'text/event-stream',headers:{'x-oneapi-request-id':'offline-trace-success','access-control-expose-headers':'x-oneapi-request-id'},body:chunks.map(c=>'data: '+JSON.stringify(c)+'\n\n').join('')});
+   }
+   return route.fulfill({json:{data:[{b64_json:data}]}});
   });
   await page.goto(base,{waitUntil:'domcontentloaded'});
   await page.waitForFunction(()=>document.querySelector('#provider')?.options.length>0);
@@ -60,6 +69,9 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
   outputIndex=1;await begin(0,prompt,3);
   rows=await records();assert.deepEqual(rows.map(r=>r.parentId),[null,rows[0].id,rows[0].id]);
   assert.equal(rows[0].image,fixtures[0]);assert.equal(rows[2].revisionAudit.apiRequestCount,1);assert.equal(rows[2].revisionAudit.editingPolicy,'user-directed');
+  assert.ok(rows[2].revisionAudit.endpoint.endsWith(':streamGenerateContent'));
+  assert.equal(rows[2].revisionAudit.streaming,true);assert.equal(rows[2].revisionAudit.streamEvents,2);
+  assert.equal(rows[2].revisionAudit.requestId,'offline-trace-success');
   assert.ok(rows.slice(1).every(r=>r.revisionAudit.review==='automatic'));
   // The wire prompt carries the exact latest request, never historical Step 1
   // instructions or a content inventory generated from the original geometry.
@@ -87,6 +99,16 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
   assert.equal(calls.length,5);assert.equal(manual.apiRequestCount,1);assert.equal(manual.scopePlan.adjusted,true);assert.equal(manual.changedOutside,0);assert.ok(manual.changedInside>0);
   assert.ok(calls[4].prompt.includes(JSON.stringify(manual.regions)));assert.ok(manual.regions[0].x>600);
   const outside=await page.evaluate(async({before,after,regions})=>{const load=src=>new Promise(r=>{const i=new Image();i.onload=()=>r(i);i.src=src;});const c=document.createElement('canvas');c.width=c.height=1024;const x=c.getContext('2d',{willReadFrequently:true});x.drawImage(await load(before),0,0);const a=x.getImageData(0,0,1024,1024).data;x.drawImage(await load(after),0,0);const b=x.getImageData(0,0,1024,1024).data;let outside=0;for(let y=0;y<1024;y++)for(let z=0;z<1024;z++)if(!regions.some(r=>z>=r.x&&z<r.x+r.width&&y>=r.y&&y<r.y+r.height)){const i=(y*1024+z)*4;if([0,1,2,3].some(k=>a[i+k]!==b[i+k]))outside++;}return outside;},{before:fixtures[0],after:rows[3].image,regions:manual.regions});assert.equal(outside,0);
+  // A real HTTP error remains an error, with its upstream trace. Neither a
+  // server failure nor an unfinished stream may create a version or retry.
+  responseMode='http500';await begin(0,prompt);
+  const failure=await page.locator('.ff-revision-error').textContent();
+  assert.ok(failure.includes('HTTP 500'));assert.ok(failure.includes('bad_response_body'));assert.ok(failure.includes('offline-trace-500'));
+  assert.equal(await page.locator('.ff-revision-editor textarea').inputValue(),prompt);
+  assert.equal(await page.locator('.ff-revision-attachment').count(),1);assert.equal(calls.length,6);assert.equal((await records()).length,4);
+  responseMode='incomplete';await begin(0,prompt);
+  assert.ok((await page.locator('.ff-revision-error').textContent()).includes('未完整返回'));
+  assert.equal(calls.length,7);assert.equal((await records()).length,4);
   await page.reload({waitUntil:'domcontentloaded'});await page.waitForSelector('.ff-version');assert.equal(await page.locator('.ff-version').count(),4);
   await page.setViewportSize({width:390,height:844});assert.ok(await page.locator('[data-submit]').isVisible());
   assert.deepEqual(unexpected,[]);assert.deepEqual(errors,[]);
