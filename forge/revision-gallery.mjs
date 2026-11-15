@@ -422,7 +422,7 @@ function reviewRevision(parent,result,prompt,references,host){
     const dialog=document.createElement('section');dialog.className='ff-revision-review';dialog.setAttribute('aria-label','本次修改结果');
     const title=document.createElement('h3');title.textContent='核对本次修改结果'+(result.revisionMode==='reflow'?' · 区域重排':result.revisionMode==='local'?' · 局部修改':'');
     const hint=document.createElement('p');hint.textContent=result.revisionAudit?.outsidePreservation==='exact-pixels'
-      ?'框外已通过逐像素保留校验。请核对框内修改是否符合要求，以及框内其他文字、数据和公式是否保留；确认后才保存新版本。'
+      ?''
       :'请按本次要求逐项检查指定内容和排版。像素有变化不代表所有要求都已完成；确认后才保存新版本。';
     const request=document.createElement('pre');request.textContent=prompt;
     if(result.revisionAudit?.warnings?.length)hint.textContent+=' '+result.revisionAudit.warnings.join(' ');
@@ -442,7 +442,7 @@ function reviewRevision(parent,result,prompt,references,host){
     const finish=accepted=>{dialog.remove();resolve(accepted);};
     reject.onclick=()=>finish(false);accept.onclick=()=>finish(true);
     const output=grid.children[1];grid.removeChild(output);details.append(audit,grid);
-    actions.append(reject,accept);dialog.append(title,hint);
+    actions.append(reject,accept);dialog.append(title);if(hint.textContent)dialog.append(hint);
     if(result.revisionAudit?.outsidePreservation==='exact-pixels')dialog.append(comparisonView(parent.image,result.image));
     else dialog.append(output);
     if(result.revisionAudit?.outsidePreservation==='exact-pixels')details.prepend(output);

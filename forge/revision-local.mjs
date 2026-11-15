@@ -176,7 +176,7 @@ export function createLocalSelector(image,initial,onChange,onError){
 
 export function comparisonView(before,after){
   const view=document.createElement('div');view.className='ff-local-comparison';
-  const help=document.createElement('p');help.textContent='拖动滑块对比：左侧是修改前，右侧是修改后。也可分别放大查看。';
+  const help=document.createElement('p');help.textContent='滑动下方蓝色条，观察修改前后变化';
   const stage=document.createElement('div');stage.style.cssText='position:relative;line-height:0;overflow:hidden;border:1px solid #dedbf5';
   const old=document.createElement('img'),next=document.createElement('img');old.src=before;old.alt='修改前';next.src=after;next.alt='修改后';
   next.style.cssText='display:block;width:100%;height:auto;max-width:none;max-height:none';old.style.cssText='position:absolute;inset:0;display:block;width:100%;height:100%;max-width:none;max-height:none;clip-path:inset(0 50% 0 0)';

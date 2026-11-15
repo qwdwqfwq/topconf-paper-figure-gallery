@@ -1,0 +1,54 @@
+name: Publish comparison hint wording only
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Record original frozen check without changing its result
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Preserve original check result
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: echo "Original frozen check = $ORIGINAL_OUTCOME; no existing baseline or checker changed." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/download-artifact@v4
+        with:
+          name: revision-hint-removal-proof
+          run-id: 43717807694
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/comparison-hint-base
+      - name: Verify exact wording replacement and all published bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-comparison-hint-release.mjs "$RUNNER_TEMP/comparison-hint-base/revision-hint-removal-proof.json" --prepare-pages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: comparison-hint-proof
+          path: /tmp/comparison-hint-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/comparison-hint-pages
+      - name: Publish verified wording only
+        id: deployment
+        uses: actions/deploy-pages@v4
