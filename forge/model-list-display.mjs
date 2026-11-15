@@ -31,7 +31,8 @@ export function arrangeModels(models,{selected='',expanded=false,enabled=true}={
 }
 
 export function createModelListDisplay(select,language=()=>document.documentElement.lang){
-  let input,expanded=false,context='',button;
+  let input,expanded=false,context='',button,controls;
+  const originalStyle=select.getAttribute('style');
   const doc=select.ownerDocument,text=(zh,en)=>String(language()).startsWith('en')?en:zh;
   function render(options){
     if(options)input=options;
@@ -48,8 +49,14 @@ export function createModelListDisplay(select,language=()=>document.documentElem
       const option=doc.createElement('option');option.value='';option.disabled=true;option.textContent=placeholder;select.append(option);
     }
     if(!button&&select.parentNode){
+      // Keep the disclosure below the selector so a narrow row cannot squeeze
+      // the selected model down to an unreadable arrow-only control.
+      controls=doc.createElement('div');
+      controls.style.cssText='display:flex;flex-direction:column;align-items:stretch;gap:2px;flex:1 1 220px;min-width:0;';
+      select.before(controls);controls.append(select);
+      select.style.cssText+=';width:100%;min-width:0;box-sizing:border-box;flex:0 0 auto;';
       button=doc.createElement('button');button.type='button';button.id=select.id+'ShowAllModels';
-      button.style.cssText='font:inherit;font-size:12px;color:#6351d8;background:transparent;border:0;cursor:pointer;padding:6px 8px;max-width:100%;white-space:normal;';
+      button.style.cssText='font:inherit;font-size:12px;color:#6351d8;background:transparent;border:0;cursor:pointer;padding:6px 0;max-width:100%;white-space:normal;text-align:start;align-self:flex-start;';
       button.setAttribute('aria-controls',select.id);
       button.addEventListener('click',()=>{input.selected=select.value;expanded=!expanded;render();});
       select.insertAdjacentElement('afterend',button);
@@ -63,5 +70,5 @@ export function createModelListDisplay(select,language=()=>document.documentElem
   const changed=()=>{if(input)input.selected=select.value;};
   const translated=()=>{if(input){input.selected=select.value;render();}};
   select.addEventListener('change',changed);doc.addEventListener('langchange',translated);
-  return {render,dispose(){select.removeEventListener('change',changed);doc.removeEventListener('langchange',translated);button?.remove();}};
+  return {render,dispose(){select.removeEventListener('change',changed);doc.removeEventListener('langchange',translated);button?.remove();if(controls){controls.before(select);controls.remove();if(originalStyle===null)select.removeAttribute('style');else select.setAttribute('style',originalStyle);}}};
 }
