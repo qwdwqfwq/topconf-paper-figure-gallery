@@ -11,7 +11,7 @@ test('provider wire formats preserve references and only supported streaming fla
   const body=unpackImageBody(await packImageBody(request.body));let wire;
   await requestStep3ImageStream({url:base+request.endpoint,body,key:'fixture',usedReferences:true,fetchImpl:protocolFetch(async(url,init)=>{wire={url,...init};return new Response('{"data":[{"b64_json":"fixture"}]}',{headers:{'content-type':'application/json'}});})});
   if(p==='oai'){assert.ok(wire.body instanceof FormData);assert.match(wire.url,/images\/edits$/);assert.equal(wire.body.getAll('image[]').length,1);assert.equal(await wire.body.get('image[]').text(),'\x89PNG\r\n\x1a\n'.replace('\x89','�'));}
-  else {const json=JSON.parse(wire.body);assert.deepEqual(json.image,[ref]);assert.match(wire.url,/images\/generations$/);assert.equal(json.stream,p==='infistar'?true:undefined);}
+  else {const json=JSON.parse(wire.body);assert.deepEqual(json.image,[ref]);assert.match(wire.url,/images\/generations$/);assert.equal(json.stream,true);}
  }
 });
 test('Gemini native and compatibility formats, no generic stream flag, Imagen n=1',async()=>{
@@ -25,7 +25,7 @@ test('Gemini native and compatibility formats, no generic stream flag, Imagen n=
  assert.deepEqual(step3ImageDimensions('nonelinear','gemini-2.5-flash-image','4:3','1K'),{field:'aspect_ratio',value:'4:3'});
  assert.deepEqual(prepareStep3ImageBody({model:'gpt-image-2',aspect_ratio:'16:9'},'gpt-image-2'),{model:'gpt-image-2'});
  assert.equal(prepareStep3ImageBody({model:'imagen-4.0-generate-001'},'imagen-4.0-generate-001').n,1);
- let body;await protocolFetch(async(_u,i)=>{body=JSON.parse(i.body);})('https://infistar.cc/v1/images/generations',{body:JSON.stringify({model:'doubao-seedream-4.0',stream:true})});assert.equal(body.stream,undefined);
+ let body;await protocolFetch(async(_u,i)=>{body=JSON.parse(i.body);})('https://infistar.cc/v1/images/generations',{body:JSON.stringify({model:'doubao-seedream-4.0',stream:true})});assert.equal(body.stream,true);
 });
 test('capabilities preserve catalog policy, isolate provider pixel conventions and allow discrete Gemini native sizes',()=>{
  for(const p of ['oai','infistar','nonelinear'])for(const ratio of ['16:9','4:3','3:2','1:1']){

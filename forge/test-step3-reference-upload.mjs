@@ -17,7 +17,7 @@ test('direct NoneLinear uploads local references before one synchronous 4K gener
  assert.deepEqual(calls[0].body,{image:'aGVsbG8=',type:'.png'});
  for(const c of calls){assert.equal(new Headers(c.headers).get('Authorization'),'Bearer fixture-key');assert.equal(c.signal,signal);assert.equal(c.method,'POST');}
  assert.equal(calls[0].redirect,'manual');
- const {stream,...parameters}=body;
+ const parameters=body;
  assert.deepEqual(calls[2].body,{...parameters,image:['https://images.example.com/upload-1.png','https://images.example.com/public.png','https://images.example.com/upload-2.png']});
 });
 

@@ -35,13 +35,6 @@ export function prepareStep3ImageBody(body,model,nativeGemini=false){
 export function protocolFetch(fetchImpl=fetch){
   return async (url,init)=>{
     const route=imageJobRoute(url);let body=init.body;
-    const model=body instanceof FormData?body.get('model'):JSON.parse(body).model;
-    // Native Gemini streaming is supported. Other image families do not inherit
-    // GPT's stream flag (NoneLinear rejects even stream:false).
-    if(route==='nonelinear'||(!/:streamGenerateContent/.test(url)&&!/^gpt-image-/i.test(model||''))){
-      if(body instanceof FormData)body.delete('stream');
-      else {const value=JSON.parse(body);delete value.stream;body=JSON.stringify(value);}
-    }
     if(route==='nonelinear'&&new URL(url).hostname==='api.nonelinear.com.cn'&&!(body instanceof FormData)){
       body=JSON.stringify(await uploadStep3References(JSON.parse(body),init,fetchImpl));
     }

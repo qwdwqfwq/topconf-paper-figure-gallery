@@ -1,35 +1,12 @@
 // Step 3 only. Do not use this transport in the frozen Step 4 reconstruction.
 import {imageRequestDiagnostics} from './image-api.mjs';
+import {negotiateStep3Image} from './step3-image-compat.mjs';
 
 export function step3StreamingRequest(url,body){
   const target=new URL(url);
-  // NoneLinear image generation rejects even stream:false. Both project relays
-  // preserve the upstream's synchronous image contract.
-  const synchronousImage=/\/images\/(?:generations|edits)$/.test(target.pathname) &&
-    (['api.nonelinear.com.cn','gallery-nonelinear-relay.lixiao-gallery.workers.dev'].includes(target.hostname) ||
-      (['localhost','127.0.0.1','[::1]'].includes(target.hostname) && target.pathname.startsWith('/api/nonelinear/v1/')));
-  if(synchronousImage){
-    if(body instanceof FormData){
-      const form=new FormData();
-      for(const [name,value] of body) if(name!=='stream') form.append(name,value);
-      return {url:target.href,body:form,nativeGemini:false};
-    }
-    const {stream,...parameters}=body;
-    return {url:target.href,body:parameters,nativeGemini:false};
-  }
   if(/:(?:streamGenerateContent|generateContent)$/.test(target.pathname)){
-    // This Infistar alias rejects the streaming route in the current group.
-    // All other Gemini models retain SSE. Choose before the single paid POST;
-    // never retry a possibly completed generation after a disconnect.
-    const ordinaryBanana=['infistar.cc','www.infistar.cc','infistar.ai','www.infistar.ai'].includes(target.hostname) &&
-      /\/models\/gemini-nano-banana-2\.1:(?:streamGenerateContent|generateContent)$/.test(target.pathname);
-    if(ordinaryBanana){
-      target.pathname=target.pathname.replace(/:streamGenerateContent$/,':generateContent');
-      target.searchParams.delete('alt');
-    }else{
-      target.pathname=target.pathname.replace(/:generateContent$/,':streamGenerateContent');
-      target.searchParams.set('alt','sse');
-    }
+    target.pathname=target.pathname.replace(/:generateContent$/,':streamGenerateContent');
+    target.searchParams.set('alt','sse');
     return {url:target.href,body,nativeGemini:true};
   }
   if(body instanceof FormData){
@@ -156,9 +133,9 @@ const transportCodes=new Set(['UND_ERR_SOCKET','UND_ERR_CONNECT_TIMEOUT','UND_ER
 // One request and one body reader for every Step 3 image provider. Providers
 // with synchronous image APIs return JSON; receive that through the same
 // reader without resubmitting the generation or altering image parameters.
-export async function requestStep3ImageStream({url,body,key,usedReferences=false,
-  timeoutMs=Infinity,fetchImpl=fetch,onProgress=()=>{}}){
-  const request=step3StreamingRequest(url,body),controller=new AbortController();
+export async function requestStep3ImageOnce({url,body,key,usedReferences=false,
+  timeoutMs=Infinity,fetchImpl=fetch,onProgress=()=>{},stream=true}){
+  const request=stream?step3StreamingRequest(url,body):step3OrdinaryRequest(url,body),controller=new AbortController();
   const started=performance.now();
   let progress={stage:'waiting_response'},timer;
   const snapshot=()=>({...progress,elapsedMs:Math.round(performance.now()-started)});
@@ -225,4 +202,26 @@ export async function requestStep3ImageStream({url,body,key,usedReferences=false
       ...(transportCodes.has(code)?{errorCode:code}:{})};
     throw failure;
   }finally{clearTimeout(timer);}
+}
+
+export function step3OrdinaryRequest(url,body){
+  const target=new URL(url);target.pathname=target.pathname.replace(/:streamGenerateContent$/,':generateContent');target.searchParams.delete('alt');
+  if(body instanceof FormData){const form=new FormData();for(const [name,value]of body)if(name!=='stream')form.append(name,value);body=form;}
+  else {const {stream,...parameters}=body;body=parameters;}
+  return {url:target.href,body,nativeGemini:/:generateContent$/.test(target.pathname)};
+}
+const activeRequests=new Set();
+export async function requestStep3ImageStream(options){
+  // Durable jobs already serialize their UUID; distinct jobs may run together.
+  if(options.compatibilityStore)return negotiateStep3Image(options,requestStep3ImageOnce);
+  const {imageCompatibilityIdentity}=await import('./step3-image-compat.mjs');
+  const id=await imageCompatibilityIdentity(options.url,options.body,options.key);
+  const run=async()=>{
+    if(activeRequests.has(id))throw Object.assign(Error('同一模型的生图正在进行，请等待或取回原任务。'),{code:'IMAGE_REQUEST_PENDING'});
+    activeRequests.add(id);try{return await negotiateStep3Image(options,requestStep3ImageOnce);}finally{activeRequests.delete(id);}
+  };
+  if(!options.compatibilityStore&&globalThis.navigator?.locks)return navigator.locks.request('step3-image:'+id,{ifAvailable:true},lock=>{
+    if(!lock)throw Object.assign(Error('另一页面正在生图，请先取回原任务。'),{code:'IMAGE_REQUEST_PENDING'});return run();
+  });
+  return run();
 }

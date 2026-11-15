@@ -18,24 +18,30 @@ function fixture(){
  };
  const ctx={storage,blockConcurrencyWhile(fn){const p=lock.then(fn);lock=p.catch(()=>{});return p;}};
  const env={ALLOWED_ORIGINS:origin,BROWSER:fakeBrowser(),JOB_ENCRYPTION_KEY:btoa('01234567890123456789012345678901')};const objects=new Map();
- env.IMAGE_JOBS={idFromName:x=>x,get:id=>{if(!objects.has(id))objects.set(id,new ImageJob(ctx,env));return objects.get(id);}};
+ env.IMAGE_JOBS={idFromName:x=>x,get:id=>{if(!objects.has(id)){
+  const cache=new Map(),cacheStorage={async get(k){return structuredClone(cache.get(k));},async put(k,v){cache.set(k,structuredClone(v));}};
+  objects.set(id,new ImageJob(id.startsWith('compat:')?{storage:cacheStorage}:ctx,env));
+ }return objects.get(id);}};
  const req=(method='GET',key='test-key',body=input,suffix='')=>new Request('https://jobs.test/jobs/'+jobId+suffix,{method,headers:{Origin:origin,Authorization:'Bearer '+key,'Content-Type':'application/json'},...(method==='PUT'?{body:JSON.stringify(body)}:{})});
  return {storage,map,ctx,env,req,job:new ImageJob(ctx,env)};
 }
 
-test('Infistar Banana 2.1 durable task uses ordinary Gemini exactly once, retaining 4K and three references',async()=>{
+test('Infistar Banana explicitly rejects streaming then ordinary succeeds once, retaining 4K and three references',async()=>{
  const f=fixture(),old=globalThis.fetch;let posts=0;
  const body={contents:[{role:'user',parts:[{text:'fixture'},...Array.from({length:3},()=>({inlineData:{mimeType:'image/png',data:'aGVsbG8='}}))]}],generationConfig:{responseModalities:['TEXT','IMAGE'],imageConfig:{aspectRatio:'16:9',imageSize:'4K'}}};
  const submission={url:'https://infistar.cc/v1beta/models/gemini-nano-banana-2.1:generateContent',body,usedReferences:true};
  globalThis.fetch=async(url,init)=>{
-  posts++;assert.equal(url,submission.url);assert.deepEqual(JSON.parse(init.body),body);
+  posts++;assert.deepEqual(JSON.parse(init.body),body);
+  if(posts===1){assert.equal(url,submission.url.replace(':generateContent',':streamGenerateContent')+'?alt=sse');return Response.json({error:{message:'不支持 streamGenerateContent'}},{status:422});}
+  assert.equal(url,submission.url);
   return Response.json({candidates:[{content:{parts:[{inlineData:{mimeType:'image/png',data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII='}}]},finishReason:'STOP'}]});
  };
  try{
   assert.equal((await f.job.fetch(f.req('PUT','test-key',submission))).status,202);
   await f.job.alarm();await f.job.alarm();await f.job.fetch(f.req('PUT','test-key',submission));
-  assert.equal(posts,1);assert.equal(f.env.BROWSER.posts,0);assert.equal((await f.storage.get('meta')).state,'succeeded');
+  assert.equal(posts,2);assert.equal(f.env.BROWSER.posts,0);assert.equal((await f.storage.get('meta')).state,'succeeded');
   assert.equal((await f.job.fetch(f.req('GET','test-key',submission,'/result'))).status,200);
+  const next=fixture();next.env.IMAGE_JOBS=f.env.IMAGE_JOBS;await next.job.fetch(next.req('PUT','test-key',submission));await next.job.alarm();assert.equal(posts,3);assert.equal((await next.storage.get('meta')).upstreamAttempts,1);assert.equal((await next.storage.get('meta')).state,'succeeded');
  }finally{globalThis.fetch=old;}
 });
 
@@ -62,7 +68,7 @@ test('NoneLinear durable task uploads local references before one synchronous ge
  globalThis.fetch=async(url,init)=>{
   calls.push(url);const body=JSON.parse(init.body);
   if(url==='https://nonelinear.com.cn/api/upload-file'){assert.deepEqual(body,{image:'aGVsbG8=',type:'.png'});return Response.json({url:'https://images.example.com/reference.png'});}
-  assert.equal(url,submission.url);assert.deepEqual(body,{...submission.body,image:['https://images.example.com/reference.png']});
+  assert.equal(url,submission.url);assert.deepEqual(body,{...submission.body,image:['https://images.example.com/reference.png'],stream:true});
   return Response.json({data:[{b64_json:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII='}]});
  };
  try{
@@ -137,6 +143,19 @@ test('image URL recovery retries only GET; error responses redact the actual cre
 test('gateway failures preserve uncertain task and never replay via another host',async()=>{
  const f=fixture(),old=globalThis.fetch;let posts=0;globalThis.fetch=async url=>{posts++;assert.equal(url,'https://infistar.ai/v1/images/generations');return new Response('error code: 520',{status:520});};
  try{await f.job.fetch(f.req('PUT'));await f.job.alarm();const meta=await f.storage.get('meta');assert.equal(meta.state,'unknown');assert.equal(meta.error,'UPSTREAM_HTTP_520_NO_RESUBMIT');assert.ok(meta.resultCount);await f.job.fetch(f.req('PUT'));await f.job.alarm();assert.equal(posts,1);assert.equal((await f.job.fetch(f.req('GET','test-key',input,'/result'))).status,409);}finally{globalThis.fetch=old;}
+});
+
+test('timeout and accepted-but-incomplete responses retain their task and never resubmit',async()=>{
+ const old=globalThis.fetch;
+ try{
+  for(const [status,text] of [[408,'timeout'],[200,JSON.stringify({id:'accepted-task'})],[200,'incomplete JSON']]){
+   const f=fixture();let posts=0;globalThis.fetch=async()=>{posts++;return new Response(text,{status});};
+   await f.job.fetch(f.req('PUT'));await f.job.alarm();
+   assert.equal((await f.storage.get('meta')).state,'unknown');
+   await f.job.fetch(f.req('PUT'));await new ImageJob(f.ctx,f.env).alarm();
+   assert.equal(posts,1);assert.equal((await f.job.fetch(f.req('GET','test-key',input,'/result'))).status,409);
+  }
+ }finally{globalThis.fetch=old;}
 });
 
 function fakeBrowser(){

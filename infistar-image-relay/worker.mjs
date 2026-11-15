@@ -59,6 +59,14 @@ export default {
 export class ImageJob {
   constructor(ctx,env){this.ctx=ctx;this.storage=ctx.storage;this.env=env;}
   async fetch(request){
+    // Namespace-internal capability records; the public router has no such route.
+    if(new URL(request.url).pathname==='/compat'){
+      if(request.method==='GET')return json(await this.storage.get('compat')||null);
+      if(request.method!=='PUT')return json({error:'METHOD_NOT_ALLOWED'},405);
+      const value=await request.json();
+      if(!['stream','ordinary'].includes(value.mode))return json({error:'INVALID_MODE'},400);
+      await this.storage.put('compat',{version:1,mode:value.mode});return json({ok:true});
+    }
     const authorization=request.headers.get('Authorization')||'',owner=await digest(authorization),url=new URL(request.url);
     const id=url.pathname.split('/')[2];let meta=await this.storage.get('meta');
     if(meta&&meta.owner!==owner)return json({error:'NOT_FOUND'},404);
@@ -135,7 +143,20 @@ export class ImageJob {
     await this.storage.put('meta',meta); // Durable claim BEFORE the only POST.
     try{
       const key=await decrypt(this.env.JOB_ENCRYPTION_KEY,meta.encrypted);
-      const raw=await requestStep3ImageStream({...input,url:target,body:unpackImageBody(input.body),key,timeoutMs:EXECUTION,fetchImpl:browser?browser.fetch:protocolFetch()});
+      const compatibilityStore={
+        get:async identity=>{
+          const object=this.env.IMAGE_JOBS.get(this.env.IMAGE_JOBS.idFromName('compat:'+identity));
+          return (await object.fetch(new Request('https://internal/compat'))).json();
+        },
+        set:async(identity,value)=>{
+          const object=this.env.IMAGE_JOBS.get(this.env.IMAGE_JOBS.idFromName('compat:'+identity));
+          const response=await object.fetch(new Request('https://internal/compat',{method:'PUT',body:JSON.stringify({mode:value.mode})}));
+          if(!response.ok)throw Error('COMPATIBILITY_STORAGE_FAILED');
+        }
+      };
+      const raw=await requestStep3ImageStream({...input,url:target,body:unpackImageBody(input.body),key,timeoutMs:EXECUTION,compatibilityStore,
+        beforeAttempt:async({attempt,mode})=>{meta={...meta,upstreamAttempts:attempt,mode};await this.storage.put('meta',meta);},
+        fetchImpl:browser?browser.fetch:protocolFetch()});
       raw.backgroundTarget=target;
       // Scrub the actual key even if an upstream error echoes the credential.
       const safe=JSON.stringify(raw).split(key).join('[redacted]').replace(/Bearer\s+[^"\s]+/gi,'Bearer [redacted]');
@@ -160,7 +181,7 @@ export class ImageJob {
     // A gateway 5xx does not prove that generation was never accepted. Keep the
     // task unresolved and block automatic replacement instead of calling it a
     // definite rejection. Its received response remains stored for diagnosis.
-    const uncertain=!result.ok&&result.status>=500;
+    const uncertain=!result.ok&&(result.status>=500||result.status===408||raw.ok);
     await this.storage.transaction(async storage=>{
       const count=await putText(storage,'result:',JSON.stringify(result));
       if(meta.resultCount>count)for(let i=count;i<meta.resultCount;i++)await storage.delete('result:'+i);

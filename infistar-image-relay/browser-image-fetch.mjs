@@ -1,5 +1,6 @@
 // Isolated long-running Infistar GPT transport. Chrome owns the single paid
 // request; the Durable Object owns its lifetime and persists the response.
+import {explicitlyRejectsImageStreaming} from '../forge/step3-image-compat.mjs';
 const MAX_RESPONSE=32*1024*1024;
 export function usesBrowserImageTransport(value){
   const u=new URL(value);
@@ -48,13 +49,13 @@ export async function openBrowserImageFetch(binding,url,{timeoutMs=12*60*1000}={
       if(Date.now()-start>20000)throw Error('BROWSER_NAVIGATION_TIMEOUT');
       await new Promise(resolve=>setTimeout(resolve,250));
     }
-    let issued=false;
+    let issued=false,allowOrdinary=false;
     return {
       close,
       async fetch(target,init){
-        if(issued||target!==url||init?.method!=='POST'||typeof init.body!=='string')throw Error('BROWSER_REQUEST_ALREADY_CLAIMED');
+        if(target!==url||init?.method!=='POST'||typeof init.body!=='string'||issued&&(!allowOrdinary||JSON.parse(init.body).stream!==undefined))throw Error('BROWSER_REQUEST_ALREADY_CLAIMED');
         if(init.signal?.aborted)throw Error('BROWSER_REQUEST_ABORTED');
-        issued=true; // No retry, including a CDP send failure or lost reply.
+        issued=true;allowOrdinary=false; // A lost reply never opens the replay gate.
         const headers=new Headers(init.headers);
         const payload={url,headers:{Authorization:headers.get('Authorization'),'Content-Type':'application/json'},body:init.body,timeoutMs,maxBytes:MAX_RESPONSE};
         const expression='('+browserRequest.toString()+')('+JSON.stringify(payload)+')';
@@ -63,6 +64,7 @@ export async function openBrowserImageFetch(binding,url,{timeoutMs=12*60*1000}={
           const reply=await command('Runtime.evaluate',{expression,awaitPromise:true,returnByValue:true},timeoutMs+1000);
           const result=reply.result?.value;
           if(reply.exceptionDetails||!result||!Number.isInteger(result.status)||typeof result.text!=='string')throw Error('BROWSER_RESPONSE_UNCONFIRMED');
+          allowOrdinary=JSON.parse(init.body).stream===true&&explicitlyRejectsImageStreaming({...result,ok:result.status>=200&&result.status<300});
           return new Response(result.text,{status:result.status,headers:result.headers});
         }finally{init.signal?.removeEventListener('abort',abort);}
       }

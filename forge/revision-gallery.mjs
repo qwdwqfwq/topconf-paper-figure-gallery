@@ -362,8 +362,6 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
     // Reuse it only here: preserve the native body, references and one-call policy;
     // leave legacy staged edits, other providers and Step 4 unchanged.
     const streamedRevision=!!parent.freeRevision;
-    // This Infistar model/group rejects streamGenerateContent. Whole-image
-    // edits need the same ordinary generateContent endpoint as local edits.
     const durableRevision=streamedRevision&&usesInfistarImageJob(url);
     const response=staged?.response||await (streamedRevision?(durableRevision?requestInfistarImageJob:requestStep3ImageStream)({url,body:request.body,key,usedReferences:!!references.length,onProgress:state=>{
       onProgress?.(state.stage==='waiting_response'?'请求已发送，正在等待修改图响应。':state.stage==='response_received'?(parent.localPatch?'修改图已接收，正在还原选区并校验框外像素。':'修改图已接收，正在校验并保存。'):`已收到接口响应，正在接收修改图（${Math.ceil((state.responseBytes||0)/1024)} KB）。`);
@@ -402,7 +400,7 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
     }
     if(response.job&&!parent.localPatch)await acknowledgeInfistarImageJob(key,response.job.id);
     return {image:output,width,height,route:{...parent.route,ratio:outputRatio},revisionAudit:{clientRequestId,startedAt,completedAt:Date.now(),
-      provider:p,model,requestedModel,inputAspectRatio:ratio,outputAspectRatio:outputRatio,apiRequestCount:staged?.stages.length||1,stages:staged?.stages,contentCheck:staged?'passed':undefined,endpoint:response.request?.endpoint||transport.endpoint,format:transport.format,referenceCount:references.length,
+      provider:p,model,requestedModel,inputAspectRatio:ratio,outputAspectRatio:outputRatio,apiRequestCount:staged?.stages.length||response.compatibility?.attempts||1,stages:staged?.stages,contentCheck:staged?'passed':undefined,endpoint:response.request?.endpoint||transport.endpoint,format:transport.format,referenceCount:references.length,
       ...(streamedRevision?{streaming:response.streaming,streamEvents:response.events,transport:response.transport,compatibility:response.compatibility,job:response.job}:{}),
       referenceTransport:p==='nonelinear'?'https-upload':'inline',uploadedReferenceCount:p==='nonelinear'?apiReferences.length:0,
       inputHashes,promptHash:await fingerprint(prompt),instructionHash:await fingerprint(instruction),
