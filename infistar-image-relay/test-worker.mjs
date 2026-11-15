@@ -7,6 +7,7 @@ const origin='https://qwdwqfwq.github.io',jobId='c3c04790-cd04-47e2-bb09-546aa8f
 const input={url:'https://infistar.cc/v1/images/generations',body:{model:'gpt-image-2.5-sunburst',prompt:'fixture'},usedReferences:false};
 test('overseas image gateway is selected before the one request; other routes are unchanged',()=>{
  assert.equal(backgroundTarget(input.url),'https://infistar.ai/v1/images/generations');
+ for(const host of ['infistar.cc','www.infistar.cc'])for(const suffix of ['generateContent','streamGenerateContent?alt=sse'])assert.equal(backgroundTarget(`https://${host}/v1beta/models/gemini-nano-banana-2.1:${suffix}`),`https://infistar.ai/v1beta/models/gemini-nano-banana-2.1:${suffix}`);
  for(const url of ['https://infistar.cc/v1beta/models/gemini-3.1-flash-lite-image:generateContent','https://api.openai.com/v1/images/edits','https://api.nonelinear.com.cn/v1/images/generations'])assert.equal(backgroundTarget(url),url);
 });
 function fixture(){
@@ -33,7 +34,7 @@ test('Infistar Nano Banana 2.1 starts ordinary once, retaining 4K and three refe
  const submission={url:'https://infistar.cc/v1beta/models/gemini-nano-banana-2.1:generateContent',body,usedReferences:true};
  globalThis.fetch=async(url,init)=>{
   posts++;assert.deepEqual(JSON.parse(init.body),body);
-  assert.equal(url,submission.url);
+  assert.equal(url,'https://infistar.ai/v1beta/models/gemini-nano-banana-2.1:generateContent');
   return Response.json({candidates:[{content:{parts:[{inlineData:{mimeType:'image/png',data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII='}}]},finishReason:'STOP'}]});
  };
  try{

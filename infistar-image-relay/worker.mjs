@@ -11,7 +11,8 @@ const encoder=new TextEncoder();
 // image gateway BEFORE the sole POST; never fail over by replaying a paid call.
 export function backgroundTarget(value){
   const url=new URL(value);
-  if(['infistar.cc','www.infistar.cc'].includes(url.hostname)&&url.pathname==='/v1/images/generations')url.hostname='infistar.ai';
+  const nano=url.pathname==='/v1beta/models/gemini-nano-banana-2.1:generateContent'||url.pathname==='/v1beta/models/gemini-nano-banana-2.1:streamGenerateContent';
+  if(['infistar.cc','www.infistar.cc'].includes(url.hostname)&&(url.pathname==='/v1/images/generations'||nano))url.hostname='infistar.ai';
   return url.href;
 }
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
