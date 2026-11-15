@@ -2553,7 +2553,7 @@ $('#genBtn').onclick = async ()=>{
     base = baseURL();
     model = $('#model').value;
     if(!model){ showErr(tt('gen.nomodel')); return; }
-    if(mode==='image' && kindOf(model)!=='image'){ showErr(tt('gen.needimage')); return; }
+    if(mode==='image' && !step3Catalog().isImageModel(model)){ showErr(tt('gen.needimage')); return; }
   }
   if(mode==='image'){
     try{
@@ -5955,7 +5955,7 @@ function revisionConfiguration(version, validate=true){
   const key=cleanKey($('#key').value);
   if(validate){
     if(mode!==(svg?'svg':'image'))throw new Error(svg?'请在步骤三选择「SVG 可编辑初稿」，并选择视觉模型。':'请在步骤三选择「AI 位图初稿」，并选择图像模型。');
-    if(!model || (svg?!isVisualChatModel(model,cfg().vision||[]):!(kindOf(model)==='image'||(cfg().image||[]).includes(model))))throw new Error(svg?'请在步骤三选择支持图像输入的视觉模型。':'请在步骤三选择图像模型。');
+    if(!model || (svg?!isVisualChatModel(model,cfg().vision||[]):!step3Catalog().isImageModel(model)))throw new Error(svg?'请在步骤三选择支持图像输入的视觉模型。':'请在步骤三选择图像模型。');
     if(!key)throw new Error('请先填写当前服务商的 API Key。');
     if(!/^https?:\/\//.test(route.base))throw new Error('请先配置有效的服务商接口地址。');
   }
