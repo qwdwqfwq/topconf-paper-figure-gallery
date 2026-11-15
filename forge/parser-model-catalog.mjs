@@ -1,5 +1,7 @@
 // Parser discovery only. Generation/reconstruction transports remain independent.
 import {nonelinearCatalog} from './parser-nonelinear-catalog.mjs?v=20261114';
+import {officialCatalogUrls,fetchOfficialCatalog} from './step3-official-catalog.mjs';
+import {createModelListDisplay} from './model-list-display.mjs';
 
 export function normalizeModels(body){
   const rows=body?.data??body?.models;
@@ -46,28 +48,26 @@ const messages={
 
 export function createParserModelCatalog({select,status,readConfig,readSaved,isParserModel,onLiveModels=()=>{},
   storage=globalThis.localStorage,fetchImpl=globalThis.fetch,transportOptions={},debounceMs=650,
-  language=()=>document.documentElement.lang,now=()=>Date.now()}){
-  let revision=0,scheduled,lastProvider='',state;
+  language=()=>document.documentElement.lang,now=()=>Date.now(),autoRefreshMs=300000}){
+  let revision=0,scheduled,lastIdentity='',state,lastRefresh=0,officialKinds={};
+  const display=createModelListDisplay(select,language);
   const inflight=new Map();
   const text=(zh,en)=>String(language()).startsWith('en')?en:zh;
   const identity=c=>JSON.stringify([c.provider,c.base,c.proto,c.key]); // Memory only; never persisted.
   const current=(id,version)=>version===revision&&identity(readConfig())===id;
-  const parserList=list=>[...new Set(list.filter(isParserModel))];
+  const parserList=list=>[...new Set(list.filter(id=>Object.hasOwn(officialKinds,id)?officialKinds[id]==='chat':isParserModel(id)))];
   const cacheKey=async id=>{
     if(!globalThis.crypto?.subtle)return null;
     const hash=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(id));
     return 'ff_parser_catalog_v1_'+Array.from(new Uint8Array(hash),x=>x.toString(16).padStart(2,'0')).join('');
   };
   function draw(config,list,source,message){
-    const preferred=[readSaved(config.provider),lastProvider===config.provider?select.value:'',...(config.defaults||[])];
-    lastProvider=config.provider;
-    select.replaceChildren();
-    const group=document.createElement('optgroup');group.label=source;
-    for(const id of list){const option=document.createElement('option');option.value=id;option.textContent=id;group.append(option);}
-    if(list.length)select.append(group);
-    else {const option=document.createElement('option');option.textContent=config.placeholder||text('未获取到解析模型，请重试','No parser models; please retry');option.value='';option.disabled=true;select.append(option);}
-    const selected=preferred.find(id=>id&&list.includes(id));
-    if(selected)select.value=selected;
+    const supported=['nonelinear','infistar'].includes(config.provider);
+    const preferred=[lastIdentity===identity(config)?select.value:'',readSaved(config.provider),...(config.defaults||[])];
+    lastIdentity=identity(config);
+    const selected=preferred.find(id=>id&&(list.includes(id)||(supported&&parserList([id]).length)))||list[0]||'';
+    display.render({models:list,selected,source,enabled:supported,scope:JSON.stringify([config.provider,config.base]),
+      placeholder:config.placeholder||text('未获取到解析模型，请重试','No parser models; please retry')});
     status.textContent=message;status.dataset.catalogSource=state?.source||'defaults';
   }
   const permissionNote=()=>text('目录不代表当前 Key 的调用权限。','The catalog does not confirm this key’s inference access.');
@@ -81,14 +81,58 @@ export function createParserModelCatalog({select,status,readConfig,readSaved,isP
       source:bundled.length?text(`内置目录（${nonelinearCatalog.updated}，非实时）`,`Bundled catalog (${nonelinearCatalog.updated}, not live)`):text('预设模型','Preset models')
     };
   }
+  async function refreshOfficial(config,id,version){
+    const fallback=initial(config),publicKey='ff_step3_official_v1_'+config.provider;
+    let publicResult,keyResult,publicCache,keyCache,fingerprint;
+    const valid=cache=>cache&&now()-cache.updated>=0&&now()-cache.updated<24*60*60*1000;
+    try{
+      const cached=JSON.parse(storage.getItem(publicKey)||'null');
+      if(valid(cached))publicCache={list:normalizeModels({data:cached.models}),kinds:cached.kinds||{}};
+    }catch{}
+    try{
+      fingerprint=config.key?await cacheKey(id):null;
+      const cached=JSON.parse(fingerprint&&storage.getItem(fingerprint)||'null');
+      if(valid(cached))keyCache={list:normalizeModels({data:cached.models})};
+    }catch{}
+    function show(){
+      if(!current(id,version))return;
+      const published=publicResult?.ok?publicResult:publicCache,permitted=keyResult?.ok?keyResult:keyCache;
+      officialKinds=published?.kinds||{};
+      const list=parserList([...(published?.list||[]),...(permitted?.list||[])]);
+      const source=publicResult?.ok?text('官网实时目录 + Key 目录','Live official catalog + key catalog'):
+        publicCache?text('官网缓存（非实时）','Official cache (not live)'):
+        keyResult?.ok?text('Key 实时目录','Live key catalog'):keyCache?text('Key 缓存（非实时）','Key cache (not live)'):fallback.source;
+      const message=publicResult?.ok?text(`已同步官网最新目录：${list.length} 个解析模型。`,`Official catalog synchronized: ${list.length} parser models.`):
+        publicResult?text('官网目录暂时无法读取，显示上次目录或预设模型。','Official catalog unavailable; showing the last catalog or presets.'):
+        text('正在同步官网最新目录…','Synchronizing the official catalog…');
+      render(config,source,list.length?list:fallback.list,message+' '+permissionNote());
+    }
+    if(!current(id,version))return;
+    show();
+    await Promise.all([
+      fetchOfficialCatalog(config,{fetchImpl,timeoutMs:transportOptions.officialTimeoutMs||6000}).then(result=>{
+        if(!current(id,version))return;
+        publicResult=result;
+        if(result.ok)try{storage.setItem(publicKey,JSON.stringify({updated:now(),models:result.list,kinds:result.kinds,visual:result.visual}));}catch{}
+        show();
+      }),
+      (config.key?fetchParserCatalog(config,{fetchImpl,...transportOptions}):Promise.resolve(null)).then(result=>{
+        if(!current(id,version))return;
+        keyResult=result;
+        if(result?.ok){onLiveModels(result.list);try{if(fingerprint)storage.setItem(fingerprint,JSON.stringify({updated:now(),models:result.list}));}catch{}}
+        show();
+      })
+    ]);
+  }
   async function refresh(){
     clearTimeout(scheduled);
-    const version=++revision,config=readConfig(),id=identity(config);
+    const version=++revision,config=readConfig(),id=identity(config);lastRefresh=now();officialKinds={};
     onLiveModels(null);
     const initialState=initial(config);
     let fallback=initialState.list,source=initialState.source;
     const loading=config.key?text('正在刷新解析模型…','Refreshing parser models…'):text('填写 Key 后自动刷新实时目录。','Enter a key to refresh the live catalog automatically.');
     render(config,source,fallback,loading+' '+permissionNote());
+    if(officialCatalogUrls(config).length)return refreshOfficial(config,id,version);
     if(!config.provider||config.provider==='custom'||!config.key||!config.base)return;
     let fingerprint;
     try{
@@ -119,10 +163,16 @@ export function createParserModelCatalog({select,status,readConfig,readSaved,isP
       render(config,source,fallback,text(...reason)+'。'+text('当前显示'+source+'；可点击“刷新模型列表”重试。',' Showing '+source+'; click “Refresh models” to retry.')+' '+permissionNote());
     }
   }
+  const checkFreshness=()=>{if(globalThis.document?.visibilityState!=='hidden'&&officialCatalogUrls(readConfig()).length&&now()-lastRefresh>=60000)refresh();};
+  const timer=autoRefreshMs>0?setInterval(checkFreshness,autoRefreshMs):null;
+  timer?.unref?.();
+  globalThis.addEventListener?.('focus',checkFreshness);
+  globalThis.document?.addEventListener('visibilitychange',checkFreshness);
   return {
     refresh,
+    dispose(){++revision;display.dispose();clearTimeout(scheduled);clearInterval(timer);globalThis.removeEventListener?.('focus',checkFreshness);globalThis.document?.removeEventListener('visibilitychange',checkFreshness);},
     schedule(){
-      ++revision;clearTimeout(scheduled);onLiveModels(null);
+      ++revision;clearTimeout(scheduled);onLiveModels(null);officialKinds={};
       const config=readConfig(),preview=initial(config);
       render(config,preview.source,preview.list,text('设置已更新，即将刷新解析模型…','Settings updated; refreshing parser models shortly…')+' '+permissionNote());
       scheduled=setTimeout(refresh,debounceMs);

@@ -3,6 +3,7 @@ import {fetchParserCatalog,normalizeModels} from './parser-model-catalog.mjs?v=2
 import {nonelinearCatalog} from './parser-nonelinear-catalog.mjs?v=20261114';
 import {officialCatalogUrls,fetchOfficialCatalog,isOfficialGeminiImageModel} from './step3-official-catalog.mjs';
 import {installStep3ResolutionDisplay} from './step3-resolution-display.mjs';
+import {createModelListDisplay} from './model-list-display.mjs';
 
 export function createStep3ModelCatalog({select,analysisSelect,status,readConfig,readSaved,
   kindOf,isVisualModel,onLiveModels=()=>{},onRender=()=>{},
@@ -10,6 +11,7 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
   language=()=>document.documentElement.lang,now=()=>Date.now(),autoRefreshMs=300000}){
   let revision=0,scheduled,state,lastConfig,lastRefresh=0,officialKinds={},officialVisual={};
   const resolutionDisplay=installStep3ResolutionDisplay(select,readConfig,language);
+  const mainDisplay=createModelListDisplay(select,language),analysisDisplay=createModelListDisplay(analysisSelect,language);
   const inflight=new Map();
   const text=(zh,en)=>String(language()).startsWith('en')?en:zh;
   const identity=c=>JSON.stringify([c.provider,c.base,c.proto,c.key]); // Never persisted.
@@ -26,17 +28,14 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
     const same=lastConfig&&identity(lastConfig)===identity(c)&&(analysis||lastConfig.mode===c.mode);
     const saved=readSaved(c.provider,analysis);
     const defaults=analysis?(c.vision||[]):c.mode==='svg'?[...(c.chat||[]),...(c.vision||[])]:c.image||[];
-    const preferred=[saved,same?element.value:'',...defaults];
-    element.replaceChildren();
-    if(list.length){
-      const group=document.createElement('optgroup');group.label=source;
-      for(const id of list){const option=document.createElement('option');option.value=id;option.textContent=id;group.append(option);}
-      element.append(group);
-      const choice=preferred.find(id=>id&&list.includes(id));if(choice)element.value=choice;
-    }else{
-      const option=document.createElement('option');option.value='';option.disabled=true;
-      option.textContent=text('暂无适用模型，请刷新目录','No compatible models; refresh the catalog');element.append(option);
-    }
+    const supported=['nonelinear','infistar'].includes(c.provider);
+    const preferred=[same?element.value:'',saved,...defaults];
+    // Preserve an old selection even when a live catalog is partial, but never
+    // carry an image selection into SVG or a model from a different provider.
+    const selected=preferred.find(id=>id&&(list.includes(id)||(supported&&filter([id],c,analysis).length)))||list[0]||'';
+    (analysis?analysisDisplay:mainDisplay).render({models:list,selected,source,enabled:supported,
+      scope:JSON.stringify([c.provider,c.base,analysis?'analysis':c.mode]),
+      placeholder:text('暂无适用模型，请刷新目录','No compatible models; refresh the catalog')});
   }
   function render(c,rows,source,message,fallback=initial(c)){
     const main=filter(rows,c),analysis=filter(rows,c,true);
@@ -155,7 +154,7 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
   timer?.unref?.();
   globalThis.addEventListener?.('focus',checkFreshness);
   globalThis.document?.addEventListener('visibilitychange',checkFreshness);
-  return {refresh,dispose(){++revision;resolutionDisplay.dispose();clearTimeout(scheduled);clearInterval(timer);globalThis.removeEventListener?.('focus',checkFreshness);globalThis.document?.removeEventListener('visibilitychange',checkFreshness);},schedule(){
+  return {refresh,dispose(){++revision;resolutionDisplay.dispose();mainDisplay.dispose();analysisDisplay.dispose();clearTimeout(scheduled);clearInterval(timer);globalThis.removeEventListener?.('focus',checkFreshness);globalThis.document?.removeEventListener('visibilitychange',checkFreshness);},schedule(){
     ++revision;clearTimeout(scheduled);onLiveModels(null);officialKinds={};officialVisual={};
     const c=readConfig(),fallback=initial(c);render(c,fallback.list,fallback.source,text('设置已更新，即将刷新步骤三模型…','Settings updated; refreshing Step 3 models shortly…'));
     scheduled=setTimeout(refresh,debounceMs);
