@@ -3,6 +3,7 @@
 import {requestStep3ImageStream} from '../forge/step3-image-stream.mjs';
 import {imageJobRoute,unpackImageBody,protocolFetch} from '../forge/step3-image-protocol.mjs';
 import {preserveImageResult} from './image-result.mjs';
+import {resultDiagnostics,exceptionDiagnostics} from './job-diagnostics.mjs';
 import {usesBrowserImageTransport,openBrowserImageFetch} from './browser-image-fetch.mjs';
 const RETENTION=24*60*60*1000, EXECUTION=12*60*1000, MAX_REQUEST=16*1024*1024;
 const encoder=new TextEncoder();
@@ -18,7 +19,7 @@ export async function digest(value){return [...new Uint8Array(await crypto.subtl
 async function cipher(secret){return crypto.subtle.importKey('raw',Uint8Array.from(atob(secret),c=>c.charCodeAt(0)),'AES-GCM',false,['encrypt','decrypt']);}
 async function encrypt(secret,value){const iv=crypto.getRandomValues(new Uint8Array(12)),bytes=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},await cipher(secret),encoder.encode(value)));return {iv:[...iv],bytes:[...bytes]};}
 async function decrypt(secret,value){return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:new Uint8Array(value.iv)},await cipher(secret),new Uint8Array(value.bytes)));}
-function publicMeta(meta){return {id:meta.id,state:meta.state,created:meta.created,expires:meta.expires,upstreamAttempts:meta.upstreamAttempts||0,requestId:meta.requestId||'',error:meta.error||null};}
+function publicMeta(meta){return {id:meta.id,state:meta.state,created:meta.created,expires:meta.expires,upstreamAttempts:meta.upstreamAttempts||0,requestId:meta.requestId||'',error:meta.error||null,...(meta.diagnostic?{diagnostic:meta.diagnostic}:{})};}
 async function putText(storage,prefix,text){const count=Math.ceil(text.length/16000);for(let i=0;i<count;i++)await storage.put(prefix+i,text.slice(i*16000,(i+1)*16000));return count;}
 async function getText(storage,prefix,count){let text='';for(let i=0;i<count;i++)text+=await storage.get(prefix+i);return text;}
 async function clearText(storage,prefix,count){for(let i=0;i<count;i++)await storage.delete(prefix+i);}
@@ -91,11 +92,22 @@ export class ImageJob {
     if(!meta)return json({error:'NOT_FOUND'},404);
     if(meta.state==='expired')return json(publicMeta(meta),410);
     if(url.pathname.endsWith('/result')){
-      if(meta.state!=='succeeded'&&meta.state!=='rejected')return json(publicMeta(meta),409);
+      if(meta.state!=='succeeded'&&meta.state!=='rejected')return json(await this.diagnosticMeta(meta,authorization.slice(7)),409);
       const result=JSON.parse(await getText(this.storage,'result:',meta.resultCount));
       return json(result);
     }
-    return json(publicMeta(meta));
+    return json(await this.diagnosticMeta(meta,authorization.slice(7)));
+  }
+  async diagnosticMeta(meta,key){
+    const result=publicMeta(meta);
+    if(['unknown','rejected'].includes(meta.state)&&meta.resultCount){
+      try{
+        // Read legacy records as well; never mutate or restart the old task.
+        const stored=JSON.parse(await getText(this.storage,'result:',meta.resultCount));
+        result.diagnostic={...resultDiagnostics(stored,key),...meta.diagnostic};
+      }catch{result.diagnostic={...meta.diagnostic,recordError:'DIAGNOSTIC_RECORD_UNREADABLE'};}
+    }
+    return result;
   }
   async expire(meta){
     for(const prefix of ['input:','result:'])for(;;){const keys=[...(await this.storage.list({prefix,limit:128})).keys()];if(!keys.length)break;await this.storage.delete(keys);}
@@ -122,17 +134,18 @@ export class ImageJob {
       input=JSON.parse(await getText(this.storage,'input:',meta.inputCount));
       target=backgroundTarget(input.url);
       if(usesBrowserImageTransport(target))browser=await openBrowserImageFetch(this.env.BROWSER,target,{timeoutMs:EXECUTION});
-    }catch{
+    }catch(error){
       const {encrypted,inputCount,...failed}=meta;
-      await this.storage.put('meta',{...failed,state:'unknown',error:'IMAGE_PREPARATION_FAILED'});
+      await this.storage.put('meta',{...failed,state:'unknown',error:'IMAGE_PREPARATION_FAILED',diagnostic:exceptionDiagnostics(error)});
       await clearText(this.storage,'input:',inputCount||0);
       await this.storage.setAlarm(meta.expires);
       return;
     }
     meta={...meta,state:'running',upstreamAttempts:1};
     await this.storage.put('meta',meta); // Durable claim BEFORE the only POST.
+    let executionKey='';
     try{
-      const key=await decrypt(this.env.JOB_ENCRYPTION_KEY,meta.encrypted);
+      const key=executionKey=await decrypt(this.env.JOB_ENCRYPTION_KEY,meta.encrypted);
       const compatibilityStore={
         get:async identity=>{
           const object=this.env.IMAGE_JOBS.get(this.env.IMAGE_JOBS.idFromName('compat:'+identity));
@@ -160,7 +173,8 @@ export class ImageJob {
       await this.finish(meta,JSON.parse(safe));
     }catch(error){
       const {encrypted,inputCount,...finished}=meta;
-      await this.storage.put('meta',{...finished,state:'unknown',requestId:error.imageDiagnostics?.requestId||'',error:'UPSTREAM_RESULT_UNCONFIRMED_NO_RESUBMIT'});
+      const diagnostic=exceptionDiagnostics(error,executionKey);
+      await this.storage.put('meta',{...finished,state:'unknown',requestId:diagnostic.requestId||'',error:'UPSTREAM_RESULT_UNCONFIRMED_NO_RESUBMIT',diagnostic});
       await clearText(this.storage,'input:',inputCount||0);
     }finally{await browser?.close();}
     await this.storage.setAlarm(meta.expires);

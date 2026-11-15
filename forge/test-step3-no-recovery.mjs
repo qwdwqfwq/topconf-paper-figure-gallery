@@ -74,3 +74,22 @@ test('provider allowlist and request packing remain in force',async()=>{
  for(const url of ['https://evil.test/v1/images/generations','http://infistar.cc/v1/images/generations'])await assert.rejects(c.request({...input,url}),/Unsupported/);
  assert.equal(calls,0);
 });
+
+test('unknown jobs expose the upstream reason, processing error and request ID without another request',async()=>{
+ const calls=[];
+ const meta={state:'unknown',error:'UPSTREAM_HTTP_520_NO_RESUBMIT',requestId:'provider-trace',diagnostic:{upstreamStatus:520,upstreamMessage:'upstream connection failed',resultError:'NO_IMAGE',stage:'response_received'}};
+ const c=createInfistarJobClient({...options,fetchImpl:async(url,init)=>{calls.push(init.method||'GET');return reply(meta);}});
+ await assert.rejects(c.request(input),error=>{
+  assert.equal(error.code,'JOB_RESULT_UNKNOWN');assert.deepEqual(error.diagnostic,meta);
+  for(const text of ['UPSTREAM_HTTP_520_NO_RESUBMIT','HTTP 520','upstream connection failed','NO_IMAGE','provider-trace','response_received'])assert.ok(error.message.includes(text),text);
+  assert.doesNotMatch(error.message,/未取得完整结果/);return true;
+ });
+ assert.deepEqual(calls,['PUT']);
+});
+
+test('old jobs without saved exceptions explicitly identify the missing diagnosis',async()=>{
+ const c=createInfistarJobClient({...options,fetchImpl:async()=>reply({state:'unknown',error:'UPSTREAM_RESULT_UNCONFIRMED_NO_RESUBMIT'})});
+ await assert.rejects(c.request(input),error=>error.message.includes('UPSTREAM_RESULT_UNCONFIRMED_NO_RESUBMIT'));
+ const empty=createInfistarJobClient({...options,fetchImpl:async()=>reply({state:'unknown'})});
+ await assert.rejects(empty.request(input),/后台未保存具体异常/);
+});

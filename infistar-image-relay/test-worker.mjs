@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {openBrowserImageFetch,usesBrowserImageTransport} from './browser-image-fetch.mjs';
 import worker,{ImageJob,validateSubmission,backgroundTarget} from './worker.mjs';
+import {resultDiagnostics,exceptionDiagnostics} from './job-diagnostics.mjs';
 const origin='https://qwdwqfwq.github.io',jobId='c3c04790-cd04-47e2-bb09-546aa8fcd7fe';
 const input={url:'https://infistar.cc/v1/images/generations',body:{model:'gpt-image-2.5-sunburst',prompt:'fixture'},usedReferences:false};
 test('overseas image gateway is selected before the one request; other routes are unchanged',()=>{
@@ -208,4 +209,29 @@ test('browser capacity failures stop with zero paid attempts and no background r
   const meta=await f.storage.get('meta');assert.equal(meta.state,'unknown');assert.equal(meta.error,'IMAGE_PREPARATION_FAILED');assert.equal(meta.upstreamAttempts,0);assert.equal(posts,0);assert.equal(meta.encrypted,undefined);
   f.env.BROWSER=fakeBrowser();await f.job.alarm();assert.equal(posts,0);assert.equal((await f.storage.get('meta')).state,'unknown');assert.equal(f.env.BROWSER.closed,0);
  }finally{globalThis.fetch=old;}
+});
+
+test('legacy uncertain records expose stored provider errors using read-only GETs',async()=>{
+ const f=fixture();await f.job.fetch(f.req('PUT'));
+ const raw={ok:false,status:520,text:JSON.stringify({error:{message:'provider failed test-key Bearer test-key',code:'upstream_error'}}),requestId:'old-trace',transport:{stage:'response_received'}};
+ await f.storage.put('result:0',JSON.stringify(raw));
+ await f.storage.put('meta',{...await f.storage.get('meta'),state:'unknown',error:'UPSTREAM_HTTP_520_NO_RESUBMIT',resultCount:1,upstreamAttempts:1});
+ const before=structuredClone(f.map);
+ for(const suffix of ['', '/result']){
+  const response=await f.job.fetch(f.req('GET','test-key',input,suffix));assert.equal(response.status,suffix?409:200);
+  const result=await response.json();assert.equal(result.error,'UPSTREAM_HTTP_520_NO_RESUBMIT');
+  assert.equal(result.diagnostic.upstreamStatus,520);assert.equal(result.diagnostic.requestId,'old-trace');
+  assert.match(result.diagnostic.upstreamMessage,/provider failed/);assert.doesNotMatch(JSON.stringify(result),/test-key/);
+  assert.equal(result.text,undefined);assert.equal(result.encrypted,undefined);
+ }
+ assert.deepEqual(f.map,before);
+});
+
+test('diagnosis distinguishes missing images, invalid JSON, download errors and gateway HTML',()=>{
+ assert.equal(resultDiagnostics({status:200,resultError:'NO_IMAGE',text:JSON.stringify({candidates:[{finishReason:'IMAGE_SAFETY'}]})}).upstreamMessage,'IMAGE_SAFETY');
+ assert.equal(resultDiagnostics({status:200,resultError:'INVALID_JSON',text:'incomplete JSON'}).resultError,'INVALID_JSON');
+ assert.equal(resultDiagnostics({downloadError:'IMAGE_DOWNLOAD_HTTP_403'}).resultError,'IMAGE_DOWNLOAD_HTTP_403');
+ assert.equal(resultDiagnostics({text:'<html><title>520: origin error</title><body>long page</body></html>'}).upstreamMessage,'520: origin error');
+ const error=Object.assign(Error('test-key disconnected'),{imageDiagnostics:{stage:'reading_response',status:200,errorCode:'UND_ERR_SOCKET',requestId:'trace'}});
+ assert.deepEqual(exceptionDiagnostics(error,'test-key'),{message:'[redacted] disconnected',errorCode:'UND_ERR_SOCKET',stage:'reading_response',requestId:'trace',upstreamStatus:200});
 });

@@ -3,9 +3,18 @@ import {imageJobRoute,packImageBody} from './step3-image-protocol.mjs';
 export const INFISTAR_JOBS='https://gallery-infistar-image-jobs.lixiao-gallery.workers.dev';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 export function usesInfistarImageJob(url){return !!imageJobRoute(url);}
-function jobError(code,id){
-  const messages={JOB_RESULT_UNKNOWN:'本次生图失败，未取得完整结果。',JOB_EXPIRED:'本次任务已过期。',JOB_CONNECTION:'本次生图连接中断或超时。'};
-  return Object.assign(new Error((messages[code]||code)+(id?' [task: '+id+']':'')),{code,jobId:id});
+function jobError(code,id,meta={}){
+  const messages={JOB_RESULT_UNKNOWN:'本次生图未完成，后台报告：',JOB_EXPIRED:'本次任务已过期。',JOB_CONNECTION:'本次生图连接中断或超时。'};
+  const d=meta.diagnostic||{},details=[];
+  if(meta.error)details.push(meta.error);
+  if(Number.isInteger(d.upstreamStatus))details.push('上游 HTTP '+d.upstreamStatus);
+  if(d.resultError)details.push('结果处理：'+d.resultError);
+  if(d.upstreamMessage||d.message)details.push(d.upstreamMessage||d.message);
+  if(d.errorCode)details.push('连接错误：'+d.errorCode);
+  if(d.stage)details.push('阶段：'+d.stage);
+  if(meta.requestId||d.requestId)details.push('request-id: '+(meta.requestId||d.requestId));
+  if(code==='JOB_RESULT_UNKNOWN'&&!details.length)details.push('后台未保存具体异常，请凭任务 ID 查询；不会自动重新提交。');
+  return Object.assign(new Error((messages[code]||code)+(details.length?' '+details.join('；'):'')+(id?' [task: '+id+']':'')),{code,jobId:id,diagnostic:meta});
 }
 export function createInfistarJobClient({fetchImpl=globalThis.fetch.bind(globalThis),endpoint=INFISTAR_JOBS,wait=sleep,pollMs=1500,deadlineMs=15*60*1000}={}){
   async function track(record,key,{submission,onProgress=()=>{}}){
@@ -26,13 +35,13 @@ export function createInfistarJobClient({fetchImpl=globalThis.fetch.bind(globalT
     async function run(){
       let response=await http('/jobs/'+record.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(submission)});
       for(;;){
-        if(response.status===410)throw jobError('JOB_EXPIRED',record.id);
-        if(![200,202].includes(response.status))throw jobError('JOB_HTTP_'+response.status,record.id);
+        if(response.status===410)throw jobError('JOB_EXPIRED',record.id,response.data);
+        if(![200,202].includes(response.status))throw jobError('JOB_HTTP_'+response.status,record.id,response.data);
         const state=response.data.state;onProgress({id:record.id,state});
-        if(state==='unknown')throw jobError('JOB_RESULT_UNKNOWN',record.id);
+        if(state==='unknown')throw jobError('JOB_RESULT_UNKNOWN',record.id,response.data);
         if(state==='succeeded'||state==='rejected'){
           const result=await http('/jobs/'+record.id+'/result');
-          if(result.status!==200)throw jobError('JOB_HTTP_'+result.status,record.id);
+          if(result.status!==200)throw jobError('JOB_HTTP_'+result.status,record.id,result.data);
           return {...result.data,job:{id:record.id,recovered:false}};
         }
         if(!['queued','running','response_received'].includes(state))throw jobError('JOB_INVALID_STATE',record.id);
