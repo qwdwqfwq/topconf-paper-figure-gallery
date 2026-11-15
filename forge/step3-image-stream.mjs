@@ -18,8 +18,18 @@ export function step3StreamingRequest(url,body){
     return {url:target.href,body:parameters,nativeGemini:false};
   }
   if(/:(?:streamGenerateContent|generateContent)$/.test(target.pathname)){
-    target.pathname=target.pathname.replace(/:generateContent$/,':streamGenerateContent');
-    target.searchParams.set('alt','sse');
+    // This Infistar alias rejects the streaming route in the current group.
+    // All other Gemini models retain SSE. Choose before the single paid POST;
+    // never retry a possibly completed generation after a disconnect.
+    const ordinaryBanana=['infistar.cc','www.infistar.cc','infistar.ai','www.infistar.ai'].includes(target.hostname) &&
+      /\/models\/gemini-nano-banana-2\.1:(?:streamGenerateContent|generateContent)$/.test(target.pathname);
+    if(ordinaryBanana){
+      target.pathname=target.pathname.replace(/:streamGenerateContent$/,':generateContent');
+      target.searchParams.delete('alt');
+    }else{
+      target.pathname=target.pathname.replace(/:generateContent$/,':streamGenerateContent');
+      target.searchParams.set('alt','sse');
+    }
     return {url:target.href,body,nativeGemini:true};
   }
   if(body instanceof FormData){

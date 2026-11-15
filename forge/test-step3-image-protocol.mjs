@@ -6,7 +6,7 @@ import {step3ImageDimensions,step3ImageResolutions,step3NativePixelsMatch} from 
 import {requestStep3ImageStream} from './step3-image-stream.mjs';
 test('provider wire formats preserve references and only supported streaming flags',async()=>{
  const ref='data:image/png;base64,iVBORw0KGgo=';
- for(const [p,base]of [['oai','https://api.openai.com/v1'],['infistar','https://infistar.cc/v1'],['nonelinear','https://api.nonelinear.com.cn/v1']]){
+ for(const [p,base]of [['oai','https://api.openai.com/v1'],['infistar','https://infistar.cc/v1'],['nonelinear','https://gallery-nonelinear-relay.lixiao-gallery.workers.dev/v1']]){
   const request=compatibleImageRequest({model:'gpt-image-2.5-sunburst',prompt:'fixture',image:[ref],size:'2048x1152'},base,p);
   const body=unpackImageBody(await packImageBody(request.body));let wire;
   await requestStep3ImageStream({url:base+request.endpoint,body,key:'fixture',usedReferences:true,fetchImpl:protocolFetch(async(url,init)=>{wire={url,...init};return new Response('{"data":[{"b64_json":"fixture"}]}',{headers:{'content-type':'application/json'}});})});
@@ -27,12 +27,12 @@ test('Gemini native and compatibility formats, no generic stream flag, Imagen n=
  assert.equal(prepareStep3ImageBody({model:'imagen-4.0-generate-001'},'imagen-4.0-generate-001').n,1);
  let body;await protocolFetch(async(_u,i)=>{body=JSON.parse(i.body);})('https://infistar.cc/v1/images/generations',{body:JSON.stringify({model:'doubao-seedream-4.0',stream:true})});assert.equal(body.stream,undefined);
 });
-test('capabilities fail closed, isolate provider pixel conventions and allow discrete Gemini native sizes',()=>{
+test('capabilities preserve catalog policy, isolate provider pixel conventions and allow discrete Gemini native sizes',()=>{
  for(const p of ['oai','infistar','nonelinear'])for(const ratio of ['16:9','4:3','3:2','1:1']){
   assert.deepEqual(step3ImageResolutions(p,'gemini-2.5-flash-image',ratio),['1K']);
   assert.deepEqual(step3ImageResolutions(p,'gemini-3.1-flash-lite-image',ratio),['1K']);
   assert.deepEqual(step3ImageResolutions(p,'gpt-image-2.5-sunburst',ratio),['1K','2K','4K']);
-  assert.deepEqual(step3ImageResolutions(p,'unverified-new-image-model',ratio),[]);
+  assert.deepEqual(step3ImageResolutions(p,'unverified-new-image-model',ratio),['1K','2K','4K']);
  }
  assert.equal(step3ImageDimensions('oai','gpt-image-2.5-sunburst','1:1','1K').value,'1024x1024');
  assert.equal(step3ImageDimensions('infistar','gpt-image-2.5-sunburst','1:1','1K').value,'1152x1152');

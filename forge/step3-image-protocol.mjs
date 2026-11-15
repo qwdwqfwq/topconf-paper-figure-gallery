@@ -1,4 +1,5 @@
 // Private Step 3 adapters; shared Step 4 protocol modules stay unchanged.
+import {uploadStep3References} from './step3-reference-upload.mjs';
 export function imageJobRoute(url){
   try{
     const u=new URL(url);if(u.protocol!=='https:'||u.port||u.username||u.password||u.hash)return null;
@@ -32,7 +33,7 @@ export function prepareStep3ImageBody(body,model,nativeGemini=false){
   return body;
 }
 export function protocolFetch(fetchImpl=fetch){
-  return (url,init)=>{
+  return async (url,init)=>{
     const route=imageJobRoute(url);let body=init.body;
     const model=body instanceof FormData?body.get('model'):JSON.parse(body).model;
     // Native Gemini streaming is supported. Other image families do not inherit
@@ -40,6 +41,9 @@ export function protocolFetch(fetchImpl=fetch){
     if(route==='nonelinear'||(!/:streamGenerateContent/.test(url)&&!/^gpt-image-/i.test(model||''))){
       if(body instanceof FormData)body.delete('stream');
       else {const value=JSON.parse(body);delete value.stream;body=JSON.stringify(value);}
+    }
+    if(route==='nonelinear'&&new URL(url).hostname==='api.nonelinear.com.cn'&&!(body instanceof FormData)){
+      body=JSON.stringify(await uploadStep3References(JSON.parse(body),init,fetchImpl));
     }
     return fetchImpl(url,{...init,body});
   };

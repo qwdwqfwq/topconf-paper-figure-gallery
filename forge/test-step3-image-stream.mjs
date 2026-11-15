@@ -50,11 +50,33 @@ test('NoneLinear upstream and relays omit stream entirely, preserve 4K and three
   assert.equal(result.body.get('image[]').name,'reference.png');
 });
 
-test('Gemini changes only transport endpoint/query, keeping all references and settings',()=>{
-  const original=geminiImageRequest('https://infistar.cc/v1','gemini-3.1-flash-image',body.prompt,body.image,{aspectRatio:'16:9',imageSize:'2K'});
-  const result=step3StreamingRequest(original.base+original.endpoint,original.body);
-  assert.equal(result.url,'https://infistar.cc/v1beta/models/gemini-3.1-flash-image:streamGenerateContent?alt=sse');
-  assert.strictEqual(result.body,original.body);assert.equal(result.nativeGemini,true);
+test('only exact Infistar Banana 2.1 uses ordinary native endpoint with 4K and three references',()=>{
+  for(const host of ['infistar.cc','www.infistar.cc','infistar.ai','www.infistar.ai']){
+    const original=geminiImageRequest('https://'+host+'/v1','gemini-nano-banana-2.1',body.prompt,['data:image/png;base64,AA==','data:image/png;base64,AQ==','data:image/png;base64,Ag=='],{aspectRatio:'16:9',imageSize:'4K'});
+    for(const endpoint of [original.base+original.endpoint,original.base+original.endpoint.replace(':generateContent',':streamGenerateContent')+'?alt=sse']){
+      const result=step3StreamingRequest(endpoint,original.body);
+      assert.equal(result.url,'https://'+host+'/v1beta/models/gemini-nano-banana-2.1:generateContent');
+      assert.strictEqual(result.body,original.body);assert.equal(result.nativeGemini,true);
+      assert.equal(result.body.contents[0].parts.length,4);
+      assert.deepEqual(result.body.generationConfig.imageConfig,{aspectRatio:'16:9',imageSize:'4K'});
+    }
+  }
+  assert.equal(step3StreamingRequest('https://generativelanguage.googleapis.com/v1beta/models/gemini:generateContent',{}).url,'https://generativelanguage.googleapis.com/v1beta/models/gemini:streamGenerateContent?alt=sse');
+});
+
+test('other Infistar Gemini models and Banana on other providers retain SSE',()=>{
+  for(const host of ['infistar.cc','www.infistar.cc','infistar.ai','www.infistar.ai']){
+    for(const model of ['gemini-2.5-flash-image','gemini-3-pro-image','gemini-3-pro-image-preview','gemini-3.1-flash-image','gemini-3.1-flash-lite-image','gemini-nano-banana-2.1-preview','gemini-nano-banana-2.10','gemini-future-image']){
+      for(const endpoint of ['generateContent','streamGenerateContent']){
+        const url='https://'+host+'/v1beta/models/'+model+':'+endpoint;
+        const result=step3StreamingRequest(url,body);
+        assert.equal(result.url,url.replace(':'+endpoint,':streamGenerateContent')+'?alt=sse');
+        assert.strictEqual(result.body,body);
+      }
+    }
+  }
+  for(const host of ['generativelanguage.googleapis.com','infistar.cc.example.invalid'])
+    assert.equal(step3StreamingRequest('https://'+host+'/v1beta/models/gemini-nano-banana-2.1:generateContent',body).url,'https://'+host+'/v1beta/models/gemini-nano-banana-2.1:streamGenerateContent?alt=sse');
 });
 
 test('OpenAI multipart editing preserves the files and fields without mutating caller data',async()=>{

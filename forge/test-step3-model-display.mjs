@@ -46,9 +46,14 @@ test('provider wire formats preserve references and only supported streaming fla
  for(const [p,base]of [['oai','https://api.openai.com/v1'],['infistar','https://infistar.cc/v1'],['nonelinear','https://api.nonelinear.com.cn/v1']]){
   const request=compatibleImageRequest({model:'gpt-image-2.5-sunburst',prompt:'fixture',image:[ref],size:'2048x1152'},base,p);
   const body=unpackImageBody(await packImageBody(request.body));let wire;
-  await requestStep3ImageStream({url:base+request.endpoint,body,key:'fixture',usedReferences:true,fetchImpl:protocolFetch(async(url,init)=>{wire={url,...init};return new Response('{"data":[{"b64_json":"fixture"}]}',{headers:{'content-type':'application/json'}});})});
+  let uploads=0;
+  await requestStep3ImageStream({url:base+request.endpoint,body,key:'fixture',usedReferences:true,fetchImpl:protocolFetch(async(url,init)=>{
+   if(url==='https://nonelinear.com.cn/api/upload-file'){uploads++;assert.equal(JSON.parse(init.body).image,ref.split(',')[1]);return Response.json({url:'https://images.example.com/reference.png'});}
+   wire={url,...init};return new Response('{"data":[{"b64_json":"fixture"}]}',{headers:{'content-type':'application/json'}});
+  })});
+  assert.equal(uploads,p==='nonelinear'?1:0);
   if(p==='oai'){assert.ok(wire.body instanceof FormData);assert.match(wire.url,/images\/edits$/);assert.equal(wire.body.getAll('image[]').length,1);assert.equal(await wire.body.get('image[]').text(),'\x89PNG\r\n\x1a\n'.replace('\x89','�'));}
-  else {const json=JSON.parse(wire.body);assert.deepEqual(json.image,[ref]);assert.match(wire.url,/images\/generations$/);assert.equal(json.stream,p==='infistar'?true:undefined);}
+  else {const json=JSON.parse(wire.body);assert.deepEqual(json.image,p==='nonelinear'?['https://images.example.com/reference.png']:[ref]);assert.match(wire.url,/images\/generations$/);assert.equal(json.stream,p==='infistar'?true:undefined);}
  }
 });
 test('Gemini native and compatibility formats, no generic stream flag, Imagen n=1',async()=>{

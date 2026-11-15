@@ -2,7 +2,7 @@ import {scopedRevision,confirmedRevision,selectRevisionRegions,validateRegions,m
 import {usesInfistarGemini,geminiImageRequest,geminiImageResult,compatibleImageRequest,requestImageWithRecovery,imageRequestDiagnostics} from './image-api.mjs?v=20261026-nonelinear-resolution';
 import {imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261026-nonelinear-resolution';
 import {captureGenerationContext,copyStep1Context,revisionContextInstruction} from './revision-context.mjs';
-import {requestStep3ImageStream} from './step3-image-stream.mjs?v=20261114-errors';
+import {requestStep3ImageStream} from './step3-image-stream.mjs?v=20261115-endpoints';
 
 // Separate image-edit request: chosen full bitmap first, optional screenshot references after it.
 // This module never calls or configures the editable reconstruction pipeline.

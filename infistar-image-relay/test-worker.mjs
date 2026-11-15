@@ -22,6 +22,54 @@ function fixture(){
  const req=(method='GET',key='test-key',body=input,suffix='')=>new Request('https://jobs.test/jobs/'+jobId+suffix,{method,headers:{Origin:origin,Authorization:'Bearer '+key,'Content-Type':'application/json'},...(method==='PUT'?{body:JSON.stringify(body)}:{})});
  return {storage,map,ctx,env,req,job:new ImageJob(ctx,env)};
 }
+
+test('Infistar Banana 2.1 durable task uses ordinary Gemini exactly once, retaining 4K and three references',async()=>{
+ const f=fixture(),old=globalThis.fetch;let posts=0;
+ const body={contents:[{role:'user',parts:[{text:'fixture'},...Array.from({length:3},()=>({inlineData:{mimeType:'image/png',data:'aGVsbG8='}}))]}],generationConfig:{responseModalities:['TEXT','IMAGE'],imageConfig:{aspectRatio:'16:9',imageSize:'4K'}}};
+ const submission={url:'https://infistar.cc/v1beta/models/gemini-nano-banana-2.1:generateContent',body,usedReferences:true};
+ globalThis.fetch=async(url,init)=>{
+  posts++;assert.equal(url,submission.url);assert.deepEqual(JSON.parse(init.body),body);
+  return Response.json({candidates:[{content:{parts:[{inlineData:{mimeType:'image/png',data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII='}}]},finishReason:'STOP'}]});
+ };
+ try{
+  assert.equal((await f.job.fetch(f.req('PUT','test-key',submission))).status,202);
+  await f.job.alarm();await f.job.alarm();await f.job.fetch(f.req('PUT','test-key',submission));
+  assert.equal(posts,1);assert.equal(f.env.BROWSER.posts,0);assert.equal((await f.storage.get('meta')).state,'succeeded');
+  assert.equal((await f.job.fetch(f.req('GET','test-key',submission,'/result'))).status,200);
+ }finally{globalThis.fetch=old;}
+});
+
+test('other Infistar Gemini durable tasks retain SSE and recover results without another generation',async()=>{
+ const f=fixture(),old=globalThis.fetch;let posts=0;
+ const submission={url:'https://infistar.cc/v1beta/models/gemini-3.1-flash-image:generateContent',body:{contents:[{role:'user',parts:[{text:'fixture'}]}]},usedReferences:false};
+ globalThis.fetch=async(url,init)=>{
+  posts++;assert.equal(url,submission.url.replace(':generateContent',':streamGenerateContent')+'?alt=sse');assert.deepEqual(JSON.parse(init.body),submission.body);
+  const image={candidates:[{index:0,content:{parts:[{inlineData:{mimeType:'image/png',data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII='}}]}}]};
+  const stop={candidates:[{index:0,finishReason:'STOP',content:{parts:[]}}]};
+  return new Response('data: '+JSON.stringify(image)+'\n\ndata: '+JSON.stringify(stop)+'\n\n',{headers:{'Content-Type':'text/event-stream'}});
+ };
+ try{
+  assert.equal((await f.job.fetch(f.req('PUT','test-key',submission))).status,202);await f.job.alarm();
+  await new ImageJob(f.ctx,f.env).alarm();await f.job.fetch(f.req('PUT','test-key',submission));
+  assert.equal(posts,1);assert.equal((await f.storage.get('meta')).state,'succeeded');
+  const result=await (await f.job.fetch(f.req('GET','test-key',submission,'/result'))).json();assert.equal(result.streaming,true);assert.ok(JSON.parse(result.text).data[0].b64_json);
+ }finally{globalThis.fetch=old;}
+});
+
+test('NoneLinear durable task uploads local references before one synchronous generation',async()=>{
+ const f=fixture(),old=globalThis.fetch,calls=[];
+ const submission={url:'https://api.nonelinear.com.cn/v1/images/generations',body:{model:'gemini-3.1-flash-image-preview',prompt:'fixture',size:'4K',aspect_ratio:'16:9',image:['data:image/png;base64,aGVsbG8=']},usedReferences:true};
+ globalThis.fetch=async(url,init)=>{
+  calls.push(url);const body=JSON.parse(init.body);
+  if(url==='https://nonelinear.com.cn/api/upload-file'){assert.deepEqual(body,{image:'aGVsbG8=',type:'.png'});return Response.json({url:'https://images.example.com/reference.png'});}
+  assert.equal(url,submission.url);assert.deepEqual(body,{...submission.body,image:['https://images.example.com/reference.png']});
+  return Response.json({data:[{b64_json:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII='}]});
+ };
+ try{
+  assert.equal((await f.job.fetch(f.req('PUT','test-key',submission))).status,202);await f.job.alarm();await f.job.alarm();
+  assert.deepEqual(calls,['https://nonelinear.com.cn/api/upload-file',submission.url]);assert.equal(f.env.BROWSER.posts,0);assert.equal((await f.storage.get('meta')).state,'succeeded');
+ }finally{globalThis.fetch=old;}
+});
 test('duplicate concurrent submissions, completed replay and expiry never issue another upstream POST',async()=>{
  const f=fixture();let posts=0;const old=globalThis.fetch;
  globalThis.fetch=async(url)=>{assert.equal(url,'https://infistar.ai/v1/images/generations');posts++;return new Response(JSON.stringify({data:[{b64_json:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII='}]}),{headers:{'Content-Type':'application/json','x-request-id':'fixture-id'}});};
