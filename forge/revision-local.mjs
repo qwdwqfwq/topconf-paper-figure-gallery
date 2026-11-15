@@ -182,11 +182,5 @@ export function comparisonView(before,after){
   const divider=document.createElement('div');divider.style.cssText='position:absolute;top:0;bottom:0;left:50%;width:2px;background:#a000c8;pointer-events:none';
   const slider=document.createElement('input');slider.type='range';slider.min='0';slider.max='100';slider.value='50';slider.dataset.compareSlider='true';slider.setAttribute('aria-label','前后对比分界线');slider.style.cssText='width:100%;margin:14px 0';
   slider.oninput=()=>{old.style.clipPath=`inset(0 ${100-Number(slider.value)}% 0 0)`;divider.style.left=slider.value+'%';};
-  const links=document.createElement('div');links.style.cssText='display:flex;gap:12px;flex-wrap:wrap';
-  for(const [label,src] of [['放大修改前',before],['放大修改后',after]]){
-    const button=document.createElement('button');button.type='button';button.textContent=label;
-    button.onclick=()=>{const dialog=document.createElement('dialog');dialog.style.cssText='width:94vw;max-width:1600px;max-height:94vh;overflow:auto;border:1px solid #dedbf5;border-radius:12px';const close=document.createElement('button');close.textContent='关闭';close.type='button';close.onclick=()=>dialog.close();const img=document.createElement('img');img.src=src;img.alt=label;img.style.cssText='display:block;max-width:none';dialog.append(close,img);dialog.onclose=()=>dialog.remove();document.body.append(dialog);dialog.showModal();};
-    links.append(button);
-  }
-  stage.append(next,old,divider);view.append(help,stage,slider,links);return view;
+  stage.append(next,old,divider);view.append(help,stage,slider);return view;
 }

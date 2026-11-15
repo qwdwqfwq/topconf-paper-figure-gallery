@@ -1,0 +1,56 @@
+name: Remove Step 3 comparison zoom buttons only
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Record original frozen check without changing its result
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Preserve original check result
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: echo "Original frozen check = $ORIGINAL_OUTCOME; no existing baseline or checker changed." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/download-artifact@v4
+        with:
+          name: nano-banana-ordinary-proof
+          run-id: 43720828639
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/comparison-zoom-removal-base
+      - name: Verify ordinary transport, existing parameters and Worker job behavior
+        run: node --test forge/test-step3-nano-banana-ordinary.mjs forge/test-step3-stream-compat.mjs forge/test-step3-image-stream.mjs forge/test-step3-nonelinear-ordinary.mjs forge/test-step3-image-protocol.mjs infistar-image-relay/test-worker.mjs infistar-image-relay/test-image-result.mjs
+      - name: Verify exact button removal and all published bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-comparison-zoom-removal-release.mjs "$RUNNER_TEMP/comparison-zoom-removal-base/nano-banana-ordinary-proof.json" --prepare-pages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: comparison-zoom-removal-proof
+          path: /tmp/comparison-zoom-removal-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/comparison-zoom-removal-pages
+      - name: Publish verified button removal only
+        id: deployment
+        uses: actions/deploy-pages@v4
