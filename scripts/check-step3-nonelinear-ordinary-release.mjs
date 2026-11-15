@@ -8,9 +8,10 @@ import {join,resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('..',import.meta.url));
 export const anchor='235ed565f87c8bbc866eeb6ede0c4c5821fc54dc';
-const reviewedParent='235ed565f87c8bbc866eeb6ede0c4c5821fc54dc';
+const reviewedParent='d1eb457c3dbd644807ce9c553d63637240d2a451';
 export const publishedTree='d8aee3a87cacf43da0d59c9d1d48910f57e05248';
-export const payload=["forge/step3-image-compat.mjs", "forge/step3-image-stream.mjs", "forge/step3-infistar-job.mjs", "infistar-image-relay/worker.mjs"];
+export const payload=["forge/step3-image-compat.mjs", "forge/step3-image-stream.mjs", "forge/step3-infistar-job.mjs"];
+export const workerPayload=["infistar-image-relay/worker.mjs"];
 export const allowed=[".github/workflows/step3-nonelinear-ordinary-release.yml", "forge/step3-image-compat.mjs", "forge/step3-image-stream.mjs", "forge/step3-infistar-job.mjs", "forge/test-step3-image-protocol.mjs", "forge/test-step3-image-stream.mjs", "forge/test-step3-model-display.mjs", "forge/test-step3-no-recovery-browser.cjs", "forge/test-step3-no-recovery.mjs", "forge/test-step3-nonelinear-ordinary-browser.cjs", "forge/test-step3-nonelinear-ordinary.mjs", "forge/test-step3-stream-compat-browser.cjs", "forge/test-step3-stream-compat.mjs", "infistar-image-relay/test-worker.mjs", "infistar-image-relay/worker.mjs", "scripts/check-step3-nonelinear-ordinary-release.mjs", "scripts/test-step3-nonelinear-ordinary-release.mjs"];
 const expected={
   ".github/workflows/step3-nonelinear-ordinary-release.yml": "9ceccba0828ccc0f4b5ff0b1cd25898a41baedcaace0272518fa430beae78a69",
@@ -28,7 +29,7 @@ const expected={
   "forge/test-step3-stream-compat.mjs": "ce538a575a15b8111d0dddaf5be5fc0bb8a0eb59ddc1300ab85edf05227fc338",
   "infistar-image-relay/test-worker.mjs": "dc1fcd2bc9d2acf935852b2bb2e2b83199cae781708eb518b84e16c99cf396b9",
   "infistar-image-relay/worker.mjs": "44835f73b02fad11f2bbbf520b36fe261470f426566a829072701474d1fbcfe4",
-  "scripts/test-step3-nonelinear-ordinary-release.mjs": "2346987ed361d405ea8d16fda0b3b47af90b37bfe2e3f9a81246774c4d3c3409"
+  "scripts/test-step3-nonelinear-ordinary-release.mjs": "78d1a8cd72f09ffbdd412fd329a402449d1ee239082e17287c033df58debc7cb"
 };
 const git=(...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8',maxBuffer:40*1024*1024}).trim();
 const changed=(a,b)=>git('diff','--name-only','--no-renames',a,b,'--').split('\n').filter(Boolean).sort();
@@ -57,7 +58,8 @@ function main(){
   for(const p of payload){const blob=working?git('hash-object','-w',p):git('rev-parse','HEAD:'+p);indexGit('update-index','--add','--cacheinfo','100644',blob,p);}
   const artifactTree=indexGit('write-tree');assertArtifactDiff(changed(publishedTree,artifactTree));
   const entries=git('ls-tree','-r',artifactTree).split('\n').filter(Boolean).map(line=>{const m=line.match(/^(\d+) blob ([0-9a-f]+)\t(.+)$/);assert.ok(m,'Unsupported entry');assert.ok(['100644','100755'].includes(m[1]),'Symlinks forbidden');return {mode:m[1],blob:m[2],path:m[3]};});
-  proof={independentAcceptance:true,originalFrozenCheck:'Unchanged; historical failures remain failures',anchor,publishedTree,artifactTree,changedOnline:payload,unchangedFiles:entries.length-payload.length,allOtherOnlineBlobsIdentical:true,previousAcceptanceAndTests:true,entries};
+  for(const p of workerPayload)assert.equal(git('ls-tree',publishedTree,'--',p),'','Worker services must remain outside the static Pages artifact');
+  proof={independentAcceptance:true,originalFrozenCheck:'Unchanged; historical failures remain failures',anchor,publishedTree,artifactTree,changedOnline:payload,separatelyDeployedWorker:workerPayload,unchangedFiles:entries.length-payload.length,allOtherOnlineBlobsIdentical:true,previousAcceptanceAndTests:true,entries};
   if(process.argv.includes('--prepare-pages')){
    assert.equal(working,false);assert.equal(process.env.GITHUB_ACTIONS,'true');assert.equal(process.env.GITHUB_REF,'refs/heads/main');assert.equal(process.env.GITHUB_SHA,git('rev-parse','HEAD'));
    const output='/tmp/isolated-step3-nonelinear-ordinary-pages';assert.equal(existsSync(output),false,'Refuse overwrite');mkdirSync(output);
