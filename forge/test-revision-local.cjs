@@ -158,7 +158,7 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
    const {unpackImageBody}=await import('./step3-image-protocol.mjs');
    const loadImage=src=>new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src=src;});
    const options={key:'offline-fixture',loadImage,toDataURL:async x=>x};
-   const originalFetch=window.fetch,requests=[],uploads=[],jobs=new Map();let failRead=false;
+   const originalFetch=window.fetch,requests=[],uploads=[],discoveries=[],jobs=new Map();let failRead=false,failModels=false;
    window.fetch=async(url,options)=>{
     if(url.startsWith('https://gallery-infistar-image-jobs.lixiao-gallery.workers.dev/jobs/')){
      const id=new URL(url).pathname.split('/')[2];
@@ -172,6 +172,7 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
     if(url==='https://nonelinear.com.cn/api/upload-file'){
      uploads.push(JSON.parse(options.body));return new Response(JSON.stringify({url:'https://storage.example.test/crop-'+uploads.length+'.png'}));
     }
+    if(url.endsWith('/models')){discoveries.push({url,options});return new Response(JSON.stringify(failModels?{error:{message:'catalogue unavailable'}}:{data:[{id:'gpt-4.1'},{id:'gpt-6-sol'},{id:'gpt-6.1-terra'},{id:'gpt-6.1-sol'},{id:'gpt-image-2'},{id:'gpt-99-codex'}]}),{status:failModels?503:200});}
     requests.push({url,body:options.body instanceof FormData?Object.fromEntries(options.body):JSON.parse(options.body)});
     if(url.endsWith('/chat/completions'))return new Response(JSON.stringify(failRead?{error:{message:'fixture failure'}}:{choices:[{message:{reasoning_content:'Hidden draft should never be forwarded',content:'Keep node labels Source and Target; place Source left and Target right, connected by an arrow. Pale blue academic style.'}}]}),{status:failRead?400:200});
     if(url.includes(':generateContent'))return new Response(JSON.stringify({candidates:[{content:{parts:[{thought:true,inlineData:{mimeType:'image/png',data:fixtures.reference.split(',')[1]}},{inlineData:{mimeType:'image/png',data:fixtures.green.split(',')[1]}}]},finishReason:'STOP'}]}));
@@ -190,20 +191,25 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
     const banana=await generateRevision({...parent,route:{p:'infistar',model:'gemini-nano-banana-2.1',base:'https://infistar.cc/v1',ratio:'16:9',resolution:'1K'}},'绿色局部',options);
     if(requests.length!==before+1||!requests.at(-1).url.endsWith(':generateContent')||banana.revisionAudit.streaming===true||banana.revisionAudit.apiRequestCount!==1||banana.revisionAudit.changedOutside!==0)throw Error('Nano Banana local synchronous one-call contract');
     const redrawParent={...parent,localRedraw:true,editRegions:[{x:230,y:119,width:192,height:192}],route:banana.route};
+    if(discoveries.length)throw Error('Ordinary editing must not discover reader models');
     const redrawStart=requests.length,redraw=await generateRevision(redrawParent,'把上下改成左右，不要只是改字改色',options);
     const read=requests[redrawStart].body,draw=requests[redrawStart+1].body;
     const readParts=read.messages.flatMap(c=>c.content),drawParts=draw.contents.flatMap(c=>c.parts);
-    if(!requests[redrawStart].url.endsWith('/chat/completions')||read.model!=='gpt-4.1'||requests.length!==redrawStart+2||readParts.filter(p=>p.type==='image_url'&&p.image_url.detail==='high').length!==2)throw Error('Redraw content read contract');
+    if(!requests[redrawStart].url.endsWith('/chat/completions')||read.model!=='gpt-6.1-sol'||requests.length!==redrawStart+2||readParts.filter(p=>p.type==='image_url'&&p.image_url.detail==='high').length!==2)throw Error('Redraw content read contract');
     if(drawParts.some(p=>p.inlineData)||!drawParts.some(p=>p.text?.includes('Source left and Target right'))||drawParts.some(p=>p.text?.includes('Hidden draft')))throw Error('Redraw must use final text only, no original-layout image');
-    if(redraw.revisionAudit.contentReadModel!=='gpt-4.1'||redraw.revisionAudit.apiRequestCount!==2||redraw.revisionAudit.referenceCount!==0||redraw.revisionAudit.changedOutside!==0||redraw.revisionAudit.editingPolicy!=='content-redraw')throw Error('Redraw audit and outside preservation');
-    failRead=true;let readFailed=false;const failureStart=requests.length;
+    if(redraw.revisionAudit.contentReadModel!=='gpt-6.1-sol'||redraw.revisionAudit.apiRequestCount!==2||redraw.revisionAudit.referenceCount!==0||redraw.revisionAudit.changedOutside!==0||redraw.revisionAudit.editingPolicy!=='content-redraw')throw Error('Redraw audit and outside preservation');
+    if(discoveries.length!==1||discoveries[0].url!=='https://infistar.cc/v1/models'||discoveries[0].options.headers.Authorization!=='Bearer offline-fixture')throw Error('Reader discovery provider/key contract');
+    failModels=true;const catalogueStart=requests.length;let catalogueFailed=false;
+    try{await generateRevision(redrawParent,'重新绘制',options);}catch(e){catalogueFailed=e.message.includes('模型自动选择失败');}
+    if(!catalogueFailed||requests.length!==catalogueStart)throw Error('Catalogue failure must not read, draw, retry or fall back');
+    failModels=false;failRead=true;let readFailed=false;const failureStart=requests.length;
     try{await generateRevision(redrawParent,'重新绘制',options);}catch(e){readFailed=e.message.includes('读取选区失败');}
     if(!readFailed||requests.length!==failureStart+1)throw Error('Failed read must not draw or retry');
-    let multiRejected=false,providerRejected=false;const preflightStart=requests.length;
+    let multiRejected=false,providerRejected=false;const preflightStart=requests.length,discoveryStart=discoveries.length;
     try{await generateRevision({...redrawParent,editRegions:[...redrawParent.editRegions,{x:600,y:100,width:50,height:50}]},'重新绘制',options);}catch(e){multiRejected=e.message.includes('一个框');}
     try{await generateRevision({...redrawParent,route:oai.route},'重新绘制',options);}catch(e){providerRejected=e.message.includes('无限星河');}
-    if(!multiRejected||!providerRejected||requests.length!==preflightStart)throw Error('Redraw preflight must not charge unsupported inputs');
-    return {nonelinear:true,oai:true,nanoBananaSynchronous:true,thoughtDraftExcluded:true,referenceLimit:true,redrawTextOnly:true,redrawTwoCalls:true,readFailureNoRetry:true,redrawPreflight:true,requests:requests.length};
+    if(!multiRejected||!providerRejected||requests.length!==preflightStart||discoveries.length!==discoveryStart)throw Error('Redraw preflight must not charge unsupported inputs');
+    return {nonelinear:true,oai:true,nanoBananaSynchronous:true,thoughtDraftExcluded:true,referenceLimit:true,redrawTextOnly:true,redrawTwoCalls:true,readFailureNoRetry:true,redrawPreflight:true,latestReader:true,ordinaryEditNoDiscovery:true,catalogueFailureNoCalls:true,requests:requests.length};
    }finally{window.fetch=originalFetch;}
   },fixtures);
   assert.deepEqual(unexpected,[]);assert.deepEqual(errors,[]);

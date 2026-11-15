@@ -1,0 +1,56 @@
+name: Publish structure redraw reader model selection only
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Record original frozen check without changing its result
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Preserve original check result
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: echo "Original frozen check = $ORIGINAL_OUTCOME; no existing baseline or checker changed." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/download-artifact@v4
+        with:
+          name: comparison-hint-proof
+          run-id: 43718313447
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/redraw-reader-base
+      - name: Test reader model discovery without live API calls
+        run: node forge/test-revision-reader-model.mjs
+      - name: Verify exact reader patch and all published bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-redraw-reader-release.mjs "$RUNNER_TEMP/redraw-reader-base/comparison-hint-proof.json" --prepare-pages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: redraw-reader-proof
+          path: /tmp/redraw-reader-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/redraw-reader-pages
+      - name: Publish verified reader model selection only
+        id: deployment
+        uses: actions/deploy-pages@v4

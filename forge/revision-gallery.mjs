@@ -5,7 +5,8 @@ import {captureGenerationContext,copyStep1Context,revisionContextInstruction} fr
 import {requestStep3ImageStream} from './step3-image-stream.mjs?v=20261115-endpoints';
 import {usesInfistarImageJob,requestInfistarImageJob,acknowledgeInfistarImageJob} from './step3-infistar-job.mjs?v=20261114-durable-jobs';
 import {imageResultItem} from './step3-image-protocol.mjs';
-import {prepareLocalEdit,prepareLocalRedraw,localEditInstruction,localRedrawReadInstruction,localRedrawInstruction,localRedrawReaderModel,compositeLocalEdit,createLocalSelector,comparisonView,requestLocalSynchronous,localFinalImageResponse} from './revision-local.mjs?v=20261115-local';
+import {discoverRedrawReaderModel} from './revision-reader-model.mjs?v=20261115-auto';
+import {prepareLocalEdit,prepareLocalRedraw,localEditInstruction,localRedrawReadInstruction,localRedrawInstruction,compositeLocalEdit,createLocalSelector,comparisonView,requestLocalSynchronous,localFinalImageResponse} from './revision-local.mjs?v=20261115-local';
 
 // Separate image-edit request: chosen full bitmap first, optional screenshot references after it.
 // This module never calls or configures the editable reconstruction pipeline.
@@ -286,14 +287,15 @@ export async function generateRevision(parent,prompt,options){
     if(parent.localRedraw&&!native)throw Error('结构重绘目前支持无限星河 Gemini 图像模型。请先选择该模型；本次未发送请求。');
     if(parent.localRedraw&&!['1K','2K','4K'].includes(parent.route.resolution))throw Error('不支持的重绘分辨率，本次未发送请求。');
     const patch=parent.localRedraw?prepareLocalRedraw(original,regions,revisionGeminiRatios):prepareLocalEdit(original,regions,native);
-    const brief=parent.localRedraw?await readLocalRedrawBrief(parent,prompt,patch,options):null;
+    const reading=parent.localRedraw?await readLocalRedrawBrief(parent,prompt,patch,options):null;
+    const brief=reading?.brief||null;
     options.onProgress?.(brief?'内容已读取，正在按你的要求重新绘制结构；框外保留原像素。':'正在修改选区及周边局部，框外像素由程序保留。');
     const result=await generateRegionRevision({...parent,image:patch.target||patch.image,localPatch:patch,localRedrawBrief:brief,manualScope:false,route:{...parent.route,ratio:patch.ratio}},prompt,options);
     const edited=await options.loadImage(result.image);
     const [ratioW,ratioH]=patch.ratio.split(':').map(Number);
     const composite=await compositeLocalEdit(original,edited,regions,patch.crop,options.loadImage,brief?ratioW/ratioH:undefined);
     return {...result,...composite,route:{...parent.route},revisionMode:'local',revisionAudit:{...result.revisionAudit,
-      ...(brief?{apiRequestCount:2,contentReadRequestCount:1,imageRequestCount:1,redrawBrief:brief,contentReadModel:localRedrawReaderModel,generatedAspectRatio:patch.ratio}:{}),
+      ...(brief?{apiRequestCount:2,contentReadRequestCount:1,imageRequestCount:1,redrawBrief:brief,contentReadModel:reading.model,generatedAspectRatio:patch.ratio}:{}),
       regions,crop:patch.crop,cropRegions:patch.regions,changedInside:composite.changedInside,changedOutside:composite.changedOutside,editingPolicy:brief?'content-redraw':'selected-crop',outsidePreservation:'exact-pixels',
       pixelCheck:'changed',scopePlan:{...plan,confirmedAt:Date.now()},encodedPixelCheck:'passed',review:'pending'}};
   }
@@ -305,10 +307,12 @@ async function readLocalRedrawBrief(parent,prompt,patch,{key,onProgress}){
   if(typeof prompt!=='string'||!prompt.trim())throw Error('请填写本次修改要求。');
   const references=[patch.image,...(parent.attachments||[]).map(item=>item.data)];
   if(references.some(data=>typeof data!=='string'||!imageData.test(data)))throw Error('待读取选区或截图无效，本次未发送请求。');
-  const {base}=parent.route,model=localRedrawReaderModel;
+  const {base}=parent.route;
+  onProgress?.('正在查询当前服务商最新可用的 GPT 视觉模型。');
+  const model=await discoverRedrawReaderModel({base,key});
   // Private Step 3 vision request; no shared adapter or Step 4 changes.
   const body={model,messages:[{role:'user',content:[{type:'text',text:localRedrawReadInstruction(prompt)},...references.map(url=>({type:'image_url',image_url:{url,detail:'high'}}))]}]};
-  onProgress?.('正在读取选区文字和连接关系，随后按你的要求重新绘制（读取 1 次 + 生图 1 次）。');
+  onProgress?.('正在用 '+model+' 读取选区文字和连接关系，随后按你的要求重新绘制（读取 1 次 + 生图 1 次）。');
   try{
     const response=await requestLocalSynchronous({url:base.replace(/\/$/,'')+'/chat/completions',body,key});
     if(!response.ok){
@@ -318,7 +322,7 @@ async function readLocalRedrawBrief(parent,prompt,patch,{key,onProgress}){
     const data=JSON.parse(response.text),content=data.choices?.[0]?.message?.content;
     const brief=(typeof content==='string'?content:Array.isArray(content)?content.filter(part=>part.type==='text').map(part=>part.text).join('\n'):'').trim();
     if(!brief)throw Error('接口未返回选区内容说明，未发起重绘，未自动重试。');
-    return brief;
+    return {brief,model};
   }catch(error){
     error.message=String(error.message).replaceAll(key,'[redacted]').replace(/sk-[A-Za-z0-9_-]+/gi,'[redacted]');
     throw error;
@@ -620,7 +624,7 @@ export function createRevisionGallery(adapter){
       // Display guidance depends only on the selected version, not provider loading.
       panel.querySelector('[data-model]').textContent=editing.source==='svg'
         ?'请在步骤三选择「SVG 可编辑初稿」，并选择视觉模型。'
-        :editing.localRedrawDraft?'结构重绘：用一个框完整框住待重排的图。gpt-4.1 读取内容 1 次 + 当前模型生图 1 次；生图不附旧布局，框内样式可能变化。当前支持无限星河 Gemini。框外像素不变，前后对比确认后保存。':'局部修改：在原图上拖动框选，再输入要求。只修改框内，原尺寸和框外像素保持不变；前后对比确认后保存。可附最多 3 张参考截图。请选择「AI 位图初稿」图像模型。';
+        :editing.localRedrawDraft?'结构重绘：用一个框完整框住待重排的图。自动选择当前服务商最新可用的 GPT 视觉模型读取内容 1 次 + 当前模型生图 1 次；生图不附旧布局，框内样式可能变化。当前支持无限星河 Gemini。框外像素不变，前后对比确认后保存。':'局部修改：在原图上拖动框选，再输入要求。只修改框内，原尺寸和框外像素保持不变；前后对比确认后保存。可附最多 3 张参考截图。请选择「AI 位图初稿」图像模型。';
     }
     for(const v of versions){
       v.localSelector?.setEnabled(editing===v,!generating&&!reading&&!deleting);
