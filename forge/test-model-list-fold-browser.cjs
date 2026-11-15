@@ -13,10 +13,12 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
    const context=await browser.newContext({serviceWorkers:'block',locale}),page=await context.newPage();
    let offline=false,future=false,inference=0;const errors=[],publicHeaders=[];
    const chats=['5.3','5.4','5.5','5.6','6','6.1','6.2'].flatMap(v=>['sol','terra'].map(t=>`gpt-${v}-${t}`));
-   const images=['1','1.5','2','2.3','2.4','2.5','2.6'].map(v=>'gpt-image-'+v).concat(['gemini-3.1-flash-image','gemini-3.1-flash-lite-image']);
+   const images=['1','1.5','2','2.3','2.4','2.5','2.6'].map(v=>'gpt-image-'+v).concat(['gemini-3.1-flash-image','gemini-3.1-flash-lite-image','wan2.2-t2i-plus']);
    const catalogs=()=>({chat:[...chats.filter(id=>!future||!id.startsWith('gpt-5.4-')),...(future?['gpt-6.10-sol']:[])],image:[...images.filter(id=>!future||id!=='gpt-image-1.5'),...(future?['gpt-image-2.7']:[])]});
    const row=(id,kind)=>[id,'vendor','No','/','/','/','/','Yes','','2026-11-15',kind];
    await context.addInitScript(p=>{
+    if(localStorage.getItem('fold-fixture-'+p))return;
+    localStorage.setItem('fold-fixture-'+p,'1');
     localStorage.setItem('ff_parse_model_'+p,'gpt-5.3-sol');
     localStorage.setItem('ff_amodel_'+p,'gpt-5.3-terra');
     localStorage.setItem('ff_model_'+p,'gpt-image-1');
@@ -76,6 +78,18 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
    await page.locator('#modeTabs [data-mode="svg"]').click();await synced();
    assert.ok((await values('model')).includes('gpt-6.10-sol'));assert.ok(!(await values('model')).some(id=>id.startsWith('gpt-image')));
    await page.locator('#modeTabs [data-mode="image"]').click();await synced();
+   // This ID needs official metadata: the frozen heuristic calls it chat.
+   // A temporary loading fallback must not replace its saved image selection.
+   const imageToggle=page.locator('#modelShowAllModels');
+   if(await imageToggle.getAttribute('aria-expanded')!=='true')await imageToggle.click();
+   await page.locator('#model').selectOption('wan2.2-t2i-plus');
+   await page.locator('#refreshModels').click();await synced();
+   assert.equal(await page.locator('#model').inputValue(),'wan2.2-t2i-plus');
+   await page.reload();await synced();
+   await page.locator('#modeTabs [data-mode="image"]').click();await synced();
+   assert.equal(await page.locator('#model').inputValue(),'wan2.2-t2i-plus');
+   await page.waitForFunction(()=>document.querySelector('#reconModel option[value="gpt-6.2-sol"]'));
+   assert.deepEqual(await step4(),before);
    offline=true;await page.locator('#refreshModels').click();
    await page.waitForFunction(()=>/Official cache|官网缓存/.test(document.querySelector('#parserCatalogStatus').textContent+' '+document.querySelector('#parseModel optgroup')?.label));
    assert.ok((await values('parseModel')).includes('gpt-6.10-sol'));assert.ok((await values('model')).includes('gpt-image-2.7'));

@@ -29,7 +29,10 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
     const saved=readSaved(c.provider,analysis);
     const defaults=analysis?(c.vision||[]):c.mode==='svg'?[...(c.chat||[]),...(c.vision||[])]:c.image||[];
     const supported=['nonelinear','infistar'].includes(c.provider);
-    const preferred=[same?element.value:'',saved,...defaults];
+    // The loading fallback cannot classify some provider-specific image IDs.
+    // Restore the user's persisted choice as soon as official metadata arrives,
+    // rather than letting that temporary fallback replace it permanently.
+    const preferred=[saved,same?element.value:'',...defaults];
     // Preserve an old selection even when a live catalog is partial, but never
     // carry an image selection into SVG or a model from a different provider.
     const selected=preferred.find(id=>id&&(list.includes(id)||(supported&&filter([id],c,analysis).length)))||list[0]||'';
