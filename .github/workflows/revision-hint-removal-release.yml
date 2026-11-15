@@ -1,0 +1,55 @@
+name: Publish revision hint removal only
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Record original frozen check without changing its result
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Preserve the original check result
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: echo "Original frozen check = $ORIGINAL_OUTCOME; no baseline or checker is changed." >> "$GITHUB_STEP_SUMMARY"
+      - name: Download exact preceding published file manifest
+        uses: actions/download-artifact@v4
+        with:
+          name: isolated-step3-nonelinear-ordinary-proof
+          run-id: 43716834189
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/revision-hint-base
+      - name: Accept only the requested display deletion and verify every published blob
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-revision-hint-removal-release.mjs "$RUNNER_TEMP/revision-hint-base/isolated-step3-nonelinear-ordinary-proof.json" --prepare-pages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: revision-hint-removal-proof
+          path: /tmp/revision-hint-removal-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/revision-hint-removal-pages
+      - name: Publish only the verified display deletion
+        id: deployment
+        uses: actions/deploy-pages@v4

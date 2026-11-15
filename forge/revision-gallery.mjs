@@ -606,7 +606,8 @@ export function createRevisionGallery(adapter){
   function refresh(){
     if(!mounted)return;
     if(editing){
-      panel.querySelector('[data-step1-context]').textContent=editing.source!=='svg'?'以当前选中图片和最新要求为准；步骤一存档继续保留，不作为本次改图的布局约束。':copyStep1Context(editing.step1Context)?'已带入生成时的步骤一内容；后续版本继续继承。以当前选中图片为基础修改。':'此版本没有生成时的步骤一快照，按当前选中图片修改。';
+      panel.querySelector('[data-step1-context]').textContent=editing.source!=='svg'?'':copyStep1Context(editing.step1Context)?'已带入生成时的步骤一内容；后续版本继续继承。以当前选中图片为基础修改。':'此版本没有生成时的步骤一快照，按当前选中图片修改。';
+      panel.querySelector('[data-step1-context]').style.display=editing.source==='svg'?'block':'none';
       panel.querySelector('[data-manual-revision]').hidden=editing.source==='svg';
       panel.querySelector('[data-manual-revision]').disabled=generating||!!reading||deleting||!editing.regionsDraft?.length;
       panel.querySelector('[data-manual-revision]').textContent=editing.regionsDraft?.length?'生成局部修改 · '+editing.regionsDraft.length+' 个区域 · 框外不变':'先在原图框选，再生成局部修改';
