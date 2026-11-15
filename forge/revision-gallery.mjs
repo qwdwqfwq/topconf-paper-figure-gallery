@@ -3,6 +3,9 @@ import {usesInfistarGemini,geminiImageRequest,geminiImageResult,compatibleImageR
 import {imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261026-nonelinear-resolution';
 import {captureGenerationContext,copyStep1Context,revisionContextInstruction} from './revision-context.mjs';
 import {requestStep3ImageStream} from './step3-image-stream.mjs?v=20261115-endpoints';
+import {usesInfistarImageJob,requestInfistarImageJob,acknowledgeInfistarImageJob} from './step3-infistar-job.mjs?v=20261114-durable-jobs';
+import {imageResultItem} from './step3-image-protocol.mjs';
+import {prepareLocalEdit,prepareLocalRedraw,localEditInstruction,localRedrawReadInstruction,localRedrawInstruction,localRedrawReaderModel,compositeLocalEdit,createLocalSelector,comparisonView,requestLocalSynchronous,localFinalImageResponse} from './revision-local.mjs?v=20261115-local';
 
 // Separate image-edit request: chosen full bitmap first, optional screenshot references after it.
 // This module never calls or configures the editable reconstruction pipeline.
@@ -17,7 +20,8 @@ ${modeInstruction(mode)} 严禁改变画布或扩边。修改范围以原图上�
 USER REQUEST (verbatim):\n${prompt}`;
 }
 
-// Bitmap edits follow the latest request directly and save without a review gate.
+// Whole-image bitmap edits follow the latest request directly. Local edits use
+// a separate crop, exact-pixel compositing and an explicit comparison review.
 export function freeRevisionInstruction(parent,prompt,count){
   return `你正在执行图片编辑任务。根据下面用户的最新要求实际修改第一张图片，输出完成修改后的图片。
 第一张图片是当前选中的完整图片，是编辑对象。${count>1?'后续图片仅用于定位问题或说明用户意图，可能是局部截图或界面截图；不要把参考截图当作修改结果，也不要把界面、框选标记画进结果。':'没有额外参考截图。'}
@@ -271,32 +275,54 @@ export async function generateRevision(parent,prompt,options){
       options.onProgress?.('正在按你的要求生成修改图，完成后将自动保存新版本。');
       return generateRegionRevision(parent,prompt,options);
     }
-    // Only an explicit manual scope preserves outside pixels; no semantic planner.
+    // The selection is made directly on the source image before submitting.
+    // Crop and guide are revision-only inputs; the original bitmap is immutable.
     const source=await readRevisionSource(parent.image,options),original=await options.loadImage(source);
     const width=original.naturalWidth||original.width,height=original.naturalHeight||original.height;
     const plan={manual:true,mode:'local',summary:prompt,preserve:'框外内容',regions:validateRegions(parent.editRegions,width,height),width,height,apiRequestCount:0};
-    const confirmed=await selectRevisionRegions(source,plan.regions,plan);
-    if(!confirmed)throw new Error('已取消，本次未修改图片。修改要求和截图已保留。');
-    const regions=validateRegions(confirmed,width,height);
-    const result=await generateRegionRevision({...parent,freeRevisionRegions:regions},prompt,options);
-    const edited=await options.loadImage(result.image),ew=edited.naturalWidth||edited.width,eh=edited.naturalHeight||edited.height;
-    const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
-    const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.drawImage(original,0,0);
-    const before=ctx.getImageData(0,0,width,height).data;
-    for(const r of regions)ctx.drawImage(edited,r.x*ew/width,r.y*eh/height,r.width*ew/width,r.height*eh/height,r.x,r.y,r.width,r.height);
-    const after=ctx.getImageData(0,0,width,height).data;let changedInside=0,changedOutside=0;
-    for(let y=0;y<height;y++)for(let x=0;x<width;x++){
-      const offset=(y*width+x)*4;
-      if([0,1,2,3].some(c=>before[offset+c]!==after[offset+c])){
-        if(regions.some(r=>x>=r.x&&x<r.x+r.width&&y>=r.y&&y<r.y+r.height))changedInside++;else changedOutside++;
-      }
-    }
-    if(changedOutside)throw new Error('区域外像素校验失败，未保存新版本。');
-    const warnings=[...(result.revisionAudit?.warnings||[])];
-    if(!changedInside)throw new Error('修改未生效：框选区域没有像素变化，未保存新版本。已保留原图和输入，不会自动重复计费。');
-    return {...result,image:canvas.toDataURL('image/png'),width,height,revisionMode:'local',revisionAudit:{...result.revisionAudit,warnings,regions,changedInside,changedOutside,outsidePreservation:'exact-pixels',pixelCheck:changedInside?'changed':'unchanged',scopePlan:{...plan,regions,confirmedAt:Date.now(),adjusted:JSON.stringify(regions)!==JSON.stringify(plan.regions)}}};
+    const regions=plan.regions;
+    if((parent.attachments||[]).length>3)throw Error('局部修改最多添加 3 张参考截图（另附原图局部和选区示意），请移除多余截图。本次未发送请求。');
+    const native=usesInfistarGemini(parent.route.base,parent.route.model);
+    if(parent.localRedraw&&!native)throw Error('结构重绘目前支持无限星河 Gemini 图像模型。请先选择该模型；本次未发送请求。');
+    if(parent.localRedraw&&!['1K','2K','4K'].includes(parent.route.resolution))throw Error('不支持的重绘分辨率，本次未发送请求。');
+    const patch=parent.localRedraw?prepareLocalRedraw(original,regions,revisionGeminiRatios):prepareLocalEdit(original,regions,native);
+    const brief=parent.localRedraw?await readLocalRedrawBrief(parent,prompt,patch,options):null;
+    options.onProgress?.(brief?'内容已读取，正在按你的要求重新绘制结构；框外保留原像素。':'正在修改选区及周边局部，框外像素由程序保留。');
+    const result=await generateRegionRevision({...parent,image:patch.target||patch.image,localPatch:patch,localRedrawBrief:brief,manualScope:false,route:{...parent.route,ratio:patch.ratio}},prompt,options);
+    const edited=await options.loadImage(result.image);
+    const [ratioW,ratioH]=patch.ratio.split(':').map(Number);
+    const composite=await compositeLocalEdit(original,edited,regions,patch.crop,options.loadImage,brief?ratioW/ratioH:undefined);
+    return {...result,...composite,route:{...parent.route},revisionMode:'local',revisionAudit:{...result.revisionAudit,
+      ...(brief?{apiRequestCount:2,contentReadRequestCount:1,imageRequestCount:1,redrawBrief:brief,contentReadModel:localRedrawReaderModel,generatedAspectRatio:patch.ratio}:{}),
+      regions,crop:patch.crop,cropRegions:patch.regions,changedInside:composite.changedInside,changedOutside:composite.changedOutside,editingPolicy:brief?'content-redraw':'selected-crop',outsidePreservation:'exact-pixels',
+      pixelCheck:'changed',scopePlan:{...plan,confirmedAt:Date.now()},encodedPixelCheck:'passed',review:'pending'}};
   }
   return (parent.confirmScope||parent.revisionMode==='auto'?confirmedRevision:scopedRevision)(parent,prompt,options,generateRegionRevision);
+}
+
+async function readLocalRedrawBrief(parent,prompt,patch,{key,onProgress}){
+  if(!key)throw Error('请先填写该服务商的 API Key。');
+  if(typeof prompt!=='string'||!prompt.trim())throw Error('请填写本次修改要求。');
+  const references=[patch.image,...(parent.attachments||[]).map(item=>item.data)];
+  if(references.some(data=>typeof data!=='string'||!imageData.test(data)))throw Error('待读取选区或截图无效，本次未发送请求。');
+  const {base}=parent.route,model=localRedrawReaderModel;
+  // Private Step 3 vision request; no shared adapter or Step 4 changes.
+  const body={model,messages:[{role:'user',content:[{type:'text',text:localRedrawReadInstruction(prompt)},...references.map(url=>({type:'image_url',image_url:{url,detail:'high'}}))]}]};
+  onProgress?.('正在读取选区文字和连接关系，随后按你的要求重新绘制（读取 1 次 + 生图 1 次）。');
+  try{
+    const response=await requestLocalSynchronous({url:base.replace(/\/$/,'')+'/chat/completions',body,key});
+    if(!response.ok){
+      let detail;try{detail=JSON.parse(response.text)?.error?.message;}catch{}
+      throw Error('读取选区失败（HTTP '+response.status+'，模型 '+model+'）'+(typeof detail==='string'?'：'+detail.slice(0,300):'')+(response.requestId?'\n请求 ID：'+response.requestId:'')+'\n未发起重绘，未自动重试。');
+    }
+    const data=JSON.parse(response.text),content=data.choices?.[0]?.message?.content;
+    const brief=(typeof content==='string'?content:Array.isArray(content)?content.filter(part=>part.type==='text').map(part=>part.text).join('\n'):'').trim();
+    if(!brief)throw Error('接口未返回选区内容说明，未发起重绘，未自动重试。');
+    return brief;
+  }catch(error){
+    error.message=String(error.message).replaceAll(key,'[redacted]').replace(/sk-[A-Za-z0-9_-]+/gi,'[redacted]');
+    throw error;
+  }
 }
 
 async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onProgress}){
@@ -306,7 +332,7 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
   if(!key)throw new Error('请先填写该服务商的 API Key。');
   if(typeof prompt!=='string'||!prompt.trim())throw new Error('请填写本次修改要求。');
   const source=await readRevisionSource(parent.image,{toDataURL});
-  const references=[parent.diagramReflow&&parent.diagramContentReference||source,...(parent.attachments||[]).map(item=>item.data)];
+  const references=parent.localRedrawBrief?[]:[parent.diagramReflow&&parent.diagramContentReference||source,...(parent.localPatch?[parent.localPatch.guide]:[]),...(parent.attachments||[]).map(item=>item.data)];
   // The target draft must be the edit canvas; placing the original first encourages cloning it.
   if(references.length>(p==='nonelinear'?5:parent.focusedRegion?6:5)||references.some(data=>typeof data!=='string'||!imageData.test(data)))
     throw new Error('待修改原图或截图无效，请重新选择；本次未发送请求。');
@@ -314,7 +340,7 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
   if(native&&(!revisionGeminiRatios.includes(ratio)||!['1K','2K','4K'].includes(resolution)))throw new Error('不支持的修改图比例或分辨率。');
   const dimensions=native?{field:'gemini',aspectRatio:ratio,imageSize:resolution}:imageRequestDimensions(p,model,ratio,resolution,false);
   const semanticContext=parent.freeRevision?'':revisionContextInstruction(parent);
-  const instruction=(parent.freeRevision?freeRevisionInstruction(parent,parent.freeRevisionPrompt,references.length):parent.diagramReflow?`Redesign the INTERNAL layout of this selected diagram panel. Image 0 (FIRST) is the NEW TARGET LAYOUT canvas to finish. The content checklist specifies the exact visible text, colors and directed branch conditions. Follow Image 0 geometry and use the entire target canvas, including its lower portion. Finish the confirmed NEW arrangement of individual elements. Sizes, shapes, fonts, line breaks and branch orientation may change freely within the selected region while keeping all content readable. Reduce gaps only when requested; honor explicit directions and grouping. Copy all flow-node labels and branch conditions from the checklist exactly, retaining their logical relationships. The draft covers the entire selected region. Include every inventoried title, legend, equation, footer, icon and process node at its NEW location; there are no fixed original bands inside it. Do not introduce content absent from the inventory. Visual design may be optimized while preserving information carried by color coding. Output the redesigned panel only, with readable text. Do not reproduce the original arrangement. User request and content checklist:\n${prompt}`:revisionInstruction(prompt,references.length,parent.revisionMode,parent.focusedRegion))+'\n\n'+semanticContext;
+  const instruction=(parent.localRedrawBrief?localRedrawInstruction(prompt,parent.localRedrawBrief):parent.localPatch?localEditInstruction(prompt,parent.localPatch,references.length):parent.freeRevision?freeRevisionInstruction(parent,parent.freeRevisionPrompt,references.length):parent.diagramReflow?`Redesign the INTERNAL layout of this selected diagram panel. Image 0 (FIRST) is the NEW TARGET LAYOUT canvas to finish. The content checklist specifies the exact visible text, colors and directed branch conditions. Follow Image 0 geometry and use the entire target canvas, including its lower portion. Finish the confirmed NEW arrangement of individual elements. Sizes, shapes, fonts, line breaks and branch orientation may change freely within the selected region while keeping all content readable. Reduce gaps only when requested; honor explicit directions and grouping. Copy all flow-node labels and branch conditions from the checklist exactly, retaining their logical relationships. The draft covers the entire selected region. Include every inventoried title, legend, equation, footer, icon and process node at its NEW location; there are no fixed original bands inside it. Do not introduce content absent from the inventory. Visual design may be optimized while preserving information carried by color coding. Output the redesigned panel only, with readable text. Do not reproduce the original arrangement. User request and content checklist:\n${prompt}`:revisionInstruction(prompt,references.length,parent.revisionMode,parent.focusedRegion))+'\n\n'+semanticContext;
   const inputHashes=await Promise.all(references.map(fingerprint));
   const startedAt=Date.now(),clientRequestId=crypto.randomUUID();
   try{
@@ -335,9 +361,12 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
     // The current bitmap editor previously missed the Step 3 stream transport.
     // Reuse it only here: preserve the native body, references and one-call policy;
     // leave legacy staged edits, other providers and Step 4 unchanged.
-    const streamedRevision=native&&parent.freeRevision;
-    const response=staged?.response||await (streamedRevision?requestStep3ImageStream({url,body:request.body,key,usedReferences:true,onProgress:state=>{
-      onProgress?.(state.stage==='waiting_response'?'请求已发送，正在等待修改图响应。':state.stage==='response_received'?'修改图已接收，正在校验并保存。':`已收到接口响应，正在接收修改图（${Math.ceil((state.responseBytes||0)/1024)} KB）。`);
+    const streamedRevision=!!parent.freeRevision;
+    // This Infistar model/group rejects streamGenerateContent. Whole-image
+    // edits need the same ordinary generateContent endpoint as local edits.
+    const durableRevision=streamedRevision&&usesInfistarImageJob(url);
+    const response=staged?.response||await (streamedRevision?(durableRevision?requestInfistarImageJob:requestStep3ImageStream)({url,body:request.body,key,usedReferences:!!references.length,onProgress:state=>{
+      onProgress?.(state.stage==='waiting_response'?'请求已发送，正在等待修改图响应。':state.stage==='response_received'?(parent.localPatch?'修改图已接收，正在还原选区并校验框外像素。':'修改图已接收，正在校验并保存。'):`已收到接口响应，正在接收修改图（${Math.ceil((state.responseBytes||0)/1024)} KB）。`);
     }}):requestImageWithRecovery({url,body:request.body,key,usedReferences:true,allowReferenceFallback:false}));
     if(!response.ok){
       if(!streamedRevision)throw new Error('修改生图失败（HTTP '+response.status+'）。'+response.text.slice(0,400));
@@ -348,10 +377,14 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
     }
     const data=staged?.data||JSON.parse(response.text);
     if(data._revisionUpstreamStatus>=400)throw new Error('修改生图失败（HTTP '+data._revisionUpstreamStatus+'）。'+JSON.stringify(data.error||{}).slice(0,400));
-    const item=native?geminiImageResult(data,{locale:'zh',requestId:response.requestId}):(data?.data?.[0]||data?.images?.[0]);
+    const item=response.job?imageResultItem(data):native?geminiImageResult(parent.localPatch?localFinalImageResponse(data):data,{locale:'zh',requestId:response.requestId}):(data?.data?.[0]||data?.images?.[0]);
     const image=item?.b64_json?`data:${item.mimeType||'image/png'};base64,${item.b64_json}`:item?.url;
     if(!image)throw new Error('服务商未返回图片，未自动重试。');
     const output=await revisionOutput(image,p,toDataURL);
+    // A completed local-edit job has been retrieved even if its image is later
+    // rejected as an echo/guide. Preserve recovery, and release the pending slot
+    // so the user's next explicit edit can create a different request.
+    if(response.job&&parent.localPatch)await acknowledgeInfistarImageJob(key,response.job.id);
     const warnings=[],unchanged=await samePixels(source,output,loadImage);
     if(unchanged){
       throw new Error('修改未生效：API 返回的图片与原图像素相同，未保存新版本。已保留原图和输入，不会自动重复计费。');
@@ -367,9 +400,10 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
       if(!parent.freeRevision)throw new Error('修改图的比例或分辨率与所选版本不符，未替换任何已有结果。');
       warnings.push(`返回图片尺寸为 ${width} × ${height}，与请求的比例或分辨率不同。`);
     }
+    if(response.job&&!parent.localPatch)await acknowledgeInfistarImageJob(key,response.job.id);
     return {image:output,width,height,route:{...parent.route,ratio:outputRatio},revisionAudit:{clientRequestId,startedAt,completedAt:Date.now(),
       provider:p,model,requestedModel,inputAspectRatio:ratio,outputAspectRatio:outputRatio,apiRequestCount:staged?.stages.length||1,stages:staged?.stages,contentCheck:staged?'passed':undefined,endpoint:response.request?.endpoint||transport.endpoint,format:transport.format,referenceCount:references.length,
-      ...(streamedRevision?{streaming:response.streaming,streamEvents:response.events,transport:response.transport}:{}),
+      ...(streamedRevision?{streaming:response.streaming,streamEvents:response.events,transport:response.transport,compatibility:response.compatibility,job:response.job}:{}),
       referenceTransport:p==='nonelinear'?'https-upload':'inline',uploadedReferenceCount:p==='nonelinear'?apiReferences.length:0,
       inputHashes,promptHash:await fingerprint(prompt),instructionHash:await fingerprint(instruction),
       requestId:String(response.requestId||'').replaceAll(key,'[redacted]').slice(0,160),
@@ -401,7 +435,8 @@ function reviewRevision(parent,result,prompt,references,host){
       caption.textContent=label;img.src=src;img.alt=label;figure.append(caption,img);grid.append(figure);
     }
     const audit=document.createElement('p'),a=result.revisionAudit;
-    audit.textContent=a?`API 已响应：HTTP ${a.status} · 原图 1 张 + 截图 ${a.referenceCount-1} 张 · ${a.model}${a.requestId?' · 请求 ID：'+a.requestId:''}`:'请核对返回图片。';
+    audit.textContent=a?`API 已响应：HTTP ${a.status} · ${a.editingPolicy==='content-redraw'?'读取内容 1 次（'+a.contentReadModel+'）+ 文字生图 1 次（生图不附旧布局）':a.editingPolicy==='selected-crop'?'局部原图 + 选区示意 + 参考截图 '+references.length+' 张':'原图 1 张 + 截图 '+(a.referenceCount-1)+' 张'} · ${a.model}${a.requestId?' · 请求 ID：'+a.requestId:''}`:'请核对返回图片。';
+    if(a?.redrawBrief){const brief=document.createElement('pre');brief.textContent=a.redrawBrief;details.append('读取的内容与重绘说明：',brief);}
     const actions=document.createElement('div');actions.className='ff-revision-review-actions';
     const reject=document.createElement('button'),accept=document.createElement('button');
     reject.type=accept.type='button';reject.dataset.revisionReject='true';accept.dataset.revisionAccept='true';
@@ -409,7 +444,11 @@ function reviewRevision(parent,result,prompt,references,host){
     const finish=accepted=>{dialog.remove();resolve(accepted);};
     reject.onclick=()=>finish(false);accept.onclick=()=>finish(true);
     const output=grid.children[1];grid.removeChild(output);details.append(audit,grid);
-    actions.append(reject,accept);dialog.append(title,hint,output,actions,details);host.append(dialog);
+    actions.append(reject,accept);dialog.append(title,hint);
+    if(result.revisionAudit?.outsidePreservation==='exact-pixels')dialog.append(comparisonView(parent.image,result.image));
+    else dialog.append(output);
+    if(result.revisionAudit?.outsidePreservation==='exact-pixels')details.prepend(output);
+    dialog.append(actions,details);host.append(dialog);dialog.scrollIntoView({block:'start',behavior:'smooth'});
   });
 }
 
@@ -446,10 +485,16 @@ export function createRevisionGallery(adapter){
     list=document.createElement('div');panel=document.createElement('aside');panel.className='ff-revision-editor';
     panel.innerHTML='<h3>继续修改</h3><div data-base></div><small data-model style="display:block;margin-top:10px;overflow-wrap:anywhere"></small><textarea aria-label="你希望改哪里？" placeholder="输入修改要求，可粘贴或拖入截图"></textarea><input data-files type="file" accept="image/png,image/jpeg,image/webp" multiple hidden><button data-upload type="button">＋ 上传截图</button><div class="ff-revision-attachments"></div><button data-submit type="button">生成修改版</button><p class="ff-revision-error" role="alert"></p>';
     const contextHint=document.createElement('small');contextHint.dataset.step1Context='true';contextHint.style.cssText='display:block;margin-top:10px;line-height:1.6';panel.querySelector('[data-model]').after(contextHint);
-    const scopeButton=document.createElement('button');scopeButton.type='button';scopeButton.dataset.selectRegions='true';scopeButton.textContent='手动指定范围（可选）';
+    const scopeButton=document.createElement('button');scopeButton.type='button';scopeButton.dataset.selectRegions='true';scopeButton.textContent='放大原图框选';
     panel.querySelector('[data-submit]').before(scopeButton);
-    const manualButton=document.createElement('button');manualButton.type='button';manualButton.dataset.manualRevision='true';manualButton.textContent='按已框选范围局部修改';manualButton.onclick=()=>revise(true);scopeButton.after(manualButton);
-    scopeButton.onclick=async()=>{if(!editing||generating)return;const target=editing;try{const regions=await selectRevisionRegions(target.image,target.regionsDraft||[]);if(regions){target.regionsDraft=regions;if(editing===target){scopeButton.textContent='已框选 '+regions.length+' 个区域 · 重新框选';refresh();}}}catch(e){error.textContent=e.message;}};
+    const manualButton=document.createElement('button');manualButton.type='button';manualButton.dataset.manualRevision='true';manualButton.textContent='生成局部修改 · 框外不变';manualButton.onclick=()=>revise(true);scopeButton.after(manualButton);
+    const localModeLabel=document.createElement('label');localModeLabel.dataset.localModeLabel='true';localModeLabel.style.cssText='display:block;margin:12px 0;line-height:1.8';
+    localModeLabel.textContent='局部修改方式';
+    const localMode=document.createElement('select');localMode.dataset.localMode='true';localMode.setAttribute('aria-label','局部修改方式');localMode.style.cssText='display:block;width:100%;padding:9px;margin-top:6px;font:inherit';
+    localMode.innerHTML='<option value="edit">保留布局编辑（文字、颜色等）</option><option value="redraw">结构重绘（上下改左右等，单框）</option>';
+    localMode.onchange=()=>{if(editing){editing.localRedrawDraft=localMode.value==='redraw';refresh();}};
+    localModeLabel.append(localMode);manualButton.before(localModeLabel);
+    scopeButton.onclick=async()=>{if(!editing||generating)return;const target=editing;try{const regions=await selectRevisionRegions(target.image,target.regionsDraft||[]);if(regions){target.regionsDraft=regions;target.localSelector?.setRegions(regions);if(editing===target)refresh();}}catch(e){error.textContent=e.message;}};
     textarea=panel.querySelector('textarea');submit=panel.querySelector('[data-submit]');error=panel.querySelector('[role=alert]');
     attachments=panel.querySelector('.ff-revision-attachments');fileInput=panel.querySelector('[data-files]');
     panel.querySelector('[data-upload]').onclick=()=>fileInput.click();
@@ -511,7 +556,7 @@ export function createRevisionGallery(adapter){
     if(busy())return false;
     snapshot();active=v;adapter.activate(v);refresh();return true;
   }
-  function edit(v){editing=v;panel.querySelector('[data-select-regions]').textContent=v.regionsDraft?.length?'已框选 '+v.regionsDraft.length+' 个区域 · 重新框选':'手动指定范围（可选）';panel.querySelector('[data-base]').textContent='基于 V'+v.number+(v.parentId?' · 修改版':' · 原始图');textarea.value=v.draft||'';error.textContent='';renderAttachments();refresh();}
+  function edit(v){editing=v;panel.querySelector('[data-base]').textContent='基于 V'+v.number+(v.parentId?' · 修改版':' · 原始图');textarea.value=v.draft||'';error.textContent='';renderAttachments();refresh();}
   function append(v){
     mount();versions.push(v);nextNumber=Math.max(nextNumber,v.number+1);
     const card=document.createElement('article');card.className='ff-version';card.dataset.versionId=v.id;
@@ -524,6 +569,17 @@ export function createRevisionGallery(adapter){
     const modify=document.createElement('button');modify.type='button';modify.textContent='继续修改';modify.dataset.modify='true';modify.onclick=()=>{edit(v);panel.scrollIntoView({block:'nearest',behavior:'smooth'});textarea.focus();};
     const build=document.createElement('button');build.type='button';build.dataset.build='true';build.onclick=()=>{if(activate(v)){if(v.source==='svg'||v.state?.scene)adapter.showExport();else adapter.rebuild();}};
     const status=document.createElement('small');status.dataset.status='true';footer.append(download,modify,status,build);card.append(header,image,footer);list.append(card);v.card=card;
+    if(v.source!=='svg')v.localSelector=createLocalSelector(image,v.regionsDraft||[],regions=>{v.regionsDraft=regions;error.textContent='';refresh();},message=>{error.textContent=message;});
+    if(v.parentId){
+      const compare=document.createElement('button');compare.type='button';compare.dataset.compareVersion='true';compare.textContent='前后对比';
+      compare.onclick=()=>{
+        const parent=versions.find(item=>item.id===v.parentId);if(!parent){error.textContent='原版本已删除，无法进行前后对比。';return;}
+        const dialog=document.createElement('dialog');dialog.className='ff-revision-preview';dialog.style.width='1100px';
+        const close=document.createElement('button');close.type='button';close.textContent='关闭';close.onclick=()=>dialog.close();
+        const title=document.createElement('h3');title.textContent='V'+parent.number+' → V'+v.number+' · 前后对比';
+        dialog.append(close,title,comparisonView(parent.image,v.image));dialog.onclose=()=>dialog.remove();document.body.append(dialog);dialog.showModal();
+      };footer.insertBefore(compare,status);
+    }
     refresh();
   }
   async function removeVersion(v){
@@ -553,16 +609,24 @@ export function createRevisionGallery(adapter){
     if(!mounted)return;
     if(editing){
       panel.querySelector('[data-step1-context]').textContent=editing.source!=='svg'?'以当前选中图片和最新要求为准；步骤一存档继续保留，不作为本次改图的布局约束。':copyStep1Context(editing.step1Context)?'已带入生成时的步骤一内容；后续版本继续继承。以当前选中图片为基础修改。':'此版本没有生成时的步骤一快照，按当前选中图片修改。';
-      panel.querySelector('[data-manual-revision]').hidden=editing.source==='svg'||!editing.regionsDraft?.length;
-      panel.querySelector('[data-manual-revision]').disabled=generating||!!reading||deleting;
+      panel.querySelector('[data-manual-revision]').hidden=editing.source==='svg';
+      panel.querySelector('[data-manual-revision]').disabled=generating||!!reading||deleting||!editing.regionsDraft?.length;
+      panel.querySelector('[data-manual-revision]').textContent=editing.regionsDraft?.length?'生成局部修改 · '+editing.regionsDraft.length+' 个区域 · 框外不变':'先在原图框选，再生成局部修改';
+      panel.querySelector('[data-local-mode-label]').hidden=editing.source==='svg';
+      panel.querySelector('[data-local-mode]').value=editing.localRedrawDraft?'redraw':'edit';
+      panel.querySelector('[data-local-mode]').disabled=generating||!!reading||deleting;
       panel.querySelector('[data-select-regions]').hidden=editing.source==='svg';
       panel.querySelector('[data-select-regions]').disabled=generating||!!reading||deleting;
+      panel.querySelector('[data-select-regions]').textContent='放大原图框选'+(editing.regionsDraft?.length?' · 已选 '+editing.regionsDraft.length+' 个区域':'');
       // Display guidance depends only on the selected version, not provider loading.
       panel.querySelector('[data-model]').textContent=editing.source==='svg'
         ?'请在步骤三选择「SVG 可编辑初稿」，并选择视觉模型。'
-        :'步骤三自由改图 · 20261114-R2。请选择服务商、填写对应密钥，并选择「AI 位图初稿」的图像模型。按最新要求自由设计，完成后自动保存；手动指定范围为可选。';
+        :editing.localRedrawDraft?'结构重绘：用一个框完整框住待重排的图。gpt-4.1 读取内容 1 次 + 当前模型生图 1 次；生图不附旧布局，框内样式可能变化。当前支持无限星河 Gemini。框外像素不变，前后对比确认后保存。':'局部修改：在原图上拖动框选，再输入要求。只修改框内，原尺寸和框外像素保持不变；前后对比确认后保存。可附最多 3 张参考截图。请选择「AI 位图初稿」图像模型。';
     }
     for(const v of versions){
+      v.localSelector?.setEnabled(editing===v,!generating&&!reading&&!deleting);
+      v.card.querySelector('[data-modify]').disabled=generating||!!reading||deleting;
+      const compare=v.card.querySelector('[data-compare-version]');if(compare)compare.disabled=!versions.some(item=>item.id===v.parentId);
       v.card.querySelector('[data-delete]').disabled=busy()||generating||!!reading||deleting;
       const pending=job?.version===v||v.state?.reconPending;
       const ready=v.source==='svg'?!!v.svg:!!v.state?.scene&&!!v.state?.svg;
@@ -570,7 +634,9 @@ export function createRevisionGallery(adapter){
       v.card.querySelector('[data-status]').textContent=pending?'可编辑版生成中…':ready?'可编辑版已就绪':v.state?.reconFailed?'可编辑版生成失败':'';
       const b=v.card.querySelector('[data-build]');b.disabled=busy()||deleting;b.textContent=pending?'正在生成可编辑版…':ready?'查看可编辑版':v.state?.reconFailed?'重试生成可编辑版':'生成可编辑版';
     }
-    submit.disabled=generating||!!reading||deleting||!editing;submit.textContent=generating?'正在处理，请查看下方进度…':reading?'正在读取截图…':editing?.source==='svg'?'生成修改版':'按要求生成修改图';
+    submit.disabled=generating||!!reading||deleting||!editing;submit.textContent=generating?'正在处理，请查看下方进度…':reading?'正在读取截图…':editing?.source==='svg'?'生成修改版':'整图修改（可能改变框外）';
+    submit.style.cssText=editing?.source==='svg'?'':'margin-top:10px;background:#f3efff;color:#6944db';
+    textarea.disabled=generating;
   }
   async function revise(manualScope=false){
     if(generating||reading||deleting||!editing)return;
@@ -578,17 +644,19 @@ export function createRevisionGallery(adapter){
     generating=true;error.textContent='';refresh();
     let progress=panel.querySelector('[data-revision-progress]');
     if(!progress){progress=document.createElement('p');progress.dataset.revisionProgress='true';progress.setAttribute('role','status');error.before(progress);}
-    progress.textContent=manualScope?'请确认已框选的局部修改范围，尚未开始生图。':'正在按你的要求生成修改图，完成后将自动保存新版本。';
+    progress.textContent=manualScope?'正在准备已框选的局部，框外将保留原图像素。':'正在按你的要求生成修改图，完成后将自动保存新版本。';
     const onRevisionProgress=message=>{progress.textContent=message;};
     try{
       // Request-only attachments; never replace a version bitmap or reconstruction state.
       const references=(parent.attachmentsDraft||[]).map(item=>({...item}));
-      const result=await adapter.generate({...parent,step1Context:copyStep1Context(parent.step1Context),freeRevision:parent.source!=='svg',manualScope,onRevisionProgress,route:{...parent.route},attachments:references,revisionMode:manualScope?'local':parent.source==='svg'?(parent.revisionModeDraft||parent.revisionMode||'local'):'auto',confirmScope:parent.source!=='svg',retainElements:parent.source==='svg'?parent.retainElementsDraft!==false:undefined,editRegions:parent.regionsDraft?.map(r=>({...r}))},parent.source==='svg'?prompt+'\n\n'+revisionContextInstruction(parent):prompt);
+      const result=await adapter.generate({...parent,step1Context:copyStep1Context(parent.step1Context),freeRevision:parent.source!=='svg',manualScope,localRedraw:manualScope&&parent.localRedrawDraft===true,onRevisionProgress,route:{...parent.route},attachments:references,revisionMode:manualScope?'local':parent.source==='svg'?(parent.revisionModeDraft||parent.revisionMode||'local'):'auto',confirmScope:parent.source!=='svg',retainElements:parent.source==='svg'?parent.retainElementsDraft!==false:undefined,editRegions:parent.regionsDraft?.map(r=>({...r}))},parent.source==='svg'?prompt+'\n\n'+revisionContextInstruction(parent):prompt);
       error.textContent='';
-      if(parent.source==='svg'&&!await reviewRevision(parent,result,prompt,references,list)){
+      const needsReview=parent.source==='svg'||manualScope;
+      if(needsReview)progress.textContent='生成完成，请在前后对比中核对结果，确认后保存新版本。';
+      if(needsReview&&!await reviewRevision(parent,result,prompt,references,list)){
         edit(parent);error.textContent='本次结果未保存。修改要求和截图已保留；再次生成会发起新的 API 请求。';return;
       }
-      if(result.revisionAudit)result.revisionAudit={...result.revisionAudit,review:parent.source==='svg'?'user-confirmed':'automatic',reviewedAt:Date.now()};
+      if(result.revisionAudit)result.revisionAudit={...result.revisionAudit,review:needsReview?'user-confirmed':'automatic',reviewedAt:Date.now()};
       const v={...result,step1Context:copyStep1Context(parent.step1Context),id:crypto.randomUUID(),number:nextNumber,parentId:parent.id,prompt,route:{...(result.route||parent.route)},created:Date.now(),state:null};
       append(v);persist(v);edit(v);v.card.scrollIntoView({block:'nearest',behavior:'smooth'});
     }catch(e){
