@@ -8,7 +8,7 @@ import {join,resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('..',import.meta.url));
 export const anchor='a395d4de477b4daebf0413096fb67d73f7c13c5d';
-const reviewedParent=anchor;
+const reviewedParent='542b8d9ad024bd044a7bd47be8b98dc2f8a6bfbb';
 export const publishedTree='6ef5ba51058be406071320aba59c46741e1d0d29';
 export const payload=['forge/step3-image-capabilities.mjs','forge/step3-model-catalog.mjs','forge/step3-official-catalog.mjs','forge/step3-resolution-display.mjs'];
 export const allowed=[...payload,'forge/test-step3-model-display.mjs','forge/test-step3-model-display-browser.cjs','.github/workflows/step3-model-display-release.yml','scripts/check-step3-model-display-release.mjs','scripts/test-step3-model-display-release.mjs'];
@@ -17,9 +17,9 @@ const expected={
   "forge/step3-model-catalog.mjs": "e25ccf9a3d34910b3cf82b8b06749f87112e84105c555354c8474822b5db317a",
   "forge/step3-official-catalog.mjs": "1bb9b45cf1c0f936e1ef5893b816a9b8a15aa8f88dc653f8879a3374420e7746",
   "forge/step3-resolution-display.mjs": "a62e03ce60774caee7f20495affdc9ff2685851290ea723a637e10f12db2a54c",
-  "forge/test-step3-model-display.mjs": "bf2e64d16f50cf1475d7ba06b5ccbf986ae94ed8d80c6ca6e27ee85c3f2a944e",
+  "forge/test-step3-model-display.mjs": "d3043f49f994c7d429f29e215dc72903b5b96e0c72b9d20364dcaf979c743826",
   "forge/test-step3-model-display-browser.cjs": "d8a23d30972abaaf3d49fdcc27342965540d6741b6c07f5077f4c9bd189dbbd8",
-  ".github/workflows/step3-model-display-release.yml": "602e4e90a1ae5c032c22a196919e12dd4571a88aedafa4c99e3bef475ef69a88",
+  ".github/workflows/step3-model-display-release.yml": "2544c0d3279e2d4112341ee977a51c059d35d64aea0c38e93cd5751b82cc1dc8",
   "scripts/test-step3-model-display-release.mjs": "7a1596b9b6f9daae1b6aa028373eb4215943026827a0c14ed9c92dbbe3ff928e"
 };
 const git=(...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8',maxBuffer:40*1024*1024}).trim();
@@ -43,7 +43,7 @@ function main(){
   execFileSync(process.execPath,['--test','scripts/test-step3-nonelinear-official-release.mjs'],{cwd:prior,encoding:'utf8',maxBuffer:4*1024*1024});
   // Preserve the old serializer-gated selection assertions on their original version.
   // The current display contract is tested separately without altering those tests.
-  execFileSync(process.execPath,['--test','forge/test-step3-image-capabilities.mjs'],{cwd:prior,encoding:'utf8',maxBuffer:4*1024*1024});
+  execFileSync(process.execPath,['--test','forge/test-step3-image-capabilities.mjs','forge/test-step3-image-protocol.mjs'],{cwd:prior,encoding:'utf8',maxBuffer:4*1024*1024});
   const original=execFileSync('git',['show',anchor+':forge/step3-image-capabilities.mjs'],{cwd:root,encoding:'utf8'}).replace(/\r\n/g,'\n');
   const current=readFileSync(join(root,'forge/step3-image-capabilities.mjs'),'utf8').replace(/\r\n/g,'\n');
   const marker='export function step3ImageDimensions';

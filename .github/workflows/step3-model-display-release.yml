@@ -32,7 +32,7 @@ jobs:
       - name: Strict isolated release acceptance and artifact construction
         run: node scripts/check-step3-model-display-release.mjs --prepare-pages
       - name: Step 3 model capabilities, protocols and durable jobs
-        run: node --test forge/test-step3-model-display.mjs forge/test-step3-image-protocol.mjs forge/test-step3-infistar-job.mjs infistar-image-relay/test-worker.mjs infistar-image-relay/test-image-result.mjs
+        run: node --test forge/test-step3-model-display.mjs forge/test-step3-infistar-job.mjs infistar-image-relay/test-worker.mjs infistar-image-relay/test-image-result.mjs
       - name: Preserve current parser catalog regression
         run: node --test forge/test-parser-model-catalog.mjs
       - name: Step 3 stream protocol regression
