@@ -6,6 +6,10 @@ const memory=new Map();
 export function requiresOrdinaryStep3Image(url){
   const u=new URL(url);
   if(u.username||u.password)return false;
+  // Infistar Nano Banana 2.1 requires the ordinary Gemini native endpoint.
+  // This positive policy overrides stale streaming capability records in both
+  // the browser and durable Worker. Keep other Gemini models negotiating.
+  if(u.protocol==='https:'&&!u.port&&['infistar.cc','www.infistar.cc','infistar.ai','www.infistar.ai'].includes(u.hostname)&&/^\/v1beta\/models\/gemini-nano-banana-2\.1:(?:streamGenerateContent|generateContent)$/.test(u.pathname))return true;
   if(u.protocol==='https:'&&!u.port&&['api.nonelinear.com.cn','gallery-nonelinear-relay.lixiao-gallery.workers.dev','gallery-revision-images.lixiao-gallery.workers.dev'].includes(u.hostname))
     return /^\/v1\/images\/(?:generations|edits)$/.test(u.pathname);
   return u.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(u.hostname)&&/^\/api\/nonelinear\/v1\/images\/(?:generations|edits)$/.test(u.pathname);

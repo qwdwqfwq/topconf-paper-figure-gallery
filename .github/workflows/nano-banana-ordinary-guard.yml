@@ -1,0 +1,18 @@
+name: Nano Banana ordinary endpoint regression
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  nano-banana-ordinary:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Browser and durable Worker must both start ordinary exactly once
+        run: node --test forge/test-step3-nano-banana-ordinary.mjs forge/test-step3-image-stream.mjs forge/test-step3-stream-compat.mjs forge/test-step3-nonelinear-ordinary.mjs infistar-image-relay/test-worker.mjs

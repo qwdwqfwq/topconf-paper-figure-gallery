@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {requestStep3ImageOnce as requestStep3ImageStream,step3StreamingRequest} from './step3-image-stream.mjs';
 import {geminiImageRequest,geminiImageResult,compatibleImageRequest} from './image-api.mjs';
+import './test-step3-nano-banana-ordinary.mjs';
 
 const body={model:'gpt-image-2',prompt:'private paper 图形',size:'2752x1536',quality:'high',image:['data:image/png;base64,AA==']};
 const complete={type:'image_generation.completed',b64_json:'ZmluYWw=',output_format:'jpeg'};
@@ -50,13 +51,13 @@ test('NoneLinear upstream and relays omit stream, preserve 4K and three referenc
   assert.equal(result.body.get('image[]').name,'reference.png');
 });
 
-test('every Infistar Banana first probes streaming with 4K and three references',()=>{
+test('Infistar Nano Banana 2.1 uses ordinary Gemini with 4K and three references',()=>{
   for(const host of ['infistar.cc','www.infistar.cc','infistar.ai','www.infistar.ai']){
     const original=geminiImageRequest('https://'+host+'/v1','gemini-nano-banana-2.1',body.prompt,['data:image/png;base64,AA==','data:image/png;base64,AQ==','data:image/png;base64,Ag=='],{aspectRatio:'16:9',imageSize:'4K'});
     for(const endpoint of [original.base+original.endpoint,original.base+original.endpoint.replace(':generateContent',':streamGenerateContent')+'?alt=sse']){
       const result=step3StreamingRequest(endpoint,original.body);
-      assert.equal(result.url,'https://'+host+'/v1beta/models/gemini-nano-banana-2.1:streamGenerateContent?alt=sse');
-      assert.strictEqual(result.body,original.body);assert.equal(result.nativeGemini,true);
+      assert.equal(result.url,'https://'+host+'/v1beta/models/gemini-nano-banana-2.1:generateContent');
+      assert.deepEqual(result.body,original.body);assert.equal(result.nativeGemini,true);
       assert.equal(result.body.contents[0].parts.length,4);
       assert.deepEqual(result.body.generationConfig.imageConfig,{aspectRatio:'16:9',imageSize:'4K'});
     }

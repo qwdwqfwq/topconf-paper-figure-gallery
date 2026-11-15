@@ -1,0 +1,56 @@
+name: Publish Nano Banana ordinary endpoint only
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Record original frozen check without changing its result
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Preserve original check result
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: echo "Original frozen check = $ORIGINAL_OUTCOME; no existing baseline or checker changed." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/download-artifact@v4
+        with:
+          name: redraw-reader-proof
+          run-id: 43719621140
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/nano-banana-ordinary-base
+      - name: Verify ordinary transport, existing parameters and Worker job behavior
+        run: node --test forge/test-step3-nano-banana-ordinary.mjs forge/test-step3-stream-compat.mjs forge/test-step3-image-stream.mjs forge/test-step3-nonelinear-ordinary.mjs forge/test-step3-image-protocol.mjs infistar-image-relay/test-worker.mjs infistar-image-relay/test-image-result.mjs
+      - name: Verify exact ordinary endpoint patch and all published bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-nano-banana-ordinary-release.mjs "$RUNNER_TEMP/nano-banana-ordinary-base/redraw-reader-proof.json" --prepare-pages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nano-banana-ordinary-proof
+          path: /tmp/nano-banana-ordinary-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/nano-banana-ordinary-pages
+      - name: Publish verified ordinary endpoint policy only
+        id: deployment
+        uses: actions/deploy-pages@v4

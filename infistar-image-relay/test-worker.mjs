@@ -26,22 +26,21 @@ function fixture(){
  return {storage,map,ctx,env,req,job:new ImageJob(ctx,env)};
 }
 
-test('Infistar Banana explicitly rejects streaming then ordinary succeeds once, retaining 4K and three references',async()=>{
+test('Infistar Nano Banana 2.1 starts ordinary once, retaining 4K and three references',async()=>{
  const f=fixture(),old=globalThis.fetch;let posts=0;
  const body={contents:[{role:'user',parts:[{text:'fixture'},...Array.from({length:3},()=>({inlineData:{mimeType:'image/png',data:'aGVsbG8='}}))]}],generationConfig:{responseModalities:['TEXT','IMAGE'],imageConfig:{aspectRatio:'16:9',imageSize:'4K'}}};
  const submission={url:'https://infistar.cc/v1beta/models/gemini-nano-banana-2.1:generateContent',body,usedReferences:true};
  globalThis.fetch=async(url,init)=>{
   posts++;assert.deepEqual(JSON.parse(init.body),body);
-  if(posts===1){assert.equal(url,submission.url.replace(':generateContent',':streamGenerateContent')+'?alt=sse');return Response.json({error:{message:'不支持 streamGenerateContent'}},{status:422});}
   assert.equal(url,submission.url);
   return Response.json({candidates:[{content:{parts:[{inlineData:{mimeType:'image/png',data:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII='}}]},finishReason:'STOP'}]});
  };
  try{
   assert.equal((await f.job.fetch(f.req('PUT','test-key',submission))).status,202);
   await f.job.alarm();await f.job.alarm();await f.job.fetch(f.req('PUT','test-key',submission));
-  assert.equal(posts,2);assert.equal(f.env.BROWSER.posts,0);assert.equal((await f.storage.get('meta')).state,'succeeded');
+  assert.equal(posts,1);assert.equal(f.env.BROWSER.posts,0);assert.equal((await f.storage.get('meta')).upstreamAttempts,1);assert.equal((await f.storage.get('meta')).state,'succeeded');
   assert.equal((await f.job.fetch(f.req('GET','test-key',submission,'/result'))).status,200);
-  const next=fixture();next.env.IMAGE_JOBS=f.env.IMAGE_JOBS;await next.job.fetch(next.req('PUT','test-key',submission));await next.job.alarm();assert.equal(posts,3);assert.equal((await next.storage.get('meta')).upstreamAttempts,1);assert.equal((await next.storage.get('meta')).state,'succeeded');
+  const next=fixture();next.env.IMAGE_JOBS=f.env.IMAGE_JOBS;await next.job.fetch(next.req('PUT','test-key',submission));await next.job.alarm();assert.equal(posts,2);assert.equal((await next.storage.get('meta')).upstreamAttempts,1);assert.equal((await next.storage.get('meta')).state,'succeeded');
  }finally{globalThis.fetch=old;}
 });
 
