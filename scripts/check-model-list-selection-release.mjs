@@ -8,14 +8,15 @@ import {join,resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('..',import.meta.url));
 export const anchor='c38b854cc68f49e0a7728e5578463b12fa727910';
-const reviewedParent='c38b854cc68f49e0a7728e5578463b12fa727910';
+const reviewedParent='6d85ba78ea4c9b0516d1c0dd51f056e689a5cc41';
 export const publishedTree='31891a579f828498585b7d33dde5129dab041539';
 export const payload=['forge/step3-model-catalog.mjs'];
-export const allowed=[...payload,'forge/test-model-list-fold-browser.cjs','.github/workflows/model-list-selection-release.yml','scripts/check-model-list-selection-release.mjs'];
+export const allowed=[...payload,'forge/test-model-list-fold-browser.cjs','.github/workflows/model-list-selection-release.yml','scripts/check-model-list-selection-release.mjs','scripts/test-model-list-selection-release.mjs'];
 const expected={
   "forge/step3-model-catalog.mjs": "f2295083745e33390dbc158c7f120855d839cb8022d7b61e7521ebffd76b5c05",
   "forge/test-model-list-fold-browser.cjs": "6110909faa81774aaa66a6dba2066ba5e5fe173c0ca2095cd4402c222dbcf554",
-  ".github/workflows/model-list-selection-release.yml": "6234984f3feb2a28b71b49673d5c7d2db07ee0a3d533c918e4322d158b4a2bb1"
+  ".github/workflows/model-list-selection-release.yml": "d8c2d8fc25e56129f4454ed37b6dc76ba7ab6e8d3f92907e79e0e85e70b4d971",
+  "scripts/test-model-list-selection-release.mjs": "2de4bd3f5653467afbf1d0e15d198b5d8066986f59e8575380354c2624acbdfc"
 };
 const git=(...args)=>execFileSync('git',args,{cwd:root,encoding:'utf8',maxBuffer:40*1024*1024}).trim();
 const changed=(a,b)=>git('diff','--name-only','--no-renames',a,b,'--').split('\n').filter(Boolean).sort();
