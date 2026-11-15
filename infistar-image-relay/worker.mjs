@@ -92,12 +92,7 @@ export class ImageJob {
     if(meta.state==='expired')return json(publicMeta(meta),410);
     if(url.pathname.endsWith('/result')){
       if(meta.state!=='succeeded'&&meta.state!=='rejected')return json(publicMeta(meta),409);
-      let result=JSON.parse(await getText(this.storage,'result:',meta.resultCount));
-      // Retrying this GET may retry an image URL download, never generation.
-      if(result.downloadError){
-        result=await preserveImageResult(result);
-        if(!result.downloadError)await this.storage.transaction(async storage=>{const resultCount=await putText(storage,'result:',JSON.stringify(result));for(let i=resultCount;i<meta.resultCount;i++)await storage.delete('result:'+i);await storage.put('meta',{...meta,resultCount,error:result.resultError||null,state:result.ok?'succeeded':'rejected'});});
-      }
+      const result=JSON.parse(await getText(this.storage,'result:',meta.resultCount));
       return json(result);
     }
     return json(publicMeta(meta));
@@ -112,11 +107,7 @@ export class ImageJob {
   async alarm(){
     let meta=await this.storage.get('meta');if(!meta)return;
     if(Date.now()>=meta.expires){await this.expire(meta);return;}
-    if(meta.state==='response_received'){
-      await this.finish(meta,JSON.parse(await getText(this.storage,'result:',meta.resultCount)));
-      await this.storage.setAlarm(meta.expires);return;
-    }
-    if(meta.state==='running'){
+    if(meta.state==='running'||meta.state==='response_received'){
       // At-least-once alarm delivery or a restart after claim. The upstream may
       // have charged; there is no documented upstream image-result lookup API.
       const {encrypted,inputCount,...interrupted}=meta;
@@ -132,11 +123,10 @@ export class ImageJob {
       target=backgroundTarget(input.url);
       if(usesBrowserImageTransport(target))browser=await openBrowserImageFetch(this.env.BROWSER,target,{timeoutMs:EXECUTION});
     }catch{
-      // No generation was submitted. Capacity/navigation failures can safely
-      // wait in the same queue with the same UUID and encrypted input.
-      meta={...meta,preparationFailures:(meta.preparationFailures||0)+1};
-      await this.storage.put('meta',meta);
-      await this.storage.setAlarm(Math.min(meta.expires,Date.now()+Math.min(300000,30000*meta.preparationFailures)));
+      const {encrypted,inputCount,...failed}=meta;
+      await this.storage.put('meta',{...failed,state:'unknown',error:'IMAGE_PREPARATION_FAILED'});
+      await clearText(this.storage,'input:',inputCount||0);
+      await this.storage.setAlarm(meta.expires);
       return;
     }
     meta={...meta,state:'running',upstreamAttempts:1};
@@ -169,15 +159,15 @@ export class ImageJob {
       });
       await this.finish(meta,JSON.parse(safe));
     }catch(error){
-      if(meta.state==='response_received'){await this.storage.setAlarm(Date.now()+30000);return;}
       const {encrypted,inputCount,...finished}=meta;
       await this.storage.put('meta',{...finished,state:'unknown',requestId:error.imageDiagnostics?.requestId||'',error:'UPSTREAM_RESULT_UNCONFIRMED_NO_RESUBMIT'});
-      await clearText(this.storage,'input:',inputCount);
+      await clearText(this.storage,'input:',inputCount||0);
     }finally{await browser?.close();}
     await this.storage.setAlarm(meta.expires);
   }
   async finish(meta,raw){
-    const result=await preserveImageResult(raw);
+    const preserved=await preserveImageResult(raw);
+    const result=preserved.downloadError?{...preserved,ok:false,resultError:preserved.downloadError}:preserved;
     // A gateway 5xx does not prove that generation was never accepted. Keep the
     // task unresolved and block automatic replacement instead of calling it a
     // definite rejection. Its received response remains stored for diagnosis.

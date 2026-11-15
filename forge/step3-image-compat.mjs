@@ -1,7 +1,15 @@
 // Private Step 3 negotiation. A rejected capability probe is the ONLY replay gate.
-import {imageResultItem} from './step3-image-protocol.mjs';
 const PREFIX='figureforge:step3-image-compat:v1:';
 const memory=new Map();
+// Positive endpoint policy, private to Step 3. Unknown gateways/models still
+// negotiate streaming. Never apply the exception to lookalike hosts or chat.
+export function requiresOrdinaryStep3Image(url){
+  const u=new URL(url);
+  if(u.username||u.password)return false;
+  if(u.protocol==='https:'&&!u.port&&['api.nonelinear.com.cn','gallery-nonelinear-relay.lixiao-gallery.workers.dev','gallery-revision-images.lixiao-gallery.workers.dev'].includes(u.hostname))
+    return /^\/v1\/images\/(?:generations|edits)$/.test(u.pathname);
+  return u.protocol==='http:'&&['localhost','127.0.0.1','[::1]'].includes(u.hostname)&&/^\/api\/nonelinear\/v1\/images\/(?:generations|edits)$/.test(u.pathname);
+}
 async function digest(text){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))].map(x=>x.toString(16).padStart(2,'0')).join('');}
 export async function imageCompatibilityIdentity(url,body,key){
   const u=new URL(url),native=/\/models\/([^/]+):(?:streamGenerateContent|generateContent)$/.exec(u.pathname);
@@ -21,35 +29,26 @@ export function explicitlyRejectsImageStreaming(result){
 }
 function browserStore(){try{return globalThis.localStorage;}catch{return null;}}
 export const defaultImageCompatibilityStore={
-  async get(id){const value=memory.get(id)||JSON.parse(browserStore()?.getItem(PREFIX+id)||'null');return value?.version===1?value:null;},
-  async set(id,value){const record={...value,version:1};memory.set(id,record);const storage=browserStore();if(typeof window!=='undefined'&&!storage)throw Error('无法保存生图任务状态，尚未发送请求。请允许本地存储后重试。');storage?.setItem(PREFIX+id,JSON.stringify(record));},
+  async get(id){let value=memory.get(id);try{value||=JSON.parse(browserStore()?.getItem(PREFIX+id)||'null');}catch{}return value?.version===1?value:null;},
+  async set(id,value){const record={mode:value.mode,version:1};memory.set(id,record);try{browserStore()?.setItem(PREFIX+id,JSON.stringify(record));}catch{}},
 };
 export async function negotiateStep3Image(options,requestOnce){
   const {compatibilityStore=defaultImageCompatibilityStore,beforeAttempt=async()=>{}}=options;
   const identity=await imageCompatibilityIdentity(options.url,options.body,options.key);
   const cached=await compatibilityStore.get(identity);
-  if(cached?.uncertain)throw Object.assign(Error('上次生图结果未确认，已阻止重复提交。请先取回原任务，或凭请求编号向服务商核查。'),{code:'IMAGE_RESULT_UNCONFIRMED',requestId:cached.requestId});
-  let mode=cached?.mode==='ordinary'?'ordinary':'stream',attempts=0;
+  let mode=requiresOrdinaryStep3Image(options.url)||cached?.mode==='ordinary'?'ordinary':'stream',attempts=0;
   const run=async()=>{
     await beforeAttempt({mode,attempt:++attempts});
-    // Persist uncertainty BEFORE sending. Refresh/crash cannot silently replay.
-    await compatibilityStore.set(identity,{mode,uncertain:true,requestId:''});
     return requestOnce({...options,stream:mode==='stream'});
   };
-  try{
-    let result=await run();let rejection;
-    if(mode==='stream'&&explicitlyRejectsImageStreaming(result)){
-      rejection={status:result.status,requestId:result.requestId};mode='ordinary';
-      await compatibilityStore.set(identity,{mode,uncertain:false});
-      result=await run();
-    }
-    // HTTP 5xx may conceal accepted work. Do not let the next click replay it.
-    let image=false;try{image=!!imageResultItem(JSON.parse(result.text));}catch{}
-    const uncertain=result.ok?!image:result.status>=500||result.status===408;
-    await compatibilityStore.set(identity,{mode,uncertain,requestId:result.requestId||''});
-    return {...result,compatibility:{mode,cached:!!cached,attempts,...(rejection?{streamRejection:rejection}:{})}};
-  }catch(error){
-    await compatibilityStore.set(identity,{mode,uncertain:true,requestId:error.imageDiagnostics?.requestId||''});
-    throw error;
+  let result=await run();let rejection;
+  if(mode==='stream'&&explicitlyRejectsImageStreaming(result)){
+    rejection={status:result.status,requestId:result.requestId};mode='ordinary';
+    await compatibilityStore.set(identity,{mode});
+    result=await run();
   }
+  // Remember interface compatibility only. Failures never trigger a replay,
+  // recovery lookup, or a persistent lock on a later explicit user request.
+  if(result.ok)await compatibilityStore.set(identity,{mode});
+  return {...result,compatibility:{mode,cached:!!cached,attempts,...(rejection?{streamRejection:rejection}:{})}};
 }

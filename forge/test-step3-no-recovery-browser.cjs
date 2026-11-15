@@ -5,7 +5,7 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
 (async()=>{
  const {createGalleryServer}=await import(pathToFileURL(path.resolve(__dirname,'../scripts/serve-nonelinear.mjs')).href);
  const server=createGalleryServer();await new Promise(r=>server.listen(0,'127.0.0.1',r));
- const origin=`http://127.0.0.1:${server.address().port}`;let browser,puts=0,posts=0,gets=0,image;const ids=new Set();
+ const origin=`http://127.0.0.1:${server.address().port}`;let browser,puts=0,posts=0,gets=0,image;const ids=new Set();let failure='';const transportCalls=[];
  try{
   browser=await chromium.launch({headless:true,...(process.env.REVISION_BUNDLED_BROWSER==='1'?{}:{executablePath:process.env.CHROME_PATH||'C:/Program Files/Google/Chrome/Application/chrome.exe'})});
   const page=await browser.newPage({serviceWorkers:'block'});
@@ -13,6 +13,9 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
    const req=route.request(),url=new URL(req.url());
    if(url.hostname==='gallery-infistar-image-jobs.lixiao-gallery.workers.dev'){
     const id=url.pathname.split('/')[2];
+    transportCalls.push(req.method()+' '+(url.pathname.endsWith('/result')?'result':'job'));
+    if((failure==='put'&&req.method()==='PUT')||(failure==='result'&&url.pathname.endsWith('/result'))||(failure==='poll'&&req.method()==='GET'))return route.abort();
+    if(failure==='poll'&&req.method()==='PUT')return route.fulfill({json:{id,state:'running'}});
     if(req.method()==='PUT'){ids.add(id);puts++;assert.equal(req.headers().authorization,'Bearer offline-recovery-key');return route.fulfill({json:{id,state:'succeeded'}});}
     gets++;
     return route.fulfill({json:url.pathname.endsWith('/result')?{ok:true,status:200,text:JSON.stringify({data:[{b64_json:image,mimeType:'image/png'}]}),usedReferences:false,requestId:'offline-request'}:{id,state:'succeeded'}});
@@ -50,6 +53,14 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
   assert.equal(await page.evaluate(()=>window.__recoveryTest()),'EDITOR_BOUNDARY_SENTINEL');
   assert.equal(puts,3);assert.equal(posts,0);assert.equal(ids.size,3);assert.equal(gets,3);
   assert.equal(await page.evaluate(()=>Object.keys(localStorage).filter(k=>k.startsWith('figureforge:infistar-image-job:v1:')).length),2);
-  console.log('PASS browser: stale records ignored; changed input and refresh generate successfully; recovery panel removed; Step 4 not executed');
+  for(const phase of ['put','poll','result']){
+   failure=phase;transportCalls.length=0;
+   assert.match(await page.evaluate(()=>window.__recoveryTest()),/连接中断或超时/);
+   assert.deepEqual(transportCalls,phase==='put'?['PUT job']:phase==='poll'?['PUT job','GET job']:['PUT job','GET result']);
+   await page.waitForTimeout(200);
+   assert.equal(transportCalls.length,phase==='put'?1:2);
+  }
+  failure='';assert.equal(await page.evaluate(()=>window.__recoveryTest()),'EDITOR_BOUNDARY_SENTINEL');
+  console.log('PASS browser: stale records ignored; changed input and refresh generate successfully; recovery panel removed; disconnect in submission, status or result stops immediately; explicit next request succeeds; Step 4 not executed');
  }finally{if(browser)await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

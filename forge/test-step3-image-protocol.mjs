@@ -11,7 +11,7 @@ test('provider wire formats preserve references and only supported streaming fla
   const body=unpackImageBody(await packImageBody(request.body));let wire;
   await requestStep3ImageStream({url:base+request.endpoint,body,key:'fixture',usedReferences:true,fetchImpl:protocolFetch(async(url,init)=>{wire={url,...init};return new Response('{"data":[{"b64_json":"fixture"}]}',{headers:{'content-type':'application/json'}});})});
   if(p==='oai'){assert.ok(wire.body instanceof FormData);assert.match(wire.url,/images\/edits$/);assert.equal(wire.body.getAll('image[]').length,1);assert.equal(await wire.body.get('image[]').text(),'\x89PNG\r\n\x1a\n'.replace('\x89','�'));}
-  else {const json=JSON.parse(wire.body);assert.deepEqual(json.image,[ref]);assert.match(wire.url,/images\/generations$/);assert.equal(json.stream,true);}
+  else {const json=JSON.parse(wire.body);assert.deepEqual(json.image,[ref]);assert.match(wire.url,/images\/generations$/);assert.equal(Object.hasOwn(json,'stream'),p!=='nonelinear');}
  }
 });
 test('Gemini native and compatibility formats, no generic stream flag, Imagen n=1',async()=>{

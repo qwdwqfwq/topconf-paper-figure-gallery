@@ -17,8 +17,8 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||'C:/Users/黎枭/.cach
   assert.deepEqual(await page.evaluate(async()=>{const calls=[];const result=await requestImage({...options,fetchImpl:async(url,init)=>{calls.push(JSON.parse(init.body).stream??false);return new Response(JSON.stringify({data:[{b64_json:'fixture'}]}));}});return {calls,cached:result.compatibility.cached};}),{calls:[false],cached:true});
   assert.deepEqual(await page.evaluate(async()=>{const calls=[];await requestImage({...options,body:{...options.body,model:'unseen-next-model'},fetchImpl:async(url,init)=>{calls.push(JSON.parse(init.body).stream);throw Error('disconnect after submission');}}).catch(()=>{});return calls;}),[true]);
   await prepare();
-  assert.deepEqual(await page.evaluate(async()=>{let calls=0;try{await requestImage({...options,body:{...options.body,model:'unseen-next-model'},fetchImpl:async()=>{calls++;throw Error('must never send');}});}catch(e){return {calls,code:e.code};}}),{calls:0,code:'IMAGE_RESULT_UNCONFIRMED'});
+  assert.deepEqual(await page.evaluate(async()=>{const calls=[];const result=await requestImage({...options,body:{...options.body,model:'unseen-next-model'},fetchImpl:async(u,i)=>{calls.push(Object.hasOwn(JSON.parse(i.body),'stream'));return Response.json({data:[{b64_json:'fixture'}]});}});return {calls,ok:result.ok};}),{calls:[true],ok:true});
   assert.equal(await page.evaluate(()=>Object.values(localStorage).some(v=>v.includes('offline-browser-key'))),false);
-  console.log('PASS browser: first stream, explicit rejection fallback, persistent compatibility after reload, future-model stream first, disconnect replay blocked after reload; credential absent from stored values');
+  console.log('PASS browser: first stream, explicit rejection fallback, persistent compatibility after reload, future-model stream first, disconnect fails once; explicit request after reload succeeds; credential absent from stored values');
  }finally{if(browser)await browser.close();server.closeAllConnections();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

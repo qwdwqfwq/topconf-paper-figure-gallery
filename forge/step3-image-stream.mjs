@@ -1,8 +1,9 @@
 // Step 3 only. Do not use this transport in the frozen Step 4 reconstruction.
 import {imageRequestDiagnostics} from './image-api.mjs';
-import {negotiateStep3Image} from './step3-image-compat.mjs';
+import {negotiateStep3Image,requiresOrdinaryStep3Image} from './step3-image-compat.mjs';
 
 export function step3StreamingRequest(url,body){
+  if(requiresOrdinaryStep3Image(url))return step3OrdinaryRequest(url,body);
   const target=new URL(url);
   if(/:(?:streamGenerateContent|generateContent)$/.test(target.pathname)){
     target.pathname=target.pathname.replace(/:generateContent$/,':streamGenerateContent');
@@ -217,11 +218,11 @@ export async function requestStep3ImageStream(options){
   const {imageCompatibilityIdentity}=await import('./step3-image-compat.mjs');
   const id=await imageCompatibilityIdentity(options.url,options.body,options.key);
   const run=async()=>{
-    if(activeRequests.has(id))throw Object.assign(Error('同一模型的生图正在进行，请等待或取回原任务。'),{code:'IMAGE_REQUEST_PENDING'});
+    if(activeRequests.has(id))throw Object.assign(Error('同一模型的生图正在进行，请等待完成。'),{code:'IMAGE_REQUEST_PENDING'});
     activeRequests.add(id);try{return await negotiateStep3Image(options,requestStep3ImageOnce);}finally{activeRequests.delete(id);}
   };
   if(!options.compatibilityStore&&globalThis.navigator?.locks)return navigator.locks.request('step3-image:'+id,{ifAvailable:true},lock=>{
-    if(!lock)throw Object.assign(Error('另一页面正在生图，请先取回原任务。'),{code:'IMAGE_REQUEST_PENDING'});return run();
+    if(!lock)throw Object.assign(Error('另一页面正在生图，请等待完成。'),{code:'IMAGE_REQUEST_PENDING'});return run();
   });
   return run();
 }

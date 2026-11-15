@@ -18,11 +18,12 @@ test('supply 404, generic 405, malformed errors and accepted task markers never 
  }
  assert.equal(explicitlyRejectsImageStreaming({ok:false,status:422,text:JSON.stringify({error:{message:'当前分组暂不支持此接口（/v1beta/models/{model}:streamGenerateContent）'}})}),true);
 });
-test('disconnect, timeout, incomplete stream and 5xx never resubmit, including next click',async()=>{
+test('disconnect, timeout, incomplete stream and 5xx stop; later explicit requests are fresh',async()=>{
  const failures=[async()=>{throw Error('disconnected');},async()=>new Promise(()=>{}),async()=>new Response('data: {"type":"image_generation.partial_image","b64_json":"partial"}\n\n',{headers:{'Content-Type':'text/event-stream'}}),async()=>new Response('gateway',{status:502})];
  for(const failure of failures){let calls=0;const options={url,body,key,compatibilityStore:store(),timeoutMs:30,fetchImpl:async()=>{calls++;return failure();}};
   try{await requestStep3ImageStream(options);}catch{}
-  await assert.rejects(requestStep3ImageStream(options),{code:'IMAGE_RESULT_UNCONFIRMED'});assert.equal(calls,1);
+  assert.equal(calls,1);
+  const result=await requestStep3ImageStream({...options,fetchImpl:async()=>{calls++;return image();}});assert.equal(result.ok,true);assert.equal(calls,2);
  }
 });
 test('compatibility scope isolates endpoint, credential and future model',async()=>{
@@ -30,7 +31,8 @@ test('compatibility scope isolates endpoint, credential and future model',async(
  const native='https://gateway.example/v1beta/models/banana:streamGenerateContent?alt=sse';const ordinary=step3OrdinaryRequest(native,{contents:[],stream:true});assert.equal(ordinary.url,'https://gateway.example/v1beta/models/banana:generateContent');assert.equal(ordinary.body.stream,undefined);
  assert.equal(await imageCompatibilityIdentity(native,{},key),await imageCompatibilityIdentity(ordinary.url,{},key));
 });
-test('fallback disconnect also closes the replay gate',async()=>{
+test('fallback disconnect stops immediately while retaining ordinary compatibility',async()=>{
  let calls=0;const options={url,body,key,compatibilityStore:store(),fetchImpl:async()=>{if(++calls===1)return rejected();throw Error('lost ordinary reply');}};
- await assert.rejects(requestStep3ImageStream(options));await assert.rejects(requestStep3ImageStream(options),{code:'IMAGE_RESULT_UNCONFIRMED'});assert.equal(calls,2);
+ await assert.rejects(requestStep3ImageStream(options));assert.equal(calls,2);
+ const result=await requestStep3ImageStream({...options,fetchImpl:async(u,i)=>{calls++;assert.equal(Object.hasOwn(JSON.parse(i.body),'stream'),false);return image();}});assert.equal(result.ok,true);assert.equal(calls,3);
 });

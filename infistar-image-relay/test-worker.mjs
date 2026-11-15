@@ -45,7 +45,7 @@ test('Infistar Banana explicitly rejects streaming then ordinary succeeds once, 
  }finally{globalThis.fetch=old;}
 });
 
-test('other Infistar Gemini durable tasks retain SSE and recover results without another generation',async()=>{
+test('other Infistar Gemini tasks retain SSE and return their completed result once',async()=>{
  const f=fixture(),old=globalThis.fetch;let posts=0;
  const submission={url:'https://infistar.cc/v1beta/models/gemini-3.1-flash-image:generateContent',body:{contents:[{role:'user',parts:[{text:'fixture'}]}]},usedReferences:false};
  globalThis.fetch=async(url,init)=>{
@@ -68,7 +68,7 @@ test('NoneLinear durable task uploads local references before one synchronous ge
  globalThis.fetch=async(url,init)=>{
   calls.push(url);const body=JSON.parse(init.body);
   if(url==='https://nonelinear.com.cn/api/upload-file'){assert.deepEqual(body,{image:'aGVsbG8=',type:'.png'});return Response.json({url:'https://images.example.com/reference.png'});}
-  assert.equal(url,submission.url);assert.deepEqual(body,{...submission.body,image:['https://images.example.com/reference.png'],stream:true});
+  assert.equal(url,submission.url);assert.deepEqual(body,{...submission.body,image:['https://images.example.com/reference.png']});
   return Response.json({data:[{b64_json:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII='}]});
  };
  try{
@@ -112,20 +112,20 @@ test('origin, credentials and upstream target are constrained',async()=>{
  assert.equal((await worker.fetch(preflight,f.env)).status,204);
 });
 
-test('received response survives a post-processing/storage crash and restart without a second POST',async()=>{
+test('post-processing failure stops without restart recovery or a second POST',async()=>{
  const f=fixture(),old=globalThis.fetch;let posts=0,fail=true;
  globalThis.fetch=async()=>{posts++;return new Response(JSON.stringify({data:[{b64_json:'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII='}]}),{headers:{'x-request-id':'received-id'}});};
  const originalPut=f.storage.put;
  f.storage.put=async(k,v)=>{if(k==='meta'&&v.state==='succeeded'&&fail){fail=false;throw Error('simulated storage failure after response');}return originalPut.call(f.storage,k,v);};
  try{
   await f.job.fetch(f.req('PUT'));await f.job.alarm();
-  assert.equal((await f.storage.get('meta')).state,'response_received');assert.equal((await f.storage.get('meta')).encrypted,undefined);assert.equal(posts,1);
-  await new ImageJob(f.ctx,f.env).alarm();assert.equal(posts,1);assert.equal((await f.storage.get('meta')).state,'succeeded');
-  const result=await (await f.job.fetch(f.req('GET','test-key',input,'/result'))).json();assert.equal(result.requestId,'received-id');assert.equal(JSON.parse(result.text).data[0].mimeType,'image/png');
+  assert.equal((await f.storage.get('meta')).state,'unknown');assert.equal((await f.storage.get('meta')).encrypted,undefined);assert.equal(posts,1);
+  await new ImageJob(f.ctx,f.env).alarm();assert.equal(posts,1);assert.equal((await f.storage.get('meta')).state,'unknown');
+  assert.equal((await f.job.fetch(f.req('GET','test-key',input,'/result'))).status,409);
  }finally{globalThis.fetch=old;}
 });
 
-test('image URL recovery retries only GET; error responses redact the actual credential',async()=>{
+test('image download failure stops without recovery; error responses redact the actual credential',async()=>{
  const f=fixture(),old=globalThis.fetch;let posts=0,downloads=0;
  globalThis.fetch=async(url,init)=>{
   if(init?.method==='POST'){posts++;return new Response(JSON.stringify({data:[{url:'https://images.example.com/result'}]}));}
@@ -133,8 +133,8 @@ test('image URL recovery retries only GET; error responses redact the actual cre
   return new Response(Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=','base64'));
  };
  try{
-  await f.job.fetch(f.req('PUT'));await f.job.alarm();assert.equal((await f.storage.get('meta')).error,'download disconnected');
-  const result=await (await f.job.fetch(f.req('GET','test-key',input,'/result'))).json();assert.equal(result.downloadError,undefined);assert.equal(posts,1);assert.equal(downloads,2);assert.equal((await f.storage.get('meta')).error,null);
+  await f.job.fetch(f.req('PUT'));await f.job.alarm();assert.equal((await f.storage.get('meta')).state,'unknown');
+  assert.equal((await f.job.fetch(f.req('GET','test-key',input,'/result'))).status,409);assert.equal(posts,1);assert.equal(downloads,1);await new ImageJob(f.ctx,f.env).alarm();assert.equal(downloads,1);
   const g=fixture();globalThis.fetch=async()=>new Response('credential test-key Bearer test-key',{status:400});await g.job.fetch(g.req('PUT'));await g.job.alarm();
   const rejected=await (await g.job.fetch(g.req('GET','test-key',input,'/result'))).json();assert.equal(rejected.ok,false);assert.doesNotMatch(JSON.stringify(rejected),/test-key/);assert.equal((await g.storage.get('meta')).state,'rejected');
  }finally{globalThis.fetch=old;}
@@ -200,13 +200,13 @@ test('browser transport issues one POST, rejects reuse and releases its session'
   assert.equal(usesBrowserImageTransport('https://infistar.ai.evil.test/v1/images/generations'),false);
  }finally{globalThis.fetch=old;}
 });
-test('browser capacity failures remain queued with zero paid attempts; recovery submits once',async()=>{
+test('browser capacity failures stop with zero paid attempts and no background retry',async()=>{
  const f=fixture(),old=globalThis.fetch;let posts=0;
  f.env.BROWSER={async acquire(){throw Error('capacity');}};
  globalThis.fetch=async()=>{posts++;return new Response('invalid fixture',{status:400});};
  try{
   await f.job.fetch(f.req('PUT'));await f.job.alarm();await new ImageJob(f.ctx,f.env).alarm();
-  const meta=await f.storage.get('meta');assert.equal(meta.state,'queued');assert.equal(meta.upstreamAttempts,0);assert.equal(posts,0);assert.ok(meta.encrypted);assert.equal(meta.preparationFailures,2);
-  f.env.BROWSER=fakeBrowser();await f.job.alarm();assert.equal(posts,1);assert.equal((await f.storage.get('meta')).state,'rejected');assert.equal(f.env.BROWSER.closed,1);
+  const meta=await f.storage.get('meta');assert.equal(meta.state,'unknown');assert.equal(meta.error,'IMAGE_PREPARATION_FAILED');assert.equal(meta.upstreamAttempts,0);assert.equal(posts,0);assert.equal(meta.encrypted,undefined);
+  f.env.BROWSER=fakeBrowser();await f.job.alarm();assert.equal(posts,0);assert.equal((await f.storage.get('meta')).state,'unknown');assert.equal(f.env.BROWSER.closed,0);
  }finally{globalThis.fetch=old;}
 });

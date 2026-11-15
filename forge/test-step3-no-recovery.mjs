@@ -21,16 +21,33 @@ test('stale pending and saved records never block new inputs, keys or refreshed 
  await acknowledgeInfistarImageJob(input.key,first.job.id);showInfistarJobProgress({state:'running'});
 });
 
-test('lost acknowledgements and interrupted result queries reuse one task without direct POSTs',async()=>{
- let puts=0,gets=0,results=0;const ids=new Set(),progress=[];
- const c=createInfistarJobClient({...options,fetchImpl:async(url,init)=>{
-  assert.notEqual(init.method,'POST');ids.add(url.match(/jobs\/([^/]+)/)[1]);
-  if(init.method==='PUT'){if(++puts===1)throw Error('ack lost');return reply({state:'running'},202);}
-  if(url.endsWith('/result')){if(++results===1)throw Error('result connection lost');return success(url);}
-  if(++gets===1)throw Error('poll lost');return reply({state:'succeeded'});
- }});
- assert.equal((await c.request({...input,onProgress:p=>progress.push(p)})).ok,true);
- assert.equal(puts,2);assert.equal(results,2);assert.equal(ids.size,1);assert.ok(progress.some(p=>p.state==='reconnecting'));
+test('lost acknowledgement, poll, result, missing job and malformed JSON stop without recovery',async()=>{
+ for(const failure of ['put','poll','result','missing','json']){
+  const calls=[],progress=[];
+  const c=createInfistarJobClient({...options,fetchImpl:async(url,init)=>{
+   const phase=init.method==='PUT'?'put':url.endsWith('/result')?'result':'poll';calls.push(phase);
+   if(phase===failure)throw Error('connection lost');
+   if(failure==='missing'&&phase==='poll')return reply({},404);
+   if(failure==='json')return new Response('broken JSON');
+   return reply(phase==='put'?{state:'running'}:{state:'succeeded'});
+  }});
+  await assert.rejects(c.request({...input,onProgress:p=>progress.push(p)}),e=>e.code===(failure==='missing'?'JOB_HTTP_404':'JOB_CONNECTION'));
+  assert.deepEqual(calls,({put:['put'],poll:['put','poll'],result:['put','poll','result'],missing:['put','poll'],json:['put']}[failure]));
+  assert.ok(progress.every(p=>p.state!=='reconnecting'));
+ }
+});
+
+test('deadline covers a hung submission, poll and result body without extra requests',async()=>{
+ for(const phase of ['put','poll','result']){
+  const calls=[];let signal;
+  const c=createInfistarJobClient({...options,deadlineMs:20,fetchImpl:async(url,init)=>{
+   const current=init.method==='PUT'?'put':url.endsWith('/result')?'result':'poll';calls.push(current);signal=init.signal;
+   if(current===phase)return {status:200,json:()=>new Promise(()=>{})};
+   return reply(current==='put'?{state:'running'}:{state:'succeeded'});
+  }});
+  await assert.rejects(c.request(input),{code:'JOB_CONNECTION'});
+  assert.equal(calls.filter(x=>x==='put').length,1);assert.equal(calls.at(-1),phase);assert.equal(signal.aborted,true);
+ }
 });
 
 test('unknown, rejected, expired and failed attempts do not occupy the next generation',async()=>{

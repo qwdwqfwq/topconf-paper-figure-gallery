@@ -28,25 +28,25 @@ test('stream-capable providers preserve every generation parameter',()=>{
   assert.equal(body.stream,undefined);
 });
 
-test('NoneLinear upstream and relays first request streaming, preserve 4K and three references',async()=>{
+test('NoneLinear upstream and relays omit stream, preserve 4K and three references',async()=>{
   const parameters={...body,model:'gemini-3-pro-image-preview',size:'4K',aspect_ratio:'16:9',image:['ref1','ref2','ref3']};
-  for(const base of ['https://api.nonelinear.com.cn/v1','https://gallery-nonelinear-relay.lixiao-gallery.workers.dev/v1','http://127.0.0.1:1234/api/nonelinear/v1','http://localhost:1234/api/nonelinear/v1']){
+  for(const base of ['https://api.nonelinear.com.cn/v1','https://gallery-nonelinear-relay.lixiao-gallery.workers.dev/v1','https://gallery-revision-images.lixiao-gallery.workers.dev/v1','http://127.0.0.1:1234/api/nonelinear/v1','http://localhost:1234/api/nonelinear/v1']){
     for(const stream of [true,false,undefined]){
       const original={...parameters,stream},result=step3StreamingRequest(base+'/images/generations',original);
-      assert.deepEqual(result.body,{...parameters,stream:true});assert.equal(result.body.stream,true);
+      assert.deepEqual(result.body,parameters);assert.equal(Object.hasOwn(result.body,'stream'),false);
       assert.equal(original.stream,stream);
     }
     let calls=0;
     const text=JSON.stringify({data:[{url:'https://example.invalid/final-4K.png'}]});
     const result=await requestStep3ImageStream({url:base+'/images/generations',body:parameters,key:'offline-secret',fetchImpl:async(url,init)=>{
-      calls++;assert.deepEqual(JSON.parse(init.body),{...parameters,stream:true});
+      calls++;assert.deepEqual(JSON.parse(init.body),parameters);
       return response(text,{type:'application/json',chunk:1});
     }});
     assert.equal(calls,1);assert.equal(result.text,text);assert.equal(result.streaming,false);
   }
   const form=new FormData();form.append('model',parameters.model);form.append('image[]',new Blob(['pixels']), 'reference.png');form.append('stream','false');
   const result=step3StreamingRequest('https://api.nonelinear.com.cn/v1/images/edits',form);
-  assert.equal(result.body.get('stream'),'true');assert.equal(form.get('stream'),'false');
+  assert.equal(result.body.has('stream'),false);assert.equal(form.get('stream'),'false');
   assert.equal(result.body.get('image[]').name,'reference.png');
 });
 
@@ -194,10 +194,10 @@ test('transport diagnostics allow only known error names/codes and redact reques
   }
 });
 
-test('NoneLinear image endpoints request streaming without changing other parameters',()=>{
+test('NoneLinear image endpoints remove stream without changing other parameters',()=>{
   for(const base of ['https://api.nonelinear.com.cn/v1','https://gallery-nonelinear-relay.lixiao-gallery.workers.dev/v1','http://localhost:8123/api/nonelinear/v1']){
     for(const endpoint of ['/images/generations','/images/edits']){
-      assert.deepEqual(step3StreamingRequest(base+endpoint,{...body,stream:false}).body,{...body,stream:true});
+      assert.deepEqual(step3StreamingRequest(base+endpoint,{...body,stream:false}).body,body);
     }
   }
 });

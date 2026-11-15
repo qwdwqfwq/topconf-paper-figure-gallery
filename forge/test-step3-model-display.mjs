@@ -53,7 +53,7 @@ test('provider wire formats preserve references and only supported streaming fla
   })});
   assert.equal(uploads,p==='nonelinear'?1:0);
   if(p==='oai'){assert.ok(wire.body instanceof FormData);assert.match(wire.url,/images\/edits$/);assert.equal(wire.body.getAll('image[]').length,1);assert.equal(await wire.body.get('image[]').text(),'\x89PNG\r\n\x1a\n'.replace('\x89','�'));}
-  else {const json=JSON.parse(wire.body);assert.deepEqual(json.image,p==='nonelinear'?['https://images.example.com/reference.png']:[ref]);assert.match(wire.url,/images\/generations$/);assert.equal(json.stream,true);}
+  else {const json=JSON.parse(wire.body);assert.deepEqual(json.image,p==='nonelinear'?['https://images.example.com/reference.png']:[ref]);assert.match(wire.url,/images\/generations$/);assert.equal(Object.hasOwn(json,'stream'),p!=='nonelinear');if(p!=='nonelinear')assert.equal(json.stream,true);}
  }
 });
 test('Gemini native and compatibility formats, no generic stream flag, Imagen n=1',async()=>{
