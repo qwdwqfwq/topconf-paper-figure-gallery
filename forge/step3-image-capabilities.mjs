@@ -4,19 +4,18 @@ import {nonelinearImageDimensions} from './nonelinear-image.mjs';
 
 const resolutions=['1K','2K','4K'];
 export function step3ImageResolutions(provider,model,ratio,nativeGemini=false){
-  // Flash Lite Image accepts 1K only, even though the gateway accepts the
-  // generic 2K/4K parameter syntax before the request reaches this model.
-  const gemini=/^gemini-(?:2\.5-flash|3-pro|3\.1-flash(?:-lite)?)-image(?:-preview|-\d{4}-\d{2}-\d{2})?$/i.test(model);
-  const gpt=/^gpt-image-(?:1(?:\.5)?|1-mini|2(?:\.5-(?:sunburst|flare))?)(?:-(?:high|medium|low)|-\d{4}-\d{2}-\d{2})?$/i.test(model);
-  const seedream=/^doubao-seedream-/i.test(model);
-  // Unknown dynamic model IDs have no declared capabilities. Do not advertise
-  // arbitrary sizes merely because a gateway accepts a generic size field.
-  if(!gemini&&!gpt&&!seedream&&!['sf','glm'].includes(provider)&&provider!=='nonelinear')return [];
-  const candidates=gemini&&/2\.5-flash|flash-lite/i.test(model)?['1K']:resolutions;
-  return candidates.filter(resolution=>{
-    try{step3ImageDimensions(provider,model,ratio,resolution,nativeGemini);return true;}
-    catch{return false;}
-  });
+  if(!model||!['16:9','3:2','4:3','1:1'].includes(ratio))return [];
+  // Selection follows published model specifications, never audit results or
+  // whether the existing request serializer recognizes a newly listed model.
+  // https://ai.google.dev/gemini-api/docs/models/gemini-3.1-flash-lite-image
+  // https://ai.google.dev/gemini-api/docs/image-generation
+  if(/^gemini-(?:2\.5-flash|3\.1-flash-lite)-image(?:$|-)/i.test(model))return ['1K'];
+  // https://developers.openai.com/api/docs/guides/image-generation
+  if(/^gpt-image-(?:1(?:\.5)?|1-mini)(?:$|-)/i.test(model))return ['1:1','3:2'].includes(ratio)?['1K']:[];
+  // https://docs.byteplus.com/en/docs/modelark/image-generation-api
+  if(/^(?:doubao-)?seedream-(?:4[.-]5|5[.-]0-lite)(?:$|-)/i.test(model))return ['2K','4K'];
+  // No documented restriction: expose all three presets, including future IDs.
+  return [...resolutions];
 }
 
 export function step3ImageDimensions(provider,model,ratio,resolution,nativeGemini=false){

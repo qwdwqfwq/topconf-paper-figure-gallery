@@ -27,6 +27,7 @@ export function parseNonelinearOfficialCatalog(text){
   if(new Set(list).size!==list.length)throw new Error('duplicate');
   return {list,kinds,visual,total:body.total};
 }
+export const isOfficialGeminiImageModel=name=>/^gemini-(?:[a-z0-9.]+-)*image(?:$|-)|^(?:gemini-)?nano-banana(?:$|-)/i.test(name);
 export function parseOfficialCatalog(html){
   const match=String(html).match(/<script\b(?=[^>]*\bid=["']public-site-pricing-data["'])(?=[^>]*\btype=["']application\/json["'])[^>]*>([\s\S]*?)<\/script\s*>/i);
   if(!match)throw new Error('schema');
@@ -38,7 +39,9 @@ export function parseOfficialCatalog(html){
     if(typeof name!=='string'||!name.trim()||name.length>256||/[\x00-\x1f\x7f]/.test(name))throw new Error('schema');
     const endpoints=Array.isArray(row.supported_endpoint_types)?row.supported_endpoint_types:[];
     // Use the official endpoint capability for unfamiliar future model names.
-    if(endpoints.includes('image-generation')||row.price_presentation?.kind==='image')kinds[name]='image';
+    // Gemini native image generation is token-billed and uses the Gemini/chat
+    // endpoint. Billing kind "text" does not mean text-only output.
+    if(endpoints.includes('image-generation')||row.price_presentation?.kind==='image'||isOfficialGeminiImageModel(name))kinds[name]='image';
     else if(endpoints.some(type=>['openai','openai-response','anthropic','gemini'].includes(type)))kinds[name]='chat';
     models.push(name);
   }

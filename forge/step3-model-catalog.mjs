@@ -1,19 +1,21 @@
 // Step 3 discovery/display only. No generation or reconstruction requests.
 import {fetchParserCatalog,normalizeModels} from './parser-model-catalog.mjs?v=20261114';
 import {nonelinearCatalog} from './parser-nonelinear-catalog.mjs?v=20261114';
-import {officialCatalogUrls,fetchOfficialCatalog} from './step3-official-catalog.mjs';
+import {officialCatalogUrls,fetchOfficialCatalog,isOfficialGeminiImageModel} from './step3-official-catalog.mjs';
+import {installStep3ResolutionDisplay} from './step3-resolution-display.mjs';
 
 export function createStep3ModelCatalog({select,analysisSelect,status,readConfig,readSaved,
   kindOf,isVisualModel,onLiveModels=()=>{},onRender=()=>{},
   storage=globalThis.localStorage,fetchImpl=globalThis.fetch,transportOptions={},debounceMs=650,
   language=()=>document.documentElement.lang,now=()=>Date.now(),autoRefreshMs=300000}){
   let revision=0,scheduled,state,lastConfig,lastRefresh=0,officialKinds={},officialVisual={};
+  const resolutionDisplay=installStep3ResolutionDisplay(select,readConfig,language);
   const inflight=new Map();
   const text=(zh,en)=>String(language()).startsWith('en')?en:zh;
   const identity=c=>JSON.stringify([c.provider,c.base,c.proto,c.key]); // Never persisted.
   const current=(id,version,mode)=>version===revision&&identity(readConfig())===id&&readConfig().mode===mode;
   const unique=list=>[...new Set(list)];
-  const filter=(list,c,analysis=false)=>unique(list.filter(m=>analysis?(Object.hasOwn(officialVisual,m)?officialVisual[m]:isVisualModel(m,c.vision||[])):(Object.hasOwn(officialKinds,m)?officialKinds[m]:kindOf(m))===(c.mode==='svg'?'chat':'image')));
+  const filter=(list,c,analysis=false)=>unique(list.filter(m=>analysis?(Object.hasOwn(officialVisual,m)?officialVisual[m]:isVisualModel(m,c.vision||[])):(Object.hasOwn(officialKinds,m)?officialKinds[m]:c.provider==='infistar'&&isOfficialGeminiImageModel(m)?'image':kindOf(m))===(c.mode==='svg'?'chat':'image')));
   const permissionNote=()=>text('目录不代表当前 Key 的调用权限。','The catalog does not confirm this key’s inference access.');
   const bundledLabel=()=>text(`内置目录（${nonelinearCatalog.updated}，非实时）`,`Bundled catalog (${nonelinearCatalog.updated}, not live)`);
   function initial(c){
@@ -47,7 +49,7 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
     if(c.mode==='image'&&!analysis.length)missing.push(text('视觉归纳','Visual analysis'));
     const note=missing.length?text(` ${missing.join('、')}目录无适用项，显示${fallback.source}。`,` No compatible ${missing.join(', ')} entries; showing ${fallback.source}.`):'';
     status.textContent=message+note+' '+permissionNote();status.dataset.catalogSource=source;
-    onRender();
+    onRender();resolutionDisplay.update();
   }
   const cacheKey=async id=>{
     if(!globalThis.crypto?.subtle)return null;
@@ -90,6 +92,7 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
     function parseCachedOfficial(stored){
       const list=normalizeModels({data:stored.models});
       const kinds=Object.fromEntries(list.filter(name=>['image','chat','other'].includes(stored.kinds?.[name])).map(name=>[name,stored.kinds[name]]));
+      if(c.provider==='infistar')for(const name of list)if(isOfficialGeminiImageModel(name))kinds[name]='image';
       const visual=Object.fromEntries(list.filter(name=>typeof stored.visual?.[name]==='boolean').map(name=>[name,stored.visual[name]]));
       return {list,kinds,visual};
     }
@@ -152,7 +155,7 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
   timer?.unref?.();
   globalThis.addEventListener?.('focus',checkFreshness);
   globalThis.document?.addEventListener('visibilitychange',checkFreshness);
-  return {refresh,dispose(){++revision;clearTimeout(scheduled);clearInterval(timer);globalThis.removeEventListener?.('focus',checkFreshness);globalThis.document?.removeEventListener('visibilitychange',checkFreshness);},schedule(){
+  return {refresh,dispose(){++revision;resolutionDisplay.dispose();clearTimeout(scheduled);clearInterval(timer);globalThis.removeEventListener?.('focus',checkFreshness);globalThis.document?.removeEventListener('visibilitychange',checkFreshness);},schedule(){
     ++revision;clearTimeout(scheduled);onLiveModels(null);officialKinds={};officialVisual={};
     const c=readConfig(),fallback=initial(c);render(c,fallback.list,fallback.source,text('设置已更新，即将刷新步骤三模型…','Settings updated; refreshing Step 3 models shortly…'));
     scheduled=setTimeout(refresh,debounceMs);
