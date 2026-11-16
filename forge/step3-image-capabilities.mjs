@@ -14,12 +14,18 @@ export function step3ImageResolutions(provider,model,ratio,nativeGemini=false){
   if(/^gpt-image-(?:1(?:\.5)?|1-mini)(?:$|-)/i.test(model))return ['1:1','3:2'].includes(ratio)?['1K']:[];
   // https://docs.byteplus.com/en/docs/modelark/image-generation-api
   if(/^(?:doubao-)?seedream-(?:4[.-]5|5[.-]0-lite)(?:$|-)/i.test(model))return ['2K','4K'];
+  // NoneLinear explicitly limits Imagen 4 tiers and excludes 3:2.
+  // https://docs.nonelinear.com/models/images/gemini
+  if(provider==='nonelinear'&&/^imagen-4\.0-(?:ultra-generate|generate|fast-generate)-001$/i.test(model)){
+    if(ratio==='3:2')return [];
+    return /fast-generate/i.test(model)?['1K']:['1K','2K'];
+  }
   // No documented restriction: expose all three presets, including future IDs.
   return [...resolutions];
 }
 
 export function step3ImageDimensions(provider,model,ratio,resolution,nativeGemini=false){
-  if(!['16:9','3:2','4:3','1:1'].includes(ratio))throw Error('Unsupported ratio');
+  assertStep3ImageResolution(provider,model,ratio,resolution,nativeGemini);
   if(/^gemini-2\.5-flash-image(?:$|-)/i.test(model)){
     if(resolution!=='1K')throw Error('1K only');
     return nativeGemini?{field:'gemini',aspectRatio:ratio}: {field:'aspect_ratio',value:ratio};
@@ -33,7 +39,8 @@ export function step3ImageDimensions(provider,model,ratio,resolution,nativeGemin
     return {field:'size',value:ratio==='1:1'?'1024x1024':'1536x1024'};
   }
   if(provider==='nonelinear'&&!/^gpt-image-2(?:$|[.-])/i.test(model)){
-    const value=nonelinearImageDimensions(model,ratio,resolution);if(!value)throw Error('Undeclared model size');return value;
+    // Preserve documented serializers; a missing local entry is not a size restriction.
+    return nonelinearImageDimensions(model,ratio,resolution) || {field:'size',value:resolution,aspectRatio:ratio};
   }
   if(/seedream-4[.-]5/i.test(model)&&resolution==='1K')throw Error('2K minimum');
   if(/seedream-5/i.test(model)&&resolution!=='2K'&&!(provider==='ark'&&/lite/i.test(model)&&resolution==='4K'))throw Error('Unsupported Seedream size');
