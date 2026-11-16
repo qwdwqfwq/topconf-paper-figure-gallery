@@ -1,0 +1,113 @@
+name: Deploy isolated Infistar direct routing
+on:
+  push:
+    branches: [main]
+    paths:
+      - forge/step3-infistar-job.mjs
+      - .github/workflows/deploy-infistar-direct.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Record unchanged original lock result
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Report original lock outcome
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: echo "Original lock outcome = $ORIGINAL_OUTCOME; historical failures remain failures." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/download-artifact@v4
+        with:
+          name: infistar-initial-route-proof
+          run-id: 43958528130
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/current-proof
+      - uses: actions/download-artifact@v4
+        with:
+          name: step3-analysis-proof
+          run-id: 43907732087
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/historical-proof
+      - uses: actions/download-artifact@v4
+        with:
+          name: step3-recovery-proof
+          run-id: 43933237875
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/chat-base-proof
+      - uses: actions/download-artifact@v4
+        with:
+          name: chat-single-submit-proof
+          run-id: 43954135435
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/route-base-proof
+      - name: Preserve immediate prior route acceptance
+        run: |
+          historical="$RUNNER_TEMP/previous-route-release"
+          trap 'git worktree remove --force "$historical"' EXIT
+          git worktree add --detach "$historical" 1e0cb29be9fda25f6fae048b218ea4f18f0452ad
+          (cd "$historical" && node scripts/check-infistar-initial-route-release.mjs "$RUNNER_TEMP/route-base-proof/chat-single-submit-proof.json" && node --test scripts/test-infistar-initial-route-release.mjs)
+      - name: Preserve previous release acceptance and adversarial tests
+        run: |
+          historical="$RUNNER_TEMP/previous-release"
+          trap 'git worktree remove --force "$historical"' EXIT
+          git worktree add --detach "$historical" 31891566ba0cdf31447ac428c63149f41685fb4f
+          (cd "$historical" && node scripts/check-chat-single-submit-release.mjs "$RUNNER_TEMP/chat-base-proof/step3-recovery-proof.json" && node --test scripts/test-chat-single-submit-release.mjs)
+          git worktree remove --force "$historical"
+          git worktree add --detach "$historical" 5e7f1cece066ede4ed286928c724b00067b991d8
+          (cd "$historical" && node scripts/check-step3-recovery-release.mjs "$RUNNER_TEMP/historical-proof/step3-analysis-proof.json" && node --test scripts/test-step3-recovery-release.mjs)
+      - name: Initial routing, single submission and diagnostics
+        run: node --test forge/test-step3-international-image-route.mjs forge/test-step3-initial-image-job.mjs scripts/test-infistar-initial-route-release.mjs
+      - name: Direct routing and release scope
+        run: node --test scripts/test-infistar-direct-release.mjs forge/test-step3-image-stream.mjs forge/test-step3-image-protocol.mjs
+      - name: Install browser test runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/browser-test" playwright@1.58.2
+          "$RUNNER_TEMP/browser-test/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Direct pixels, local history, no retry and Nonelinear backend
+        env:
+          REVISION_PLAYWRIGHT: ${{ runner.temp }}/browser-test/node_modules/playwright
+          REVISION_BUNDLED_BROWSER: '1'
+        run: |
+          node forge/test-infistar-direct-browser.cjs
+          node forge/test-step3-preflight-jobs-browser.cjs
+      - name: Chat transport, diagnostics and PDF regression
+        run: node --test forge/test-chat-api.mjs forge/test-step3-analysis-request.mjs forge/test-openai-pdf.mjs nonelinear-relay/test-chat-stream.mjs nonelinear-relay/test-worker.mjs nonelinear-relay/test-live-chat.mjs nonelinear-relay/test-source-image.mjs nonelinear-relay/test-references.mjs scripts/test-chat-single-submit-release.mjs
+      - name: Preserve bitmap and editable export regression
+        run: |
+          node --test forge/test-openai-token-limit.mjs forge/test-bitmap-composition.mjs forge/test-generation-intent.mjs forge/test-svg-chat-response.mjs forge/test-infistar-reconstruction-responses.mjs forge/test-infistar-reconstruction-stream.mjs
+          node forge/test-editable-export.mjs
+      - name: Build byte-preserving artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-infistar-direct-release.mjs "$RUNNER_TEMP/current-proof/infistar-initial-route-proof.json" --prepare-pages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: infistar-direct-proof
+          path: /tmp/infistar-direct-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/infistar-direct-pages
+      - name: Deploy isolated direct-route module
+        id: deployment
+        uses: actions/deploy-pages@v4

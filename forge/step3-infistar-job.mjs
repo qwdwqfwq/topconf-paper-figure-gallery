@@ -2,7 +2,7 @@
 import {imageJobRoute,packImageBody} from './step3-image-protocol.mjs';
 export const INFISTAR_JOBS='https://gallery-infistar-image-jobs.lixiao-gallery.workers.dev';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-export function usesInfistarImageJob(url){return !!imageJobRoute(url);}
+export function usesInfistarImageJob(url){const route=imageJobRoute(url);return !!route&&route!=='infistar';}
 function jobError(code,id,meta={}){
   const messages={JOB_RESULT_UNKNOWN:'本次生图未完成，后台报告：',JOB_EXPIRED:'本次任务已过期。',JOB_CONNECTION:'本次生图连接中断或超时。'};
   const d=meta.diagnostic||{},details=[];
@@ -57,7 +57,7 @@ export function createInfistarJobClient({fetchImpl=globalThis.fetch.bind(globalT
   }
   return {
     async request({url,body,key,usedReferences=false,onProgress}){
-      if(!usesInfistarImageJob(url))throw Error('Unsupported image job route');
+      if(!imageJobRoute(url))throw Error('Unsupported image job route');
       const submission={url,body:await packImageBody(body),usedReferences};
       return track({id:crypto.randomUUID()},key,{submission,onProgress});
     }
