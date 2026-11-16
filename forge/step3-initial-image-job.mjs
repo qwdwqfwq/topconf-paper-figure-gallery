@@ -5,16 +5,17 @@ const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const transientStatus=status=>status===408||status===425||status===429||status>=500;
 
 export function createInitialImageJobClient({fetchImpl=globalThis.fetch.bind(globalThis),endpoint=ENDPOINT,wait=sleep,pollMs=1500,retryMs=1500,deadlineMs=15*60*1000,requestMs=30000,resultMs=120000,maxReadFailures=5}={}){
- return {async request({url,body,key,usedReferences=false,onProgress=()=>{}}){
+ return {async request({url,body,key,usedReferences=false,onProgress=()=>{},routePolicy}){
   if(!imageJobRoute(url))throw Error('Unsupported image job route');
-  const submission={url,body:await packImageBody(body),usedReferences};
+  const submission={url,body:await packImageBody(body),usedReferences,...(routePolicy?{routePolicy}:{})};
   const id=crypto.randomUUID(),end=Date.now()+deadlineMs;
   let closed=false,active=null,deadline,stage='submission',recovered=false;
   const clean=value=>typeof value==='string'?value.replaceAll(key,'[redacted]'):value;
   function failure(code,meta={}){
    const d=meta.diagnostic||{};
-   const info=[meta.error,d.upstreamMessage||d.message,d.resultError,d.errorCode,Number.isInteger(d.upstreamStatus)?'上游 HTTP '+d.upstreamStatus:'',meta.requestId||d.requestId].filter(Boolean).map(clean).join('；');
-   const label={JOB_CONNECTION:'本次任务连接未恢复；不会重新提交生图。',JOB_EXPIRED:'本次任务已过期。',JOB_RESULT_UNKNOWN:'后台未完成生图；不会自动重新提交。'}[code]||'任务请求失败（'+code+'）。';
+   const initial=routePolicy==='preserve-initial-host';
+   const info=[meta.error,d.upstreamMessage||d.message,d.resultError,d.errorCode,...(initial?[d.providerErrorType,d.providerErrorCode]:[]),Number.isInteger(d.upstreamStatus)?'上游 HTTP '+d.upstreamStatus:'',meta.requestId||d.requestId].filter(Boolean).map(clean).join('；');
+   const label=initial&&code==='JOB_RESULT_UNKNOWN'&&d.upstreamStatus>=400?'生图网关返回错误；结果未确认，不会自动重新提交。':{JOB_CONNECTION:'本次任务连接未恢复；不会重新提交生图。',JOB_EXPIRED:'本次任务已过期。',JOB_RESULT_UNKNOWN:'后台未完成生图；不会自动重新提交。'}[code]||'任务请求失败（'+code+'）。';
    return Object.assign(Error(label+(info?' '+info:'')+' [stage: '+stage+'] [task: '+id+']'),{code,jobId:id,diagnostic:{...meta,stage}});
   }
   function ensureOpen(){if(closed||Date.now()>=end)throw failure('JOB_CONNECTION');}
@@ -82,6 +83,6 @@ export function createInitialImageJobClient({fetchImpl=globalThis.fetch.bind(glo
 let defaultClient;
 export function createInternationalInitialImageJobClient(options){
  const client=createInitialImageJobClient(options);
- return {request:input=>client.request({...input,url:internationalInitialImageUrl(input.url,input.body)})};
+ return {request:input=>client.request({...input,url:internationalInitialImageUrl(input.url,input.body),...(imageJobRoute(input.url)==='infistar'?{routePolicy:'preserve-initial-host'}:{})})};
 }
 export const requestInfistarImageJob=options=>(defaultClient||=createInternationalInitialImageJobClient()).request(options);
