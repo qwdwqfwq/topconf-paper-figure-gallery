@@ -232,6 +232,18 @@
   .nonelinear-links a{white-space:nowrap}
   .nonelinear-divider{height:14px;border-left:1px solid #a78bfa}
   .nonelinear-offer{display:block;margin-top:2px;line-height:1.6}
+  /* Author contact in the Step 1 heading. */
+  #card1 > .step{flex-wrap:wrap}
+  .author-contact-link{margin-left:auto;color:var(--purple);font-size:22px;font-weight:800;line-height:1.5;white-space:nowrap;text-decoration:underline;text-underline-offset:5px}
+  .author-contact-link:hover{color:var(--indigo)}
+  .author-contact-link:focus-visible{outline:3px solid var(--indigo);outline-offset:5px;border-radius:3px}
+  .author-contact-dialog{margin:auto;border:0;border-radius:18px;padding:20px;width:min(420px,calc(100vw - 32px));max-height:90vh;max-height:90dvh;overflow:auto;box-shadow:0 16px 64px #0004}
+  .author-contact-dialog::backdrop{background:#11182788}
+  .author-contact-dialog header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:8px}
+  .author-contact-dialog h2{font-size:20px}
+  .author-contact-dialog button{border:0;border-radius:8px;background:#f3f4f6;font-size:28px;line-height:1;min-width:44px;min-height:44px;color:#374151}
+  .author-contact-dialog img{display:block;width:100%;height:auto;max-height:calc(90vh - 108px);max-height:calc(90dvh - 108px);object-fit:contain}
+  @media(max-width:720px){#card1 > .step .step-note{flex:1;min-width:140px}.author-contact-link{flex-basis:100%;margin-left:33px;font-size:20px}}
   .nonelinear-support{margin:auto;border:0;border-radius:16px;padding:20px;width:min(400px,calc(100vw - 32px));max-height:90vh;overflow:auto;box-shadow:0 16px 64px #0004}
   .nonelinear-support::backdrop{background:#11182788}
   .nonelinear-support header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:12px}
@@ -392,6 +404,7 @@
   <div class="card" id="card1">
     <div class="step"><span class="num">1</span><span data-i18n="s1"></span>
       <span class="step-note" data-i18n="s1.note"></span>
+      <a class="author-contact-link" id="authorContactOpen" href="./assets/author-wechat.jpg" aria-haspopup="dialog" aria-controls="authorContactDialog">有问题可联系作者</a>
     </div>
 
     <div class="s1-grid">
@@ -708,6 +721,25 @@
   <button class="forge-lb-nav next" id="forgeLbNext" data-i18n-aria="lb.next">›</button>
 </div>
 
+<dialog id="authorContactDialog" class="author-contact-dialog" aria-labelledby="authorContactTitle">
+  <header><h2 id="authorContactTitle">微信联系作者</h2><button type="button" id="authorContactClose" aria-label="关闭作者微信二维码" autofocus>×</button></header>
+  <img src="./assets/author-wechat.jpg" alt="作者 folklore 的微信二维码，扫一扫添加作者为好友" loading="lazy" width="960" height="1418">
+</dialog>
+<script>
+{
+  const authorContactDialog = document.getElementById('authorContactDialog');
+  document.getElementById('authorContactOpen').addEventListener('click', event => {
+    event.preventDefault();
+    authorContactDialog.showModal();
+  });
+  document.getElementById('authorContactClose').addEventListener('click', () => authorContactDialog.close());
+  authorContactDialog.addEventListener('click', event => {
+    if (event.target !== authorContactDialog) return;
+    const bounds = authorContactDialog.getBoundingClientRect();
+    if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) authorContactDialog.close();
+  });
+}
+</script>
 <dialog id="nonelinearSupportDialog" class="nonelinear-support" aria-labelledby="nonelinearSupportTitle">
   <header><h2 id="nonelinearSupportTitle">扫描客服微信</h2><button type="button" id="nonelinearSupportClose" aria-label="关闭客服二维码">×</button></header>
   <img src="./assets/nonelinear-wechat.png" alt="非线智能客服微信二维码" loading="lazy" width="523" height="693">

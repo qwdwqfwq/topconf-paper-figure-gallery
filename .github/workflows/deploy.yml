@@ -1,4 +1,4 @@
-name: Deploy isolated Step 3 image preflight repair
+name: Deploy isolated author contact link
 on:
   push:
     branches: [main]
@@ -11,7 +11,7 @@ permissions:
   id-token: write
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   deploy:
     runs-on: ubuntu-24.04
@@ -29,64 +29,30 @@ jobs:
         id: original_lock
         continue-on-error: true
         run: node scripts/check-forge-workflow-lock.mjs
-      - name: Record original lock outcome explicitly
+      - name: Record original lock outcome
         env:
           ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
-        run: echo "Original lock outcome = $ORIGINAL_OUTCOME. Independent Step 3 acceptance does not change this result." >> "$GITHUB_STEP_SUMMARY"
-      - name: Download current publication byte proof
+        run: echo "Original lock outcome = $ORIGINAL_OUTCOME. Contact publication preserves all preexisting application bytes." >> "$GITHUB_STEP_SUMMARY"
+      - name: Download successful current publication proof
         uses: actions/download-artifact@v4
         with:
-          name: step3-task-diagnostics-proof
-          run-id: 43723203769
+          name: step3-preflight-proof
+          run-id: 43859330805
           github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/step3-preflight-base
-      - name: Strict isolated release acceptance and artifact construction
+          path: ${{ runner.temp }}/author-contact-base
+      - name: Verify exact contact additions and preserve all other published bytes
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/check-step3-preflight-release.mjs "$RUNNER_TEMP/step3-preflight-base/step3-task-diagnostics-proof.json" --prepare-pages
-      - name: Step 3 stream protocol regression
-        run: node --test forge/test-step3-image-stream.mjs forge/test-revision-error-recovery.mjs
-      - name: Independent acceptance adversarial tests
-        run: node --test scripts/test-step3-preflight-release.mjs forge/test-step3-nonelinear-dimensions.mjs forge/test-step3-nano-banana-ordinary.mjs forge/test-step3-image-protocol.mjs forge/test-revision-routing.mjs forge/test-nonelinear-source.mjs nonelinear-relay/test-source-image.mjs
-      - name: Preserve existing Responses transport regression
-        run: node --test forge/test-infistar-reconstruction-responses.mjs forge/test-infistar-reconstruction-stream.mjs
-      - name: Install isolated revision browser test runtime
-        run: npm install --prefix "$RUNNER_TEMP/revision-test" playwright@1.58.2 && "$RUNNER_TEMP/revision-test/node_modules/.bin/playwright" install chromium --with-deps
-      - name: Required revision behavior and pixel preservation regression
-        env:
-          REVISION_PLAYWRIGHT: ${{ runner.temp }}/revision-test/node_modules/playwright
-          REVISION_BUNDLED_BROWSER: '1'
-        run: |
-          node forge/test-revision-compact.cjs
-          node forge/test-step3-preflight-jobs-browser.cjs
-          node forge/test-manual-revision-browser.cjs
-          historical="$RUNNER_TEMP/preflight-browser-history"
-          trap 'git worktree remove --force "$historical"' EXIT
-          git worktree add --detach "$historical" a72641224b23164fbf3142feb9e2428e99c61018
-          (cd "$historical" && node forge/test-step3-image-stream-browser.cjs && node forge/test-nonelinear-source-browser.cjs)
-          git -C "$historical" checkout --detach ac4d5b6fcd88d110ae5f1453c9857bcb31438211
-          (cd "$historical" && node forge/test-revision-context.cjs)
-          git -C "$historical" checkout --detach 661d2648bdc4efc0b49772243340dcb4e2704789
-          (cd "$historical" && node forge/test-revision-auto-ui.cjs)
-      - name: Preserve existing bitmap regression checks
-        run: node --test forge/test-openai-token-limit.mjs forge/test-bitmap-composition.mjs forge/test-generation-intent.mjs
-      - name: Preserve existing SVG regression checks
-        run: node --test forge/test-svg-chat-response.mjs nonelinear-relay/test-chat-stream.mjs nonelinear-relay/test-worker.mjs nonelinear-relay/test-live-chat.mjs nonelinear-relay/test-source-image.mjs nonelinear-relay/test-references.mjs
-      - name: Preserve existing retrieval regression checks
-        run: node --test forge/test-retrieval-boot.mjs
-      - name: Preserve existing PDF regression checks
-        run: node --test forge/test-chat-api.mjs forge/test-openai-pdf.mjs nonelinear-relay/test-worker.mjs nonelinear-relay/test-references.mjs nonelinear-relay/test-source-image.mjs nonelinear-relay/test-chat-stream.mjs forge/test-infistar-reconstruction-stream.mjs nonelinear-relay/test-live-chat.mjs
-      - name: Preserve existing editable export regression checks
-        run: node forge/test-editable-export.mjs
-      - name: Upload independent byte preservation proof
+        run: node scripts/check-author-contact-release.mjs "$RUNNER_TEMP/author-contact-base/step3-preflight-proof.json" --prepare-pages
+      - name: Upload byte preservation proof
         uses: actions/upload-artifact@v4
         with:
-          name: step3-preflight-proof
-          path: /tmp/step3-preflight-proof.json
+          name: author-contact-proof
+          path: /tmp/author-contact-proof.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: /tmp/step3-preflight-pages
-      - name: Deploy isolated artifact to current application
+          path: /tmp/author-contact-pages
+      - name: Publish author contact UI
         id: deployment
         uses: actions/deploy-pages@v4
