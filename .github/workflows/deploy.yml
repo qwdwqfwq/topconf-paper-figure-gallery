@@ -1,4 +1,4 @@
-name: Deploy isolated Step 3 initial image read recovery
+name: Deploy isolated Steps 1-3 international routing
 on:
   push:
     branches: [main]
@@ -36,14 +36,27 @@ jobs:
       - name: Download current publication byte proof
         uses: actions/download-artifact@v4
         with:
-          name: author-contact-proof
-          run-id: 43864466485
+          name: step3-initial-read-proof
+          run-id: 43864925489
           github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/step3-initial-read-base
+          path: ${{ runner.temp }}/step3-international-base
       - name: Strict isolated release acceptance and artifact construction
         env:
           GH_TOKEN: ${{ github.token }}
-        run: node scripts/check-step3-initial-read-release.mjs "$RUNNER_TEMP/step3-initial-read-base/author-contact-proof.json" --prepare-pages
+        run: node scripts/check-step3-international-release.mjs "$RUNNER_TEMP/step3-international-base/step3-initial-read-proof.json" --prepare-pages
+      - name: Download historical initial-read acceptance input
+        uses: actions/download-artifact@v4
+        with:
+          name: author-contact-proof
+          run-id: 43864466485
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/initial-read-history-base
+      - name: Preserve published initial-read acceptance and adversarial tests
+        run: |
+          historical="$RUNNER_TEMP/initial-read-acceptance-history"
+          trap 'git worktree remove --force "$historical"' EXIT
+          git worktree add --detach "$historical" e6cbac0ce9776114cce12689c0866358582624c3
+          (cd "$historical" && node scripts/check-step3-initial-read-release.mjs "$RUNNER_TEMP/initial-read-history-base/author-contact-proof.json" && node --test scripts/test-step3-initial-read-release.mjs)
       - name: Download historical author contact acceptance input
         uses: actions/download-artifact@v4
         with:
@@ -73,7 +86,7 @@ jobs:
       - name: Step 3 stream protocol regression
         run: node --test forge/test-step3-initial-image-job.mjs forge/test-step3-image-stream.mjs forge/test-revision-error-recovery.mjs
       - name: Independent acceptance adversarial tests
-        run: node --test scripts/test-step3-initial-read-release.mjs forge/test-step3-nonelinear-dimensions.mjs forge/test-step3-nano-banana-ordinary.mjs forge/test-step3-image-protocol.mjs forge/test-revision-routing.mjs forge/test-nonelinear-source.mjs nonelinear-relay/test-source-image.mjs
+        run: node --test scripts/test-step3-international-release.mjs forge/test-step3-international-image-route.mjs forge/test-step3-nonelinear-dimensions.mjs forge/test-step3-nano-banana-ordinary.mjs forge/test-step3-image-protocol.mjs forge/test-revision-routing.mjs forge/test-nonelinear-source.mjs nonelinear-relay/test-source-image.mjs
       - name: Preserve existing Responses transport regression
         run: node --test forge/test-infistar-reconstruction-responses.mjs forge/test-infistar-reconstruction-stream.mjs
       - name: Install isolated revision browser test runtime
@@ -107,12 +120,12 @@ jobs:
       - name: Upload independent byte preservation proof
         uses: actions/upload-artifact@v4
         with:
-          name: step3-initial-read-proof
-          path: /tmp/step3-initial-read-proof.json
+          name: step3-international-proof
+          path: /tmp/step3-international-proof.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: /tmp/step3-initial-read-pages
+          path: /tmp/step3-international-pages
       - name: Deploy isolated artifact to current application
         id: deployment
         uses: actions/deploy-pages@v4

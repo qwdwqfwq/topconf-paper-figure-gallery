@@ -1,4 +1,5 @@
 import {imageJobRoute,packImageBody} from './step3-image-protocol.mjs';
+import {internationalInitialImageUrl} from './step3-international-image-route.mjs';
 const ENDPOINT='https://gallery-infistar-image-jobs.lixiao-gallery.workers.dev';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const transientStatus=status=>status===408||status===425||status===429||status>=500;
@@ -79,4 +80,8 @@ export function createInitialImageJobClient({fetchImpl=globalThis.fetch.bind(glo
  }};
 }
 let defaultClient;
-export const requestInfistarImageJob=options=>(defaultClient||=createInitialImageJobClient()).request(options);
+export function createInternationalInitialImageJobClient(options){
+ const client=createInitialImageJobClient(options);
+ return {request:input=>client.request({...input,url:internationalInitialImageUrl(input.url,input.body)})};
+}
+export const requestInfistarImageJob=options=>(defaultClient||=createInternationalInitialImageJobClient()).request(options);
