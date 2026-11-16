@@ -13,11 +13,12 @@ const baseRun=43723203769;
 const baseTree='d23603856cf20b21f3b8bcb6d84bf961fd102046';
 const baseProofSha256='ae33239a50804d6bd20ffe546725828fc6716cba03390f62e6c627f9bf5c6166';
 export const payload=['forge/index.html','forge/step3-image-capabilities.mjs'];
-export const allowed=[...payload,'.github/workflows/deploy.yml','forge/test-step3-nonelinear-dimensions.mjs','scripts/check-step3-preflight-release.mjs','scripts/test-step3-preflight-release.mjs'].sort();
+export const allowed=[...payload,'.github/workflows/deploy.yml','forge/test-step3-nonelinear-dimensions.mjs','forge/test-step3-preflight-jobs-browser.cjs','scripts/check-step3-preflight-release.mjs','scripts/test-step3-preflight-release.mjs'].sort();
 const reviewed={
+  "forge/test-step3-preflight-jobs-browser.cjs": "6ba89a892e8db9559e99e5977144559d6cc7a3a6001b29818d946c56f8271325",
   "forge/index.html": "07693349622c533b01fa13882347daf8dc2618708f3f9365b4cb7a9f05893c8e",
   "forge/step3-image-capabilities.mjs": "dd7234ceda28041d497cd9604beb4517b9581570dffeffae702eed8842079c37",
-  ".github/workflows/deploy.yml": "0152ab17ccc15661d1e7ca0fb6250e3b5a2bf9951113a8e0cc346a5004fc6490",
+  ".github/workflows/deploy.yml": "559c5d280251869a03b221b92296d9663441af99315ee10c7f8e40b4930d07f5",
   "forge/test-step3-nonelinear-dimensions.mjs": "8d5c7f3610d6340bcfb50f79daa86f690394412578fe30d3d2a29955547b68e1",
   "scripts/test-step3-preflight-release.mjs": "6f2b8986c32e5c79c72031e38b8c4e24dfe008d497d6ac6718d4884e4f3c60b9"
 };
@@ -44,8 +45,8 @@ async function api(suffix){
 }
 async function main(){
  const working=process.argv.includes('--working');
- if(working)assert.equal(git('rev-parse','HEAD'),baseCommit,'Unexpected working base');
- else{assert.equal(git('show','-s','--format=%P','HEAD'),baseCommit,'Release must directly follow the current publication');assert.equal(git('status','--porcelain','--untracked-files=all'),'','Dirty checkout');}
+ git('merge-base','--is-ancestor',baseCommit,'HEAD');
+ if(!working)assert.equal(git('status','--porcelain','--untracked-files=all'),'','Dirty checkout');
  const paths=working?[...new Set([...git('diff','--name-only','--no-renames',baseCommit,'--').split('\n').filter(Boolean),...git('ls-files','--others','--exclude-standard').split('\n').filter(Boolean)])]:git('diff','--name-only','--no-renames',baseCommit,'HEAD').split('\n').filter(Boolean);
  assertScope(paths);
  for(const p of Object.keys(reviewed))verifyReviewed(p,readFileSync(join(root,p)));

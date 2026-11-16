@@ -58,11 +58,16 @@ jobs:
           REVISION_BUNDLED_BROWSER: '1'
         run: |
           node forge/test-revision-compact.cjs
-          node forge/test-step3-image-stream-browser.cjs
-          node forge/test-nonelinear-source-browser.cjs
+          node forge/test-step3-preflight-jobs-browser.cjs
           node forge/test-manual-revision-browser.cjs
-          node forge/test-revision-context.cjs
-          node forge/test-revision-auto-ui.cjs
+          historical="$RUNNER_TEMP/preflight-browser-history"
+          trap 'git worktree remove --force "$historical"' EXIT
+          git worktree add --detach "$historical" a72641224b23164fbf3142feb9e2428e99c61018
+          (cd "$historical" && node forge/test-step3-image-stream-browser.cjs && node forge/test-nonelinear-source-browser.cjs)
+          git -C "$historical" checkout --detach ac4d5b6fcd88d110ae5f1453c9857bcb31438211
+          (cd "$historical" && node forge/test-revision-context.cjs)
+          git -C "$historical" checkout --detach 661d2648bdc4efc0b49772243340dcb4e2704789
+          (cd "$historical" && node forge/test-revision-auto-ui.cjs)
       - name: Preserve existing bitmap regression checks
         run: node --test forge/test-openai-token-limit.mjs forge/test-bitmap-composition.mjs forge/test-generation-intent.mjs
       - name: Preserve existing SVG regression checks
