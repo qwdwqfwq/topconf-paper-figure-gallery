@@ -777,6 +777,7 @@ import {step3ImageResolutions,assertStep3ImageResolution,step3ImageDimensions,st
 import {usesInfistarImageJob,acknowledgeInfistarImageJob,showInfistarJobProgress} from './step3-infistar-job.mjs?v=20261114-durable-jobs';
 import {requestInfistarImageJob} from './step3-initial-image-job.mjs?v=20261116-initial-read-recovery';
 import {internationalGalleryBase} from './step3-international-image-route.mjs?v=20261116-international1';
+import {requestStep3Analysis} from './step3-analysis-request.mjs?v=20261117-diagnostics1';
 import {prepareStep3ImageBody,protocolFetch,imageResultItem} from './step3-image-protocol.mjs?v=20261115-endpoints';
 import {step3ReferenceInputs} from './step3-reference-input.mjs?v=20261114-errors';
 import {createRevisionGallery,generateRevision} from './revision-gallery.mjs?v=20261115-endpoints';
@@ -2135,9 +2136,9 @@ async function analyzeReferences(){
     const blocks=uris.map(u=>{const p=dataURIToParts(u);return {type:'image',source:{type:'base64',media_type:p.media,data:p.data}};});
     blocks.push({type:'text',text:buildAnalyzePrompt(ordered.length, ordered)});
     const body={model:$('#analyzeModel').value||$('#model').value,max_tokens:16000,system:ANALYZE_SYS,messages:[{role:'user',content:blocks}]};
-    const r=await fetchWithTimeout(internationalBase(body.model)+'/v1/messages',{method:'POST',headers:anthropicHeaders(cleanKey($('#key').value)),body:JSON.stringify(withReasoning(body,'visual'))});
-    txt=await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
-    const d=JSON.parse(txt); txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    const url=internationalBase(body.model)+'/v1/messages',key=cleanKey($('#key').value);
+    const d=await requestStep3Analysis({model:body.model,url,key,english:GAL_I18N.lang==='en',request:()=>fetchWithTimeout(url,{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'visual'))})});
+    txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
   }else{
     const am = (mode==='image'&&passMode==='two') ? $('#analyzeModel').value : $('#model').value;
     if(!am) throw new Error(tt('analyze.needmodel'));
@@ -2145,15 +2146,8 @@ async function analyzeReferences(){
     parts.push({type:'text',text:buildAnalyzePrompt(ordered.length, ordered)});
     const body={model:am,temperature:0.2,max_tokens:16000,messages:[{role:'system',content:ANALYZE_SYS},{role:'user',content:parts}]};
     if($('#provider').value==='ark' && !relayBase()) body.thinking={type:'disabled'};
-    let r;
-    try{ r=await postJSON(internationalBase(am),'/chat/completions',withReasoning(body,'visual'),cleanKey($('#key').value)); }
-    catch(e){
-      if(e.name==='TimeoutError') throw new Error(tt('analyze.timeout'));
-      const diag=await diagnoseConnection(internationalBase(am),cleanKey($('#key').value),am);
-      throw new Error(diag || tt('analyze.blocked'));
-    }
-    txt=await r.text(); if(!r.ok) throw new Error(friendlyHttp(r.status,txt));
-    const d=JSON.parse(txt);
+    const base=internationalBase(am),key=cleanKey($('#key').value);
+    const d=await requestStep3Analysis({model:am,url:base+'/chat/completions',key,english:GAL_I18N.lang==='en',request:()=>postJSON(base,'/chat/completions',withReasoning(body,'visual'),key)});
     if(d.choices?.[0]?.finish_reason==='length') throw new Error(tt('err.analyze3'));
     txt=d.choices?.[0]?.message?.content||'';
   }
