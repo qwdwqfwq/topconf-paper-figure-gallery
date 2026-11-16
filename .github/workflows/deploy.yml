@@ -1,4 +1,4 @@
-name: Deploy isolated Step 3 reference analysis
+name: Deploy isolated Step 3 job recovery
 on:
   push:
     branches: [main]
@@ -33,17 +33,32 @@ jobs:
         env:
           ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
         run: echo "Original lock outcome = $ORIGINAL_OUTCOME. Independent Step 3 acceptance does not change this result." >> "$GITHUB_STEP_SUMMARY"
-      - name: Download current analysis publication base
+      - name: Download current recovery publication base
+        uses: actions/download-artifact@v4
+        with:
+          name: step3-analysis-proof
+          run-id: 43907732087
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/step3-recovery-base
+      - name: Strict isolated recovery acceptance and artifact construction
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-step3-recovery-release.mjs "$RUNNER_TEMP/step3-recovery-base/step3-analysis-proof.json" --prepare-pages
+      - name: Download historical analysis acceptance input
         uses: actions/download-artifact@v4
         with:
           name: step3-international-proof
           run-id: 43869741849
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/step3-analysis-base
-      - name: Strict isolated analysis release acceptance and artifact construction
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: node scripts/check-step3-analysis-release.mjs "$RUNNER_TEMP/step3-analysis-base/step3-international-proof.json" --prepare-pages
+      - name: Preserve published analysis acceptance and adversarial tests
+        run: |
+          historical="$RUNNER_TEMP/analysis-acceptance-history"
+          trap 'git worktree remove --force "$historical"' EXIT
+          git worktree add --detach "$historical" 1aa0f3940cc1cf81747d6e2b9559dabe5da1d688
+          (cd "$historical" && node scripts/check-step3-analysis-release.mjs "$RUNNER_TEMP/step3-analysis-base/step3-international-proof.json" && node --test scripts/test-step3-analysis-release.mjs)
+      - name: Durable backend recovery and local revision regression
+        run: node --test infistar-image-relay/test-worker.mjs forge/test-revision-job-recovery.mjs scripts/test-step3-recovery-release.mjs
       - name: Download historical international acceptance input
         uses: actions/download-artifact@v4
         with:
@@ -99,7 +114,7 @@ jobs:
       - name: Step 3 stream protocol regression
         run: node --test forge/test-step3-initial-image-job.mjs forge/test-step3-image-stream.mjs forge/test-revision-error-recovery.mjs
       - name: Independent acceptance adversarial tests
-        run: node --test scripts/test-step3-analysis-release.mjs forge/test-step3-analysis-request.mjs forge/test-step3-analysis-scope.mjs forge/test-step3-international-image-route.mjs forge/test-step3-nonelinear-dimensions.mjs forge/test-step3-nano-banana-ordinary.mjs forge/test-step3-image-protocol.mjs forge/test-revision-routing.mjs forge/test-nonelinear-source.mjs nonelinear-relay/test-source-image.mjs
+        run: node --test forge/test-step3-analysis-request.mjs forge/test-step3-analysis-scope.mjs forge/test-step3-international-image-route.mjs forge/test-step3-nonelinear-dimensions.mjs forge/test-step3-nano-banana-ordinary.mjs forge/test-step3-image-protocol.mjs forge/test-revision-routing.mjs forge/test-nonelinear-source.mjs nonelinear-relay/test-source-image.mjs
       - name: Preserve existing Responses transport regression
         run: node --test forge/test-infistar-reconstruction-responses.mjs forge/test-infistar-reconstruction-stream.mjs
       - name: Install isolated revision browser test runtime
@@ -134,12 +149,12 @@ jobs:
       - name: Upload independent byte preservation proof
         uses: actions/upload-artifact@v4
         with:
-          name: step3-analysis-proof
-          path: /tmp/step3-analysis-proof.json
+          name: step3-recovery-proof
+          path: /tmp/step3-recovery-proof.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: /tmp/step3-analysis-pages
+          path: /tmp/step3-recovery-pages
       - name: Deploy isolated artifact to current application
         id: deployment
         uses: actions/deploy-pages@v4

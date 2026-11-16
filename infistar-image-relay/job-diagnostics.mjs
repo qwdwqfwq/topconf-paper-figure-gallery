@@ -20,23 +20,48 @@ function providerMessage(text){
     return /<title[^>]*>([^<]+)<\/title>/i.exec(text)?.[1]||(!/<(?:html|script|body)\b/i.test(text)?text:'');
   }
 }
+export function responseDiagnostics(response,key=''){
+  const diagnostic={upstreamStatus:response.status};
+  for(const [name,header] of Object.entries({cfRay:'cf-ray',cfErrorOrigin:'cf-error-origin',cfErrorType:'cf-error-type',server:'server',upstreamDate:'date',requestId:'x-request-id'})){
+    const value=safeDiagnosticText(response.headers.get(header),key);if(value)diagnostic[name]=value;
+  }
+  if(!diagnostic.requestId){const value=safeDiagnosticText(response.headers.get('request-id')||response.headers.get('x-oneapi-request-id'),key);if(value)diagnostic.requestId=value;}
+  // An upstream HTTP status alone cannot identify which Cloudflare hop made it.
+  if(response.status===524)diagnostic.errorSource=diagnostic.cfErrorOrigin?'cloudflare:'+diagnostic.cfErrorOrigin:'unattributed-upstream';
+  const timing=response.imageTransport;
+  for(const name of ['headersMs','firstBodyChunkMs','responseBytes','normalizedResponseChars','elapsedMs'])if(Number.isFinite(timing?.[name])&&timing[name]>=0)diagnostic['remote'+name[0].toUpperCase()+name.slice(1)]=timing[name];
+  return diagnostic;
+}
 export function resultDiagnostics(result,key=''){
   const diagnostic={};
+  for(const name of ['headersMs','responseBytes','firstBodyChunkMs','elapsedMs']){
+    const value=result?.transport?.[name];if(Number.isFinite(value)&&value>=0)diagnostic[name]=value;
+  }
   if(Number.isInteger(result?.status))diagnostic.upstreamStatus=result.status;
   for(const [name,value] of Object.entries({
     resultError:result?.resultError||result?.downloadError,
-    upstreamMessage:providerMessage(result?.text),requestId:result?.requestId,
+    upstreamMessage:!result?.ok||result?.resultError?providerMessage(result?.text):'',requestId:result?.requestId,
     stage:result?.transport?.stage,errorCode:result?.transport?.errorCode
   })){const safe=safeDiagnosticText(value,key);if(safe)diagnostic[name]=safe;}
   return diagnostic;
 }
 export function exceptionDiagnostics(error,key=''){
   const diagnostic={};
+  for(const name of ['headersMs','responseBytes','firstBodyChunkMs','elapsedMs']){
+    const value=error?.imageDiagnostics?.[name];if(Number.isFinite(value)&&value>=0)diagnostic[name]=value;
+  }
   for(const [name,value] of Object.entries({
     message:error?.message,errorCode:error?.imageDiagnostics?.errorCode||error?.code,
     stage:error?.imageDiagnostics?.stage,requestId:error?.imageDiagnostics?.requestId
   })){const safe=safeDiagnosticText(value,key);if(safe)diagnostic[name]=safe;}
   const status=error?.imageDiagnostics?.status;
   if(Number.isInteger(status))diagnostic.upstreamStatus=status;
+  const transport=error?.transportDiagnostics;
+  if(transport){
+    for(const name of ['headersMs','firstBodyChunkMs','responseBytes','elapsedMs'])if(Number.isFinite(transport[name])&&transport[name]>=0)diagnostic['remote'+name[0].toUpperCase()+name.slice(1)]=transport[name];
+    for(const name of ['stage','errorCode']){const value=safeDiagnosticText(transport[name],key);if(value)diagnostic['remote'+name[0].toUpperCase()+name.slice(1)]=value;}
+    if(Number.isInteger(transport.status))diagnostic.upstreamStatus=transport.status;
+    if(transport.headers)Object.assign(diagnostic,responseDiagnostics({status:transport.status,headers:new Headers(transport.headers)},key));
+  }
   return diagnostic;
 }

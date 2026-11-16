@@ -3,8 +3,11 @@
 import {requestStep3ImageStream} from '../forge/step3-image-stream.mjs';
 import {imageJobRoute,unpackImageBody,protocolFetch} from '../forge/step3-image-protocol.mjs';
 import {preserveImageResult} from './image-result.mjs';
-import {resultDiagnostics,exceptionDiagnostics} from './job-diagnostics.mjs';
+import {resultDiagnostics,exceptionDiagnostics,responseDiagnostics} from './job-diagnostics.mjs';
 import {usesBrowserImageTransport,openBrowserImageFetch} from './browser-image-fetch.mjs';
+import {PAYLOAD_STORE,SQLITE_PAYLOAD_STORE,hasPayloadStore,putPayload,getPayload,deletePayloads,payloadObject} from './job-payloads.mjs';
+import {extractImage,storeImage,streamedResult} from './streamed-image-result.mjs';
+import {sqliteImagePayloads} from './sqlite-image-payloads.mjs';
 const RETENTION=24*60*60*1000, EXECUTION=12*60*1000, MAX_REQUEST=16*1024*1024;
 const encoder=new TextEncoder();
 // This Worker runs outside mainland China. Select the documented international
@@ -12,6 +15,7 @@ const encoder=new TextEncoder();
 export function backgroundTarget(value){
   const url=new URL(value);
   if(['infistar.cc','www.infistar.cc'].includes(url.hostname)&&url.pathname==='/v1/images/generations')url.hostname='infistar.ai';
+  if(url.hostname==='gallery-nonelinear-relay.lixiao-gallery.workers.dev'&&url.pathname==='/v1/images/generations')url.hostname='api.nonelinear.com.cn';
   return url.href;
 }
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
@@ -20,6 +24,7 @@ async function cipher(secret){return crypto.subtle.importKey('raw',Uint8Array.fr
 async function encrypt(secret,value){const iv=crypto.getRandomValues(new Uint8Array(12)),bytes=new Uint8Array(await crypto.subtle.encrypt({name:'AES-GCM',iv},await cipher(secret),encoder.encode(value)));return {iv:[...iv],bytes:[...bytes]};}
 async function decrypt(secret,value){return new TextDecoder().decode(await crypto.subtle.decrypt({name:'AES-GCM',iv:new Uint8Array(value.iv)},await cipher(secret),new Uint8Array(value.bytes)));}
 function publicMeta(meta){return {id:meta.id,state:meta.state,created:meta.created,expires:meta.expires,upstreamAttempts:meta.upstreamAttempts||0,requestId:meta.requestId||'',error:meta.error||null,...(meta.diagnostic?{diagnostic:meta.diagnostic}:{})};}
+function jobLog(event,meta){console.log(JSON.stringify({event,...publicMeta(meta)}));}
 async function putText(storage,prefix,text){const count=Math.ceil(text.length/16000);for(let i=0;i<count;i++)await storage.put(prefix+i,text.slice(i*16000,(i+1)*16000));return count;}
 async function getText(storage,prefix,count){let text='';for(let i=0;i<count;i++)text+=await storage.get(prefix+i);return text;}
 async function clearText(storage,prefix,count){for(let i=0;i<count;i++)await storage.delete(prefix+i);}
@@ -58,7 +63,15 @@ export default {
   }
 };
 export class ImageJob {
-  constructor(ctx,env){this.ctx=ctx;this.storage=ctx.storage;this.env=env;}
+  constructor(ctx,env){this.ctx=ctx;this.storage=ctx.storage;this.env=Object.create(env);this.env.DO_IMAGE_PAYLOADS=sqliteImagePayloads(ctx.storage);}
+  async readText(meta,kind){
+    return hasPayloadStore(meta)?getPayload(this.env,meta,kind==='result'?(meta.resultStage||'result'):kind):getText(this.storage,kind+':',meta[kind+'Count']);
+  }
+  async clearInput(storage,meta){
+    // Payload stages remain private until the existing 24-hour expiry. Retaining
+    // their known keys also makes cleanup after an interrupted commit safe.
+    if(!hasPayloadStore(meta))await clearText(storage,'input:',meta.inputCount||0);
+  }
   async fetch(request){
     // Namespace-internal capability records; the public router has no such route.
     if(new URL(request.url).pathname==='/compat'){
@@ -71,7 +84,7 @@ export class ImageJob {
     const authorization=request.headers.get('Authorization')||'',owner=await digest(authorization),url=new URL(request.url);
     const id=url.pathname.split('/')[2];let meta=await this.storage.get('meta');
     if(meta&&meta.owner!==owner)return json({error:'NOT_FOUND'},404);
-    if(meta&&Date.now()>=meta.expires){await this.expire(meta);meta=await this.storage.get('meta');}
+    if(meta&&meta.state!=='expired'&&Date.now()>=meta.expires){await this.expire(meta);meta=await this.storage.get('meta');}
     if(request.method==='PUT'){
       let value;try{value=validateSubmission(JSON.parse(await boundedBody(request)));}catch(error){return json({error:error.message==='REQUEST_TOO_LARGE'?'REQUEST_TOO_LARGE':'INVALID_SUBMISSION'},400);}
       const text=JSON.stringify(value),fingerprint=await digest(text);
@@ -80,11 +93,16 @@ export class ImageJob {
         meta=await this.storage.get('meta');
         if(meta)return;
         const encrypted=await encrypt(this.env.JOB_ENCRYPTION_KEY,authorization.slice(7));
+        const queued={id,owner,fingerprint,state:'queued',created:Date.now(),expires:Date.now()+RETENTION,encrypted,upstreamAttempts:0,...((this.env.IMAGE_PAYLOADS||this.env.STREAM_IMAGE_RESULTS==='true')?{payloadStore:this.env.IMAGE_PAYLOADS?PAYLOAD_STORE:SQLITE_PAYLOAD_STORE,streamImageResults:this.env.STREAM_IMAGE_RESULTS==='true'}:{})};
+        // Finish the payload write BEFORE acknowledging/scheduling the task. Keep
+        // external I/O outside the retryable SQLite transaction callback.
+        if(hasPayloadStore(queued))await putPayload(this.env,queued,'input',text);
         await this.storage.transaction(async storage=>{
-          const count=await putText(storage,'input:',text);
-          meta={id,owner,fingerprint,state:'queued',created:Date.now(),expires:Date.now()+RETENTION,inputCount:count,encrypted,upstreamAttempts:0};
+          const count=hasPayloadStore(queued)?0:await putText(storage,'input:',text);
+          meta={...queued,inputCount:count};
           await storage.put('meta',meta);await storage.setAlarm(Date.now()+100);
         });
+        jobLog('queued',meta);
       });
       if(meta.fingerprint!==fingerprint)return json({error:'JOB_ID_CONFLICT'},409);
       return json(publicMeta(meta),meta.state==='expired'?410:202);
@@ -93,63 +111,80 @@ export class ImageJob {
     if(meta.state==='expired')return json(publicMeta(meta),410);
     if(url.pathname.endsWith('/result')){
       if(meta.state!=='succeeded'&&meta.state!=='rejected')return json(await this.diagnosticMeta(meta,authorization.slice(7)),409);
-      const result=JSON.parse(await getText(this.storage,'result:',meta.resultCount));
+      if(meta.resultFormat==='image-v2')return streamedResult(this.env,meta);
+      if(hasPayloadStore(meta))return new Response((await payloadObject(this.env,meta,meta.resultStage||'result')).body,{headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});
+      const result=JSON.parse(await this.readText(meta,'result'));
       return json(result);
     }
     return json(await this.diagnosticMeta(meta,authorization.slice(7)));
   }
   async diagnosticMeta(meta,key){
     const result=publicMeta(meta);
-    if(['unknown','rejected'].includes(meta.state)&&meta.resultCount){
+    if(['unknown','rejected'].includes(meta.state)&&meta.resultCount&&!meta.diagnostic){
       try{
         // Read legacy records as well; never mutate or restart the old task.
-        const stored=JSON.parse(await getText(this.storage,'result:',meta.resultCount));
+        const stored=JSON.parse(await this.readText(meta,'result'));
         result.diagnostic={...resultDiagnostics(stored,key),...meta.diagnostic};
       }catch{result.diagnostic={...meta.diagnostic,recordError:'DIAGNOSTIC_RECORD_UNREADABLE'};}
     }
     return result;
   }
   async expire(meta){
+    if(meta.state==='expired')return;
+    if(hasPayloadStore(meta))await deletePayloads(this.env,meta);
     for(const prefix of ['input:','result:'])for(;;){const keys=[...(await this.storage.list({prefix,limit:128})).keys()];if(!keys.length)break;await this.storage.delete(keys);}
     // Small tombstone is intentionally retained. Replaying an expired ID must
     // never silently create a second chargeable upstream generation.
-    const {encrypted,inputCount,resultCount,...tombstone}=meta;
+    const {encrypted,inputCount,resultCount,payloadStore,resultStage,...tombstone}=meta;
     await this.storage.put('meta',{...tombstone,state:'expired'});await this.storage.deleteAlarm();
   }
   async alarm(){
+    if(this.active)return;
+    this.active=true;
+    try{return await this.executeAlarm();}finally{this.active=false;}
+  }
+  async executeAlarm(){
     let meta=await this.storage.get('meta');if(!meta)return;
     if(Date.now()>=meta.expires){await this.expire(meta);return;}
-    if(meta.state==='running'||meta.state==='response_received'){
+    const recovering=['running','response_received'].includes(meta.state)&&!!meta.browserSession&&!!meta.encrypted;
+    if((meta.state==='running'||meta.state==='response_received')&&!recovering){
       // At-least-once alarm delivery or a restart after claim. The upstream may
       // have charged; there is no documented upstream image-result lookup API.
       const {encrypted,inputCount,...interrupted}=meta;
-      await this.storage.put('meta',{...interrupted,state:'unknown',error:'EXECUTION_INTERRUPTED_NO_RESUBMIT'});
-      await clearText(this.storage,'input:',inputCount||0);await this.storage.setAlarm(meta.expires);return;
+      const stopped={...interrupted,state:'unknown',error:'EXECUTION_INTERRUPTED_NO_RESUBMIT'};
+      await this.storage.put('meta',stopped);jobLog('interrupted',stopped);
+      await this.clearInput(this.storage,meta);await this.storage.setAlarm(meta.expires);return;
     }
-    if(meta.state!=='queued'){await this.storage.setAlarm(meta.expires);return;}
-    await this.storage.setAlarm(Date.now()+EXECUTION+30000);
+    if(meta.state!=='queued'&&!recovering){await this.storage.setAlarm(meta.expires);return;}
+    await this.storage.setAlarm(Date.now()+15000);
     let browser;
     let input,target;
     try{
-      input=JSON.parse(await getText(this.storage,'input:',meta.inputCount));
+      input=JSON.parse(await this.readText(meta,'input'));
       target=backgroundTarget(input.url);
-      if(usesBrowserImageTransport(target))browser=await openBrowserImageFetch(this.env.BROWSER,target,{timeoutMs:EXECUTION});
+      if(usesBrowserImageTransport(target))browser=await openBrowserImageFetch(this.env.BROWSER,target,{timeoutMs:EXECUTION,resume:recovering?meta.browserSession:undefined});
     }catch(error){
+      if(recovering&&Date.now()-meta.created<EXECUTION+60000){
+        await this.storage.put('meta',{...meta,diagnostic:{...meta.diagnostic,recoveryError:error.message}});
+        await this.storage.setAlarm(Date.now()+15000);return;
+      }
       const {encrypted,inputCount,...failed}=meta;
-      await this.storage.put('meta',{...failed,state:'unknown',error:'IMAGE_PREPARATION_FAILED',diagnostic:exceptionDiagnostics(error)});
-      await clearText(this.storage,'input:',inputCount||0);
+      const stopped={...failed,state:'unknown',error:'IMAGE_PREPARATION_FAILED',diagnostic:exceptionDiagnostics(error)};
+      await this.storage.put('meta',stopped);jobLog('preparation_failed',stopped);
+      await this.clearInput(this.storage,meta);
       await this.storage.setAlarm(meta.expires);
       return;
     }
-    meta={...meta,state:'running',upstreamAttempts:1};
+    meta={...meta,state:'running',upstreamAttempts:meta.upstreamAttempts||1,...(browser?{browserSession:browser.descriptor}:{}),diagnostic:{...meta.diagnostic,targetHost:new URL(target).hostname,transport:browser?'browser':'worker-fetch',...(recovering?{recoveries:(meta.diagnostic?.recoveries||0)+1}:{})}};
     await this.storage.put('meta',meta); // Durable claim BEFORE the only POST.
+    jobLog('started',meta);
     let executionKey='';
     try{
       const key=executionKey=await decrypt(this.env.JOB_ENCRYPTION_KEY,meta.encrypted);
       const compatibilityStore={
         get:async identity=>{
           const object=this.env.IMAGE_JOBS.get(this.env.IMAGE_JOBS.idFromName('compat:'+identity));
-          return (await object.fetch(new Request('https://internal/compat'))).json();
+          return recovering&&meta.mode?{version:1,mode:meta.mode}:(await object.fetch(new Request('https://internal/compat'))).json();
         },
         set:async(identity,value)=>{
           const object=this.env.IMAGE_JOBS.get(this.env.IMAGE_JOBS.idFromName('compat:'+identity));
@@ -157,39 +192,94 @@ export class ImageJob {
           if(!response.ok)throw Error('COMPATIBILITY_STORAGE_FAILED');
         }
       };
-      const raw=await requestStep3ImageStream({...input,url:target,body:unpackImageBody(input.body),key,timeoutMs:EXECUTION,compatibilityStore,
-        beforeAttempt:async({attempt,mode})=>{meta={...meta,upstreamAttempts:attempt,mode};await this.storage.put('meta',meta);},
-        fetchImpl:browser?browser.fetch:protocolFetch()});
+      let browserTransport;
+      const observedFetch=async(url,init)=>{
+        const started=Date.now();
+        const response=await (browser&&url===target?browser.fetch(url,init):globalThis.fetch(url,init));
+        if(response.imageTransport)browserTransport=response.imageTransport;
+        if(new URL(url).pathname.includes('/images/')||new URL(url).pathname.includes('/models/')){
+          meta={...meta,diagnostic:{...meta.diagnostic,headersMs:browserTransport?.headersMs??Date.now()-started,...responseDiagnostics(response,key)}};
+          await this.storage.put('meta',meta);jobLog('headers_received',meta);
+        }
+        return response;
+      };
+      const requestInput={...input,url:target,body:unpackImageBody(input.body),key,timeoutMs:EXECUTION,compatibilityStore,
+        beforeAttempt:async({attempt,mode})=>{meta={...meta,upstreamAttempts:Math.max(meta.upstreamAttempts||0,attempt),mode};await this.storage.put('meta',meta);},
+        fetchImpl:protocolFetch(observedFetch)};
+      input=null;
+      const raw=await requestStep3ImageStream(requestInput);
+      if(browserTransport)raw.transport={...raw.transport,...browserTransport};
+      requestInput.body=null;
       raw.backgroundTarget=target;
+      meta={...meta,diagnostic:{...meta.diagnostic,...resultDiagnostics(raw,key)}};
+      if(meta.streamImageResults){meta=await this.finishStreamed(meta,raw,key);}
+      else {
       // Scrub the actual key even if an upstream error echoes the credential.
       const safe=JSON.stringify(raw).split(key).join('[redacted]').replace(/Bearer\s+[^"\s]+/gi,'Bearer [redacted]');
+      if(hasPayloadStore(meta))await putPayload(this.env,meta,'raw',safe);
       await this.storage.transaction(async storage=>{
-        const count=await putText(storage,'result:',safe);
-        const {encrypted,inputCount,...finished}=meta;
-        meta={...finished,state:'response_received',requestId:raw.requestId,resultCount:count};
+        const count=hasPayloadStore(meta)?1:await putText(storage,'result:',safe);
+        const previous=meta;
+        meta={...meta,state:'response_received',requestId:raw.requestId,resultCount:count,...(hasPayloadStore(meta)?{resultStage:'raw'}:{})};
         await storage.put('meta',meta);
-        await clearText(storage,'input:',inputCount);
       });
       await this.finish(meta,JSON.parse(safe));
+      }
     }catch(error){
+      meta=await this.storage.get('meta')||meta;
+      if(browser&&(error.browserRecoverable||!/^BROWSER_|^IMAGE_/.test(error.message))&&Date.now()-meta.created<EXECUTION+60000){
+        meta={...meta,diagnostic:{...meta.diagnostic,recoveryError:error.message}};
+        await this.storage.put('meta',meta);await browser.close({retain:true});browser=null;
+        await this.storage.setAlarm(Date.now()+15000);return;
+      }
       const {encrypted,inputCount,...finished}=meta;
-      const diagnostic=exceptionDiagnostics(error,executionKey);
-      await this.storage.put('meta',{...finished,state:'unknown',requestId:diagnostic.requestId||'',error:'UPSTREAM_RESULT_UNCONFIRMED_NO_RESUBMIT',diagnostic});
-      await clearText(this.storage,'input:',inputCount||0);
+      const diagnostic={...meta.diagnostic,...exceptionDiagnostics(error,executionKey)};
+      const failed={...finished,state:'unknown',requestId:diagnostic.requestId||meta.requestId||'',error:'UPSTREAM_RESULT_UNCONFIRMED_NO_RESUBMIT',diagnostic};
+      await this.storage.put('meta',failed);jobLog('failed',failed);
+      await this.clearInput(this.storage,meta);
     }finally{await browser?.close();}
     await this.storage.setAlarm(meta.expires);
   }
-  async finish(meta,raw){
+  async finishStreamed(meta,raw,key){
+    let item,extractError;
+    try{item=extractImage(raw);}catch(error){extractError=error.message;}
+    const diagnostic={...meta.diagnostic,...resultDiagnostics(raw,key)};
+    // Preserve a small provider response/URL for diagnosis. Inline image bytes
+    // are stored separately and never re-serialized into another huge JSON.
+    const saved={...raw,text:raw.ok?(item?.url?JSON.stringify({data:[{url:item.url}]}):''):raw.text?.slice(0,16000)};
+    raw.text='';
+    const safe=JSON.stringify(saved).split(key).join('[redacted]').replace(/Bearer\s+[^"\s]+/gi,'Bearer [redacted]');
+    await putPayload(this.env,meta,'raw',safe);
+    meta={...meta,state:'response_received',requestId:raw.requestId,resultCount:1,resultStage:'raw',diagnostic};
+    await this.storage.put('meta',meta);
+    jobLog('response_received',meta);
+    if(!raw.ok||extractError){
+      const result={...JSON.parse(safe),...(extractError?{ok:false,resultError:extractError}:{})};
+      return this.finish(meta,result,raw.ok);
+    }
+    const image=await storeImage(this.env,meta,item);item=null;
+    const result={...raw};delete result.text;
+    await putPayload(this.env,meta,'result',JSON.stringify({image,result}));
+    const {encrypted,inputCount,browserSession,...finished}=meta;
+    const complete={...finished,state:'succeeded',resultFormat:'image-v2',resultStage:'result',error:null,diagnostic:{...diagnostic,imageBytes:image.bytes,totalMs:Date.now()-meta.created}};
+    await this.storage.put('meta',complete);await this.clearInput(this.storage,meta);jobLog('completed',complete);return complete;
+  }
+  async finish(meta,raw,accepted=raw.ok){
     const preserved=await preserveImageResult(raw);
     const result=preserved.downloadError?{...preserved,ok:false,resultError:preserved.downloadError}:preserved;
     // A gateway 5xx does not prove that generation was never accepted. Keep the
     // task unresolved and block automatic replacement instead of calling it a
     // definite rejection. Its received response remains stored for diagnosis.
-    const uncertain=!result.ok&&(result.status>=500||result.status===408||raw.ok);
+    const uncertain=!result.ok&&(result.status>=500||result.status===408||accepted);
+    if(hasPayloadStore(meta))await putPayload(this.env,meta,'result',JSON.stringify(result));
     await this.storage.transaction(async storage=>{
-      const count=await putText(storage,'result:',JSON.stringify(result));
+      const count=hasPayloadStore(meta)?1:await putText(storage,'result:',JSON.stringify(result));
       if(meta.resultCount>count)for(let i=count;i<meta.resultCount;i++)await storage.delete('result:'+i);
-      await storage.put('meta',{...meta,state:uncertain?'unknown':result.ok?'succeeded':'rejected',requestId:result.requestId,error:uncertain?'UPSTREAM_HTTP_'+result.status+'_NO_RESUBMIT':result.resultError||result.downloadError||null,resultCount:count});
+      const previous=meta,{encrypted,inputCount,browserSession,...finished}=meta;
+      meta={...finished,state:uncertain?'unknown':result.ok?'succeeded':'rejected',requestId:result.requestId,error:uncertain?'UPSTREAM_HTTP_'+result.status+'_NO_RESUBMIT':result.resultError||result.downloadError||null,resultCount:count,diagnostic:{...meta.diagnostic,...resultDiagnostics(result)},...(hasPayloadStore(meta)?{resultStage:'result'}:{})};
+      await storage.put('meta',meta);
+      await this.clearInput(storage,previous);
     });
+    jobLog('completed',meta);return meta;
   }
 }

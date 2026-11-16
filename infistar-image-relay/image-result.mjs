@@ -7,7 +7,7 @@ function mime64(value){
   if(String.fromCharCode(...bytes.slice(0,4))==='RIFF'&&String.fromCharCode(...bytes.slice(8,12))==='WEBP')return 'image/webp';
   return null;
 }
-function publicUrl(value){
+export function publicUrl(value){
   const u=new URL(value);
   // URLs originate in the provider response. Limit downloads to public DNS
   // names and verify each redirect; never forward the generation credential.

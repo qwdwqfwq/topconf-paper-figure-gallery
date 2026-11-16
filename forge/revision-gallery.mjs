@@ -3,7 +3,10 @@ import {usesInfistarGemini,geminiImageRequest,geminiImageResult,compatibleImageR
 import {imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261026-nonelinear-resolution';
 import {captureGenerationContext,copyStep1Context,revisionContextInstruction} from './revision-context.mjs';
 import {requestStep3ImageStream} from './step3-image-stream.mjs?v=20261115-endpoints';
-import {usesInfistarImageJob,requestInfistarImageJob,acknowledgeInfistarImageJob} from './step3-infistar-job.mjs?v=20261114-durable-jobs';
+import {usesInfistarImageJob,acknowledgeInfistarImageJob} from './step3-infistar-job.mjs?v=20261114-durable-jobs';
+import {createInitialImageJobClient} from './step3-initial-image-job.mjs?v=20261117-revision-recovery';
+const revisionJobClient=createInitialImageJobClient();
+const requestInfistarImageJob=input=>revisionJobClient.request(input);
 import {imageResultItem} from './step3-image-protocol.mjs';
 import {discoverRedrawReaderModel} from './revision-reader-model.mjs?v=20261115-auto';
 import {prepareLocalEdit,prepareLocalRedraw,localEditInstruction,localRedrawReadInstruction,localRedrawInstruction,compositeLocalEdit,createLocalSelector,comparisonView,requestLocalSynchronous,localFinalImageResponse} from './revision-local.mjs?v=20261115-local';
@@ -342,7 +345,10 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
     throw new Error('待修改原图或截图无效，请重新选择；本次未发送请求。');
   const native=usesInfistarGemini(base,model);
   if(native&&(!revisionGeminiRatios.includes(ratio)||!['1K','2K','4K'].includes(resolution)))throw new Error('不支持的修改图比例或分辨率。');
-  const dimensions=native?{field:'gemini',aspectRatio:ratio,imageSize:resolution}:imageRequestDimensions(p,model,ratio,resolution,false);
+  // Revision-only alias support: keep the provider model ID and shared Step 4 adapter unchanged.
+  const dimensions=native?{field:'gemini',aspectRatio:ratio,imageSize:resolution}:
+    p==='nonelinear'&&model==='gemini-nano-banana-2.1'&&['1K','2K','4K'].includes(resolution)
+      ?{field:'size',value:resolution,aspectRatio:ratio}:imageRequestDimensions(p,model,ratio,resolution,false);
   const semanticContext=parent.freeRevision?'':revisionContextInstruction(parent);
   const instruction=(parent.localRedrawBrief?localRedrawInstruction(prompt,parent.localRedrawBrief):parent.localPatch?localEditInstruction(prompt,parent.localPatch,references.length):parent.freeRevision?freeRevisionInstruction(parent,parent.freeRevisionPrompt,references.length):parent.diagramReflow?`Redesign the INTERNAL layout of this selected diagram panel. Image 0 (FIRST) is the NEW TARGET LAYOUT canvas to finish. The content checklist specifies the exact visible text, colors and directed branch conditions. Follow Image 0 geometry and use the entire target canvas, including its lower portion. Finish the confirmed NEW arrangement of individual elements. Sizes, shapes, fonts, line breaks and branch orientation may change freely within the selected region while keeping all content readable. Reduce gaps only when requested; honor explicit directions and grouping. Copy all flow-node labels and branch conditions from the checklist exactly, retaining their logical relationships. The draft covers the entire selected region. Include every inventoried title, legend, equation, footer, icon and process node at its NEW location; there are no fixed original bands inside it. Do not introduce content absent from the inventory. Visual design may be optimized while preserving information carried by color coding. Output the redesigned panel only, with readable text. Do not reproduce the original arrangement. User request and content checklist:\n${prompt}`:revisionInstruction(prompt,references.length,parent.revisionMode,parent.focusedRegion))+'\n\n'+semanticContext;
   const inputHashes=await Promise.all(references.map(fingerprint));
@@ -357,7 +363,7 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
     const multipartGPT=p!=='nonelinear'&&/^gpt-image-/i.test(model);
     const request=native?geminiImageRequest(base,model,instruction,references,dimensions):
       compatibleImageRequest(body,multipartGPT?'':base,multipartGPT?'':p);
-    const revisionBase=p==='nonelinear'&&base==='https://gallery-nonelinear-relay.lixiao-gallery.workers.dev/v1'?'https://gallery-revision-images.lixiao-gallery.workers.dev/v1':(request.base||base);
+    const revisionBase=request.base||base;
     const url=revisionBase+request.endpoint;
     const transport=imageRequestDiagnostics(url,request.body);
     if(transport.referenceCount!==references.length)throw new Error('修改请求未完整包含原图和截图，本次未发送。');
