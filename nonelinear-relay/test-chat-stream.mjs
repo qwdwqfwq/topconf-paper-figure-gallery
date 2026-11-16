@@ -77,14 +77,14 @@ test('DONE never substitutes for finish_reason, including role-only and partial 
  }
  assert.equal((await bufferedChat(sse(event('','stop')),headers).json()).error.code,'empty_completion');
 });
-test('bounded retry discards bad attempts and returns only the completed response',async()=>{
+test('incomplete paid request is never automatically resubmitted',async()=>{
  let attempts=0;
  const response=waitingChat(async()=>sse(++attempts<3?event('<svg>',null):event('<svg></svg>','stop')),headers,5);
- const data=await response.json();assert.equal(attempts,3);assert.equal(data.choices[0].message.content,'<svg></svg>');assert.equal(data.relay.attempts,3);
+ const data=await response.json();assert.equal(attempts,1);assert.equal(data.choices,undefined);assert.equal(data.error.code,'incomplete_stream');assert.equal(data.error.attempts,1);
 });
-test('repeated incomplete completion ends as an actionable error at three attempts',async()=>{
- let calls=0;const data=await waitingChat(async()=>{calls++;return sse(event(null,null));},headers,5).json();
- assert.equal(calls,3);assert.equal(data.error.code,'incomplete_stream');assert.equal(data.error.attempts,3);
+test('incomplete completion retains its upstream request ID after one submission',async()=>{
+ let calls=0;const data=await waitingChat(async()=>{calls++;const response=sse(event(null,null));response.headers.set('x-request-id','original-request');return response;},headers,5).json();
+ assert.equal(calls,1);assert.equal(data.error.code,'incomplete_stream');assert.equal(data.error.attempts,1);assert.equal(data.error.request_id,'original-request');
 });
 test('quota, malformed SSE, length and refusal are not replayed',async()=>{
  for(const make of [()=>new Response('quota',{status:429}),()=>sse('data: broken\n\n'),()=>sse(event('<svg>','length')),()=>sse('data: '+JSON.stringify({choices:[{delta:{refusal:'refused'},finish_reason:'stop'}]})+'\n\n')]){
@@ -103,9 +103,51 @@ test('cancellation during upstream body reading cancels that body without retry'
  const reader=response.body.getReader();await reader.read();await new Promise(r=>setTimeout(r,10));await reader.cancel();await new Promise(r=>setTimeout(r,10));assert.equal(cancelled,true);assert.equal(calls,1);
 });
 
-test('provider typed timeout is retried, typed non-timeout errors are not',async()=>{
+test('provider timeout and quota errors preserve details without a second paid submission',async()=>{
  for(const message of ['The read operation timed out','quota exceeded']){
   let calls=0;const data=await waitingChat(async()=>{calls++;return sse(calls===1?'data: '+JSON.stringify({type:'error',message,code:500})+'\n\ndata: [DONE]\n\n':event('<svg></svg>','stop'));},headers,5).json();
-  assert.equal(calls,message.includes('timed out')?2:1);assert.equal(Boolean(data.choices),calls===2);
+  assert.equal(calls,1);assert.equal(data.choices,undefined);assert.equal(data.error.message,message);assert.equal(data.error.code,500);assert.equal(data.error.attempts,1);
  }
+});
+
+test('HTTP JSON, wrapped plaintext and SSE errors preserve provider diagnostics',async()=>{
+ const detail={message:'Image processing blocked due to content policy violation.',type:'invalid_request_error',param:'input',code:'content_policy_violation'};
+ const wrapped="请求格式错误或输入不符合安全审查：Error code: 400 - {'error': {'message': 'Image processing blocked due to content policy violation.', 'type': 'invalid_request_error', 'param': 'input', 'code': 'content_policy_violation'}}";
+ for(const make of [()=>new Response(JSON.stringify({error:detail}),{status:400}),()=>new Response(wrapped,{status:400}),()=>sse('data: '+JSON.stringify({error:detail})+'\n\n')]){
+  let calls=0;const data=await waitingChat(()=>{calls++;const response=make();response.headers.set('x-request-id','policy-request');return response;},headers,5).json();
+  assert.equal(calls,1);assert.equal(data.error.code,detail.code);assert.equal(data.error.type,detail.type);assert.equal(data.error.param,'input');assert.match(data.error.message,/Image processing blocked/);assert.equal(data.error.request_id,'policy-request');assert.equal(data.error.attempts,1);
+ }
+});
+
+test('rate limit retains HTTP status and Retry-After without replay',async()=>{
+ let calls=0;const data=await waitingChat(()=>{calls++;return new Response(JSON.stringify({error:{message:'wait for capacity',code:'rate_limit_exceeded'}}),{status:429,headers:{'retry-after':'28','x-request-id':'limited'}});},headers,5).json();
+ assert.equal(calls,1);assert.equal(data.error.status,429);assert.equal(data.error.code,'rate_limit_exceeded');assert.equal(data.error.retry_after,'28');assert.equal(data.error.request_id,'limited');
+});
+
+test('bounded diagnostics redact bearer keys and do not forward provider objects',async()=>{
+ let cancelled=false;const payload=JSON.stringify({error:{message:'Bearer secret-value sk-example-secret '+ 'x'.repeat(30000),extra:'private'}});
+ const response=new Response(new ReadableStream({start(c){c.enqueue(new TextEncoder().encode(payload));},cancel(){cancelled=true;}}),{status:400});
+ const data=await waitingChat(Promise.resolve(response),headers,5).json();
+ assert.equal(cancelled,true);assert.ok(data.error.message.length<=4096);assert.doesNotMatch(data.error.message,/secret-value|sk-example-secret/);assert.equal(data.error.extra,undefined);
+});
+
+test('network failure and empty completion never reissue a paid request',async()=>{
+ for(const make of [()=>{throw new TypeError('fetch failed');},()=>sse(event('','stop'))]){
+  let calls=0;const data=await waitingChat(()=>{calls++;return make();},headers,5).json();assert.equal(calls,1);assert.equal(data.error.attempts,1);assert.equal(data.choices,undefined);
+ }
+});
+
+test('an interrupted HTTP error body retains status and request ID without replay',async()=>{
+ let calls=0;
+ const data=await waitingChat(()=>{
+  calls++;
+  return new Response(new ReadableStream({pull(c){c.error(new TypeError('connection reset'));}}),{status:504,headers:{'x-request-id':'broken-error-body'}});
+ },headers,5).json();
+ assert.equal(calls,1);assert.equal(data.error.status,504);assert.equal(data.error.code,504);assert.equal(data.error.body_read_failed,true);assert.equal(data.error.request_id,'broken-error-body');
+});
+
+test('JSON error bodies on HTTP 200 retain safe provider details without replay',async()=>{
+ let calls=0;
+ const data=await waitingChat(()=>{calls++;return Response.json({error:{message:'provider rejected Bearer private',type:'invalid_request_error',code:'model_not_found',extra:'private'}});},headers,5).json();
+ assert.equal(calls,1);assert.equal(data.error.code,'model_not_found');assert.equal(data.error.type,'invalid_request_error');assert.equal(data.error.attempts,1);assert.equal(data.error.extra,undefined);assert.doesNotMatch(data.error.message,/private/);
 });

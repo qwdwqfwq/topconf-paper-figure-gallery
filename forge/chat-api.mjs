@@ -1,19 +1,10 @@
 import {fetchBufferedWithTimeout} from './image-api.mjs';
 
-// Retry only explicit transient HTTP failures, preserving images and settings.
-// One wall-clock budget includes both responses and backoff.
+// A failed response can follow a billed request. Submit once and preserve the
+// response so callers can report the failure without silently charging again.
 export async function requestChat(url, options, timeoutMs=Infinity, fetchImpl=fetch){
-  const end=Date.now()+timeoutMs;
-  let response;
-  for(let attempt=0;attempt<2;attempt++){
-    const remaining=end-Date.now();
-    if(remaining<=0) throw new DOMException('timeout','TimeoutError');
-    response=await fetchBufferedWithTimeout(url,options,remaining,fetchImpl);
-    if(attempt || ![502,503,504].includes(response.status)) return response;
-    const delay=Math.min(1000,Math.max(0,end-Date.now()));
-    await new Promise(resolve=>setTimeout(resolve,delay));
-  }
-  return response;
+  if(timeoutMs<=0) throw new DOMException('timeout','TimeoutError');
+  return fetchBufferedWithTimeout(url,options,timeoutMs,fetchImpl);
 }
 
 export function pdfResponseJSON(data){

@@ -2,15 +2,34 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {requestChat,pdfResponseJSON,pdfRepairBody} from './chat-api.mjs';
 
-test('504 recovery preserves reference pixels, model and reasoning settings',async()=>{
+test('502/503/504 preserve the original error and never replay a paid POST',async()=>{
   const options={method:'POST',body:JSON.stringify({model:'gpt-6-astra',reasoning_effort:'high',
     messages:[{role:'user',content:[{type:'image_url',image_url:{url:'data:image/png;base64,AA=='}}]}]})};
-  const requests=[];
-  const result=await requestChat('https://example.invalid',options,5000,async(_,init)=>{
-    requests.push(init.body);
-    return new Response(requests.length===1?'service timeout':'ok',{status:requests.length===1?504:200});
-  });
-  assert.equal(result.status,200);assert.deepEqual(requests,[options.body,options.body]);
+  for(const status of [502,503,504]){
+    const requests=[];
+    const result=await requestChat('https://example.invalid',options,5000,async(_,init)=>{
+      requests.push(init.body);
+      return new Response('upstream request may have been billed',{status,headers:{'x-request-id':'original-request'}});
+    });
+    assert.equal(result.status,status);assert.deepEqual(requests,[options.body]);
+    assert.equal(result.headers.get('x-request-id'),'original-request');
+    assert.equal(await result.text(),'upstream request may have been billed');
+  }
+});
+
+test('a body interruption or timeout cannot trigger another POST',async()=>{
+  let calls=0;
+  await assert.rejects(requestChat('https://example.invalid',{method:'POST'},1000,async()=>{
+    calls++;return new Response(new ReadableStream({start(c){c.error(new Error('body interrupted'));}}));
+  }),/body interrupted/);
+  assert.equal(calls,1);
+  calls=0;
+  await assert.rejects(requestChat('https://example.invalid',{method:'POST'},10,async(_,init)=>{
+    calls++;return new Response(new ReadableStream({start(c){init.signal.addEventListener('abort',()=>c.error(init.signal.reason));}}));
+  }),{name:'TimeoutError'});
+  assert.equal(calls,1);
+  await assert.rejects(requestChat('https://example.invalid',{},0,async()=>{calls++;}),{name:'TimeoutError'});
+  assert.equal(calls,1);
 });
 test('authentication, request rejection and ambiguous network errors are not retried',async()=>{
   for(const status of [400,401,403,422,429]){
