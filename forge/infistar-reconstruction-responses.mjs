@@ -1,5 +1,7 @@
-// Only the explicitly authorized Infistar GPT whole-image request uses this transport.
-export const usesReconstructionResponses=(provider,model,wholeImage)=>provider==='infistar'&&!!wholeImage&&/^gpt-/i.test(model);
+// Infistar's Sol Responses conversion can fail with "without typed terminal
+// event: done". Submit Sol once through its native Chat Completions stream;
+// retain Responses for the other GPT whole-image models and their long tasks.
+export const usesReconstructionResponses=(provider,model,wholeImage)=>provider==='infistar'&&!!wholeImage&&/^gpt-/i.test(model)&&!/^gpt-6[.]1-sol(?:$|[-_])/i.test(model);
 
 export function reconstructionResponsesBody(body){
   const {messages,max_completion_tokens,max_tokens,reasoning_effort,stream,...rest}=body;

@@ -56,3 +56,19 @@ test('timeout and cancellation remain distinguishable',async()=>{
     await assert.rejects(invoke(async()=>{throw new DOMException('fixture',name);}),error=>error.analysisDiagnostic.kind===kind);
   }
 });
+
+test('body disconnect after HTTP headers retains status and request ID without claiming CORS failure',async()=>{
+  let calls=0;
+  await assert.rejects(invoke(async()=>{
+    calls++;
+    return new Response(new ReadableStream({pull(c){c.error(new TypeError('connection reset fixture-secret'));}}),{status:502,headers:{'x-oneapi-request-id':'read-fixture'}});
+  }),error=>{
+    assert.equal(error.analysisDiagnostic.kind,'response-read');
+    assert.equal(error.analysisDiagnostic.httpStatus,502);
+    assert.equal(error.analysisDiagnostic.requestId,'read-fixture');
+    assert.match(error.message,/HTTP 502.*read-fixture/);
+    assert.doesNotMatch(error.message,/未取得 HTTP|CORS|fixture-secret/);
+    return true;
+  });
+  assert.equal(calls,1);
+});

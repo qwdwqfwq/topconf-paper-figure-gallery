@@ -26,10 +26,13 @@ export async function requestStep3Analysis({request,model,url,key='',english=fal
     throw failure(kind,`${cause?.name||'Error'}: ${cause?.message||cause} ${hint}`,cause);
   }
   try{text=await response.text();}
-  catch(cause){throw failure('response-read',cause?.message||cause,cause,{httpStatus:response.status});}
+  catch(cause){
+    const requestId=safeDetail(response.headers?.get('x-request-id')||response.headers?.get('request-id')||response.headers?.get('x-oneapi-request-id')||'',key);
+    throw failure('response-read',`HTTP ${response.status}; ${words('已收到响应头，但响应正文读取中断。','Response headers received, but reading the body was interrupted.')} ${cause?.message||cause}${requestId?' request_id='+requestId:''}`,cause,{httpStatus:response.status,...(requestId?{requestId}:{})});
+  }
   let data;try{data=JSON.parse(text);}catch{}
   const upstream=data?.error;
-  const requestId=safeDetail(upstream?.request_id||data?.request_id||response.headers?.get('x-request-id')||'',key);
+  const requestId=safeDetail(upstream?.request_id||data?.request_id||response.headers?.get('x-request-id')||response.headers?.get('request-id')||response.headers?.get('x-oneapi-request-id')||'',key);
   const metadata={httpStatus:response.status,...(requestId?{requestId}:{})};
   if(!response.ok||upstream){
     const code=typeof upstream==='object'?upstream?.code:undefined;

@@ -18,6 +18,13 @@ test('routing is limited to Infistar GPT whole-image reconstruction',()=>{
   assert.equal(usesReconstructionResponses('infistar','gpt-6-astra',true),true);
   for(const args of [['infistar','gpt-6-astra',false],['nonelinear','gpt-6-astra',true],['infistar','gemini-3.1-pro-preview',true]])assert.equal(usesReconstructionResponses(...args),false);
 });
+
+test('Sol uses the existing Chat stream instead of the incompatible Responses converter',()=>{
+  for(const model of ['gpt-6.1-sol','GPT-6.1-SOL','gpt-6.1-sol-high','gpt-6.1-sol_latest']){
+    assert.equal(usesReconstructionResponses('infistar',model,true),false);
+  }
+  assert.equal(usesReconstructionResponses('infistar','gpt-6.1-astra',true),true);
+});
 test('preserves exact prompt, original image, detail, token budget and reasoning effort',()=>{
   assert.deepEqual(reconstructionResponsesBody(body),{model:body.model,stream:true,max_output_tokens:128000,reasoning:{effort:'high'},instructions:'Exact system',input:[{role:'user',content:[{type:'input_text',text:'Exact prompt'},{type:'input_image',image_url:'data:image/png;base64,original',detail:'high'}]}]});
   const {reasoning_effort,...defaultBody}=body;

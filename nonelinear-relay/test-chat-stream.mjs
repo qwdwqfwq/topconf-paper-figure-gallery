@@ -146,6 +146,24 @@ test('an interrupted HTTP error body retains status and request ID without repla
  assert.equal(calls,1);assert.equal(data.error.status,504);assert.equal(data.error.code,504);assert.equal(data.error.body_read_failed,true);assert.equal(data.error.request_id,'broken-error-body');
 });
 
+test('DONE finishes without socket EOF or a settled cancellation, but still requires finish_reason',async()=>{
+ for(const finish of ['stop',null]){
+  let cancelled=false,calls=0;
+  const response=waitingChat(()=>{
+   calls++;
+   return new Response(new ReadableStream({
+    start(c){c.enqueue(new TextEncoder().encode(event('{"ok":true}',finish)));},
+    cancel(){cancelled=true;return new Promise(()=>{});}
+   }),{headers});
+  },headers,5);
+  let timer;
+  const data=await Promise.race([response.json(),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Error('waited for socket EOF')),1000);})]).finally(()=>clearTimeout(timer));
+  assert.equal(calls,1);assert.equal(cancelled,true);
+  if(finish)assert.equal(data.choices[0].message.content,'{"ok":true}');
+  else{assert.equal(data.error.code,'incomplete_stream');assert.equal(data.choices,undefined);}
+ }
+});
+
 test('JSON error bodies on HTTP 200 retain safe provider details without replay',async()=>{
  let calls=0;
  const data=await waitingChat(()=>{calls++;return Response.json({error:{message:'provider rejected Bearer private',type:'invalid_request_error',code:'model_not_found',extra:'private'}});},headers,5).json();

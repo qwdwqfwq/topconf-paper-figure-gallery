@@ -1,0 +1,88 @@
+name: Deploy isolated transport repair
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/deploy-transport-repair.yml
+      - forge/index.html
+      - forge/step3-analysis-request.mjs
+      - forge/infistar-reconstruction-responses.mjs
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Record unchanged historical freeze result
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Report historical freeze outcome
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: echo "Historical lock outcome = $ORIGINAL_OUTCOME; original guard is unchanged." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/download-artifact@v4
+        with:
+          name: infistar-direct-proof
+          run-id: 43959420530
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/current-proof
+      - uses: actions/download-artifact@v4
+        with:
+          name: infistar-initial-route-proof
+          run-id: 43958528130
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/prior-proof
+      - name: Preserve previous publication acceptance
+        run: |
+          historical="$RUNNER_TEMP/previous-release"
+          trap 'git worktree remove --force "$historical"' EXIT
+          git worktree add --detach "$historical" 18f59f3ada897d437b4617978f6d40ac497bd972
+          (cd "$historical" && node scripts/check-infistar-direct-release.mjs "$RUNNER_TEMP/prior-proof/infistar-initial-route-proof.json" && node --test scripts/test-infistar-direct-release.mjs)
+      - name: Transport completeness, request diagnostics and publication boundary
+        run: node --test scripts/test-transport-repair-release.mjs forge/test-step3-analysis-request.mjs forge/test-infistar-reconstruction-responses.mjs forge/test-infistar-reconstruction-stream.mjs nonelinear-relay/test-chat-stream.mjs nonelinear-relay/test-live-chat.mjs nonelinear-relay/test-worker.mjs
+      - name: Preserve input size, token parameters and editable exports
+        run: |
+          node --test forge/test-openai-token-limit.mjs forge/test-bitmap-composition.mjs forge/test-generation-intent.mjs forge/test-svg-chat-response.mjs
+          node forge/test-editable-export.mjs
+      - name: Install browser test runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/browser-test" playwright@1.58.2
+          "$RUNNER_TEMP/browser-test/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Browser analysis success and failure classification
+        env:
+          REVISION_PLAYWRIGHT: ${{ runner.temp }}/browser-test/node_modules/playwright
+          REVISION_BUNDLED_BROWSER: '1'
+        run: node forge/test-step3-analysis-browser.cjs
+      - name: Build byte-preserving artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-transport-repair-release.mjs "$RUNNER_TEMP/current-proof/infistar-direct-proof.json" --prepare-pages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: transport-repair-proof
+          path: /tmp/transport-repair-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/transport-repair-pages
+      - name: Deploy authorized transport repair
+        id: deployment
+        uses: actions/deploy-pages@v4

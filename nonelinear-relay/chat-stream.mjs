@@ -137,7 +137,10 @@ export function bufferedChat(response, headers, heartbeatMs=10000) {
           const {done,value}=await reader.read();
           pending+=done?decoder.decode():decoder.decode(value,{stream:true});
           pending=pending.replace(/\r\n/g,'\n');
-          let boundary;while((boundary=pending.indexOf('\n\n'))>=0){event(pending.slice(0,boundary));pending=pending.slice(boundary+2);}
+          let boundary;while(!terminal&&(boundary=pending.indexOf('\n\n'))>=0){event(pending.slice(0,boundary));pending=pending.slice(boundary+2);}
+          // DONE closes the SSE message, not necessarily the TCP connection.
+          // Keep the finish_reason check below: DONE alone cannot bless partial output.
+          if(terminal){pending='';void reader.cancel().catch(()=>{});break;}
           if(done)break;
         }
         if(pending.trim())event(pending);
@@ -147,7 +150,7 @@ export function bufferedChat(response, headers, heartbeatMs=10000) {
         emit(JSON.stringify(result));
       }catch(error){
         const reason=['Malformed SSE event','NoneLinear stream returned an error','Incomplete NoneLinear stream','Empty NoneLinear completion','NoneLinear upstream timed out'].includes(error.message)?error.message:'Upstream body read failed';
-        await reader.cancel().catch(()=>{});
+        void reader.cancel().catch(()=>{});
         emit(JSON.stringify({error:error.relayError||{message:reason,type:'upstream_stream_error',code:reason==='NoneLinear upstream timed out'?'upstream_timeout':reason==='Incomplete NoneLinear stream'?'incomplete_stream':reason==='Empty NoneLinear completion'?'empty_completion':'invalid_stream'}}));
       }finally{
         clearInterval(timer);if(!cancelled)controller.close();reader.releaseLock();

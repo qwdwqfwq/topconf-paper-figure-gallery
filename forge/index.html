@@ -768,7 +768,7 @@ import {createStep3ModelCatalog} from './step3-model-catalog.mjs?v=20261114';
 import {createRetrievalBoot,createSemanticWorker} from './retrieval-boot.mjs';
 import {readBitmapSource} from './nonelinear-source.mjs';
 import {fetchReconstructionStream,usesReconstructionStream} from './infistar-reconstruction-stream.mjs?v=20261114-errors';
-import {fetchReconstructionResponses,usesReconstructionResponses} from './infistar-reconstruction-responses.mjs?v=20261114-errors';
+import {fetchReconstructionResponses,usesReconstructionResponses} from './infistar-reconstruction-responses.mjs?v=20261117-sol-chat';
 import {prepareQuery,buildIndex,rank} from './retrieval.mjs';
 import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=20261021-unlimited';
 import {usesInfistarGemini, geminiImageRequest, geminiImageResult, compatibleImageRequest, requestImageWithRecovery, imageFailureKind, fetchBufferedWithTimeout} from './image-api.mjs?v=20261026-nonelinear-resolution';
@@ -777,7 +777,7 @@ import {step3ImageResolutions,assertStep3ImageResolution,step3ImageDimensions,st
 import {usesInfistarImageJob,acknowledgeInfistarImageJob,showInfistarJobProgress} from './step3-infistar-job.mjs?v=20261114-durable-jobs';
 import {requestInfistarImageJob} from './step3-initial-image-job.mjs?v=20261116-initial-read-recovery';
 import {internationalGalleryBase} from './step3-international-image-route.mjs?v=20261116-international1';
-import {requestStep3Analysis} from './step3-analysis-request.mjs?v=20261117-diagnostics1';
+import {requestStep3Analysis} from './step3-analysis-request.mjs?v=20261117-read-phase';
 import {prepareStep3ImageBody,protocolFetch,imageResultItem} from './step3-image-protocol.mjs?v=20261115-endpoints';
 import {step3ReferenceInputs} from './step3-reference-input.mjs?v=20261114-errors';
 import {createRevisionGallery,generateRevision} from './revision-gallery.mjs?v=20261115-endpoints';
@@ -2137,7 +2137,7 @@ async function analyzeReferences(){
     blocks.push({type:'text',text:buildAnalyzePrompt(ordered.length, ordered)});
     const body={model:$('#analyzeModel').value||$('#model').value,max_tokens:16000,system:ANALYZE_SYS,messages:[{role:'user',content:blocks}]};
     const url=internationalBase(body.model)+'/v1/messages',key=cleanKey($('#key').value);
-    const d=await requestStep3Analysis({model:body.model,url,key,english:GAL_I18N.lang==='en',request:()=>fetchWithTimeout(url,{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'visual'))})});
+    const d=await requestStep3Analysis({model:body.model,url,key,english:GAL_I18N.lang==='en',request:()=>fetch(url,{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'visual'))})});
     txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
   }else{
     const am = (mode==='image'&&passMode==='two') ? $('#analyzeModel').value : $('#model').value;
@@ -2147,7 +2147,7 @@ async function analyzeReferences(){
     const body={model:am,temperature:0.2,max_tokens:16000,messages:[{role:'system',content:ANALYZE_SYS},{role:'user',content:parts}]};
     if($('#provider').value==='ark' && !relayBase()) body.thinking={type:'disabled'};
     const base=internationalBase(am),key=cleanKey($('#key').value);
-    const d=await requestStep3Analysis({model:am,url:base+'/chat/completions',key,english:GAL_I18N.lang==='en',request:()=>postJSON(base,'/chat/completions',withReasoning(body,'visual'),key)});
+    const d=await requestStep3Analysis({model:am,url:base+'/chat/completions',key,english:GAL_I18N.lang==='en',request:()=>fetch(base+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(normalizeChatTokenLimit(withReasoning(body,'visual')))})});
     if(d.choices?.[0]?.finish_reason==='length') throw new Error(tt('err.analyze3'));
     txt=d.choices?.[0]?.message?.content||'';
   }
