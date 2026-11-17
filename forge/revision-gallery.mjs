@@ -506,7 +506,7 @@ export function createRevisionGallery(adapter){
   let taskList;
   function renderRevisionTasks(){
     if(!mounted)return;
-    if(!taskList){taskList=document.createElement('div');taskList.dataset.revisionTasks='true';panel.before(taskList);}
+    if(!taskList){taskList=document.createElement('div');taskList.dataset.revisionTasks='true';panel.append(taskList);}
     taskList.replaceChildren();
     for(const task of revisionTasks.values()){
       if(task.state==='saved'||task.state==='dismissed')continue;

@@ -1,0 +1,89 @@
+name: Deploy modification editor sidebar
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/deploy-revision-editor-layout.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Record unchanged historical freeze result
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Report historical freeze outcome
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: echo "Historical lock outcome = $ORIGINAL_OUTCOME; original guard is unchanged." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/download-artifact@v4
+        with:
+          name: revision-upload-proof
+          run-id: 44067993396
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/published-proof
+      - uses: actions/download-artifact@v4
+        with:
+          name: revision-task-proof
+          run-id: 44060812144
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/prior-proof
+      - name: Preserve previous publication acceptance
+        run: |
+          historical="$RUNNER_TEMP/previous-release"
+          trap 'git worktree remove --force "$historical"' EXIT
+          git worktree add --detach "$historical" edd67a660fa680b4d55da82c2923a7cd6304b21a
+          (cd "$historical" && node scripts/check-revision-upload-release.mjs "$RUNNER_TEMP/prior-proof/revision-task-proof.json" && node --test scripts/test-revision-upload-release.mjs)
+      - name: Verify private tasks and exact publication scope
+        run: |
+          node --test scripts/test-revision-editor-layout-release.mjs forge/test-revision-durable-task.mjs revision-image-jobs/test-worker.mjs
+          node forge/test-revision-entry-durable.mjs
+      - name: Preserve input size, token parameters and editable exports
+        run: |
+          node --test forge/test-openai-token-limit.mjs forge/test-bitmap-composition.mjs forge/test-generation-intent.mjs forge/test-svg-chat-response.mjs
+          node forge/test-editable-export.mjs
+      - name: Install browser test runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/browser-test" playwright@1.58.2
+          "$RUNNER_TEMP/browser-test/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify actual browser refresh and storage failure recovery
+        env:
+          REVISION_PLAYWRIGHT: ${{ runner.temp }}/browser-test/node_modules/playwright
+          REVISION_BUNDLED_BROWSER: '1'
+        run: |
+          node forge/test-revision-task-browser.cjs
+          node forge/test-revision-editor-layout.cjs
+      - name: Build byte-preserving artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-revision-editor-layout-release.mjs "$RUNNER_TEMP/published-proof/revision-upload-proof.json" --prepare-pages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: revision-editor-layout-proof
+          path: /tmp/revision-editor-layout-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/revision-editor-layout-pages
+      - name: Deploy modification editor sidebar
+        id: deployment
+        uses: actions/deploy-pages@v4
