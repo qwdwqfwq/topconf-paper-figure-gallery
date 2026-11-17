@@ -1,0 +1,6 @@
+{
+  "name": "gallery-reference-analysis",
+  "compatibility_date": "2026-11-17",
+  "pages_build_output_dir": ".",
+  "services": [{"binding": "ANALYSIS", "service": "gallery-reference-analysis-jobs"}]
+}

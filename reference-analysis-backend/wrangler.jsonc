@@ -1,0 +1,10 @@
+{
+  "name": "gallery-reference-analysis-jobs",
+  "account_id": "03d0e7f5e2659b917b65c66eaa5c0e7b",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-17",
+  "workers_dev": false,
+  "durable_objects": {"bindings": [{"name": "ANALYSIS_JOBS", "class_name": "ReferenceAnalysisJob"}]},
+  "migrations": [{"tag": "v1", "new_sqlite_classes": ["ReferenceAnalysisJob"]}],
+  "observability": {"enabled": false}
+}
