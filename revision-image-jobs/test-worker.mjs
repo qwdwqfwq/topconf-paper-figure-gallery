@@ -53,7 +53,7 @@ test('streamed result preserves image bytes across arbitrary binary chunk bounda
 for(const r2 of [false,true])test(`two five-reference jobs bypass nested relay and stream durable images (${r2?'R2':'DO'})`,async()=>{
  const fixtures=[fixture({r2,stream:true}),fixture({r2,stream:true})],old=globalThis.fetch;let posts=0;const large64=largePng().toString('base64');
  const submission={url:'https://gallery-nonelinear-relay.lixiao-gallery.workers.dev/v1/images/generations',body:{model:'gemini-nano-banana-2.1',prompt:'five refs',size:'4K',aspect_ratio:'16:9',image:Array.from({length:5},(_,i)=>`https://images.example.com/ref-${i}.png`)},usedReferences:true};
- globalThis.fetch=async(url,init)=>{assert.equal(url,submission.url);assert.deepEqual(JSON.parse(init.body),submission.body);posts++;return Response.json({data:[{b64_json:large64}]},{headers:{'cf-ray':'fixture-ray','x-request-id':'five-refs'}});};
+ globalThis.fetch=async(url,init)=>{assert.equal(url,submission.url);assert.equal(new Headers(init.headers).get('Origin'),origin);assert.deepEqual(JSON.parse(init.body),submission.body);posts++;return Response.json({data:[{b64_json:large64}]},{headers:{'cf-ray':'fixture-ray','x-request-id':'five-refs'}});};
  try{
   await Promise.all(fixtures.map(f=>f.job.fetch(f.req('PUT','test-key',submission))));
   await Promise.all(fixtures.map(f=>f.job.alarm()));
@@ -88,7 +88,7 @@ test('DO streamed payload survives restart with Unicode across chunk boundaries 
 for(const status of [200,524])test(`streaming failure remains unresolved and never replays generation (${status})`,async()=>{
  const f=fixture({r2:true,stream:true}),old=globalThis.fetch;let posts=0;
  const submission={url:'https://api.nonelinear.com.cn/v1/images/generations',body:{model:'gemini-nano-banana-2.1',prompt:'fixture'},usedReferences:false};
- globalThis.fetch=async()=>{posts++;return new Response(JSON.stringify({error:{message:'gateway test-key'}}),{status,headers:{'cf-ray':'test-ray','x-request-id':'failed-request','cf-error-type':'524','cf-error-origin':'origin','date':'Mon, 16 Nov 2026 17:00:00 GMT'}});};
+ globalThis.fetch=async(url,init)=>{assert.equal(new Headers(init.headers).get('Origin'),null);posts++;return new Response(JSON.stringify({error:{message:'gateway test-key'}}),{status,headers:{'cf-ray':'test-ray','x-request-id':'failed-request','cf-error-type':'524','cf-error-origin':'origin','date':'Mon, 16 Nov 2026 17:00:00 GMT'}});};
  try{await f.job.fetch(f.req('PUT','test-key',submission));await f.job.alarm();await f.job.alarm();
   const meta=await f.storage.get('meta');assert.equal(meta.state,'unknown');assert.equal(meta.diagnostic.cfRay,'test-ray');assert.equal(meta.diagnostic.cfErrorType,'524');assert.equal(meta.diagnostic.cfErrorOrigin,'origin');assert.equal(meta.diagnostic.upstreamDate,'Mon, 16 Nov 2026 17:00:00 GMT');assert.equal(meta.diagnostic.headersMs,135001);assert.equal(meta.diagnostic.transport,'browser');assert.ok(!JSON.stringify(meta).includes('test-key'));assert.equal(posts,1);
  }finally{globalThis.fetch=old;}

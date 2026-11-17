@@ -781,7 +781,8 @@ import {requestStep3Analysis} from './step3-analysis-request.mjs?v=20261117-read
 import {requestReferenceAnalysis} from './step3-analysis-job.mjs?v=20261117-durable-v1';
 import {prepareStep3ImageBody,protocolFetch,imageResultItem} from './step3-image-protocol.mjs?v=20261115-endpoints';
 import {step3ReferenceInputs} from './step3-reference-input.mjs?v=20261114-errors';
-import {createRevisionGallery,generateRevision} from './revision-gallery.mjs?v=20261117-editor-sidebar';
+import {createRevisionGallery,generateRevision} from './revision-gallery.mjs?v=20261118-credentials';
+import {revisionCredential} from './revision-credentials.mjs';
 import {svgChatResponse} from './svg-chat-response.mjs?v=20261112';
 import {requestStep3Svg} from './step3-svg-request.mjs?v=20261112-svg-recovery';
 import {svgVersion,generateSVGRevision} from './svg-revision.mjs?v=20261112';
@@ -5984,7 +5985,9 @@ function revisionConfiguration(version, validate=true){
   const svg=version.source==='svg',p=$('#provider').value;
   const model=($('#model').value==='custom'?$('#customModel').value:$('#model').value).trim();
   const route=version.revisionTask?.input.route||{p,model,base:svg?internationalGalleryBase(baseURL(),{provider:p,model,stage:'revision'}):baseURL(),proto:cfg().proto,ratio:$('#figureRatio').value,resolution:$('#imageResolution').value};
-  const key=cleanKey($('#key').value);
+  let key;
+  try{key=version.revisionTask?revisionCredential(route,p,$('#key').value,provider=>localStorage.getItem('ff_key_'+provider),cleanKey):cleanKey($('#key').value);}
+  catch(error){if(validate)throw error;key='';}
   if(validate){
     if(!version.revisionTask&&mode!==(svg?'svg':'image'))throw new Error(svg?'请在步骤三选择「SVG 可编辑初稿」，并选择视觉模型。':'请在步骤三选择「AI 位图初稿」，并选择图像模型。');
     if(!version.revisionTask&&(!model || (svg?!isVisualChatModel(model,cfg().vision||[]):!step3Catalog().isImageModel(model))))throw new Error(svg?'请在步骤三选择支持图像输入的视觉模型。':'请在步骤三选择图像模型。');

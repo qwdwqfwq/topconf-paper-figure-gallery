@@ -6,6 +6,7 @@ import {createRevisionImageJobClient} from './revision-image-job.mjs';
 import {createRevisionTaskStore,revisionTaskInput} from './revision-task-store.mjs';
 import {usesBrowserImageTransport} from '../revision-image-jobs/browser-image-fetch.mjs';
 import {REVISION_CHUNK,revisionDigest} from './revision-upload.mjs';
+import {revisionCredential,bindRevisionCredential} from './revision-credentials.mjs';
 
 const url='https://infistar.cc/v1beta/models/gemini-3.1-flash-image:streamGenerateContent?alt=sse';
 const body={generationConfig:{imageConfig:{imageSize:'4K',aspectRatio:'16:9'}},contents:[]};
@@ -115,12 +116,27 @@ test('actual page revision configuration keeps the selected host and restores or
  const fn=html.slice(html.indexOf('function revisionConfiguration('),html.indexOf('\nconst revisionGallery=',html.indexOf('function revisionConfiguration(')));
  assert.ok(fn.length<4000&&fn.length>300);
  const values={provider:'infistar',model:'gemini-3.1-flash-image',customModel:'',figureRatio:'16:9',imageResolution:'4K',key:'fixture-key'};
- const context={$:s=>({value:values[s.slice(1)]}),baseURL:()=> 'https://infistar.cc/v1',cfg:()=>({proto:'openai',vision:[]}),cleanKey:x=>x,mode:'image',step3Catalog:()=>({isImageModel:()=>true}),internationalGalleryBase:()=> 'https://infistar.ai/v1'};
+ const keys={ff_key_infistar:'original-infistar-key'};
+ const context={revisionCredential,localStorage:{getItem:k=>keys[k]},$:s=>({value:values[s.slice(1)]}),baseURL:()=> 'https://infistar.cc/v1',cfg:()=>({proto:'openai',vision:[]}),cleanKey:x=>x,mode:'image',step3Catalog:()=>({isImageModel:()=>true}),internationalGalleryBase:()=> 'https://infistar.ai/v1'};
  vm.createContext(context);vm.runInContext(fn+'\nthis.config=revisionConfiguration;',context);
  assert.equal(context.config({source:'image'}).route.base,'https://infistar.cc/v1');
  const route={base:'https://infistar.cc/v1',model:'old-model',resolution:'2K',ratio:'1:1'};
  context.mode='svg';assert.equal(context.config({source:'image',revisionTask:{input:{route}}}).route,route);
  assert.equal(context.config({source:'svg'},false).route.base,'https://infistar.ai/v1');
+ route.p='infistar';values.provider='nonelinear';values.key='other-provider-key';
+ assert.equal(context.config({source:'image',revisionTask:{input:{route}}}).key,'original-infistar-key');
+ delete keys.ff_key_infistar;
+ assert.equal(context.config({source:'image',revisionTask:{input:{route}}},false).key,'');
+ assert.throws(()=>context.config({source:'image',revisionTask:{input:{route}}}),/原服务商/);
+});
+
+test('revision task binds the key before submission and refuses a changed key on recovery',async()=>{
+ const task={id:'fixture'};await bindRevisionCredential(task,'original-key');
+ assert.match(task.credentialFingerprint,/^[a-f0-9]{64}$/);assert.ok(!JSON.stringify(task).includes('original-key'));
+ await bindRevisionCredential(structuredClone(task),'original-key');
+ await assert.rejects(bindRevisionCredential(structuredClone(task),'different-key'),/密钥不同/);
+ await bindRevisionCredential({...task,raw:{ok:true}},'');
+ assert.throws(()=>revisionCredential({p:'infistar'},'nonelinear','other-key',()=>''),/原服务商/);
 });
 
 

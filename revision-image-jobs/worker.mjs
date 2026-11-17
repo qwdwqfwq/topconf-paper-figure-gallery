@@ -226,6 +226,12 @@ export class ImageJob {
       let browserTransport;
       const observedFetch=async(url,init)=>{
         const started=Date.now();
+        // This gallery-owned relay enforces the browser origin even for our
+        // durable revision worker. Do not forward this header to providers.
+        if(new URL(url).origin==='https://gallery-nonelinear-relay.lixiao-gallery.workers.dev'){
+          const headers=new Headers(init?.headers);headers.set('Origin','https://qwdwqfwq.github.io');
+          init={...init,headers};
+        }
         const response=await (browser&&url===target?browser.fetch(url,init):globalThis.fetch(url,init));
         if(response.imageTransport)browserTransport=response.imageTransport;
         if(new URL(url).pathname.includes('/images/')||new URL(url).pathname.includes('/models/')){

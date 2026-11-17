@@ -5,6 +5,7 @@ import {captureGenerationContext,copyStep1Context,revisionContextInstruction} fr
 import {acknowledgeInfistarImageJob} from './step3-infistar-job.mjs?v=20261114-durable-jobs';
 import {createRevisionImageJobClient} from './revision-image-job.mjs?v=20261117-chunked-revision';
 import {revisionTaskStore,revisionTaskInput} from './revision-task-store.mjs';
+import {bindRevisionCredential} from './revision-credentials.mjs';
 const revisionJobClient=createRevisionImageJobClient();
 const requestInfistarImageJob=input=>revisionJobClient.request(input);
 import {imageResultItem} from './step3-image-protocol.mjs';
@@ -276,10 +277,12 @@ export async function generateRevision(parent,prompt,options){
   const store=options.revisionTaskStore||revisionTaskStore;
   const task=parent.revisionTask||{id:crypto.randomUUID(),versionId:crypto.randomUUID(),created:Date.now(),state:'prepared',prompt,input:revisionTaskInput({...parent,image:await readRevisionSource(parent.image,options)})};
   const saveTask=async()=>{await store.write(task);parent.onRevisionTask?.(task);};
+  await bindRevisionCredential(task,options.key);
   await saveTask();
   if(task.result)return task.result;
   try{
     const result=await generateRevisionOnce({...task.input,revisionTask:task,onRevisionProgress:parent.onRevisionProgress},task.prompt,{...options,saveTask});
+    if(result.revisionAudit)result.revisionAudit.credentialFingerprint=task.credentialFingerprint;
     task.result=result;task.state='completed';delete task.error;await saveTask();return result;
   }catch(error){
     task.error=String(error.message).replaceAll(options.key||'__no_key__','[redacted]');
@@ -403,7 +406,8 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
     if(!response.ok){
       if(!streamedRevision)throw new Error('修改生图失败（HTTP '+response.status+'）。'+response.text.slice(0,400));
       let detail;try{detail=JSON.parse(response.text)?.error;}catch{}
-      const message=typeof detail?.message==='string'?detail.message.slice(0,300):'接口未返回有效的错误说明。';
+      const plain=String(response.text||'').trim();
+      const message=(typeof detail?.message==='string'?detail.message:plain&&!/^\s*</.test(plain)?plain:'接口未返回有效的错误说明。').split(key).join('[redacted]').replace(/Bearer\s+[^"\s]+/gi,'Bearer [redacted]').slice(0,300);
       const code=typeof detail?.code==='string'?` [${detail.code.slice(0,80)}]`:'';
       throw new Error(`修改生图失败（HTTP ${response.status}）${code}。${message}${response.requestId?'\n请求 ID：'+response.requestId:''}\n原图、修改要求和截图已保留，未自动重复提交。`);
     }

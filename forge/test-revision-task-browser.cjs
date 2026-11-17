@@ -24,7 +24,9 @@ window.addSource=()=>gallery.addInitial({source:'image',image:pixels.source,widt
  await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
  try{
   browser=await chromium.launch({headless:true,...(process.env.REVISION_BUNDLED_BROWSER==='1'?{}:{executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})});
-  for(const scenario of ['refresh','task-storage-failure','history-storage-failure','real-400']){
+  const failures={'real-400':{status:400,text:JSON.stringify({error:{code:'four_k_disabled',message:'暂时供应不足'}}),expected:/HTTP 400.*four_k_disabled/},'plain-403':{status:403,text:'Gallery origin required fixture-key',expected:/HTTP 403.*Gallery origin required \[redacted\]/},'html-403':{status:403,text:'<html>fixture-key secret upstream page</html>',expected:/HTTP 403.*接口未返回有效的错误说明/}};
+  for(const scenario of ['refresh','task-storage-failure','history-storage-failure',...Object.keys(failures)]){
+   const failure=failures[scenario];
    const context=await browser.newContext(),page=await context.newPage(),errors=[];let puts=0,reads=0,jobId,submitted,complete=scenario!=='refresh',output;
    page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
    await context.addInitScript(()=>{
@@ -40,10 +42,10 @@ window.addSource=()=>gallery.addInitial({source:'image',image:pixels.source,widt
      puts++;assert.equal(puts,1);jobId=u.pathname.split('/')[2];submitted=req.postDataJSON();
      assert.match(submitted.url,/^https:\/\/infistar\.cc\//);assert.equal(submitted.body.generationConfig.imageConfig.imageSize,'4K');
      if(scenario==='refresh')return route.abort('connectionfailed');
-     return route.fulfill({status:202,json:{state:scenario==='real-400'?'rejected':'queued'}});
+     return route.fulfill({status:202,json:{state:failure?'rejected':'queued'}});
     }
     reads++;assert.ok(u.pathname.includes(jobId));
-    if(u.pathname.endsWith('/result'))return route.fulfill({json:scenario==='real-400'?{ok:false,status:400,text:JSON.stringify({error:{code:'four_k_disabled',message:'暂时供应不足'}})}:{ok:true,status:200,text:JSON.stringify({data:[{b64_json:output.split(',')[1]}]})}});
+    if(u.pathname.endsWith('/result'))return route.fulfill({json:failure?{ok:false,...failure,expected:undefined}:{ok:true,status:200,text:JSON.stringify({data:[{b64_json:output.split(',')[1]}]})}});
     return route.fulfill({status:complete?200:202,json:{state:complete?'succeeded':'running'}});
    });
    const open=async()=>{await page.goto(`http://127.0.0.1:${server.address().port}/fixture`);await page.waitForFunction(()=>window.ready);};
@@ -57,10 +59,10 @@ window.addSource=()=>gallery.addInitial({source:'image',image:pixels.source,widt
    if(scenario==='task-storage-failure'){
     await page.waitForFunction(()=>document.querySelector('[role=alert]').textContent.includes('quota'));
     assert.equal(puts,0);assert.equal(await page.locator('.ff-version').count(),1);
-   }else if(scenario==='real-400'){
-    await page.waitForFunction(()=>document.querySelector('[role=alert]').textContent.includes('four_k_disabled'));
+   }else if(failure){
+    await page.waitForFunction(()=>document.querySelector('[role=alert]').textContent.includes('HTTP'));
     await open();const before=reads;await page.getByText('查看失败与原输入',{exact:true}).click();
-    assert.match(await page.locator('[role=alert]').innerText(),/HTTP 400.*four_k_disabled/);
+    const errorText=await page.locator('[role=alert]').innerText();assert.match(errorText,failure.expected);assert.ok(!errorText.includes('fixture-key'));assert.ok(!errorText.includes('<html>'));
     assert.equal(await page.locator('textarea').inputValue(),'把标题改成测试标题');assert.equal(await page.locator('.ff-revision-attachment').count(),1);assert.equal(reads,before);assert.equal(puts,1);
    }else{
     if(scenario==='refresh')await page.waitForFunction(()=>document.querySelector('[data-revision-tasks]')?.textContent.includes('后台保留 24 小时'));
