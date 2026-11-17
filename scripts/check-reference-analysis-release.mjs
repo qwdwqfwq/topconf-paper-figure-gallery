@@ -10,6 +10,10 @@ import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('..',import.meta.url));
 export const baseCommit='9ee1132307876b2db085e011c69c18d9c426fbc2';
 const baseRun=44023069511;
+// Require the currently published, previously accepted reference-analysis release.
+// Keep the historical artifact source, frozen-byte checks and baseline unchanged.
+const expectedCurrentCommit='aa486c527319d22d37cdbc1ee5d83379815e992c';
+const expectedCurrentRun=44031179639;
 const baseTree='fa86c3f8ac7820c112ba7abfc627a05d8c67aecc';
 const baseProofSha256='c258c3ac3f251f359175febe5528e83839254e03c2a75aba6795d822e90f0bf7';
 export const payload=["forge/index.html","forge/step3-analysis-job.mjs"];
@@ -17,14 +21,14 @@ export const allowed=[".github/workflows/deploy-reference-analysis.yml","forge/i
 const reviewed={
   ".github/workflows/deploy-reference-analysis.yml": "b444fc8ee7efd0faeb4defeaaa9e99f972e0274d199eef825059d9c468687485",
   "forge/index.html": "38d9b1746608ddd3b7347ca3eb3575adca1f0c95a385fd4ffd56100c36974788",
-  "forge/step3-analysis-job.mjs": "3558fe4dcd89023520f266542dc96e8762d9fa052037d3ebd98fccda3fa48386",
-  "forge/test-reference-analysis-job-browser.cjs": "b7651e05884531892d1daae9cb1332e8ef1fa34475db0731ce3d8a57e4643442",
-  "forge/test-reference-analysis-route-browser.cjs": "bd9103ea6718cc7d6ab7108cac0c92f27dfdd69c97978e7d164f2e4c42efb944",
-  "forge/test-step3-analysis-job.mjs": "da58e6f369f8426dd04d2b8d9f76f6877f344f6a9f2100a52f966ce55591b627",
+  "forge/step3-analysis-job.mjs": "7d53413e2b89fbbb6b7e11b0117cdb4f7c5a29b9c30fb3b51e8ea9fff4f2c2a6",
+  "forge/test-reference-analysis-job-browser.cjs": "5f141ba5e961252bf1fee8a6c1ce58da00a0768d69785e6dadc48dde840d27de",
+  "forge/test-reference-analysis-route-browser.cjs": "c65372b1f007394f36b88b2c8bfdb2b4a63f2faab78d566644dadda59674b996",
+  "forge/test-step3-analysis-job.mjs": "1ff81009d3ade5bfc35696bcc18d27dced983c9d17b6ba19ce005c26b869f234",
   "reference-analysis-backend/pages/_worker.js": "328b930a270e3be34d665c2ea2aff916eb503c0d74e0c81dfdd3d271d31d5be5",
   "reference-analysis-backend/pages/wrangler.jsonc": "8ae7a13f3ced3e3c56ce2196d269dd6efd27778274aa40cb0a06de6b4c70e798",
-  "reference-analysis-backend/test-worker.mjs": "bea6121f0a35c1a443e8a5e3e50c72e7c074dd12c008267af32b3d7f082fa122",
-  "reference-analysis-backend/worker.mjs": "424433909386908f7d10ee8cbc04d28c344371b0380b84c99cfcd2f9338d9ff1",
+  "reference-analysis-backend/test-worker.mjs": "5595995c72d7c5ab4128286dc6bc7d869d2e02a991f752657fb71da1a0d1e69d",
+  "reference-analysis-backend/worker.mjs": "47a960964d9920da1379422de92b41aa6d33974e5c8decedb8e7ffe440f04d05",
   "reference-analysis-backend/wrangler.jsonc": "49b36f337915a2caf3a122871d068bab53532e8a813a33d09d4da5b5b26a06c9",
   "scripts/test-reference-analysis-release.mjs": "b2800432d533d1576c2d20c87fd11695dac346d0cc87310b1e0a668b96426dd6"
 };
@@ -62,7 +66,7 @@ async function main(){
   const run=await api('/actions/runs/'+baseRun);assert.equal(run.conclusion,'success');assert.equal(run.head_sha,baseCommit);
   const deployments=await api('/deployments?environment=github-pages&per_page=20');
   const statuses=await Promise.all(deployments.map(async d=>({deployment:d,status:(await api('/deployments/'+d.id+'/statuses'))[0]})));
-  const current=statuses.find(s=>s.status?.state==='success');assert.ok(current);assert.equal(current.deployment.sha,baseCommit,'Another release has been published');assert.ok(current.status.log_url.includes('/runs/'+baseRun+'/'));
+  const current=statuses.find(s=>s.status?.state==='success');assert.ok(current);assert.equal(current.deployment.sha,expectedCurrentCommit,'Another release has been published');assert.ok(current.status.log_url.includes('/runs/'+expectedCurrentRun+'/'));
  }
  const candidates=new Map();
  for(const p of payload){

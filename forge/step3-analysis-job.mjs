@@ -1,19 +1,34 @@
 // Used only by analyzeReferences(). Image generation and exports do not import it.
 export const ANALYSIS_JOB_BASE='https://public.gallery-reference-analysis.pages.dev';
 const hosts=new Set(['gallery-nonelinear-relay.lixiao-gallery.workers.dev','api.nonelinear.com.cn','api.nonelinear.com']);
-export function usesAnalysisJob(provider,url){try{const u=new URL(url);return provider==='nonelinear'&&u.protocol==='https:'&&hosts.has(u.hostname)&&u.pathname==='/v1/chat/completions';}catch{return false;}}
+export function analysisUpstream(provider,url){
+ try{
+  const u=new URL(url);
+  if(u.protocol!=='https:'||u.port||u.username||u.password||u.search||u.hash||u.pathname!=='/v1/chat/completions')return null;
+  if(provider==='nonelinear'&&hosts.has(u.hostname))return 'nonelinear';
+  if(provider==='infistar'&&u.hostname==='infistar.cc')return 'infistar-cc';
+  if(provider==='infistar'&&u.hostname==='infistar.ai')return 'infistar-ai';
+ }catch{}
+ return null;
+}
+export const usesAnalysisJob=(provider,url)=>analysisUpstream(provider,url)!==null;
 async function digest(text){return [...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(text)))].map(x=>x.toString(16).padStart(2,'0')).join('');}
 function storageGet(storage,key){try{return JSON.parse(storage?.getItem(key)||'null');}catch{return null;}}
 function storageSet(storage,key,value){try{storage?.setItem(key,JSON.stringify(value));}catch{}}
 function storageDelete(storage,key){try{storage?.removeItem(key);}catch{}}
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 export async function requestReferenceAnalysis({provider,url,init,fetchImpl=globalThis.fetch,storage=globalThis.sessionStorage,sleep=pause,now=Date.now,deadlineMs=15*60*1000,networkMs=20000,pollMs=2000,uuid=()=>crypto.randomUUID()}){
- if(!usesAnalysisJob(provider,url))return fetchImpl(url,init);
- const authorization=new Headers(init.headers).get('Authorization');
+ const upstream=analysisUpstream(provider,url);
+ if(!upstream)return fetchImpl(url,init);
+ const headers=new Headers(init.headers),authorization=headers.get('Authorization');
+ // NoneLinear retains its existing task namespace and wire format.
+ if(upstream!=='nonelinear')headers.set('X-Analysis-Upstream',upstream);
+ const readHeaders=new Headers({Authorization:authorization});
+ if(upstream!=='nonelinear')readHeaders.set('X-Analysis-Upstream',upstream);
  // Persist only hashes and the opaque task identifier, never the key or pictures.
  const slot='gallery.reference-analysis.v1.'+await digest(url+'\n'+authorization+'\n'+init.body);
  const saved=storageGet(storage,slot),start=now();
- const resume=saved&&/^[0-9a-f-]{36}$/.test(saved.id)&&saved.created>start-86400000;
+ const resume=saved&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(saved.id)&&Number.isFinite(saved.created)&&saved.created<=start&&saved.created>start-86400000;
  const task=resume?saved:{id:uuid(),created:start};storageSet(storage,slot,task);
  const endpoint=ANALYSIS_JOB_BASE+'/jobs/'+task.id;
  let accepted=!!resume,submit=!resume,lastError='';
@@ -28,7 +43,7 @@ export async function requestReferenceAnalysis({provider,url,init,fetchImpl=glob
   try{
    if(submit){
     submit=false;
-    const ack=await read(endpoint,{method:'PUT',headers:init.headers,body:init.body});
+    const ack=await read(endpoint,{method:'PUT',headers,body:init.body});
     if(ack.response.status!==202){
      const error=ack.data?.error;
      if(ack.response.status>=500)throw Error('归纳任务提交暂时不可用');
@@ -36,17 +51,18 @@ export async function requestReferenceAnalysis({provider,url,init,fetchImpl=glob
     }
     accepted=true;
    }
-   const result=await read(endpoint+'/result',{headers:{Authorization:authorization}});
+   const result=await read(endpoint+'/result',{headers:readHeaders});
    if(result.response.status===404){
     // A lost submission acknowledgement is retried with THE SAME task id. The
     // backend serializes duplicate PUTs and never repeats the upstream call.
     accepted=false;submit=true;
    }else if(result.response.status===202){accepted=true;}
-   else if(result.response.status>=500){throw Error('归纳结果暂时无法读取');}
+   else if(result.response.status>=500&&!result.response.headers.get('X-Analysis-Job-Id')){throw Error('归纳结果暂时无法读取');}
    else{
     if(result.response.status===410){storageDelete(storage,slot);return new Response(JSON.stringify({error:{message:'保存的归纳任务已过期，请重新发起归纳。',code:'analysis_job_expired',request_id:task.id}}),{status:410,headers:{'Content-Type':'application/json'}});}
     if(result.data.error&&typeof result.data.error==='object')result.data.error.request_id??=task.id;
-    if(!result.data.error)storageDelete(storage,slot);
+    // Keep completed jobs too: a lost downstream image response or a refresh
+    // must not discard an already paid-for, recoverable reference analysis.
     return new Response(JSON.stringify(result.data),{status:result.response.status,headers:{'Content-Type':'application/json','X-Analysis-Job-Id':task.id}});
    }
   }catch(error){lastError=error?.message||'网络连接中断';if(!accepted)submit=true;}

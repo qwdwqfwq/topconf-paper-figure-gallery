@@ -12,18 +12,24 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||path.join(require('nod
  let browser;
  try{
   browser=await chromium.launch({headless:true,...(process.env.REVISION_BUNDLED_BROWSER==='1'?{}:{executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})});
-  for(const scenario of ['transport','upstream-200','success','configured-ai']){
+  for(const scenario of ['upstream-connection','upstream-200','success','configured-ai']){
    const context=await browser.newContext({serviceWorkers:'block'}),page=await context.newPage();
-   const pageErrors=[],analysisRequests=[],imageRequests=[];let pixels,jobId,generating=false,diagnosticProbes=0;
+   const pageErrors=[],analysisRequests=[],imageRequests=[];let pixels,jobId,generating=false,diagnosticProbes=0,analysisId;
    page.on('pageerror',e=>pageErrors.push(e.message));
    await page.route('**/*',async route=>{
     const req=route.request(),url=new URL(req.url());
-    if(url.pathname.endsWith('/chat/completions')){
-     assert.equal(url.origin,scenario==='configured-ai'?'https://infistar.ai':'https://infistar.cc');analysisRequests.push(req.postDataJSON());
-     if(scenario==='transport')return route.abort('connectionfailed');
+    if(url.hostname==='public.gallery-reference-analysis.pages.dev'){
+     assert.equal(req.headers()['x-analysis-upstream'],scenario==='configured-ai'?'infistar-ai':'infistar-cc');
+     if(req.method()==='PUT'){
+      assert.equal(analysisId,undefined);analysisId=url.pathname.split('/')[2];analysisRequests.push(req.postDataJSON());
+      return route.fulfill({status:202,json:{id:analysisId,state:'queued'}});
+     }
+     assert.equal(req.method(),'GET');assert.equal(url.pathname,'/jobs/'+analysisId+'/result');
+     if(scenario==='upstream-connection')return route.fulfill({json:{error:{message:'Failed to fetch: fixture upstream connection interrupted; no model replay',code:'analysis_outcome_unknown',type:'upstream_connection_error'}}});
      if(scenario==='upstream-200')return route.fulfill({json:{error:{message:'NoneLinear upstream HTTP 524: fixture original failure',code:524,type:'upstream_http_error',request_id:'req-browser-fixture'}}});
      return route.fulfill({json:{choices:[{finish_reason:'stop',message:{content:JSON.stringify({layout:'Left to right',elements:'Three blocks',palette:['#123456'],hierarchy:'Overview then detail',representative:[1],imageRefIds:[1],refinedPrompt:'Clean research diagram.'})}}]}});
     }
+    if(url.pathname.endsWith('/chat/completions'))throw Error('Analysis must use durable jobs');
     if(url.pathname.includes(':generateContent')){const body=req.postDataJSON();imageRequests.push({body:{model:imageModel,size:body.generationConfig?.imageConfig?.imageSize}});return route.fulfill({json:{candidates:[{content:{parts:[{inlineData:{mimeType:'image/png',data:pixels}}]},finishReason:'STOP'}]}});}
     if(url.pathname.endsWith('/images/generations')){ imageRequests.push({body:req.postDataJSON()});return route.fulfill({json:{data:[{b64_json:pixels}]}}); }
     if(url.hostname==='gallery-infistar-image-jobs.lixiao-gallery.workers.dev'){
@@ -67,7 +73,7 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||path.join(require('nod
    await page.locator('#paper').fill('Offline method overview: input -> retrieval -> reasoning -> verified answer.');
    generating=true;await page.locator('#genBtn').click();
    await page.waitForFunction(()=>!document.querySelector('#genBtn').disabled);
-   assert.equal(analysisRequests.length,1,'Only the original analysis POST; no hi probe');
+   assert.equal(analysisRequests.length,1,'Only one analysis job; no direct paid fallback or hi probe');
    assert.equal(diagnosticProbes,0,'No diagnostic /models request after a failure');
    const analysis=analysisRequests[0];assert.equal(analysis.model,analysisModel);assert.equal(analysis.temperature,0.2);assert.equal(analysis.max_completion_tokens,16000);assert.equal(analysis.max_tokens,undefined);
    assert.equal(analysis.messages[0].role,'system');assert.ok(analysis.messages[1].content.some(p=>p.type==='image_url'));
@@ -80,7 +86,7 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||path.join(require('nod
    }else{
     assert.equal(imageRequests.length,0,'Failed analysis must not submit an image');
     assert.match(error,/gpt-6.1-sol/);assert.doesNotMatch(error,/Key 错误或过期|offline-fixture/);
-    if(scenario==='transport')assert.match(error,/transport.*Failed to fetch/);
+    if(scenario==='upstream-connection')assert.match(error,/analysis_outcome_unknown.*Failed to fetch/);
     else assert.match(error,/upstream=524.*req-browser-fixture.*fixture original failure/);
    }
    assert.deepEqual(pageErrors,[]);console.log('PASS Step 3 two-pass button: '+scenario);
