@@ -9,6 +9,8 @@ import {usesBrowserImageTransport,openBrowserImageFetch} from './browser-image-f
 import {PAYLOAD_STORE,SQLITE_PAYLOAD_STORE,hasPayloadStore,putPayload,getPayload,deletePayloads,payloadObject} from '../infistar-image-relay/job-payloads.mjs';
 import {extractImage,storeImage,streamedResult} from '../infistar-image-relay/streamed-image-result.mjs';
 import {sqliteImagePayloads} from '../infistar-image-relay/sqlite-image-payloads.mjs';
+import {validUpload} from '../forge/revision-upload.mjs';
+import {receiveUpload,readUpload,clearUpload,sameUpload} from './upload-store.mjs';
 const RETENTION=24*60*60*1000, EXECUTION=12*60*1000, MAX_REQUEST=16*1024*1024;
 const encoder=new TextEncoder();
 // Modification jobs preserve the exact selected service address.
@@ -23,7 +25,7 @@ function jobLog(event,meta){console.log(JSON.stringify({event,...publicMeta(meta
 async function putText(storage,prefix,text){const count=Math.ceil(text.length/16000);for(let i=0;i<count;i++)await storage.put(prefix+i,text.slice(i*16000,(i+1)*16000));return count;}
 async function getText(storage,prefix,count){let text='';for(let i=0;i<count;i++)text+=await storage.get(prefix+i);return text;}
 async function clearText(storage,prefix,count){for(let i=0;i<count;i++)await storage.delete(prefix+i);}
-async function boundedBody(request){const reader=request.body?.getReader();let text='',size=0;const decoder=new TextDecoder();if(reader)for(;;){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>MAX_REQUEST){await reader.cancel();throw Error('REQUEST_TOO_LARGE');}text+=decoder.decode(value,{stream:true});}return text+decoder.decode();}
+async function boundedBody(request,limit=MAX_REQUEST){const reader=request.body?.getReader();let text='',size=0;const decoder=new TextDecoder();if(reader)for(;;){const {done,value}=await reader.read();if(done)break;size+=value.length;if(size>limit){await reader.cancel();throw Error('REQUEST_TOO_LARGE');}text+=decoder.decode(value,{stream:true});}return text+decoder.decode();}
 export function validateSubmission(value){
   const target=new URL(value.url);
   if(!imageJobRoute(target.href))throw Error('INVALID_TARGET');
@@ -44,8 +46,8 @@ export default {
     if(!origin||!allowed.includes(origin))return json({error:'GALLERY_ORIGIN_REQUIRED'},403);
     const headers={'Access-Control-Allow-Origin':origin,'Vary':'Origin','Cache-Control':'no-store'};
     const reply=response=>{const h=new Headers(response.headers);for(const [k,v]of Object.entries(headers))h.set(k,v);return new Response(response.body,{status:response.status,headers:h});};
-    const url=new URL(request.url),match=/^\/jobs\/([0-9a-f-]{36})(\/result)?$/.exec(url.pathname);
-    if(!match||url.search||!['PUT','GET','OPTIONS'].includes(request.method)||match[2]&&request.method==='PUT')return reply(json({error:'UNKNOWN_ENDPOINT'},404));
+    const url=new URL(request.url),match=/^\/jobs\/([0-9a-f-]{36})(\/result|\/upload(?:\/\d{1,2})?)?$/.exec(url.pathname);
+    if(!match||url.search||!['PUT','GET','OPTIONS'].includes(request.method)||match[2]==='/result'&&request.method==='PUT'||match[2]==='/upload'&&request.method==='PUT'||/\/upload\/\d+$/.test(url.pathname)&&request.method==='GET')return reply(json({error:'UNKNOWN_ENDPOINT'},404));
     if(request.method==='OPTIONS'){
       const names=(request.headers.get('Access-Control-Request-Headers')||'').toLowerCase().split(',').map(x=>x.trim()).filter(Boolean);
       if(!['PUT','GET'].includes(request.headers.get('Access-Control-Request-Method'))||names.some(x=>!['authorization','content-type'].includes(x)))return reply(json({error:'INVALID_PREFLIGHT'},403));
@@ -60,6 +62,7 @@ export default {
 export class ImageJob {
   constructor(ctx,env){this.ctx=ctx;this.storage=ctx.storage;this.env=Object.create(env);this.env.DO_IMAGE_PAYLOADS=sqliteImagePayloads(ctx.storage);}
   async readText(meta,kind){
+    if(kind==='input'&&meta.upload)return readUpload(this.storage,meta.upload);
     return hasPayloadStore(meta)?getPayload(this.env,meta,kind==='result'?(meta.resultStage||'result'):kind):getText(this.storage,kind+':',meta[kind+'Count']);
   }
   async clearInput(storage,meta){
@@ -80,20 +83,52 @@ export class ImageJob {
     const id=url.pathname.split('/')[2];let meta=await this.storage.get('meta');
     if(meta&&meta.owner!==owner)return json({error:'NOT_FOUND'},404);
     if(meta&&meta.state!=='expired'&&Date.now()>=meta.expires){await this.expire(meta);meta=await this.storage.get('meta');}
+    if(url.pathname.includes('/upload')){
+      if(meta)return json({...publicMeta(meta),committed:true},meta.state==='expired'?410:200);
+      if(request.method==='GET'){
+        const manifest=await this.storage.get('upload:manifest');
+        if(!manifest)return json({error:'NOT_FOUND'},404);
+        if(Date.now()>=manifest.expires){await clearUpload(this.storage);return json({error:'UPLOAD_EXPIRED'},410);}
+        return json({count:manifest.count,digest:manifest.digest,parts:Object.keys(manifest.parts).map(Number),expires:manifest.expires});
+      }
+      try{
+        // Bounded chunk body. The original full-resolution image is never resized.
+        if(Number(request.headers.get('Content-Length'))>3*1024*1024)return json({error:'INVALID_UPLOAD'},400);
+        const value=JSON.parse(await boundedBody(request,3*1024*1024));
+        if(typeof value.data!=='string'||value.data.length>512*1024)throw Error('INVALID_UPLOAD');
+        let manifest;
+        await this.ctx.blockConcurrencyWhile(async()=>{
+          meta=await this.storage.get('meta');
+          if(!meta)manifest=await receiveUpload(this.storage,{count:value.count,digest:value.digest},Number(url.pathname.split('/')[4]),value.data);
+        });
+        if(meta)return json({...publicMeta(meta),committed:true},meta.state==='expired'?410:200);
+        return json({count:manifest.count,digest:manifest.digest,parts:Object.keys(manifest.parts).map(Number)});
+      }catch(error){return json({error:error.message},error.message==='UPLOAD_EXPIRED'?410:error.message==='UPLOAD_CONFLICT'?409:400);}
+    }
     if(request.method==='PUT'){
-      let value;try{value=validateSubmission(JSON.parse(await boundedBody(request)));}catch(error){return json({error:error.message==='REQUEST_TOO_LARGE'?'REQUEST_TOO_LARGE':'INVALID_SUBMISSION'},400);}
+      let value,upload;
+      try{
+        const received=JSON.parse(await boundedBody(request));
+        if(received.upload){
+          upload=received.upload;if(!validUpload(upload))throw Error('INVALID_UPLOAD');
+          if(meta){if(!sameUpload(meta.upload,upload))return json({error:'JOB_ID_CONFLICT'},409);return json(publicMeta(meta),meta.state==='expired'?410:202);}
+          const manifest=await this.storage.get('upload:manifest');
+          if(manifest&&Date.now()>=manifest.expires)return json({error:'UPLOAD_EXPIRED'},410);
+          value=validateSubmission(JSON.parse(await readUpload(this.storage,upload)));
+        }else value=validateSubmission(received);
+      }catch(error){return json({error:error.message.startsWith('UPLOAD_')?error.message:error.message==='REQUEST_TOO_LARGE'?'REQUEST_TOO_LARGE':'INVALID_SUBMISSION'},400);}
       const text=JSON.stringify(value),fingerprint=await digest(text);
       // Serialize first submission; concurrent identical PUTs schedule one alarm.
       await this.ctx.blockConcurrencyWhile(async()=>{
         meta=await this.storage.get('meta');
         if(meta)return;
         const encrypted=await encrypt(this.env.JOB_ENCRYPTION_KEY,authorization.slice(7));
-        const queued={id,owner,fingerprint,state:'queued',created:Date.now(),expires:Date.now()+RETENTION,encrypted,upstreamAttempts:0,...((this.env.IMAGE_PAYLOADS||this.env.STREAM_IMAGE_RESULTS==='true')?{payloadStore:this.env.IMAGE_PAYLOADS?PAYLOAD_STORE:SQLITE_PAYLOAD_STORE,streamImageResults:this.env.STREAM_IMAGE_RESULTS==='true'}:{})};
+        const queued={id,owner,fingerprint,state:'queued',created:Date.now(),expires:Date.now()+RETENTION,encrypted,upstreamAttempts:0,...(upload?{upload}:{}),...((this.env.IMAGE_PAYLOADS||this.env.STREAM_IMAGE_RESULTS==='true')?{payloadStore:this.env.IMAGE_PAYLOADS?PAYLOAD_STORE:SQLITE_PAYLOAD_STORE,streamImageResults:this.env.STREAM_IMAGE_RESULTS==='true'}:{})};
         // Finish the payload write BEFORE acknowledging/scheduling the task. Keep
         // external I/O outside the retryable SQLite transaction callback.
-        if(hasPayloadStore(queued))await putPayload(this.env,queued,'input',text);
+        if(!upload&&hasPayloadStore(queued))await putPayload(this.env,queued,'input',text);
         await this.storage.transaction(async storage=>{
-          const count=hasPayloadStore(queued)?0:await putText(storage,'input:',text);
+          const count=upload||hasPayloadStore(queued)?0:await putText(storage,'input:',text);
           meta={...queued,inputCount:count};
           await storage.put('meta',meta);await storage.setAlarm(Date.now()+100);
         });
@@ -127,6 +162,7 @@ export class ImageJob {
   async expire(meta){
     if(meta.state==='expired')return;
     if(hasPayloadStore(meta))await deletePayloads(this.env,meta);
+    await clearUpload(this.storage);
     for(const prefix of ['input:','result:'])for(;;){const keys=[...(await this.storage.list({prefix,limit:128})).keys()];if(!keys.length)break;await this.storage.delete(keys);}
     // Small tombstone is intentionally retained. Replaying an expired ID must
     // never silently create a second chargeable upstream generation.
@@ -139,7 +175,7 @@ export class ImageJob {
     try{return await this.executeAlarm();}finally{this.active=false;}
   }
   async executeAlarm(){
-    let meta=await this.storage.get('meta');if(!meta)return;
+    let meta=await this.storage.get('meta');if(!meta){const upload=await this.storage.get('upload:manifest');if(upload){if(Date.now()>=upload.expires)await clearUpload(this.storage);else await this.storage.setAlarm(upload.expires);}return;}
     if(Date.now()>=meta.expires){await this.expire(meta);return;}
     const recovering=['running','response_received'].includes(meta.state)&&!!meta.browserSession&&!!meta.encrypted;
     if((meta.state==='running'||meta.state==='response_received')&&!recovering){

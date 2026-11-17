@@ -3,7 +3,7 @@ import {usesInfistarGemini,geminiImageRequest,geminiImageResult,compatibleImageR
 import {imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261026-nonelinear-resolution';
 import {captureGenerationContext,copyStep1Context,revisionContextInstruction} from './revision-context.mjs';
 import {acknowledgeInfistarImageJob} from './step3-infistar-job.mjs?v=20261114-durable-jobs';
-import {createRevisionImageJobClient} from './revision-image-job.mjs';
+import {createRevisionImageJobClient} from './revision-image-job.mjs?v=20261117-chunked-revision';
 import {revisionTaskStore,revisionTaskInput} from './revision-task-store.mjs';
 const revisionJobClient=createRevisionImageJobClient();
 const requestInfistarImageJob=input=>revisionJobClient.request(input);
@@ -398,7 +398,7 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
     // legacy staged edits and Step 4 are unchanged.
     const streamedRevision=!!parent.freeRevision;
     const response=staged?.response||await (streamedRevision?requestInfistarImageJob({url,body:request.body,key,task:parent.revisionTask,saveTask,usedReferences:!!references.length,onProgress:state=>{
-      onProgress?.(state.stage==='waiting_response'?'请求已发送，正在等待修改图响应。':state.stage==='response_received'?(parent.localPatch?'修改图已接收，正在还原选区并校验框外像素。':'修改图已接收，正在校验并保存。'):`已收到接口响应，正在接收修改图（${Math.ceil((state.responseBytes||0)/1024)} KB）。`);
+      onProgress?.(state.state==='uploading'?`正在上传原始修改图（${state.completed} / ${state.total}），刷新后可继续。`:state.state==='submitting'?'正在保存修改图任务，尚未确认接收。':state.state==='queued'?'后台已保存修改图任务，正在排队。':state.state==='running'?'后台正在生成修改图，刷新后可取回同一任务。':state.state==='reconnecting'?'连接中断，正在恢复同一修改任务；不会重复生图。':state.stage==='waiting_response'?'请求已发送，正在等待修改图响应。':state.stage==='response_received'?(parent.localPatch?'修改图已接收，正在还原选区并校验框外像素。':'修改图已接收，正在校验并保存。'):`已收到接口响应，正在接收修改图（${Math.ceil((state.responseBytes||0)/1024)} KB）。`);
     }}):requestImageWithRecovery({url,body:request.body,key,usedReferences:true,allowReferenceFallback:false}));
     if(!response.ok){
       if(!streamedRevision)throw new Error('修改生图失败（HTTP '+response.status+'）。'+response.text.slice(0,400));

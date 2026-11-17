@@ -8,9 +8,40 @@ import {resultDiagnostics,exceptionDiagnostics,responseDiagnostics} from '../inf
 import {imageResponseStream,storeImage} from '../infistar-image-relay/streamed-image-result.mjs';
 import {sqliteImagePayloads} from '../infistar-image-relay/sqlite-image-payloads.mjs';
 import {payloadObject} from '../infistar-image-relay/job-payloads.mjs';
+import {REVISION_CHUNK,revisionDigest} from '../forge/revision-upload.mjs';
 const origin='https://qwdwqfwq.github.io',jobId='c3c04790-cd04-47e2-bb09-546aa8fcd7fe';
 const input={url:'https://infistar.cc/v1/images/generations',body:{model:'gpt-image-2.5-sunburst',prompt:'fixture'},usedReferences:false};
 const png64='iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jXioAAAAASUVORK5CYII=';
+test('chunk upload preserves full bytes across restart, verifies integrity and commits one generation',async()=>{
+ const f=fixture({stream:true}),submission={...input,url:'https://api.openai.com/v1/images/generations',body:{...input.body,prompt:'修改原图',image:'x'.repeat(REVISION_CHUNK*2+117)},usedReferences:true};
+ const text=JSON.stringify(submission),upload={count:Math.ceil(text.length/REVISION_CHUNK),digest:await revisionDigest(text)};
+ const part=i=>({...upload,data:text.slice(i*REVISION_CHUNK,(i+1)*REVISION_CHUNK)});
+ assert.equal((await f.job.fetch(f.req('PUT','test-key',{upload}))).status,400);
+ for(let i=0;i<upload.count;i++)assert.equal((await f.job.fetch(f.req('PUT','test-key',part(i),'/upload/'+i))).status,200);
+ assert.equal((await f.job.fetch(f.req('PUT','test-key',part(0),'/upload/0'))).status,200);
+ assert.equal((await f.job.fetch(f.req('PUT','test-key',{...part(0),data:'z'.repeat(REVISION_CHUNK)},'/upload/0'))).status,409);
+ assert.equal(await f.storage.get('meta'),undefined,'Uploading cannot create or start a paid task');
+ const restarted=new ImageJob(f.ctx,f.env);
+ assert.deepEqual((await(await restarted.fetch(f.req('GET','test-key',null,'/upload'))).json()).parts,[0,1,2]);
+ const commits=await Promise.all([restarted.fetch(f.req('PUT','test-key',{upload})),restarted.fetch(f.req('PUT','test-key',{upload}))]);
+ assert.deepEqual(commits.map(r=>r.status),[202,202]);
+ const meta=await f.storage.get('meta');assert.equal(meta.upstreamAttempts,0);assert.deepEqual(JSON.parse(await restarted.readText(meta,'input')),submission);
+ const previous=globalThis.fetch;let paid=0;
+ globalThis.fetch=async(u,init)=>{paid++;assert.deepEqual(JSON.parse(init.body),{...submission.body,stream:true});return Response.json({data:[{b64_json:png64}]});};
+ try{await restarted.alarm();await restarted.alarm();assert.equal(paid,1);assert.equal((await f.storage.get('meta')).state,'succeeded');}finally{globalThis.fetch=previous;}
+ assert.equal((await restarted.fetch(f.req('PUT','test-key',{upload}))).status,202);
+ const done=await(await restarted.fetch(f.req('GET','test-key',null,'/upload'))).json();assert.equal(done.committed,true);
+ f.map.set('meta',{...await f.storage.get('meta'),expires:Date.now()-1});await restarted.alarm();assert.deepEqual([...f.map.keys()],['meta']);
+ assert.equal((await restarted.fetch(f.req('PUT','test-key',{upload}))).status,410);
+});
+test('incomplete, corrupt and abandoned chunks never schedule generation',async()=>{
+ const f=fixture(),text=JSON.stringify(input),upload={count:1,digest:await revisionDigest(text)};
+ assert.equal((await f.job.fetch(f.req('PUT','test-key',{...upload,data:text+' '},'/upload/0'))).status,200);
+ assert.equal((await f.job.fetch(f.req('PUT','test-key',{upload}))).status,400);
+ assert.equal(await f.storage.get('meta'),undefined);
+ const manifest=await f.storage.get('upload:manifest');f.map.set('upload:manifest',{...manifest,expires:Date.now()-1});
+ await new ImageJob(f.ctx,f.env).alarm();assert.equal(f.map.size,0);
+});
 test('streamed result preserves image bytes across arbitrary binary chunk boundaries',async()=>{
  for(const size of [1,2,3,24577,65536]){
   const bytes=Buffer.alloc(90001);for(let i=0;i<bytes.length;i++)bytes[i]=i%251;
@@ -74,7 +105,7 @@ test('overseas image gateway is selected before the one request; other routes ar
 });
 function fixture({r2=false,stream=false}={}){
  const map=new Map(),payloads=new Map(),stats={rowWrites:0,r2Puts:0,r2Gets:0,r2Deletes:0};let lock=Promise.resolve();const storage={
-  async get(k){return structuredClone(map.get(k));},async put(k,v){stats.rowWrites++;map.set(k,structuredClone(v));},
+  async get(k){return Array.isArray(k)?new Map(k.filter(x=>map.has(x)).map(x=>[x,structuredClone(map.get(x))])):structuredClone(map.get(k));},async put(k,v){if(typeof k==='object'){for(const [name,value]of Object.entries(k)){stats.rowWrites++;map.set(name,structuredClone(value));}}else{stats.rowWrites++;map.set(k,structuredClone(v));}},
   async delete(k){for(const key of Array.isArray(k)?k:[k])if(map.delete(key))stats.rowWrites++;},
   async list({prefix,limit}){return new Map([...map].filter(([k])=>k.startsWith(prefix)).slice(0,limit));},
   async setAlarm(t){stats.rowWrites++;this.alarm=t;},async deleteAlarm(){stats.rowWrites++;this.alarm=null;},

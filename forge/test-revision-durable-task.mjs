@@ -5,6 +5,7 @@ import vm from 'node:vm';
 import {createRevisionImageJobClient} from './revision-image-job.mjs';
 import {createRevisionTaskStore,revisionTaskInput} from './revision-task-store.mjs';
 import {usesBrowserImageTransport} from '../revision-image-jobs/browser-image-fetch.mjs';
+import {REVISION_CHUNK,revisionDigest} from './revision-upload.mjs';
 
 const url='https://infistar.cc/v1beta/models/gemini-3.1-flash-image:streamGenerateContent?alt=sse';
 const body={generationConfig:{imageConfig:{imageSize:'4K',aspectRatio:'16:9'}},contents:[]};
@@ -15,6 +16,41 @@ test('private browser transport covers native selected Infistar hosts without br
  for(const bad of [url.replace('infistar.cc','evil.example'),url+'&key=secret','https://infistar.cc/v1/images/edits','http://infistar.cc/v1/images/generations'])assert.equal(usesBrowserImageTransport(bad),false);
 });
 const client=fetchImpl=>createRevisionImageJobClient({fetchImpl,wait:async()=>{},pollMs:0,retryMs:0,maxReadFailures:1});
+
+test('large original survives interrupted chunk upload and refresh without duplicate generation',async()=>{
+ const a=input();a.body={...body,original:'a'.repeat(REVISION_CHUNK*2+13)};
+ const parts=new Map();let offline=true,commits=0,descriptor;
+ const fetchImpl=async(u,i={})=>{
+  if(u.endsWith('/upload'))return parts.size?Response.json({...descriptor,parts:[...parts.keys()]}):Response.json({error:'NOT_FOUND'},{status:404});
+  if(/\/upload\/\d+$/.test(u)){
+   assert.equal(a.task.submitted,undefined);const index=Number(u.split('/').at(-1));
+   if(index===2&&offline)throw Error('refresh during upload');
+   assert.ok(!parts.has(index),'Refresh must skip acknowledged chunks');
+   const {count,digest,data}=JSON.parse(i.body);descriptor={count,digest};parts.set(index,data);return Response.json({...descriptor,parts:[...parts.keys()]});
+  }
+  if(i.method==='PUT'){
+   commits++;assert.equal(a.task.submitted,true);assert.deepEqual(JSON.parse(i.body),{upload:descriptor});
+   const text=[...parts.values()].join('');assert.equal(await revisionDigest(text),descriptor.digest);
+   assert.deepEqual(JSON.parse(text).body,a.body);return Response.json({state:'succeeded'});
+  }
+  return Response.json({ok:true,status:200,text:'unchanged original reference'});
+ };
+ await assert.rejects(client(fetchImpl).request(a));assert.equal(commits,0);assert.equal(parts.size,2);assert.equal(a.task.state,'uploading');
+ a.task=structuredClone(a.task);offline=false;
+ assert.equal((await client(fetchImpl).request(a)).text,'unchanged original reference');assert.equal(commits,1);
+ await client(fetchImpl).request(a);assert.equal(commits,1);
+});
+
+test('lost chunk acknowledgement retries only that idempotent chunk; lost commit uses GET only',async()=>{
+ const a=input();a.body={...body,original:'b'.repeat(REVISION_CHUNK+1)};let chunks=0,commits=0;
+ await client(async(u,i={})=>{
+  if(u.endsWith('/upload'))return Response.json({}, {status:404});
+  if(/\/upload\/\d+$/.test(u)){if(chunks++===0)throw Error('lost chunk ack');return Response.json({});}
+  if(i.method==='PUT'){commits++;throw Error('lost paid commit ack');}
+  return Response.json(u.endsWith('/result')?{ok:true,status:200,text:'saved'}:{state:'succeeded'});
+ }).request(a);
+ assert.equal(chunks,3);assert.equal(commits,1);
+});
 
 test('selected Infistar address and 4K are preserved through lost acknowledgement and reads',async()=>{
  const task=input(),calls=[];let reads=0,results=0;
@@ -33,6 +69,19 @@ test('refresh resumes the same accepted task using GET only',async()=>{
  const a=input();a.task.submitted=true;let reads=0;
  const c=client(async(u,i={})=>{assert.equal(i.method,undefined);assert.ok(u.includes(a.task.id));reads++;return Response.json(u.endsWith('/result')?{ok:true,status:200,text:'saved response'}:{state:'succeeded'});});
  await c.request(a);assert.equal(reads,2);
+});
+
+test('large reference acknowledgement gets an upload budget independent of status reads',async()=>{
+ const a=input();let puts=0,reads=0;
+ const c=createRevisionImageJobClient({requestMs:10,submissionMs:150,pollMs:0,fetchImpl:async(u,i={})=>{
+  if(i.method==='PUT'){
+   puts++;await new Promise(r=>setTimeout(r,50));
+   assert.equal(i.signal.aborted,false,'Upload must survive the small status-read timeout');
+   return Response.json({state:'succeeded'});
+  }
+  reads++;return Response.json({ok:true,status:200,text:'full resolution result'});
+ }});
+ assert.equal((await c.request(a)).text,'full resolution result');assert.equal(puts,1);assert.equal(reads,1);
 });
 
 test('storage failure stops before any submission and leaves task unsubmitted',async()=>{
