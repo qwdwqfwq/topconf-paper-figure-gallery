@@ -1,10 +1,11 @@
+import {createRevisionDiagnostics,revisionFailure,revisionDiagnosticText} from './revision-diagnostics.mjs';
 import {scopedRevision,confirmedRevision,selectRevisionRegions,validateRegions,modeInstruction,readRevisionSource} from './revision-scope.mjs?v=20261114-layout';
 import {usesInfistarGemini,geminiImageRequest,geminiImageResult,compatibleImageRequest,requestImageWithRecovery,imageRequestDiagnostics} from './image-api.mjs?v=20261026-nonelinear-resolution';
 import {imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261026-nonelinear-resolution';
 import {captureGenerationContext,copyStep1Context,revisionContextInstruction} from './revision-context.mjs';
 import {acknowledgeInfistarImageJob} from './step3-infistar-job.mjs?v=20261114-durable-jobs';
-import {createRevisionImageJobClient} from './revision-image-job.mjs?v=20261118-connection-recovery';
-import {receiveRevisionOutput} from './revision-result-recovery.mjs';
+import {createRevisionImageJobClient} from './revision-image-job.mjs?v=20261118-stage-diagnostics';
+import {receiveRevisionOutput} from './revision-result-recovery.mjs?v=20261118-stage-diagnostics';
 import {revisionTaskStore,revisionTaskInput} from './revision-task-store.mjs';
 import {bindRevisionCredential} from './revision-credentials.mjs';
 const revisionJobClient=createRevisionImageJobClient();
@@ -61,8 +62,8 @@ async function uploadRevisionReference(data,key,index){
       body:JSON.stringify({image:bytes.replace(/[\r\n]/g,''),type:'.'+(type==='jpeg'?'jpg':type)}),
       signal:AbortSignal.timeout(60000)
     });
-  }catch{throw new Error('第 '+(index+1)+' 张修改参考图上传失败，本次未调用生图 API；请检查网络后手动重试。');}
-  if(!response.ok)throw new Error('第 '+(index+1)+' 张修改参考图上传失败（HTTP '+response.status+'），本次未调用生图 API。');
+  }catch(error){throw revisionFailure(error,'upload',{chunk:index+1},key);}
+  if(!response.ok)throw revisionFailure(new Error('第 '+(index+1)+' 张修改参考图上传失败，本次未调用生图 API。'),'upload',{httpStatus:response.status,chunk:index+1,requestId:response.headers.get('x-request-id')},key);
   let url;
   try{
     const data=await response.json();url=new URL(data.url);
@@ -265,20 +266,24 @@ Return ONLY JSON {"passed":boolean,"columnBottoms":[],"nodeChecks":[{"id":"inven
 export async function generateRevision(parent,prompt,options){
   if(!parent.freeRevision)return generateRevisionOnce(parent,prompt,options);
   const store=options.revisionTaskStore||revisionTaskStore;
-  const task=parent.revisionTask||{id:crypto.randomUUID(),versionId:crypto.randomUUID(),created:Date.now(),state:'prepared',prompt,input:revisionTaskInput({...parent,image:await readRevisionSource(parent.image,options)})};
+  const task=parent.revisionTask||{id:crypto.randomUUID(),versionId:crypto.randomUUID(),created:Date.now(),state:'prepared',prompt,input:revisionTaskInput(parent)};
   const saveTask=async()=>{await store.write(task);parent.onRevisionTask?.(task);};
-  await bindRevisionCredential(task,options.key);
-  await saveTask();
-  if(task.result)return task.result;
+  let saved=false;
+  const diagnostics=createRevisionDiagnostics(task,{key:options.key,persist:async()=>{if(saved)await saveTask();}});
   try{
-    const result=await generateRevisionOnce({...task.input,revisionTask:task,onRevisionProgress:parent.onRevisionProgress},task.prompt,{...options,saveTask});
+    if(!parent.revisionTask)task.input.image=await diagnostics.run('source',()=>readRevisionSource(parent.image,options));
+    await diagnostics.run('storage',async()=>{await bindRevisionCredential(task,options.key);await saveTask();saved=true;});
+    if(task.result)return task.result;
+    const result=await diagnostics.run('preparation',()=>generateRevisionOnce({...task.input,revisionTask:task,onRevisionProgress:parent.onRevisionProgress},task.prompt,{...options,saveTask:()=>diagnostics.run('storage',saveTask),diagnostics}));
     if(result.revisionAudit)result.revisionAudit.credentialFingerprint=task.credentialFingerprint;
-    task.result=result;task.state='completed';delete task.error;await saveTask();return result;
+    task.result=result;task.state='completed';delete task.error;
+    await diagnostics.run('storage',saveTask);return result;
   }catch(error){
-    task.error=String(error.message).replaceAll(options.key||'__no_key__','[redacted]');
+    const failure=revisionFailure(error,task.diagnostics.currentStage,{jobId:task.id},options.key);
+    task.error=failure.message;
     if(task.raw&&!task.raw.ok)task.state='rejected';
     try{await saveTask();}catch{}
-    throw error;
+    throw failure;
   }
 }
 
@@ -292,7 +297,9 @@ async function generateRevisionOnce(parent,prompt,options){
     }
     // The selection is made directly on the source image before submitting.
     // Crop and guide are revision-only inputs; the original bitmap is immutable.
+    options.diagnostics?.setStage('source');
     const source=await readRevisionSource(parent.image,options),original=await options.loadImage(source);
+    options.diagnostics?.setStage('preparation');
     const width=original.naturalWidth||original.width,height=original.naturalHeight||original.height;
     const plan={manual:true,mode:'local',summary:prompt,preserve:'框外内容',regions:validateRegions(parent.editRegions,width,height),width,height,apiRequestCount:0};
     const regions=plan.regions;
@@ -306,12 +313,14 @@ async function generateRevisionOnce(parent,prompt,options){
     if(parent.localRedraw&&!reading){
       if(task?.readingClaimed)throw Error('上次选区内容读取结果未确认；未重复读取或生图。请核对服务商记录。');
       if(task){task.readingClaimed=true;await options.saveTask();}
+      options.diagnostics?.setStage('reading');
       reading=await readLocalRedrawBrief(parent,prompt,patch,options);
     }
     if(task){task.prepared={patch,reading};await options.saveTask();}
     const brief=reading?.brief||null;
     options.onProgress?.(brief?'内容已读取，正在按你的要求重新绘制结构；框外保留原像素。':'正在修改选区及周边局部，框外像素由程序保留。');
     const result=await generateRegionRevision({...parent,image:patch.target||patch.image,localPatch:patch,localRedrawBrief:brief,manualScope:false,route:{...parent.route,ratio:patch.ratio}},prompt,options);
+    options.diagnostics?.setStage('composite');
     const edited=await options.loadImage(result.image);
     const [ratioW,ratioH]=patch.ratio.split(':').map(Number);
     const composite=await compositeLocalEdit(original,edited,regions,patch.crop,options.loadImage,brief?ratioW/ratioH:undefined);
@@ -350,13 +359,15 @@ async function readLocalRedrawBrief(parent,prompt,patch,{key,onProgress}){
   }
 }
 
-async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onProgress,saveTask}){
+async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onProgress,saveTask,diagnostics}){
+  let phase='preparation';
   const {base,model:requestedModel,p,ratio,resolution}=parent.route;
   // Infistar retired the preview ID; this is its current name, not a model-family fallback.
   const model=usesInfistarGemini(base,requestedModel)&&requestedModel==='gemini-3.1-flash-image-preview'?'gemini-3.1-flash-image':requestedModel;
   if(!key)throw new Error('请先填写该服务商的 API Key。');
   if(typeof prompt!=='string'||!prompt.trim())throw new Error('请填写本次修改要求。');
-  const source=await readRevisionSource(parent.image,{toDataURL});
+  const source=await (parent.freeRevision&&diagnostics?diagnostics.run('source',()=>readRevisionSource(parent.image,{toDataURL})):readRevisionSource(parent.image,{toDataURL}));
+  diagnostics?.setStage('preparation');
   const references=parent.localRedrawBrief?[]:[parent.diagramReflow&&parent.diagramContentReference||source,...(parent.localPatch?[parent.localPatch.guide]:[]),...(parent.attachments||[]).map(item=>item.data)];
   // The target draft must be the edit canvas; placing the original first encourages cloning it.
   if(references.length>(p==='nonelinear'?5:parent.focusedRegion?6:5)||references.some(data=>typeof data!=='string'||!imageData.test(data)))
@@ -372,8 +383,10 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
   const inputHashes=await Promise.all(references.map(fingerprint));
   const startedAt=Date.now(),clientRequestId=crypto.randomUUID();
   try{
+    phase='upload';
     const apiReferences=[];
     for(const [index,data] of references.entries())apiReferences.push(p==='nonelinear'&&!parent.revisionTask?.submitted&&!parent.revisionTask?.raw?await uploadRevisionReference(data,key,index):data);
+    phase='preparation';
     let body={model,prompt:instruction,image:p==='sf'&&!native&&references.length===1?source:apiReferences};
     if(!native){body[dimensions.field]=dimensions.value;if(dimensions.aspectRatio)body.aspect_ratio=dimensions.aspectRatio;}
     // Infistar GPT edits use the same multipart image[] protocol as OpenAI.
@@ -389,24 +402,28 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
     // Private bitmap modification transport retains the selected host, request
     // body and task ID. Other providers retain their existing direct transport;
     // legacy staged edits and Step 4 are unchanged.
-    const streamedRevision=!!parent.freeRevision;
-    const response=staged?.response||await (streamedRevision?requestInfistarImageJob({url,body:request.body,key,task:parent.revisionTask,saveTask,usedReferences:!!references.length,onProgress:state=>{
+    const streamedRevision=!!parent.freeRevision;phase='submission';
+    const response=staged?.response||await (streamedRevision?requestInfistarImageJob({url,body:request.body,key,task:parent.revisionTask,saveTask,diagnostics,usedReferences:!!references.length,onProgress:state=>{
       onProgress?.(state.state==='uploading'?`正在上传原始修改图（${state.completed} / ${state.total}），刷新后可继续。`:state.state==='submitting'?'正在保存修改图任务，尚未确认接收。':state.state==='queued'?'后台已保存修改图任务，正在排队。':state.state==='running'?'后台正在生成修改图，刷新后可取回同一任务。':state.state==='reconnecting'?({upload:'正在恢复参考图上传',status:'正在恢复后台任务查询',result:'正在恢复已生成结果读取'}[state.stage]||'正在恢复同一修改任务')+'；不会重复生图。':state.stage==='waiting_response'?'请求已发送，正在等待修改图响应。':state.stage==='response_received'?(parent.localPatch?'修改图已接收，正在还原选区并校验框外像素。':'修改图已接收，正在校验并保存。'):`已收到接口响应，正在接收修改图（${Math.ceil((state.responseBytes||0)/1024)} KB）。`);
     }}):requestImageWithRecovery({url,body:request.body,key,usedReferences:true,allowReferenceFallback:false}));
+    phase='upstream';
     if(!response.ok){
       if(!streamedRevision)throw new Error('修改生图失败（HTTP '+response.status+'）。'+response.text.slice(0,400));
       let detail;try{detail=JSON.parse(response.text)?.error;}catch{}
       const plain=String(response.text||'').trim();
       const message=(typeof detail?.message==='string'?detail.message:plain&&!/^\s*</.test(plain)?plain:'接口未返回有效的错误说明。').split(key).join('[redacted]').replace(/Bearer\s+[^"\s]+/gi,'Bearer [redacted]').slice(0,300);
       const code=typeof detail?.code==='string'?` [${detail.code.slice(0,80)}]`:'';
-      throw new Error(`修改生图失败（HTTP ${response.status}）${code}。${message}${response.requestId?'\n请求 ID：'+response.requestId:''}\n原图、修改要求和截图已保留，未自动重复提交。`);
+      throw revisionFailure(new Error(`修改生图失败（HTTP ${response.status}）${code}。${message}${response.requestId?'\n请求 ID：'+response.requestId:''}\n原图、修改要求和截图已保留，未自动重复提交。`),'upstream',{httpStatus:response.status,requestId:response.requestId,providerErrorCode:detail?.code,reason:'http'},key);
     }
+    phase='response';
     const data=staged?.data||JSON.parse(response.text);
-    if(data._revisionUpstreamStatus>=400)throw new Error('修改生图失败（HTTP '+data._revisionUpstreamStatus+'）。'+JSON.stringify(data.error||{}).slice(0,400));
+    if(data._revisionUpstreamStatus>=400)throw revisionFailure(new Error('修改生图失败（HTTP '+data._revisionUpstreamStatus+'）。'+JSON.stringify(data.error||{}).slice(0,400)),'upstream',{httpStatus:data._revisionUpstreamStatus,requestId:response.requestId,providerErrorCode:data.error?.code},key);
     const item=response.job?imageResultItem(data):native?geminiImageResult(parent.localPatch?localFinalImageResponse(data):data,{locale:'zh',requestId:response.requestId}):(data?.data?.[0]||data?.images?.[0]);
     const image=item?.b64_json?`data:${item.mimeType||'image/png'};base64,${item.b64_json}`:item?.url;
     if(!image)throw new Error('服务商未返回图片，未自动重试。');
-    const output=await revisionOutput(image,p,toDataURL,{onProgress});
+    phase='image-download';
+    const output=await revisionOutput(image,p,toDataURL,{onProgress,diagnostics,key});
+    phase='validation';
     // A completed local-edit job has been retrieved even if its image is later
     // rejected as an echo/guide. Preserve recovery, and release the pending slot
     // so the user's next explicit edit can create a different request.
@@ -440,7 +457,7 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
       error.message=(messages[error.code]||'修改图接收失败。')+' 原图和输入已保留，未自动重复提交。'+(error.imageDiagnostics?.requestId?'\n请求 ID：'+error.imageDiagnostics.requestId:'');
     }
     error.message=String(error.message).split(key).join('[redacted]').replace(/Bearer\s+\S+/gi,'Bearer [redacted]');
-    throw error;
+    throw parent.freeRevision?revisionFailure(error,phase,{jobId:parent.revisionTask?.id},key):error;
   }
 }
 
@@ -512,7 +529,12 @@ export function createRevisionGallery(adapter){
         if(task.state==='rejected'){error.textContent=task.error||'本次请求已返回失败，可修改设置后重新提交。';return;}
         void revise(task.input.manualScope,task);};
       const dismiss=document.createElement('button');dismiss.textContent='结束此任务';dismiss.disabled=generating;dismiss.onclick=async()=>{try{await revisionTaskStore.write({...task,state:'dismissed'});task.state='dismissed';renderRevisionTasks();}catch{error.textContent='任务状态未能保存，请重试。';}};
-      row.append(label,recover,dismiss);taskList.append(row);
+      row.append(label,recover,dismiss);
+      if(task.diagnostics?.events?.length){
+        const details=document.createElement('details'),summary=document.createElement('summary'),record=document.createElement('pre');
+        details.dataset.revisionDiagnostics='true';summary.textContent='查看改图诊断记录';record.textContent=revisionDiagnosticText(task);record.style.cssText='white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px';details.append(summary,record);row.append(details);
+      }
+      taskList.append(row);
     }
   }
   function rememberRevisionTask(task){revisionTasks.set(task.id,task);renderRevisionTasks();}
@@ -707,11 +729,11 @@ export function createRevisionGallery(adapter){
       }
       if(result.revisionAudit)result.revisionAudit={...result.revisionAudit,review:needsReview?'user-confirmed':'automatic',reviewedAt:Date.now()};
       const v={...result,step1Context:copyStep1Context(parent.step1Context),id:currentTask?.versionId||crypto.randomUUID(),number:nextNumber,parentId:parent.id,prompt,route:{...(result.route||parent.route)},created:Date.now(),state:null};
-      if(currentTask){await store.write({...v,step1Context:copyStep1Context(v.step1Context)});currentTask.state='saved';await revisionTaskStore.write(currentTask);rememberRevisionTask(currentTask);}
+      if(currentTask){await createRevisionDiagnostics(currentTask,{persist:async()=>{await revisionTaskStore.write(currentTask);rememberRevisionTask(currentTask);}}).run('history',async()=>{await store.write({...v,step1Context:copyStep1Context(v.step1Context)});currentTask.state='saved';await revisionTaskStore.write(currentTask);});rememberRevisionTask(currentTask);}
       if(!versions.some(item=>item.id===v.id))append(v);if(!currentTask)persist(v);edit(versions.find(item=>item.id===v.id));v.card?.scrollIntoView({block:'nearest',behavior:'smooth'});
     }catch(e){
       const message=e?.message||'未知错误';
-      error.textContent=e?.code?message:/Failed to fetch|NetworkError|Load failed/i.test(message)?'改图请求暂未取得响应。请用「取回修改任务」恢复原任务；不会自动再次生图。':message;
+      error.textContent=parent.source!=='svg'||e?.code?message:/Failed to fetch|NetworkError|Load failed/i.test(message)?'改图请求暂未取得响应。请用「取回修改任务」恢复原任务；不会自动再次生图。':message;
     }
     finally{progress.textContent='';generating=false;refresh();renderRevisionTasks();}
   }

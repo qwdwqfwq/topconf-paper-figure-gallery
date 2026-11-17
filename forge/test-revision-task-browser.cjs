@@ -24,7 +24,7 @@ window.addSource=()=>gallery.addInitial({source:'image',image:pixels.source,widt
  await new Promise(r=>server.listen(0,'127.0.0.1',r));let browser;
  try{
   browser=await chromium.launch({headless:true,...(process.env.REVISION_BUNDLED_BROWSER==='1'?{}:{executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})});
-  const failures={'real-400':{status:400,text:JSON.stringify({error:{code:'four_k_disabled',message:'暂时供应不足'}}),expected:/HTTP 400.*four_k_disabled/},'plain-403':{status:403,text:'Gallery origin required fixture-key',expected:/HTTP 403.*Gallery origin required \[redacted\]/},'html-403':{status:403,text:'<html>fixture-key secret upstream page</html>',expected:/HTTP 403.*接口未返回有效的错误说明/}};
+  const failures={'real-400':{status:400,text:JSON.stringify({error:{code:'four_k_disabled',message:'暂时供应不足'}}),expected:/HTTP 400.*four_k_disabled/},'plain-403':{status:403,text:'Gallery origin required fixture-key',expected:/HTTP 403.*Gallery origin required \[redacted\]/},'html-403':{status:403,text:'<html>fixture-key secret upstream page</html>',expected:/HTTP 403.*接口未返回有效的错误说明/},'upstream-fetch-text':{status:502,text:JSON.stringify({error:{code:'upstream_closed',message:'upstream Failed to fetch fixture-key'}}),expected:/HTTP 502.*upstream_closed/}};
   for(const scenario of ['uploaded-outage','refresh','task-storage-failure','history-storage-failure',...Object.keys(failures)]){
    const failure=failures[scenario];
    const context=await browser.newContext(),page=await context.newPage(),errors=[];let puts=0,reads=0,jobId,submitted,complete=scenario!=='refresh',output,statusFailures=0,resultFailures=0;
@@ -67,11 +67,16 @@ window.addSource=()=>gallery.addInitial({source:'image',image:pixels.source,widt
    await page.locator('[data-submit]').click();
    if(scenario==='task-storage-failure'){
     await page.waitForFunction(()=>document.querySelector('[role=alert]').textContent.includes('quota'));
+    assert.match(await page.locator('[role=alert]').innerText(),/改图失败阶段：保存本机修改任务/);
     assert.equal(puts,0);assert.equal(await page.locator('.ff-version').count(),1);
    }else if(failure){
     await page.waitForFunction(()=>document.querySelector('[role=alert]').textContent.includes('HTTP'));
     await open();const before=reads;await page.getByText('查看失败与原输入',{exact:true}).click();
     const errorText=await page.locator('[role=alert]').innerText();assert.match(errorText,failure.expected);assert.ok(!errorText.includes('fixture-key'));assert.ok(!errorText.includes('<html>'));
+    assert.match(errorText,/改图失败阶段：服务商生成修改图/);
+    await page.locator('[data-revision-diagnostics] summary').click();
+    const diagnosticText=await page.locator('[data-revision-diagnostics] pre').innerText();
+    assert.match(diagnosticText,/服务商生成修改图.*失败/);assert.match(diagnosticText,failure.expected);assert.ok(!diagnosticText.includes('fixture-key'));
     assert.equal(await page.locator('textarea').inputValue(),'把标题改成测试标题');assert.equal(await page.locator('.ff-revision-attachment').count(),1);assert.equal(reads,before);assert.equal(puts,1);
    }else{
     if(scenario==='uploaded-outage'){
@@ -79,13 +84,19 @@ window.addSource=()=>gallery.addInitial({source:'image',image:pixels.source,widt
      assert.equal(statusFailures,9);assert.equal(resultFailures,9);assert.equal(await page.locator('[role=alert]').innerText(),'');
      assert.equal(submitted.body.contents[0].parts[0].inline_data?.data||submitted.body.contents[0].parts.find(p=>p.inlineData).inlineData.data,(await page.evaluate(()=>pixels.source)).split(',')[1]);
     }else if(scenario==='refresh')await page.waitForFunction(()=>document.querySelector('[data-revision-tasks]')?.textContent.includes('后台保留 24 小时'));
-    else await page.waitForFunction(()=>document.querySelector('[role=alert]').textContent.includes('quota'));
+    else {await page.waitForFunction(()=>document.querySelector('[role=alert]').textContent.includes('quota'));assert.match(await page.locator('[role=alert]').innerText(),/改图失败阶段：保存修改版本/);}
     await open();complete=true;
     if(scenario!=='uploaded-outage')await page.getByText('取回修改任务',{exact:true}).click();
     await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===2);
     assert.equal(puts,1);assert.equal(await page.locator('[data-revision-tasks] button').count(),0);
     const records=await page.evaluate(()=>new Promise((resolve,reject)=>{const r=indexedDB.open('figureforge-bitmap-edit-tasks',1);r.onsuccess=()=>{const q=r.result.transaction('tasks').objectStore('tasks').getAll();q.onsuccess=()=>resolve(q.result);q.onerror=reject;};}));
     assert.equal(records.length,1);assert.equal(records[0].state,'saved');assert.equal(records[0].prompt,'把标题改成测试标题');assert.equal(records[0].input.attachments.length,1);assert.equal(records[0].input.route.base,'https://infistar.cc/v1');
+    if(scenario==='uploaded-outage'){
+     const events=records[0].diagnostics.events;
+     assert.ok(events.some(e=>e.stage==='status'&&e.reason==='unreadable-response'));
+     assert.ok(events.some(e=>e.stage==='result'&&e.httpStatus===503));
+     assert.ok(events.some(e=>e.stage==='result'&&e.outcome==='recovered'));
+    }
     await open();assert.equal(await page.locator('.ff-version').count(),2);
     await page.locator('[data-delete]').first().click();await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===1);
     await page.locator('[data-delete]').first().click();await page.waitForFunction(()=>window.ready&&document.querySelectorAll('.ff-version').length===0);
