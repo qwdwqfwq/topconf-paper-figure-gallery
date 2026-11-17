@@ -10,7 +10,7 @@ import {createRevisionGallery,generateRevision} from '/forge/revision-gallery.mj
 const image=color=>{const c=document.createElement('canvas');c.width=160;c.height=90;c.getContext('2d').fillStyle=color;c.getContext('2d').fillRect(0,0,160,90);return c.toDataURL();};
 window.pixels={source:image('red'),result:image('green'),screenshot:image('blue')};
 const loadImage=src=>new Promise((resolve,reject)=>{const i=new Image();i.onload=()=>resolve(i);i.onerror=reject;i.src=src;});
-let active;window.gallery=createRevisionGallery({output:document.querySelector('#output'),busy:()=>false,getState:()=>null,captureView:()=>null,currentImage:()=>active?.image,activate:v=>{active=v;},download:()=>{},showExport:()=>{},rebuild:()=>{},generate:(v,p)=>generateRevision(v,p,{key:'fixture-key',toDataURL:async x=>x,loadImage})});
+let active;window.gallery=createRevisionGallery({output:document.querySelector('#output'),busy:()=>false,getState:()=>null,captureView:()=>null,currentImage:()=>active?.image,activate:v=>{active=v;},download:()=>{},showExport:()=>{},rebuild:()=>{},generate:(v,p)=>generateRevision({...v,route:Object.keys(v.route).length?v.route:{p:'infistar',base:'https://infistar.cc/v1',model:'gemini-3.1-flash-image',ratio:'16:9',resolution:'4K'}},p,{key:'fixture-key',toDataURL:async x=>x,loadImage})});
 await gallery.ready;window.ready=true;
 window.addSource=()=>gallery.addInitial({source:'image',image:pixels.source,width:160,height:90,route:{p:'infistar',base:'https://infistar.cc/v1',model:'gemini-3.1-flash-image',ratio:'16:9',resolution:'4K'}});
 </script>`;
@@ -25,9 +25,9 @@ window.addSource=()=>gallery.addInitial({source:'image',image:pixels.source,widt
  try{
   browser=await chromium.launch({headless:true,...(process.env.REVISION_BUNDLED_BROWSER==='1'?{}:{executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})});
   const failures={'real-400':{status:400,text:JSON.stringify({error:{code:'four_k_disabled',message:'暂时供应不足'}}),expected:/HTTP 400.*four_k_disabled/},'plain-403':{status:403,text:'Gallery origin required fixture-key',expected:/HTTP 403.*Gallery origin required \[redacted\]/},'html-403':{status:403,text:'<html>fixture-key secret upstream page</html>',expected:/HTTP 403.*接口未返回有效的错误说明/}};
-  for(const scenario of ['refresh','task-storage-failure','history-storage-failure',...Object.keys(failures)]){
+  for(const scenario of ['uploaded-outage','refresh','task-storage-failure','history-storage-failure',...Object.keys(failures)]){
    const failure=failures[scenario];
-   const context=await browser.newContext(),page=await context.newPage(),errors=[];let puts=0,reads=0,jobId,submitted,complete=scenario!=='refresh',output;
+   const context=await browser.newContext(),page=await context.newPage(),errors=[];let puts=0,reads=0,jobId,submitted,complete=scenario!=='refresh',output,statusFailures=0,resultFailures=0;
    page.on('pageerror',e=>errors.push(e.message));page.on('dialog',d=>d.accept());
    await context.addInitScript(()=>{
     const original=IDBObjectStore.prototype.put;
@@ -36,6 +36,7 @@ window.addSource=()=>gallery.addInitial({source:'image',image:pixels.source,widt
      return original.call(this,value,...args);
     };
    });
+   if(scenario==='uploaded-outage')await context.addInitScript(()=>{const timer=window.setTimeout;window.setTimeout=(fn,ms,...args)=>timer(fn,ms<=5000?1:ms,...args);});
    await context.route('https://gallery-revision-image-jobs.lixiao-gallery.workers.dev/**',async route=>{
     const req=route.request(),u=new URL(req.url());
     if(req.method()==='PUT'){
@@ -45,11 +46,19 @@ window.addSource=()=>gallery.addInitial({source:'image',image:pixels.source,widt
      return route.fulfill({status:202,json:{state:failure?'rejected':'queued'}});
     }
     reads++;assert.ok(u.pathname.includes(jobId));
+    if(scenario==='uploaded-outage'){
+     if(u.pathname.endsWith('/result')&&resultFailures++<8)return route.fulfill({status:503,body:'temporary gateway page'});
+     if(!u.pathname.endsWith('/result')&&statusFailures++<8)return route.abort('connectionfailed');
+    }
     if(u.pathname.endsWith('/result'))return route.fulfill({json:failure?{ok:false,...failure,expected:undefined}:{ok:true,status:200,text:JSON.stringify({data:[{b64_json:output.split(',')[1]}]})}});
     return route.fulfill({status:complete?200:202,json:{state:complete?'succeeded':'running'}});
    });
    const open=async()=>{await page.goto(`http://127.0.0.1:${server.address().port}/fixture`);await page.waitForFunction(()=>window.ready);};
-   await open();output=await page.evaluate(()=>pixels.result);await page.evaluate(()=>addSource());
+   await open();output=await page.evaluate(()=>pixels.result);if(scenario==='uploaded-outage'){
+    const original=await page.evaluate(()=>pixels.source);
+    await page.locator('[data-original-file]').setInputFiles({name:'user-original.png',mimeType:'image/png',buffer:Buffer.from(original.split(',')[1],'base64')});
+    await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===1);
+   }else await page.evaluate(()=>addSource());
    await page.locator('textarea').fill('把标题改成测试标题');
    const screenshot=await page.evaluate(()=>pixels.screenshot);
    await page.locator('[data-files]').setInputFiles({name:'reference.png',mimeType:'image/png',buffer:Buffer.from(screenshot.split(',')[1],'base64')});
@@ -65,10 +74,14 @@ window.addSource=()=>gallery.addInitial({source:'image',image:pixels.source,widt
     const errorText=await page.locator('[role=alert]').innerText();assert.match(errorText,failure.expected);assert.ok(!errorText.includes('fixture-key'));assert.ok(!errorText.includes('<html>'));
     assert.equal(await page.locator('textarea').inputValue(),'把标题改成测试标题');assert.equal(await page.locator('.ff-revision-attachment').count(),1);assert.equal(reads,before);assert.equal(puts,1);
    }else{
-    if(scenario==='refresh')await page.waitForFunction(()=>document.querySelector('[data-revision-tasks]')?.textContent.includes('后台保留 24 小时'));
+    if(scenario==='uploaded-outage'){
+     await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===2);
+     assert.equal(statusFailures,9);assert.equal(resultFailures,9);assert.equal(await page.locator('[role=alert]').innerText(),'');
+     assert.equal(submitted.body.contents[0].parts[0].inline_data?.data||submitted.body.contents[0].parts.find(p=>p.inlineData).inlineData.data,(await page.evaluate(()=>pixels.source)).split(',')[1]);
+    }else if(scenario==='refresh')await page.waitForFunction(()=>document.querySelector('[data-revision-tasks]')?.textContent.includes('后台保留 24 小时'));
     else await page.waitForFunction(()=>document.querySelector('[role=alert]').textContent.includes('quota'));
     await open();complete=true;
-    await page.getByText('取回修改任务',{exact:true}).click();
+    if(scenario!=='uploaded-outage')await page.getByText('取回修改任务',{exact:true}).click();
     await page.waitForFunction(()=>document.querySelectorAll('.ff-version').length===2);
     assert.equal(puts,1);assert.equal(await page.locator('[data-revision-tasks] button').count(),0);
     const records=await page.evaluate(()=>new Promise((resolve,reject)=>{const r=indexedDB.open('figureforge-bitmap-edit-tasks',1);r.onsuccess=()=>{const q=r.result.transaction('tasks').objectStore('tasks').getAll();q.onsuccess=()=>resolve(q.result);q.onerror=reject;};}));
@@ -80,5 +93,17 @@ window.addSource=()=>gallery.addInitial({source:'image',image:pixels.source,widt
    }
    assert.deepEqual(errors,[]);console.log('PASS revision browser '+scenario);await context.close();
   }
+  const receiverContext=await browser.newContext(),receiverPage=await receiverContext.newPage();let downloads=0;
+  await receiverPage.goto(`http://127.0.0.1:${server.address().port}/fixture`);await receiverPage.waitForFunction(()=>window.ready);
+  const expected=await receiverPage.evaluate(()=>pixels.result);
+  await receiverContext.route('https://gallery-revision-images.lixiao-gallery.workers.dev/revision-image',route=>{
+   downloads++;assert.equal(route.request().method(),'POST');
+   return downloads<=8?route.abort('connectionfailed'):route.fulfill({contentType:'image/png',body:Buffer.from(expected.split(',')[1],'base64')});
+  });
+  const received=await receiverPage.evaluate(async()=>{
+   const {receiveRevisionOutput}=await import('/forge/revision-result-recovery.mjs');
+   return receiveRevisionOutput('https://imagen-nonelinear-2025.tos-cn-beijing.volces.com/gemini/fixture.png','nonelinear',()=>{throw Error('unexpected fallback');},{wait:async()=>{}});
+  });
+  assert.equal(received,expected);assert.equal(downloads,9);console.log('PASS revision browser stored-image-download-outage');await receiverContext.close();
  }finally{await browser?.close();await new Promise(r=>server.close(r));}
 })().catch(e=>{console.error(e);process.exitCode=1;});

@@ -21,23 +21,33 @@ export function createRevisionImageJobClient({fetchImpl=globalThis.fetch.bind(gl
   }
   const submission={url,body:await packImageBody(body),usedReferences,...(routePolicy?{routePolicy}:{})};
   const id=task.id,end=Date.now()+deadlineMs;
-  let closed=false,active=null,deadline,stage='submission',recovered=false;
+  let closed=false,active=null,deadline,stage='submission',recovered=false,lastReadFailure;
   const clean=value=>typeof value==='string'?value.replaceAll(key,'[redacted]'):value;
   function failure(code,meta={}){
    const d=meta.diagnostic||{};
    const initial=routePolicy==='preserve-initial-host';
    const info=[meta.error,d.upstreamMessage||d.message,d.resultError,d.errorCode,...(initial?[d.providerErrorType,d.providerErrorCode]:[]),Number.isInteger(d.upstreamStatus)?'上游 HTTP '+d.upstreamStatus:'',meta.requestId||d.requestId].filter(Boolean).map(clean).join('；');
-   const label=initial&&code==='JOB_RESULT_UNKNOWN'&&d.upstreamStatus>=400?'生图网关返回错误；结果未确认，不会自动重新提交。':{JOB_CONNECTION:'本次任务连接未恢复；不会重新提交生图。',JOB_EXPIRED:'本次任务已过期。',JOB_RESULT_UNKNOWN:'后台未完成生图；不会自动重新提交。'}[code]||'任务请求失败（'+code+'）。';
+   const phase={upload:'上传参考图',submission:'确认任务接收',status:'查询后台任务',result:'读取已生成结果'}[stage]||stage;
+   const label=initial&&code==='JOB_RESULT_UNKNOWN'&&d.upstreamStatus>=400?'生图网关返回错误；结果未确认，不会自动重新提交。':{JOB_CONNECTION:phase+'暂未恢复。请用「取回修改任务」继续查询原任务；不会重新提交生图。',JOB_EXPIRED:'本次任务已过期。',JOB_RESULT_UNKNOWN:'后台未完成生图；不会自动重新提交。'}[code]||'任务请求失败（'+code+'）。';
    return Object.assign(Error(label+(info?' '+info:'')+' [stage: '+stage+'] [task: '+id+']'),{code,jobId:id,diagnostic:{...meta,stage}});
   }
-  function ensureOpen(){if(closed||Date.now()>=end)throw failure('JOB_CONNECTION');}
+  function ensureOpen(){if(closed||Date.now()>=end)throw failure('JOB_CONNECTION',lastReadFailure);}
   async function http(path,init={},budget=requestMs){
    ensureOpen();
    const controller=new AbortController();active=controller;let timer;
    try{
     return await Promise.race([
      new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Error('REQUEST_TIMEOUT'));},Math.min(budget,Math.max(1,end-Date.now())));}),
-     (async()=>{const r=await fetchImpl(endpoint+path,{...init,headers:{Authorization:'Bearer '+key,...init.headers},signal:controller.signal,cache:'no-store'});return {status:r.status,data:await r.json()};})()
+     (async()=>{
+      const r=await fetchImpl(endpoint+path,{...init,headers:{Authorization:'Bearer '+key,...init.headers},signal:controller.signal,cache:'no-store'});
+      let data;try{data=await r.json();}catch{
+       // Preserve real HTTP failures even when a gateway returns HTML. Never
+       // expose its response body or misclassify a 403 as a network outage.
+       if(r.status<400)throw Error('任务接口返回了不完整的响应');
+       data={error:'任务接口未返回有效的错误说明'};
+      }
+      return {status:r.status,data};
+     })()
     ]);
    }finally{clearTimeout(timer);controller.abort();if(active===controller)active=null;}
   }
@@ -46,15 +56,17 @@ export function createRevisionImageJobClient({fetchImpl=globalThis.fetch.bind(gl
     ensureOpen();
     try{
      const r=await http(path,{},budget);
-     if(!transientStatus(r.status))return r;
-     if(count>=maxReadFailures)throw failure('JOB_HTTP_'+r.status,r.data);
+     if(!transientStatus(r.status)){lastReadFailure=undefined;return r;}
+     lastReadFailure={error:'任务接口 HTTP '+r.status};
     }catch(error){
      if(error.code?.startsWith('JOB_'))throw error;
-     if(count>=maxReadFailures)throw failure('JOB_CONNECTION',{error:clean(error.message)});
+     lastReadFailure={error:clean(error.message)};
     }
     recovered=true;
-    onProgress({id,state:'reconnecting',stage});
-    await wait(Math.min(retryMs*(count+1),5000));
+    // GET cannot start generation. Recover until the existing overall deadline,
+    // rather than giving up after a few failures while the paid job still runs.
+    onProgress({id,state:'reconnecting',stage,attempt:count+1});
+    await wait(Math.min(retryMs*(count+1),5000,Math.max(0,end-Date.now())));
    }
   }
   async function run(){
@@ -129,7 +141,7 @@ export function createRevisionImageJobClient({fetchImpl=globalThis.fetch.bind(gl
     await wait(pollMs);response=null;
    }
   }
-  const expired=new Promise((_,reject)=>{deadline=setTimeout(()=>{closed=true;active?.abort();reject(failure('JOB_CONNECTION'));},deadlineMs);});
+  const expired=new Promise((_,reject)=>{deadline=setTimeout(()=>{closed=true;active?.abort();reject(failure('JOB_CONNECTION',lastReadFailure));},deadlineMs);});
   try{return await Promise.race([run(),expired]);}
   finally{closed=true;clearTimeout(deadline);active?.abort();}
  }};

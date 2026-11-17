@@ -3,7 +3,8 @@ import {usesInfistarGemini,geminiImageRequest,geminiImageResult,compatibleImageR
 import {imageRequestDimensions,verifyImageRatio,verifyImageResolution} from './aspect-ratio.mjs?v=20261026-nonelinear-resolution';
 import {captureGenerationContext,copyStep1Context,revisionContextInstruction} from './revision-context.mjs';
 import {acknowledgeInfistarImageJob} from './step3-infistar-job.mjs?v=20261114-durable-jobs';
-import {createRevisionImageJobClient} from './revision-image-job.mjs?v=20261117-chunked-revision';
+import {createRevisionImageJobClient} from './revision-image-job.mjs?v=20261118-connection-recovery';
+import {receiveRevisionOutput} from './revision-result-recovery.mjs';
 import {revisionTaskStore,revisionTaskInput} from './revision-task-store.mjs';
 import {bindRevisionCredential} from './revision-credentials.mjs';
 const revisionJobClient=createRevisionImageJobClient();
@@ -75,18 +76,7 @@ async function fingerprint(value){
 }
 
 // Private output path: never change the frozen Step 3/4 source-image relay.
-async function revisionOutput(image,provider,toDataURL){
-  if(provider!=='nonelinear'||image.startsWith('data:'))return toDataURL(image);
-  let url;try{url=new URL(image);}catch{throw new Error('服务商返回了无效图片地址。');}
-  if(url.protocol!=='https:'||url.hostname!=='imagen-nonelinear-2025.tos-cn-beijing.volces.com'||url.port||url.username||url.password||url.search||url.hash||!/^\/(?:others|gemini)\/[A-Za-z0-9_-]+\.(?:png|jpe?g|webp)$/.test(url.pathname))return toDataURL(image);
-  const response=await fetch('https://gallery-revision-images.lixiao-gallery.workers.dev/revision-image',{
-    method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url.href}),
-    credentials:'omit',redirect:'error',signal:AbortSignal.timeout(90000)
-  });
-  if(!response.ok)throw new Error('修改图接收失败（HTTP '+response.status+'），未保存新版本。');
-  const blob=await response.blob();
-  return new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(new Error('修改图读取失败。'));reader.readAsDataURL(blob);});
-}
+const revisionOutput=receiveRevisionOutput;
 
 // Exact decoded-pixel comparison also detects an original re-encoded as PNG/WebP.
 // No similarity threshold: a legitimate one-character or small-area edit is allowed.
@@ -383,7 +373,7 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
   const startedAt=Date.now(),clientRequestId=crypto.randomUUID();
   try{
     const apiReferences=[];
-    for(const [index,data] of references.entries())apiReferences.push(p==='nonelinear'&&!parent.revisionTask?.raw?await uploadRevisionReference(data,key,index):data);
+    for(const [index,data] of references.entries())apiReferences.push(p==='nonelinear'&&!parent.revisionTask?.submitted&&!parent.revisionTask?.raw?await uploadRevisionReference(data,key,index):data);
     let body={model,prompt:instruction,image:p==='sf'&&!native&&references.length===1?source:apiReferences};
     if(!native){body[dimensions.field]=dimensions.value;if(dimensions.aspectRatio)body.aspect_ratio=dimensions.aspectRatio;}
     // Infistar GPT edits use the same multipart image[] protocol as OpenAI.
@@ -401,7 +391,7 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
     // legacy staged edits and Step 4 are unchanged.
     const streamedRevision=!!parent.freeRevision;
     const response=staged?.response||await (streamedRevision?requestInfistarImageJob({url,body:request.body,key,task:parent.revisionTask,saveTask,usedReferences:!!references.length,onProgress:state=>{
-      onProgress?.(state.state==='uploading'?`正在上传原始修改图（${state.completed} / ${state.total}），刷新后可继续。`:state.state==='submitting'?'正在保存修改图任务，尚未确认接收。':state.state==='queued'?'后台已保存修改图任务，正在排队。':state.state==='running'?'后台正在生成修改图，刷新后可取回同一任务。':state.state==='reconnecting'?'连接中断，正在恢复同一修改任务；不会重复生图。':state.stage==='waiting_response'?'请求已发送，正在等待修改图响应。':state.stage==='response_received'?(parent.localPatch?'修改图已接收，正在还原选区并校验框外像素。':'修改图已接收，正在校验并保存。'):`已收到接口响应，正在接收修改图（${Math.ceil((state.responseBytes||0)/1024)} KB）。`);
+      onProgress?.(state.state==='uploading'?`正在上传原始修改图（${state.completed} / ${state.total}），刷新后可继续。`:state.state==='submitting'?'正在保存修改图任务，尚未确认接收。':state.state==='queued'?'后台已保存修改图任务，正在排队。':state.state==='running'?'后台正在生成修改图，刷新后可取回同一任务。':state.state==='reconnecting'?({upload:'正在恢复参考图上传',status:'正在恢复后台任务查询',result:'正在恢复已生成结果读取'}[state.stage]||'正在恢复同一修改任务')+'；不会重复生图。':state.stage==='waiting_response'?'请求已发送，正在等待修改图响应。':state.stage==='response_received'?(parent.localPatch?'修改图已接收，正在还原选区并校验框外像素。':'修改图已接收，正在校验并保存。'):`已收到接口响应，正在接收修改图（${Math.ceil((state.responseBytes||0)/1024)} KB）。`);
     }}):requestImageWithRecovery({url,body:request.body,key,usedReferences:true,allowReferenceFallback:false}));
     if(!response.ok){
       if(!streamedRevision)throw new Error('修改生图失败（HTTP '+response.status+'）。'+response.text.slice(0,400));
@@ -416,7 +406,7 @@ async function generateRegionRevision(parent,prompt,{key,toDataURL,loadImage,onP
     const item=response.job?imageResultItem(data):native?geminiImageResult(parent.localPatch?localFinalImageResponse(data):data,{locale:'zh',requestId:response.requestId}):(data?.data?.[0]||data?.images?.[0]);
     const image=item?.b64_json?`data:${item.mimeType||'image/png'};base64,${item.b64_json}`:item?.url;
     if(!image)throw new Error('服务商未返回图片，未自动重试。');
-    const output=await revisionOutput(image,p,toDataURL);
+    const output=await revisionOutput(image,p,toDataURL,{onProgress});
     // A completed local-edit job has been retrieved even if its image is later
     // rejected as an echo/guide. Preserve recovery, and release the pending slot
     // so the user's next explicit edit can create a different request.
@@ -721,7 +711,7 @@ export function createRevisionGallery(adapter){
       if(!versions.some(item=>item.id===v.id))append(v);if(!currentTask)persist(v);edit(versions.find(item=>item.id===v.id));v.card?.scrollIntoView({block:'nearest',behavior:'smooth'});
     }catch(e){
       const message=e?.message||'未知错误';
-      error.textContent=/Failed to fetch|NetworkError|Load failed/i.test(message)?'改图连接中断：浏览器未收到可读取的响应。修改任务已保留，请用「取回修改任务」查询原任务；不会自动再次生图。':message;
+      error.textContent=e?.code?message:/Failed to fetch|NetworkError|Load failed/i.test(message)?'改图请求暂未取得响应。请用「取回修改任务」恢复原任务；不会自动再次生图。':message;
     }
     finally{progress.textContent='';generating=false;refresh();renderRevisionTasks();}
   }

@@ -33,8 +33,15 @@ test('actual bitmap entry: two provider revision requests recover lost status/re
   assert.equal(calls.filter(c=>c.url.includes('/api/upload-file')).length,1);
   for(const result of results){assert.equal(result.revisionAudit.apiRequestCount,1);assert.equal(result.revisionAudit.job.recovered,true);assert.equal(result.revisionAudit.pixelCheck,'changed');assert.match(result.image,/^data:image/);}
   assert.notEqual(results[0].revisionAudit.job.id,results[1].revisionAudit.job.id);
+  // A refreshed accepted nonelinear job must not depend on uploading references again.
+  const accepted=structuredClone([...records.values()].find(t=>t.input.route.p==='nonelinear'));
+  delete accepted.result;delete accepted.raw;accepted.state='running';
+  const uploadsBefore=calls.filter(c=>c.url.includes('/api/upload-file')).length;
+  await generateRevision({...accepted.input,freeRevision:true,revisionTask:accepted},accepted.prompt,{revisionTaskStore,key:'fixture-key',toDataURL:async x=>x,loadImage:async x=>({naturalWidth:x===source?100:200,naturalHeight:100})});
+  assert.equal(calls.filter(c=>c.url.includes('/api/upload-file')).length,uploadsBefore);
+  assert.equal(calls.filter(c=>c.method==='PUT').length,2);
   for(const job of jobs.values()){
-   assert.equal(job.status,2);assert.equal(job.result,2);
+   assert.equal(job.status,job.input.url.includes('infistar.cc')?2:3);assert.equal(job.result,job.input.url.includes('infistar.cc')?2:3);
    if(job.input.url.includes('infistar.cc'))assert.match(job.input.url,/models\/gemini-nano-banana-2\.1:/);
    else {assert.equal(job.input.body.model,'gemini-nano-banana-2.1');assert.equal(job.input.body.size,'4K');assert.equal(job.input.body.aspect_ratio,'16:9');assert.match(job.input.url,/gallery-nonelinear-relay/);}
   }
