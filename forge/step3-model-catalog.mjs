@@ -19,8 +19,8 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
   const current=(id,version,mode)=>version===revision&&identity(readConfig())===id&&readConfig().mode===mode;
   const unique=list=>[...new Set(list)];
   const modelKind=(m,c,kinds=officialKinds)=>Object.hasOwn(kinds,m)?kinds[m]:c.provider==='infistar'&&isOfficialGeminiImageModel(m)?'image':kindOf(m);
-  const infistarImage=c=>c.provider==='infistar'&&c.mode==='image';
-  const selectableImage=(m,c)=>c.provider==='infistar'?!/^gpt-image-2\.6(?:-|$)/i.test(m):supportsStep3ReferenceImage(c,m);
+  const conciseImage=c=>['infistar','nonelinear'].includes(c.provider)&&c.mode==='image';
+  const selectableImage=(m,c)=>c.provider==='nonelinear'||(c.provider==='infistar'?!/^gpt-image-2\.6(?:-|$)/i.test(m):supportsStep3ReferenceImage(c,m));
   const filter=(list,c,analysis=false)=>unique(list.filter(m=>analysis?(Object.hasOwn(officialVisual,m)?officialVisual[m]:isVisualModel(m,c.vision||[])):modelKind(m,c)===(c.mode==='svg'?'chat':'image')&&(c.mode!=='image'||selectableImage(m,c))));
   const permissionNote=()=>text('目录不代表当前 Key 的调用权限。','The catalog does not confirm this key’s inference access.');
   const bundledLabel=()=>text(`内置目录（${nonelinearCatalog.updated}，非实时）`,`Bundled catalog (${nonelinearCatalog.updated}, not live)`);
@@ -55,7 +55,7 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
     if(c.mode==='image'&&!analysis.length)missing.push(text('视觉归纳','Visual analysis'));
     const note=missing.length?text(` ${missing.join('、')}目录无适用项，显示${fallback.source}。`,` No compatible ${missing.join(', ')} entries; showing ${fallback.source}.`):'';
     const referenceNote=c.mode==='image'?text(' 仅列出已确认支持参考图输入的模型；未确认的型号暂不展示。',' Only models with documented reference-image input are listed; unverified models are hidden.'):'';
-    status.textContent=infistarImage(c)?message:message+note+' '+permissionNote()+referenceNote;status.dataset.catalogSource=source;
+    status.textContent=conciseImage(c)?message:message+note+' '+permissionNote()+referenceNote;status.dataset.catalogSource=source;
     onRender();resolutionDisplay.update();
   }
   const cacheKey=async id=>{
@@ -87,14 +87,14 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
       const source=publicResult?.ok?text('官网实时目录 + Key 目录','Live official catalog + key catalog'):
         publicCache?text(`官网缓存（${date(publicCache)}，非实时）`,`Official cache (${date(publicCache)}, not live)`):
         keyResult?.ok?text('Key 实时目录','Live key catalog'):keyCache?text(`Key 缓存（${date(keyCache)}，非实时）`,`Key cache (${date(keyCache)}, not live)`):fallback.source;
-      const publicNote=publicResult?.ok?text(`已同步官网最新${infistarImage(c)?'模型':'目录'}：${filter(rows,c).length} 个${c.mode==='svg'?'对话':'图像'}模型。`,`Official catalog synchronized: ${filter(rows,c).length} ${c.mode==='svg'?'chat':'image'} models.`):
+      const publicNote=publicResult?.ok?text(`已同步官网最新${conciseImage(c)?'模型':'目录'}：${filter(rows,c).length} 个${c.mode==='svg'?'对话':'图像'}模型。`,`Official catalog synchronized: ${filter(rows,c).length} ${c.mode==='svg'?'chat':'image'} models.`):
         publicResult?text('官网目录暂时无法读取。','Official catalog is temporarily unavailable.'):text('正在同步官网最新目录…','Synchronizing the official catalog…');
       const keyNote=!c.key?text('填写 Key 后可同时刷新 Key 目录。','Enter a key to also refresh its catalog.'):
         !keyResult?text('正在检查 Key 目录…','Checking the key catalog…'):
         keyResult.ok?text('已合并当前 Key 返回的目录。','Merged the current key catalog.'):
         text('Key 目录读取失败，仍显示可获得的官网目录。','Key catalog unavailable; showing the available official catalog.')+(keyCache?text(` Key 缓存时间：${date(keyCache)}（非实时）。`,` Key cache: ${date(keyCache)} (not live).`):'');
       const cacheNote=!publicResult?.ok&&publicCache?text(` 官网缓存时间：${date(publicCache)}（非实时）。`,` Official cache: ${date(publicCache)} (not live).`):'';
-      render(c,rows,source,infistarImage(c)?publicNote:publicNote+' '+keyNote+cacheNote,{list:rows.length?rows:fallback.list,source:rows.length?source:fallback.source});
+      render(c,rows,source,conciseImage(c)?publicNote:publicNote+' '+keyNote+cacheNote,{list:rows.length?rows:fallback.list,source:rows.length?source:fallback.source});
     }
     function parseCachedOfficial(stored){
       const list=normalizeModels({data:stored.models});
@@ -148,7 +148,7 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
     if(!current(id,version,c.mode))return;
     if(result.ok){
       const main=filter(result.list,c),analysis=filter(result.list,c,true),source=text('服务商实时目录','Live provider catalog');
-      render(c,result.list,source,text(`已刷新步骤三：${main.length} 个${c.mode==='svg'?'对话':'图像'}模型，${analysis.length} 个视觉归纳模型。`,`Step 3 refreshed: ${main.length} ${c.mode==='svg'?'chat':'image'} models, ${analysis.length} visual analysis models.`),fallback);
+      render(c,result.list,source,c.provider==='nonelinear'&&c.mode==='image'?text(`已同步官网最新模型：${main.length} 个图像模型。`,`Official catalog synchronized: ${main.length} image models.`):text(`已刷新步骤三：${main.length} 个${c.mode==='svg'?'对话':'图像'}模型，${analysis.length} 个视觉归纳模型。`,`Step 3 refreshed: ${main.length} ${c.mode==='svg'?'chat':'image'} models, ${analysis.length} visual analysis models.`),fallback);
       onLiveModels(result.list);
       try{if(fingerprint)storage.setItem(fingerprint,JSON.stringify({updated:now(),models:result.list}));}catch{}
     }else{
