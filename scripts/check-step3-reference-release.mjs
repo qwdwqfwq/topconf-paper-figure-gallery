@@ -9,14 +9,14 @@ import {join,resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 const root=fileURLToPath(new URL('..',import.meta.url));
 export const baseCommit='bfc24b841652081d13b4dd866c4e3b279b5d53c5';
-const publishedCommit='edd67a660fa680b4d55da82c2923a7cd6304b21a';
-const baseRun=44067993396;
-const baseTree='ff4141b92da307bb8a36e0b12b67bd3c46b6dbc3';
-const baseProofSha256='6f667b4fce758e8dade4145703cc7381aaf5a4b0f9bbe73fc6d416fcb701b24f';
+const publishedCommit='bfc24b841652081d13b4dd866c4e3b279b5d53c5';
+const baseRun=44080978615;
+const baseTree='bd6f148032cd9a1b0a2e7b9c7f7e310a83a9d85a';
+const baseProofSha256='3c23569aad649c47fd0fbd1bf64fed4c71da658e68f4d7bc4aea11fe9307fb2a';
 export const payload=["forge/step3-model-catalog.mjs", "forge/step3-reference-models.mjs"];
 export const allowed=[".github/workflows/deploy-step3-reference.yml", "forge/step3-model-catalog.mjs", "forge/step3-reference-models.mjs", "forge/test-step3-official-catalog-browser.cjs", "forge/test-step3-reference-models.mjs", "scripts/check-step3-reference-release.mjs", "scripts/test-step3-reference-release.mjs"];
 const reviewed={
-  ".github/workflows/deploy-step3-reference.yml": "2e2926a2e8204a1f264bea1ae8ffdf839e0d6fe806d97671af4b720f8d6595b8",
+  ".github/workflows/deploy-step3-reference.yml": "e69ccc89121948df4537acdbb6cacf3fa4009eacf2a941bfce3c8a558f83ce44",
   "forge/step3-model-catalog.mjs": "a2b2fae8d25c6b26d36211fa888c0a1d9192a17ce8102b7f338da0f4c6d8b28d",
   "forge/step3-reference-models.mjs": "5871e36f81fb5f10cc3b47725d607ae66a6bb645343d5528fca8d1cd404642cd",
   "forge/test-step3-official-catalog-browser.cjs": "bc259037e8657fefaacdbc01b3d2417532633b5ae596a96135046ba5e821ffc3",
