@@ -5,6 +5,11 @@ const id='12345678-1234-1234-1234-123456789abc',key='offline-private-key';
 const init={method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify({model:'gpt-6.1-sol',temperature:.2,max_completion_tokens:16000,messages:[{role:'user',content:'same prompt and images'}]})};
 const url='https://gallery-nonelinear-relay.lixiao-gallery.workers.dev/v1/chat/completions';
 const json=(data,status=200)=>new Response(JSON.stringify(data),{status});
+async function seedBackend(c,accepted=false){
+ const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(c.url+'\n'+new Headers(c.init.headers).get('Authorization')+'\n'+c.init.body));
+ const slot='gallery.reference-analysis.v1.'+[...new Uint8Array(bytes)].map(x=>x.toString(16).padStart(2,'0')).join('');
+ c.storage.setItem(slot,JSON.stringify({id,created:c.now(),accepted}));
+}
 function config(fetchImpl){const map=new Map();let clock=1;return {provider:'nonelinear',url,init,fetchImpl,uuid:()=>id,now:()=>clock,sleep:async()=>{clock+=10;},pollMs:10,deadlineMs:200,networkMs:1000,jobBases:[ANALYSIS_JOB_BASE],probe:false,storage:{getItem:k=>map.get(k),setItem:(k,v)=>map.set(k,v),removeItem:k=>map.delete(k)},map};}
 test('lost acknowledgement, poll interruption and broken result read repeat only idempotent job operations',async()=>{
  const requests=[];let puts=0,gets=0;
@@ -28,7 +33,7 @@ test('custom endpoints and other stages retain their original native request',as
  }
 });
 
-test('both Infistar environments use recoverable jobs with unchanged request parameters',async()=>{
+test('existing jobs in both Infistar environments resume without another model submission',async()=>{
  for(const host of ['cc','ai']){
   let puts=0,gets=0;
   const c=config(async(target,options)=>{
@@ -41,8 +46,9 @@ test('both Infistar environments use recoverable jobs with unchanged request par
    return json({choices:[{message:{content:'saved '+host}}]});
   });
   c.provider='infistar';c.url='https://infistar.'+host+'/v1/chat/completions';
+  await seedBackend(c);
   assert.equal((await (await requestReferenceAnalysis(c)).json()).choices[0].message.content,'saved '+host);
-  assert.equal(puts,1);assert.equal(gets,2);
+  assert.equal(puts,0);assert.equal(gets,2);
  }
 });
 
@@ -134,8 +140,9 @@ test('a failed ingress immediately switches and retains authorization, environme
   return json({choices:[{message:{content:'already paid'}}]});
  });
  Object.assign(c,{provider:'infistar',url:'https://infistar.cc/v1/chat/completions',jobBases:[ANALYSIS_JOB_BASE,alternate],hedgeMs:60000});
+ await seedBackend(c);
  for(let attempt=0;attempt<2;attempt++)assert.equal((await (await requestReferenceAnalysis(c)).json()).choices[0].message.content,'already paid');
- assert.equal(puts,1);assert.equal(alternateReads,2);
+ assert.equal(puts,0);assert.equal(alternateReads,2);
 });
 test('health races choose a reachable upload route without sending keys or images to health',async()=>{
  let puts=0,health=0,aborted=0;

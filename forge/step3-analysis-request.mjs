@@ -21,6 +21,13 @@ export async function requestStep3Analysis({request,model,url,key='',english=fal
   let response,text;
   try{response=await request();}
   catch(cause){
+    const direct=cause?.analysisDirectDiagnostic;
+    if(cause?.name==='AnalysisDirectError'&&direct){
+      const metadata={transport:'direct',reason:safeDetail(direct.reason,key),...(Number.isInteger(direct.httpStatus)?{httpStatus:direct.httpStatus}:{}),...(direct.requestId?{requestId:safeDetail(direct.requestId,key)}:{})};
+      const kind=['response-read','timeout','cancelled'].includes(direct.kind)?direct.kind:'transport';
+      const received=metadata.httpStatus?`HTTP ${metadata.httpStatus}; `:'';
+      throw failure(kind,received+cause.message+(metadata.requestId?' request_id='+metadata.requestId:''),cause,metadata);
+    }
     const job=cause?.analysisJobDiagnostic;
     if(cause?.name==='AnalysisJobError'&&job){
       const metadata={requestId:safeDetail(job.requestId,key),jobEndpoint:safeDetail(job.jobEndpoint,key),accepted:job.accepted===true,phase:safeDetail(job.phase,key),reason:safeDetail(job.kind,key),requests:job.requests,...(Number.isInteger(job.httpStatus)?{httpStatus:job.httpStatus}:{})};

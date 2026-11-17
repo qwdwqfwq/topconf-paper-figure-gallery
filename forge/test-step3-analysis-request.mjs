@@ -76,8 +76,8 @@ test('body disconnect after HTTP headers retains status and request ID without c
 
 test('durable-job failure identifies the actual service, phase and acknowledgement instead of blaming the prompt or upstream',async()=>{
  let clock=0,calls=0;
- await assert.rejects(requestStep3Analysis({...config,url:'https://infistar.cc/v1/chat/completions',request:()=>requestReferenceAnalysis({
-  provider:'infistar',url:'https://infistar.cc/v1/chat/completions',init:{headers:{Authorization:'Bearer fixture-secret'},body:'{}'},storage:null,
+ await assert.rejects(requestStep3Analysis({...config,url:'https://infistar.ai/v1/chat/completions',request:()=>requestReferenceAnalysis({
+  provider:'infistar',url:'https://infistar.ai/v1/chat/completions',init:{headers:{Authorization:'Bearer fixture-secret'},body:'{}'},storage:null,
   now:()=>clock,sleep:async()=>{clock+=10;},deadlineMs:20,jobBases:[ANALYSIS_JOB_BASE],probe:false,uuid:()=> '12345678-1234-1234-1234-123456789abc',
   fetchImpl:async()=>{calls++;throw new DOMException('signal timed out fixture-secret','TimeoutError');}
  })}),error=>{

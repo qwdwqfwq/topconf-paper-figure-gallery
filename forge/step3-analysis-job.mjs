@@ -1,4 +1,5 @@
 // Used only by analyzeReferences(). Image generation and exports do not import it.
+import {requestDirectAnalysis} from './step3-analysis-direct.mjs';
 export const ANALYSIS_JOB_BASE='https://public.gallery-reference-analysis.pages.dev';
 // Both gateways bind to the SAME production Durable Object service/namespace.
 export const ANALYSIS_JOB_BASES=Object.freeze(['https://gallery-reference-analysis-access.lixiao-gallery.workers.dev',ANALYSIS_JOB_BASE]);
@@ -31,6 +32,10 @@ export async function requestReferenceAnalysis({provider,url,init,fetchImpl=glob
  const slot='gallery.reference-analysis.v1.'+await digest(url+'\n'+authorization+'\n'+init.body);
  const saved=storageGet(storage,slot),start=now();
  const resume=saved&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(saved.id)&&Number.isFinite(saved.created)&&saved.created<=start&&saved.created>start-86400000;
+ // A NEW infistar.cc analysis bypasses the two gateways' common network failure.
+ // Existing backend submissions (including an ambiguous PUT) MUST stay in their
+ // original namespace: never replace an already paid task with a direct POST.
+ if(upstream==='infistar-cc'&&(!resume||saved.transport==='direct'))return requestDirectAnalysis({url,init,fetchImpl,storage,slot,id:resume?saved.id:uuid(),now,deadlineMs});
  const task=resume?saved:{id:uuid(),created:start};storageSet(storage,slot,task);
  const bases=[...new Set(jobBases)];
  if(!bases.length)throw new Error('归纳服务入口未配置');
