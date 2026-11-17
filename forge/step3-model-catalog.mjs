@@ -4,6 +4,7 @@ import {nonelinearCatalog} from './parser-nonelinear-catalog.mjs?v=20261114';
 import {officialCatalogUrls,fetchOfficialCatalog,isOfficialGeminiImageModel} from './step3-official-catalog.mjs';
 import {installStep3ResolutionDisplay} from './step3-resolution-display.mjs';
 import {createModelListDisplay} from './model-list-display.mjs';
+import {supportsStep3ReferenceImage} from './step3-reference-models.mjs';
 
 export function createStep3ModelCatalog({select,analysisSelect,status,readConfig,readSaved,
   kindOf,isVisualModel,onLiveModels=()=>{},onRender=()=>{},
@@ -18,7 +19,7 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
   const current=(id,version,mode)=>version===revision&&identity(readConfig())===id&&readConfig().mode===mode;
   const unique=list=>[...new Set(list)];
   const modelKind=(m,c,kinds=officialKinds)=>Object.hasOwn(kinds,m)?kinds[m]:c.provider==='infistar'&&isOfficialGeminiImageModel(m)?'image':kindOf(m);
-  const filter=(list,c,analysis=false)=>unique(list.filter(m=>analysis?(Object.hasOwn(officialVisual,m)?officialVisual[m]:isVisualModel(m,c.vision||[])):modelKind(m,c)===(c.mode==='svg'?'chat':'image')));
+  const filter=(list,c,analysis=false)=>unique(list.filter(m=>analysis?(Object.hasOwn(officialVisual,m)?officialVisual[m]:isVisualModel(m,c.vision||[])):modelKind(m,c)===(c.mode==='svg'?'chat':'image')&&(c.mode!=='image'||supportsStep3ReferenceImage(c,m))));
   const permissionNote=()=>text('目录不代表当前 Key 的调用权限。','The catalog does not confirm this key’s inference access.');
   const bundledLabel=()=>text(`内置目录（${nonelinearCatalog.updated}，非实时）`,`Bundled catalog (${nonelinearCatalog.updated}, not live)`);
   function initial(c){
@@ -51,7 +52,8 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
     if(!main.length)missing.push(text(c.mode==='svg'?'SVG 对话':'图像',c.mode==='svg'?'SVG chat':'Image'));
     if(c.mode==='image'&&!analysis.length)missing.push(text('视觉归纳','Visual analysis'));
     const note=missing.length?text(` ${missing.join('、')}目录无适用项，显示${fallback.source}。`,` No compatible ${missing.join(', ')} entries; showing ${fallback.source}.`):'';
-    status.textContent=message+note+' '+permissionNote();status.dataset.catalogSource=source;
+    const referenceNote=c.mode==='image'?text(' 仅列出已确认支持参考图输入的模型；未确认的型号暂不展示。',' Only models with documented reference-image input are listed; unverified models are hidden.'):'';
+    status.textContent=message+note+' '+permissionNote()+referenceNote;status.dataset.catalogSource=source;
     onRender();resolutionDisplay.update();
   }
   const cacheKey=async id=>{
@@ -161,7 +163,7 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
   return {refresh,isImageModel(model){
     const c=readConfig();
     const kinds=lastConfig&&identity(lastConfig)===identity(c)?officialKinds:{};
-    return !!model&&c.mode==='image'&&modelKind(model,c,kinds)==='image';
+    return !!model&&c.mode==='image'&&modelKind(model,c,kinds)==='image'&&supportsStep3ReferenceImage(c,model);
   },dispose(){++revision;resolutionDisplay.dispose();mainDisplay.dispose();analysisDisplay.dispose();clearTimeout(scheduled);clearInterval(timer);globalThis.removeEventListener?.('focus',checkFreshness);globalThis.document?.removeEventListener('visibilitychange',checkFreshness);},schedule(){
     ++revision;clearTimeout(scheduled);onLiveModels(null);officialKinds={};officialVisual={};
     const c=readConfig(),fallback=initial(c);render(c,fallback.list,fallback.source,text('设置已更新，即将刷新步骤三模型…','Settings updated; refreshing Step 3 models shortly…'));
