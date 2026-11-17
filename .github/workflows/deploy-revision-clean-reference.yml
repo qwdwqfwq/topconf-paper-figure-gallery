@@ -1,0 +1,99 @@
+name: Deploy clean local-edit reference only
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/deploy-revision-clean-reference.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Record unchanged historical freeze result
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Report historical freeze outcome
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: echo "Historical lock outcome = $ORIGINAL_OUTCOME; original guard is unchanged." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/download-artifact@v4
+        with:
+          name: revision-provider-proof
+          run-id: 44126945855
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/published-proof
+      - uses: actions/download-artifact@v4
+        with:
+          name: step3-reference-proof
+          run-id: 44082543387
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/provider-base-proof
+      - uses: actions/download-artifact@v4
+        with:
+          name: revision-editor-layout-proof
+          run-id: 44080978615
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/prior-proof
+      - name: Preserve previous publication acceptance
+        run: |
+          historical="$RUNNER_TEMP/previous-release"
+          trap 'git worktree remove --force "$historical"' EXIT
+          git worktree add --detach "$historical" df52628252f29458bcdddcaf2ccc85af50b82a73
+          (cd "$historical" && node scripts/check-step3-reference-release.mjs "$RUNNER_TEMP/prior-proof/revision-editor-layout-proof.json" && node --test scripts/test-step3-reference-release.mjs)
+          git worktree remove "$historical"
+          git worktree add --detach "$historical" 878022a63a36d1ce11aad3a62e41f3fc3b4a3842
+          (cd "$historical" && node scripts/check-revision-provider-release.mjs "$RUNNER_TEMP/provider-base-proof/step3-reference-proof.json" && node --test scripts/test-revision-provider-release.mjs)
+      - name: Verify isolated scope and preserved request workflows
+        run: |
+          node --test scripts/test-revision-clean-reference-release.mjs forge/test-step3-reference-models.mjs forge/test-step3-official-catalog.mjs forge/test-revision-durable-task.mjs revision-image-jobs/test-worker.mjs
+          node forge/test-revision-entry-durable.mjs
+      - name: Preserve input size, token parameters and editable exports
+        run: |
+          node --test forge/test-openai-token-limit.mjs forge/test-bitmap-composition.mjs forge/test-generation-intent.mjs forge/test-svg-chat-response.mjs
+          node forge/test-editable-export.mjs
+      - name: Install browser test runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/browser-test" playwright@1.58.2
+          "$RUNNER_TEMP/browser-test/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify local editing, protected outside pixels and unchanged workflows
+        env:
+          REVISION_PLAYWRIGHT: ${{ runner.temp }}/browser-test/node_modules/playwright
+          REVISION_BUNDLED_BROWSER: '1'
+        run: |
+          node scripts/test-revision-clean-reference-browser.cjs
+          node forge/test-step3-official-catalog-browser.cjs
+          node forge/test-revision-task-browser.cjs
+      - name: Build byte-preserving artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-revision-clean-reference-release.mjs "$RUNNER_TEMP/published-proof/revision-provider-proof.json" --prepare-pages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: revision-clean-reference-proof
+          path: /tmp/revision-clean-reference-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/revision-clean-reference-pages
+      - name: Deploy authorized clean-reference fix
+        id: deployment
+        uses: actions/deploy-pages@v4

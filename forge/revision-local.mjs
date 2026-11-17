@@ -47,18 +47,15 @@ export function prepareLocalEdit(original,regions,allowWide=false){
   // all source information needed to redraw the selected area.
   for(const r of localRegions){ctx.clearRect(r.x,r.y,r.width,r.height);ctx.fillStyle='white';ctx.fillRect(r.x,r.y,r.width,r.height);}
   const target=canvas.toDataURL('image/png');
-  ctx.clearRect(0,0,canvas.width,canvas.height);ctx.fillStyle='white';ctx.fillRect(0,0,canvas.width,canvas.height);ctx.drawImage(original,-crop.x,-crop.y);
-  // The original guide is a reference, never the output canvas.
-  ctx.lineWidth=Math.max(2,crop.width/350);ctx.strokeStyle='#d600ff';ctx.fillStyle='#d600ff18';
-  for(const r of localRegions){ctx.fillRect(r.x,r.y,r.width,r.height);ctx.strokeRect(r.x,r.y,r.width,r.height);}
-  return {image,target,guide:canvas.toDataURL('image/png'),crop,regions:localRegions,ratio:crop.width===crop.height?'1:1':'16:9'};
+  // Keep the original reference pixels clean; coordinates and erased target locate the edit.
+  return {image,target,guide:image,crop,regions:localRegions,ratio:crop.width===crop.height?'1:1':'16:9'};
 }
 
 export function localEditInstruction(prompt,patch,count){
   return `LOCAL IMAGE EDIT. Perform this change on Image 1:
 ${prompt}
 
-Image 1 is the UNMARKED crop / TARGET CANVAS to finish: the selected areas have deliberately been erased. Draw the requested replacement into those empty areas, at their existing canvas coordinates. Image 2 is the ORIGINAL CONTENT and selection GUIDE of the exact same crop: magenta rectangles indicate editable areas. Use Image 2 for all original text, information and styling; do NOT copy its old layout when reflow is requested. Never output Image 2 unchanged. ${count>2?'Subsequent images are user references only.':''}
+Image 1 is the UNMARKED crop / TARGET CANVAS to finish: the selected areas have deliberately been erased. Draw the requested replacement into those empty areas, at their existing canvas coordinates. Image 2 is the CLEAN ORIGINAL CONTENT of the exact same crop, with no selection overlay. The erased areas in Image 1 and the rectangle coordinates below identify the editable areas. Use Image 2 for all original text, information and styling; do NOT copy its old layout when reflow is requested. Never output Image 2 unchanged. ${count>2?'Subsequent images are user references only.':''}
 The user's requested changes take priority INSIDE the editable rectangles. Replace the old words when new text is requested; remove the old arrangement and draw the requested new arrangement when moving/reflowing elements. Positions, sizes, line breaks and connections INSIDE a rectangle may change to fulfill the request. Do not merely reproduce the original layout or recolor it when a layout/text replacement was requested.
 Return the COMPLETE edited Image 1 crop, at the SAME aspect ratio and with the same outer canvas framing and scale. Do not zoom, translate or crop the entire canvas. Do not return the full figure or a reference screenshot. Do not reproduce guide rectangles, shading, interface controls or annotations.
 Crop canvas: ${patch.crop.width} × ${patch.crop.height} pixels. Editable rectangles in this crop (origin top-left, x/y/width/height): ${JSON.stringify(patch.regions)}.
