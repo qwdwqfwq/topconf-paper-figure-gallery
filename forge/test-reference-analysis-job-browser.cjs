@@ -8,18 +8,20 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||path.join(require('nod
  const {createGalleryServer}=await import(pathToFileURL(path.resolve(__dirname,'../scripts/serve-nonelinear.mjs')).href);
  const server=createGalleryServer();await new Promise(r=>server.listen(0,'127.0.0.1',r));
  const origin=`http://127.0.0.1:${server.address().port}`;
- const imageModel='gemini-nano-banana-2.1',analysisModel='gpt-6.1-sol';
+ const analysisModel='gpt-6.1-sol';
  let browser;
  try{
   browser=await chromium.launch({headless:true,...(process.env.REVISION_BUNDLED_BROWSER==='1'?{}:{executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe'})});
   for(const upstream of ['nonelinear','infistar-ai','infistar-cc'])for(const scenario of ['upstream-200','success','lost-ack']){
    const provider=upstream==='nonelinear'?'nonelinear':'infistar';
+   const imageModel=provider==='nonelinear'?'gemini-3.1-flash-image-preview':'gemini-nano-banana-2.1';
    const context=await browser.newContext({serviceWorkers:'block'}),page=await context.newPage();
    const pageErrors=[],analysisRequests=[],imageRequests=[];let pixels,jobId,generating=false,diagnosticProbes=0,analysisId,putCount=0,resultReads=0;
    page.on('pageerror',e=>pageErrors.push(e.message));
    await page.route('**/*',async route=>{
     const req=route.request(),url=new URL(req.url());
-    if(url.hostname==='public.gallery-reference-analysis.pages.dev'){
+    if(['public.gallery-reference-analysis.pages.dev','gallery-reference-analysis-access.lixiao-gallery.workers.dev'].includes(url.hostname)){
+     if(url.pathname==='/health')return route.fulfill({json:{ready:true}});
      assert.equal(req.headers()['x-analysis-upstream'],upstream==='nonelinear'?undefined:upstream);
      const id=url.pathname.split('/')[2];
      if(req.method()==='PUT'){
@@ -75,12 +77,14 @@ const {chromium}=require(process.env.REVISION_PLAYWRIGHT||path.join(require('nod
    await page.locator('#figureRatio').selectOption('16:9');await page.locator('#imageResolution').selectOption('2K');
    await page.locator('#refsUpload').setInputFiles(Array.from({length:4},(_,i)=>({name:`reference-${i+1}.png`,mimeType:'image/png',buffer:Buffer.from(pixels,'base64')})));
    await page.waitForFunction(()=>!document.querySelector('#refsUploadBtn').disabled);
-   await page.locator('#paper').fill('Offline method overview: input -> retrieval -> reasoning -> verified answer.');
+   const paper='USER_PROMPT_SENTINEL: 请严格按我的输入绘图；不要归纳。Input -> retrieval -> reasoning -> verified answer.';
+   await page.locator('#paper').fill(paper);
    generating=true;await page.locator('#genBtn').click();
    await page.waitForFunction(()=>!document.querySelector('#genBtn').disabled);
    assert.equal(analysisRequests.length,1,'Only the original analysis POST; no hi probe');
    assert.equal(diagnosticProbes,0,'No diagnostic /models request after a failure');
-   const analysis=analysisRequests[0];assert.equal(analysis.model,analysisModel);assert.equal(analysis.temperature,0.2);assert.equal(analysis.max_completion_tokens,16000);assert.equal(analysis.max_tokens,undefined);assert.equal(analysis.messages[1].content.filter(p=>p.type==='image_url').length,4);assert.equal(putCount,scenario==='lost-ack'?2:1);assert.ok(resultReads>=3);
+   const analysis=analysisRequests[0];assert.equal(analysis.model,analysisModel);assert.equal(analysis.temperature,0.2);assert.equal(analysis.max_completion_tokens,16000);assert.equal(analysis.max_tokens,undefined);assert.equal(analysis.messages[1].content.filter(p=>p.type==='image_url').length,4);assert.equal(putCount,1);assert.ok(resultReads>=3);
+   assert.ok(!JSON.stringify(analysis).includes('USER_PROMPT_SENTINEL'),'The reference-only analysis does not send the user paper prompt');
    assert.equal(analysis.messages[0].role,'system');assert.ok(analysis.messages[1].content.some(p=>p.type==='image_url'));
    const error=await page.locator('#genErr').evaluate(e=>e.hidden?'':e.textContent);
    if(scenario==='success'||scenario==='lost-ack'){

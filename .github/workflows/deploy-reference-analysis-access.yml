@@ -1,0 +1,75 @@
+name: Deploy Step 3 reference analysis access recovery only
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/deploy-reference-analysis-access.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Record original freeze check without changing its baseline
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Report original freeze result and verify unchanged protection
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: |
+          echo "Original freeze outcome = $ORIGINAL_OUTCOME; existing guard and baseline remain unchanged." >> "$GITHUB_STEP_SUMMARY"
+          git diff --exit-code HEAD^ HEAD -- .github/forge-workflow-lock.json scripts/check-forge-workflow-lock.mjs forge/index.html
+      - uses: actions/download-artifact@v4
+        with:
+          name: revision-connection-proof
+          run-id: 44158402232
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/published-proof
+      - name: Verify reference analysis access recovery, one paid submission and isolated publication
+        run: node --test scripts/test-reference-analysis-access-release.mjs forge/test-step3-analysis-job.mjs forge/test-step3-analysis-request.mjs reference-analysis-backend/access/test-worker.mjs
+      - name: Install browser test runtime
+        run: |
+          npm install --prefix "$RUNNER_TEMP/browser-test" playwright@1.58.2
+          "$RUNNER_TEMP/browser-test/node_modules/.bin/playwright" install --with-deps chromium
+      - name: Verify uploaded source, repeated outages, refresh recovery and original failures
+        env:
+          REVISION_PLAYWRIGHT: ${{ runner.temp }}/browser-test/node_modules/playwright
+          REVISION_BUNDLED_BROWSER: '1'
+        run: node forge/test-reference-analysis-job-browser.cjs
+      - name: Build artifact preserving every other published byte
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-reference-analysis-access-release.mjs "$RUNNER_TEMP/published-proof/revision-connection-proof.json" --prepare-pages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: reference-analysis-access-proof
+          path: /tmp/reference-analysis-access-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/reference-analysis-access-pages
+      - name: Recheck latest successful deployment before publishing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-reference-analysis-access-release.mjs "$RUNNER_TEMP/published-proof/revision-connection-proof.json" --check-published-base
+      - name: Publish only authorized Step 3 reference analysis access recovery
+        id: deployment
+        uses: actions/deploy-pages@v4

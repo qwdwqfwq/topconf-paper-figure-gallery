@@ -21,6 +21,12 @@ export async function requestStep3Analysis({request,model,url,key='',english=fal
   let response,text;
   try{response=await request();}
   catch(cause){
+    const job=cause?.analysisJobDiagnostic;
+    if(cause?.name==='AnalysisJobError'&&job){
+      const metadata={requestId:safeDetail(job.requestId,key),jobEndpoint:safeDetail(job.jobEndpoint,key),accepted:job.accepted===true,phase:safeDetail(job.phase,key),reason:safeDetail(job.kind,key),requests:job.requests,...(Number.isInteger(job.httpStatus)?{httpStatus:job.httpStatus}:{})};
+      const detail=words('画廊归纳任务服务','Gallery analysis job service')+' '+metadata.jobEndpoint+'; '+metadata.phase+'/'+metadata.reason+(metadata.httpStatus?' HTTP '+metadata.httpStatus:'')+'; '+cause.message;
+      throw failure('job-service',detail,cause,metadata);
+    }
     const kind=cause?.name==='TimeoutError'?'timeout':cause?.name==='AbortError'?'cancelled':'transport';
     const hint=kind==='transport'?words('未取得 HTTP 响应；网络、代理或跨域原因尚无法区分。','No HTTP response; network, proxy and CORS causes cannot yet be distinguished.'):'';
     throw failure(kind,`${cause?.name||'Error'}: ${cause?.message||cause} ${hint}`,cause);
@@ -39,7 +45,8 @@ export async function requestStep3Analysis({request,model,url,key='',english=fal
     const type=typeof upstream==='object'?upstream?.type:undefined;
     const detail=typeof upstream==='string'?upstream:upstream?.message;
     const tags=[`HTTP ${response.status}`,code!=null?`upstream=${safeDetail(code,key)}`:'',type?safeDetail(type,key):'',requestId?`request_id=${requestId}`:''].filter(Boolean).join(', ');
-    throw failure('upstream',`${tags}; ${detail||text||response.statusText}`,undefined,{...metadata,...(code!=null?{upstreamCode:safeDetail(code,key)}:{}),...(type?{upstreamType:safeDetail(type,key)}:{})});
+    const kind=response.headers?.get('X-Analysis-Error-Layer')==='job-service'?'job-service':'upstream';
+    throw failure(kind,`${tags}; ${detail||text||response.statusText}`,undefined,{...metadata,...(code!=null?{upstreamCode:safeDetail(code,key)}:{}),...(type?{upstreamType:safeDetail(type,key)}:{})});
   }
   if(!data||typeof data!=='object'||Array.isArray(data))throw failure('invalid-response',words('服务未返回有效 JSON。','The service did not return valid JSON.')+' '+text,undefined,metadata);
   const content=data.choices?.[0]?.message?.content??(Array.isArray(data.content)?data.content.filter(x=>x.type==='text').map(x=>x.text||'').join(''):undefined);

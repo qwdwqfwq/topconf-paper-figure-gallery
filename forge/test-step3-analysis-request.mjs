@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {requestStep3Analysis} from './step3-analysis-request.mjs';
+import {requestReferenceAnalysis,ANALYSIS_JOB_BASE} from './step3-analysis-job.mjs';
 
 const config={model:'gemini-4-carbon',url:'https://relay.example/v1/chat/completions?key=fixture-secret',key:'fixture-secret'};
 const invoke=request=>requestStep3Analysis({...config,request});
@@ -71,4 +72,23 @@ test('body disconnect after HTTP headers retains status and request ID without c
     return true;
   });
   assert.equal(calls,1);
+});
+
+test('durable-job failure identifies the actual service, phase and acknowledgement instead of blaming the prompt or upstream',async()=>{
+ let clock=0,calls=0;
+ await assert.rejects(requestStep3Analysis({...config,url:'https://infistar.cc/v1/chat/completions',request:()=>requestReferenceAnalysis({
+  provider:'infistar',url:'https://infistar.cc/v1/chat/completions',init:{headers:{Authorization:'Bearer fixture-secret'},body:'{}'},storage:null,
+  now:()=>clock,sleep:async()=>{clock+=10;},deadlineMs:20,jobBases:[ANALYSIS_JOB_BASE],probe:false,uuid:()=> '12345678-1234-1234-1234-123456789abc',
+  fetchImpl:async()=>{calls++;throw new DOMException('signal timed out fixture-secret','TimeoutError');}
+ })}),error=>{
+  assert.equal(error.analysisDiagnostic.kind,'job-service');assert.equal(error.analysisDiagnostic.phase,'result');assert.equal(error.analysisDiagnostic.reason,'timeout');
+  assert.equal(error.analysisDiagnostic.accepted,false);assert.equal(error.analysisDiagnostic.jobEndpoint,ANALYSIS_JOB_BASE);
+  assert.match(error.message,/画廊归纳任务服务.*pages.dev.*result\/timeout.*尚未取得后台接收确认/);
+  assert.doesNotMatch(error.message,/fixture-secret|未取得 HTTP 响应|跨域原因/);return true;
+ });
+ assert.equal(calls,2);
+});
+
+test('service rejection is distinct from a persisted upstream error',async()=>{
+ await assert.rejects(invoke(async()=>Response.json({error:{message:'API_KEY_REQUIRED'}},{status:401,headers:{'X-Analysis-Error-Layer':'job-service'}})),error=>error.analysisDiagnostic.kind==='job-service');
 });
