@@ -1,8 +1,8 @@
 // Used only by analyzeReferences(). Image generation and exports do not import it.
 import {requestDirectAnalysis} from './step3-analysis-direct.mjs';
-export const ANALYSIS_JOB_BASE='https://public.gallery-reference-analysis.pages.dev';
-// Both gateways bind to the SAME production Durable Object service/namespace.
-export const ANALYSIS_JOB_BASES=Object.freeze(['https://gallery-reference-analysis-access.lixiao-gallery.workers.dev',ANALYSIS_JOB_BASE]);
+export const ANALYSIS_JOB_BASE='https://analysis.topconf-paper-figure-gallery.cn';
+// The Hong Kong HTTPS ingress forwards to the SAME production Durable Object service/namespace.
+export const ANALYSIS_JOB_BASES=Object.freeze([ANALYSIS_JOB_BASE]);
 const hosts=new Set(['gallery-nonelinear-relay.lixiao-gallery.workers.dev','api.nonelinear.com.cn','api.nonelinear.com']);
 export function analysisUpstream(provider,url){
  try{
