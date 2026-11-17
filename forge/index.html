@@ -778,6 +778,7 @@ import {usesInfistarImageJob,acknowledgeInfistarImageJob,showInfistarJobProgress
 import {requestInfistarImageJob} from './step3-initial-image-job.mjs?v=20261116-initial-read-recovery';
 import {internationalGalleryBase} from './step3-international-image-route.mjs?v=20261116-international1';
 import {requestStep3Analysis} from './step3-analysis-request.mjs?v=20261117-read-phase';
+import {requestReferenceAnalysis} from './step3-analysis-job.mjs?v=20261117-durable-v1';
 import {prepareStep3ImageBody,protocolFetch,imageResultItem} from './step3-image-protocol.mjs?v=20261115-endpoints';
 import {step3ReferenceInputs} from './step3-reference-input.mjs?v=20261114-errors';
 import {createRevisionGallery,generateRevision} from './revision-gallery.mjs?v=20261115-endpoints';
@@ -2129,14 +2130,14 @@ async function analyzeReferences(){
   const ordered=[...refs];
   const uris=await refDataURIs();
   const c=cfg(), relay=relayBase();
-  const internationalBase=model=>internationalGalleryBase(baseURL(),{provider:$('#provider').value,model,stage:'visual'});
+  const analysisBase=()=>baseURL();
   const useAnthropic=c.proto==='anthropic'&&!relay;
   let txt;
   if(useAnthropic){
     const blocks=uris.map(u=>{const p=dataURIToParts(u);return {type:'image',source:{type:'base64',media_type:p.media,data:p.data}};});
     blocks.push({type:'text',text:buildAnalyzePrompt(ordered.length, ordered)});
     const body={model:$('#analyzeModel').value||$('#model').value,max_tokens:16000,system:ANALYZE_SYS,messages:[{role:'user',content:blocks}]};
-    const url=internationalBase(body.model)+'/v1/messages',key=cleanKey($('#key').value);
+    const url=analysisBase()+'/v1/messages',key=cleanKey($('#key').value);
     const d=await requestStep3Analysis({model:body.model,url,key,english:GAL_I18N.lang==='en',request:()=>fetch(url,{method:'POST',headers:anthropicHeaders(key),body:JSON.stringify(withReasoning(body,'visual'))})});
     txt=(d.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
   }else{
@@ -2146,8 +2147,8 @@ async function analyzeReferences(){
     parts.push({type:'text',text:buildAnalyzePrompt(ordered.length, ordered)});
     const body={model:am,temperature:0.2,max_tokens:16000,messages:[{role:'system',content:ANALYZE_SYS},{role:'user',content:parts}]};
     if($('#provider').value==='ark' && !relayBase()) body.thinking={type:'disabled'};
-    const base=internationalBase(am),key=cleanKey($('#key').value);
-    const d=await requestStep3Analysis({model:am,url:base+'/chat/completions',key,english:GAL_I18N.lang==='en',request:()=>fetch(base+'/chat/completions',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(normalizeChatTokenLimit(withReasoning(body,'visual')))})});
+    const base=analysisBase(),key=cleanKey($('#key').value);
+    const d=await requestStep3Analysis({model:am,url:base+'/chat/completions',key,english:GAL_I18N.lang==='en',request:()=>requestReferenceAnalysis({provider:$('#provider').value,url:base+'/chat/completions',init:{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key},body:JSON.stringify(normalizeChatTokenLimit(withReasoning(body,'visual')))}})});
     if(d.choices?.[0]?.finish_reason==='length') throw new Error(tt('err.analyze3'));
     txt=d.choices?.[0]?.message?.content||'';
   }
