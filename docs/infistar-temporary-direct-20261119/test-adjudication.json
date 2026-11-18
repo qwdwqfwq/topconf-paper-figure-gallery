@@ -1,0 +1,30 @@
+{
+  "representativeWorkflowsPassed": true,
+  "rawReportsPreserved": true,
+  "firstReportOverallPassed": false,
+  "firstReportFailures": [
+    {
+      "stage": "svg-generation",
+      "cause": "Harness inspected wrong DOM location; app stores sourceSVG and preview in revisionGallery.",
+      "resolution": "Focused test passed with sourceSVG and saved preview."
+    },
+    {
+      "stage": "image-revision",
+      "cause": "Wait condition already satisfied by two pre-existing versions; checked parent prematurely and navigated before request completion.",
+      "resolution": "Focused upload/revision test waited for new child result and passed."
+    }
+  ],
+  "analyticsExcludedFromModelRelayCount": true,
+  "modelBackendRequests": 0,
+  "focusedSvgXmlValid": true,
+  "actualSvgRequestModel": "gpt-6.2-astra",
+  "svgSavedRouteModelCaveat": "Existing UI route metadata inherited the selected image model; actual request used gpt-6.2-astra.",
+  "networkCaveat": "Stream-reader cancellation recorded ERR_ABORTED after successful result; no claim of zero network errors.",
+  "untested": [
+    "All individual models and customer networks",
+    "Gemini/Anthropic real model protocols",
+    "Actual PDF upload and extraction",
+    "All chat UI branches",
+    "Full uninstrumented button-driven workflow"
+  ]
+}

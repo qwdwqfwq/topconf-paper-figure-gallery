@@ -1,0 +1,149 @@
+{
+  "verifiedAt": "2026-11-18T16:33:59.570Z",
+  "commit": "47c0449944767734f49e95876740a522bf35be5c",
+  "deploymentRun": 44347939402,
+  "publishedFiles": [
+    {
+      "path": "forge/nonelinear-config.js",
+      "status": 200,
+      "expected": "f02f0768aa9210076a3dff3378149fa217ebabaff2e771e18bf07cf3bcb566d9",
+      "actual": "f02f0768aa9210076a3dff3378149fa217ebabaff2e771e18bf07cf3bcb566d9",
+      "passed": true
+    },
+    {
+      "path": "forge/infistar-temporary-direct.mjs",
+      "status": 200,
+      "expected": "6955ba0806c7e0cc072de55386211afb26e03149641cceb00185d6aa8a36c9c7",
+      "actual": "6955ba0806c7e0cc072de55386211afb26e03149641cceb00185d6aa8a36c9c7",
+      "passed": true
+    },
+    {
+      "path": "forge/step3-analysis-job.mjs",
+      "status": 200,
+      "expected": "93238452267394981755ac4853abf0af7b2865f55b0558624932ab39e23faf66",
+      "actual": "93238452267394981755ac4853abf0af7b2865f55b0558624932ab39e23faf66",
+      "passed": true
+    },
+    {
+      "path": "forge/step3-initial-image-job.mjs",
+      "status": 200,
+      "expected": "42d9959aaa4b9f0e69279ceee0610367e1d99387002a7e585568f1e9dd6cef10",
+      "actual": "42d9959aaa4b9f0e69279ceee0610367e1d99387002a7e585568f1e9dd6cef10",
+      "passed": true
+    },
+    {
+      "path": "forge/revision-image-job.mjs",
+      "status": 200,
+      "expected": "ae8b48c5892436d189867b6eceb40f658e751446527522e62ad55e14dd7354c2",
+      "actual": "ae8b48c5892436d189867b6eceb40f658e751446527522e62ad55e14dd7354c2",
+      "passed": true
+    },
+    {
+      "path": "forge/index.html",
+      "status": 200,
+      "baseline": "previously published artifact; source checkout is not the published HTML baseline",
+      "expectedGitBlob": "41b9dba8d0a034c80f522ab76ac188f792f3b934",
+      "actualGitBlob": "41b9dba8d0a034c80f522ab76ac188f792f3b934",
+      "actualSha256": "e792dec67ad474768b91d8679b1147946de08b36d9fbfcde91462e11f6f04ca1",
+      "passed": true
+    }
+  ],
+  "nodeTests": {
+    "passed": 113,
+    "failed": 0,
+    "mocked": true
+  },
+  "browserMockFlow": {
+    "passed": true,
+    "infistarPosts": 3,
+    "tencentOrCloudflarePosts": 0
+  },
+  "liveBrowserCors": {
+    "origin": "https://qwdwqfwq.github.io",
+    "hosts": [
+      "infistar.cc",
+      "infistar.ai"
+    ],
+    "getModels": {
+      "count": 2,
+      "status": 401,
+      "allReadable": true
+    },
+    "postApiFamilies": [
+      "chat/completions",
+      "responses",
+      "messages",
+      "images/generations",
+      "images/edits",
+      "Gemini generateContent"
+    ],
+    "postCount": 12,
+    "status": 401,
+    "allReadable": true,
+    "credential": "deliberately invalid; no real model invoked"
+  },
+  "realModelEndToEnd": {
+    "completed": true,
+    "representativeWorkflowsPassed": true,
+    "reports": [
+      "real-workflow-results.json",
+      "focused-live-results.json",
+      "real-export-integrity.json",
+      "test-adjudication.json"
+    ],
+    "modelBackendRequests": 0,
+    "scope": "Live-origin browser with test-only in-memory HTML instrumentation; real Infistar responses. Not exhaustive UI/model/network coverage."
+  },
+  "liveRuntimeRouting": {
+    "verifiedAt": "2026-11-18T16:37:16.946Z",
+    "outcomes": [
+      {
+        "name": "reference-analysis",
+        "status": 401,
+        "ok": false
+      },
+      {
+        "name": "initial-image",
+        "status": 401,
+        "ok": false
+      },
+      {
+        "name": "revision-image",
+        "status": 401,
+        "ok": false
+      }
+    ],
+    "requests": [
+      {
+        "method": "GET",
+        "url": "https://infistar.cc/pricing"
+      },
+      {
+        "method": "GET",
+        "url": "https://infistar.cc/pricing"
+      },
+      {
+        "method": "GET",
+        "url": "https://infistar.cc/pricing"
+      },
+      {
+        "method": "POST",
+        "url": "https://infistar.cc/v1/chat/completions"
+      },
+      {
+        "method": "POST",
+        "url": "https://infistar.cc/v1/images/generations"
+      },
+      {
+        "method": "POST",
+        "url": "https://infistar.cc/v1/images/edits"
+      }
+    ],
+    "officialRequests": 6,
+    "backendRequests": 0,
+    "officialPosts": 3,
+    "passed": true,
+    "credential": "deliberately invalid; routing/CORS check only, not a successful model call"
+  },
+  "realModelVerificationFinishedAt": "2026-11-18T16:59:01.624Z"
+}

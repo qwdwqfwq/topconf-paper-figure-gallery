@@ -1,0 +1,22 @@
+{
+  "svg": {
+    "bytes": 2112,
+    "root": "{http://www.w3.org/2000/svg}svg",
+    "xmlValid": true
+  },
+  "drawio": {
+    "bytes": 15479,
+    "root": "mxfile",
+    "xmlValid": true
+  },
+  "pptx": {
+    "bytes": 106182,
+    "zipIntegrity": true,
+    "xmlPartsValid": 21
+  },
+  "vsdx": {
+    "bytes": 32715,
+    "zipIntegrity": true,
+    "xmlPartsValid": 7
+  }
+}

@@ -1,0 +1,677 @@
+{
+  "startedAt": "2026-11-18T16:49:56.546Z",
+  "apiMocked": false,
+  "origin": "https://qwdwqfwq.github.io",
+  "explicitProxy": false,
+  "requests": [
+    {
+      "method": "POST",
+      "host": "gallery-analytics.lixiao-gallery.workers.dev",
+      "path": "/collect",
+      "at": "2026-11-18T16:49:58.524Z"
+    },
+    {
+      "method": "GET",
+      "host": "infistar.cc",
+      "path": "/v1/models",
+      "at": "2026-11-18T16:49:59.758Z",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "host": "infistar.cc",
+      "path": "/pricing",
+      "at": "2026-11-18T16:49:59.951Z",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "host": "infistar.cc",
+      "path": "/pricing",
+      "at": "2026-11-18T16:49:59.952Z",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "host": "infistar.cc",
+      "path": "/pricing",
+      "at": "2026-11-18T16:49:59.952Z",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "host": "infistar.cc",
+      "path": "/v1/chat/completions",
+      "at": "2026-11-18T16:50:00.176Z",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "host": "infistar.cc",
+      "path": "/v1/chat/completions",
+      "at": "2026-11-18T16:50:31.294Z",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "host": "infistar.cc",
+      "path": "/v1/chat/completions",
+      "at": "2026-11-18T16:50:52.202Z",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "host": "infistar.cc",
+      "path": "/v1/images/generations",
+      "at": "2026-11-18T16:51:53.625Z",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "host": "infistar.cc",
+      "path": "/v1/images/edits",
+      "at": "2026-11-18T16:53:02.063Z"
+    },
+    {
+      "method": "POST",
+      "host": "infistar.cc",
+      "path": "/v1/responses",
+      "at": "2026-11-18T16:53:02.275Z",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "host": "gallery-analytics.lixiao-gallery.workers.dev",
+      "path": "/collect",
+      "at": "2026-11-18T16:53:28.592Z"
+    },
+    {
+      "method": "GET",
+      "host": "infistar.cc",
+      "path": "/pricing",
+      "at": "2026-11-18T16:53:30.358Z"
+    },
+    {
+      "method": "GET",
+      "host": "infistar.cc",
+      "path": "/pricing",
+      "at": "2026-11-18T16:53:30.360Z"
+    },
+    {
+      "method": "GET",
+      "host": "infistar.cc",
+      "path": "/pricing",
+      "at": "2026-11-18T16:53:30.361Z"
+    }
+  ],
+  "results": [
+    {
+      "stage": "reference-analysis",
+      "ok": true,
+      "elapsedMs": 31140,
+      "hasAnalysis": true,
+      "keys": [
+        "j",
+        "repIds",
+        "imageRefIds",
+        "refinedPrompt",
+        "refinedPromptImage"
+      ]
+    },
+    {
+      "stage": "paper-text-parser",
+      "ok": true,
+      "elapsedMs": 20916,
+      "sections": 1
+    },
+    {
+      "stage": "svg-generation",
+      "ok": false,
+      "elapsedMs": 61419,
+      "error": "SVG was not rendered"
+    },
+    {
+      "stage": "initial-image",
+      "ok": true,
+      "elapsedMs": 67566,
+      "versions": 2
+    },
+    {
+      "stage": "image-revision",
+      "ok": false,
+      "elapsedMs": 558,
+      "error": "Missing revision history"
+    },
+    {
+      "stage": "editable-reconstruction",
+      "ok": true,
+      "elapsedMs": 25039,
+      "audit": {
+        "state": "succeeded",
+        "phase": "complete",
+        "startedAt": 1795020782131,
+        "totalTiles": 1,
+        "completedTiles": 1,
+        "fallbackTiles": 0,
+        "repairCalls": 0,
+        "revisions": [],
+        "tiles": [
+          {
+            "wholeImage": true,
+            "nativeLayout": false,
+            "recognitionRecovery": true,
+            "inputWidth": 2048,
+            "inputHeight": 1152,
+            "pinnedModel": "gpt-6.2-astra",
+            "maxAttempts": 1,
+            "maxTotalMs": null,
+            "state": "succeeded",
+            "startedAt": 1795020782166,
+            "model": "gpt-6.2-astra",
+            "provider": "oai",
+            "endpoint": "https://infistar.cc/v1",
+            "attempt": 1,
+            "compositionOverviews": [],
+            "imageTransport": [],
+            "timeoutMs": null,
+            "attemptStartedAt": 1795020782168,
+            "requestParameters": {
+              "model": "gpt-6.2-astra",
+              "endpoint": "https://infistar.cc/v1",
+              "max_completion_tokens": 128000,
+              "reasoning_effort": "high",
+              "imageTransport": [],
+              "images": [
+                {
+                  "index": 0,
+                  "detail": "high",
+                  "width": 2048,
+                  "height": 1152
+                }
+              ]
+            },
+            "parameterSupport": "accepted-by-endpoint; internal image resolution unverified",
+            "transport": {
+              "stage": "response_received",
+              "headersMs": 20701,
+              "firstBodyChunkMs": 20701.900000035763,
+              "responseBytes": 209140,
+              "events": 667,
+              "stream": true,
+              "status": 200,
+              "requestId": "",
+              "protocol": "responses",
+              "elapsedMs": 24594.600000023842
+            },
+            "responseModel": "gpt-6.2-astra",
+            "usage": {
+              "input_tokens": 3849,
+              "input_tokens_details": {
+                "cache_write_tokens": 0,
+                "cached_tokens": 0
+              },
+              "output_tokens": 716,
+              "output_tokens_details": {
+                "reasoning_tokens": 0
+              },
+              "total_tokens": 4565,
+              "prompt_tokens": 3849,
+              "completion_tokens": 716
+            },
+            "outputTruncated": false,
+            "responseDiagnostics": "finish_reason=stop, content_chars=1809, completion_tokens=716",
+            "outputChars": 1809,
+            "outputCharsPerSecond": 73.55273108724055,
+            "recovery": {
+              "schema": "scene",
+              "repaired": [],
+              "rejected": []
+            },
+            "finishedAt": 1795020806799,
+            "durationMs": 24633,
+            "nodeCount": 8,
+            "nodeCounts": {
+              "raw": 8,
+              "expanded": 8,
+              "parsed": 8,
+              "rejected": 0
+            },
+            "attempts": 1
+          }
+        ],
+        "pipeline": "direct-whole-image-v1",
+        "stages": {
+          "prepareMs": 33,
+          "recognitionMs": 24635,
+          "sceneToSvgMs": 2
+        },
+        "skipped": [
+          "inventory",
+          "regional-recognition",
+          "ai-acceptance",
+          "repair",
+          "automatic-retry"
+        ],
+        "sourceWidth": 2048,
+        "sourceHeight": 1152,
+        "pinnedModel": "gpt-6.2-astra",
+        "reasoningEffort": "high",
+        "nodeCount": 8,
+        "finishedAt": 1795020806802,
+        "durationMs": 24671
+      },
+      "sceneKeys": [
+        "schema",
+        "regions",
+        "canvas",
+        "nodes",
+        "counts",
+        "recovery",
+        "recognitionCounts"
+      ]
+    },
+    {
+      "stage": "export-svg",
+      "ok": true,
+      "elapsedMs": 259,
+      "bytes": 2112
+    },
+    {
+      "stage": "export-pptx",
+      "ok": true,
+      "elapsedMs": 598,
+      "bytes": 106182
+    },
+    {
+      "stage": "export-vsdx",
+      "ok": true,
+      "elapsedMs": 208,
+      "bytes": 32715
+    },
+    {
+      "stage": "export-drawio",
+      "ok": true,
+      "elapsedMs": 205,
+      "bytes": 15479
+    },
+    {
+      "stage": "history-reload",
+      "ok": true,
+      "elapsedMs": 2278,
+      "versions": 2
+    }
+  ],
+  "testOnlyInstrumentation": [
+    "skip gallery search model startup",
+    "expose existing app functions",
+    "run step4 separately from image generation"
+  ],
+  "liveHtmlSha256": "e792dec67ad474768b91d8679b1147946de08b36d9fbfcde91462e11f6f04ca1",
+  "catalog": {
+    "status": 200,
+    "models": [
+      "gpt-6.2-astra",
+      "gpt-6.2-sol",
+      "gpt-6.1-sol",
+      "gpt-6.1-terra",
+      "gpt-6-astra",
+      "gpt-6-sol",
+      "gpt-6-luna",
+      "gpt-5.6-sol",
+      "gpt-5.5",
+      "gpt-5.5-2026-04-23",
+      "gpt-5.6-terra",
+      "gpt-5.6-luna",
+      "gpt-5.4",
+      "gpt-5.4-mini",
+      "gpt-5.2",
+      "gpt-4.1",
+      "gpt-4.1-mini",
+      "gpt-4o",
+      "gpt-4o-mini",
+      "gpt-image-2.5-sunburst",
+      "gpt-image-2.5-flare",
+      "gpt-5.4-nano",
+      "gpt-5.3-codex",
+      "gpt-5.1",
+      "gpt-5",
+      "gpt-5-2025-08-07",
+      "gpt-5-mini",
+      "gpt-5-mini-2025-08-07",
+      "gpt-5-nano",
+      "gpt-5-nano-2025-08-07",
+      "gpt-4.1-mini-2025-04-14",
+      "gpt-4o-2024-11-20",
+      "gpt-4o-2024-08-06",
+      "gpt-4o-mini-2024-07-18",
+      "o3",
+      "o3-2025-04-16",
+      "gpt-image-2",
+      "gpt-4o-2024-05-13",
+      "o4-mini",
+      "o4-mini-2025-04-16",
+      "o3-mini",
+      "o1",
+      "o1-2024-12-17",
+      "deepseek-v4-pro",
+      "deepseek-v4.1-flash",
+      "deepseek-v4-flash",
+      "claude-fable-5-2",
+      "claude-fable-5-1",
+      "claude-fable-5",
+      "claude-opus-5-5",
+      "claude-sonnet-5-5",
+      "claude-haiku-5-5",
+      "claude-opus-5",
+      "claude-sonnet-5",
+      "claude-opus-4-8",
+      "claude-opus-4-7",
+      "claude-opus-4-6",
+      "claude-sonnet-4-6",
+      "claude-opus-4-5-20251101",
+      "claude-haiku-4-5",
+      "claude-haiku-4-5-20251001",
+      "claude-opus-4-5",
+      "claude-sonnet-4-5-20250929",
+      "claude-sonnet-4-5",
+      "gemini-4-carbon",
+      "gemini-4-argon",
+      "gemini-4-hydrogen",
+      "gemini-3.1-pro-preview",
+      "gemini-3.8-flash",
+      "gemini-3.7-flash",
+      "gemini-3.6-flash",
+      "gemini-3.5-flash",
+      "gemini-3.5-flash-lite",
+      "gemini-3-flash",
+      "gemini-3-flash-preview",
+      "gemini-3.1-pro-preview-customtools",
+      "gemini-robotics-er-2-preview",
+      "gemini-3.1-flash-lite",
+      "gemini-2.5-pro",
+      "gemini-2.5-flash",
+      "gemini-2.5-flash-lite",
+      "gemini-flash-lite-latest",
+      "gemini-nano-banana-2.1",
+      "gemini-3.1-flash-image",
+      "gemini-3.1-flash-lite-image",
+      "gemini-3-pro-image",
+      "gemini-3.1-flash-lite-preview",
+      "qwen4-max",
+      "qwen3.8-max",
+      "qwen3.7-max",
+      "qwen3.7-plus",
+      "qwen3.6-plus",
+      "qwen3.5-397b-a17b",
+      "qwen3.5-plus",
+      "qwen3.6-35b-a3b",
+      "qwen3.6-27b",
+      "qwen3.5-122b-a10b",
+      "qwen3.5-35b-a3b",
+      "qwen3.5-27b",
+      "qwen3.5-flash",
+      "qwen3.7-flash",
+      "qwen3.8-flash",
+      "qwen3.8-omni-flash",
+      "qwen3.6-flash",
+      "qwen3.5-plus-2026-02-15",
+      "qwen3.5-flash-2026-02-23",
+      "qwen3-coder-flash",
+      "qwen3-coder-flash-2025-07-28",
+      "qwen-max",
+      "qwen-plus",
+      "qwen-plus-latest",
+      "qwen-plus-2025-12-01",
+      "qwen-flash",
+      "qwen-flash-2025-07-28",
+      "qwen-long-latest",
+      "wan3.0-video",
+      "wan2.7-t2v",
+      "wan2.7-i2v",
+      "wan2.7-image-pro",
+      "wan2.7-image",
+      "qwen-image-2.0-pro",
+      "qwen-image-2.0",
+      "text-embedding-v4",
+      "qwen3.7-text-embedding",
+      "qwen3-vl-rerank",
+      "qwen3-rerank",
+      "qwen-audio-3.0-asr-flash-streaming",
+      "qwen-audio-3.0-asr-flash-filetrans",
+      "qwen3.8-27b",
+      "qwen3.8-max-0902",
+      "doubao-seed-2-1-pro-260628",
+      "doubao-seed-2-1-turbo-260628",
+      "doubao-seed-2-0-mini-260428",
+      "doubao-seed-2-0-lite-260428",
+      "doubao-seedance-2-5-260628",
+      "doubao-seedance-2-0-260128",
+      "doubao-seedance-2.0-mini",
+      "doubao-seedance-2-0-fast-260128",
+      "doubao-seedream-5-0-260128",
+      "doubao-seedream-4-0-250828",
+      "hy4",
+      "hy4-preview",
+      "hy3",
+      "hunyuan-t1-vision-20250916",
+      "hunyuan-role-latest",
+      "glm-5.3",
+      "glm-5.3-flash",
+      "glm-5.3-flashx",
+      "glm-5.2",
+      "glm-5.1",
+      "glm-5-turbo",
+      "glm-5",
+      "glm-4.7",
+      "glm-4.7-flashx",
+      "glm-4.7-flash",
+      "glm-4.6",
+      "glm-4.5-airx",
+      "glm-4.5-air",
+      "glm-4.5",
+      "glm-4.5-x",
+      "glm-4.5-flash",
+      "embedding-3",
+      "embedding-2",
+      "rerank",
+      "kimi-k3.1-pro",
+      "kimi-k3.1-pro-highspeed",
+      "kimi-k3",
+      "kimi-k2.7-code",
+      "kimi-k2.7-code-highspeed",
+      "kimi-k2.6",
+      "kimi-k2.5",
+      "step-5-preview",
+      "step-3.7-flash",
+      "mimo-v2.6-pro",
+      "mimo-v2.6-pro-ultraspeed",
+      "mimo-v2.6-flash",
+      "MiniMax-M3.1-Flash",
+      "MiniMax-M3",
+      "MiniMax-H3",
+      "kling-video-o1",
+      "grok-4.7",
+      "grok-4.6",
+      "grok-4.5",
+      "grok-4.3",
+      "grok-imagine-image",
+      "grok-imagine-image-quality",
+      "baai-bge-m3",
+      "baai-bge-large-zh-v1.5",
+      "baai-bge-large-en-v1.5",
+      "baai-bge-reranker-v2-m3",
+      "gte-rerank-v2",
+      "jev-1.13.0",
+      "muse-spark-1.3",
+      "muse-spark-1.3-contributor",
+      "muse-spark-1.2",
+      "muse-spark-1.2-contributor"
+    ]
+  },
+  "selectedModels": {
+    "vision": "gpt-6.2-astra",
+    "image": "gpt-image-2.5-sunburst",
+    "parser": "deepseek-v4.1-flash"
+  },
+  "setup": {
+    "base": "https://infistar.cc/v1"
+  },
+  "networkErrors": [
+    {
+      "host": "infistar.cc",
+      "path": "/v1/images/generations",
+      "error": "net::ERR_ABORTED"
+    },
+    {
+      "host": "infistar.cc",
+      "path": "/v1/responses",
+      "error": "net::ERR_ABORTED"
+    }
+  ],
+  "images": [
+    {
+      "id": "0be3d725-2578-48ab-987b-ca8ddea04194",
+      "parentId": null,
+      "width": 2048,
+      "height": 1152,
+      "sha256": "77d4a9428cad840ef3c40b6a59514605aa9e654a08a0ae8152b6d0482e4b5a60"
+    },
+    {
+      "id": "274e3f1d-f8ca-4c73-befc-8ec3d02b1e53",
+      "parentId": null,
+      "width": 1600,
+      "height": 900,
+      "sha256": "f48418daf3ff2a335ff8f4ae75e4383ffc47864f5dfb30c48ce352c22be0e1b4"
+    }
+  ],
+  "reconstructionAudit": {
+    "state": "succeeded",
+    "phase": "complete",
+    "startedAt": 1795020782131,
+    "totalTiles": 1,
+    "completedTiles": 1,
+    "fallbackTiles": 0,
+    "repairCalls": 0,
+    "revisions": [],
+    "tiles": [
+      {
+        "wholeImage": true,
+        "nativeLayout": false,
+        "recognitionRecovery": true,
+        "inputWidth": 2048,
+        "inputHeight": 1152,
+        "pinnedModel": "gpt-6.2-astra",
+        "maxAttempts": 1,
+        "maxTotalMs": null,
+        "state": "succeeded",
+        "startedAt": 1795020782166,
+        "model": "gpt-6.2-astra",
+        "provider": "oai",
+        "endpoint": "https://infistar.cc/v1",
+        "attempt": 1,
+        "compositionOverviews": [],
+        "imageTransport": [],
+        "timeoutMs": null,
+        "attemptStartedAt": 1795020782168,
+        "requestParameters": {
+          "model": "gpt-6.2-astra",
+          "endpoint": "https://infistar.cc/v1",
+          "max_completion_tokens": 128000,
+          "reasoning_effort": "high",
+          "imageTransport": [],
+          "images": [
+            {
+              "index": 0,
+              "detail": "high",
+              "width": 2048,
+              "height": 1152
+            }
+          ]
+        },
+        "parameterSupport": "accepted-by-endpoint; internal image resolution unverified",
+        "transport": {
+          "stage": "response_received",
+          "headersMs": 20701,
+          "firstBodyChunkMs": 20701.900000035763,
+          "responseBytes": 209140,
+          "events": 667,
+          "stream": true,
+          "status": 200,
+          "requestId": "",
+          "protocol": "responses",
+          "elapsedMs": 24594.600000023842
+        },
+        "responseModel": "gpt-6.2-astra",
+        "usage": {
+          "input_tokens": 3849,
+          "input_tokens_details": {
+            "cache_write_tokens": 0,
+            "cached_tokens": 0
+          },
+          "output_tokens": 716,
+          "output_tokens_details": {
+            "reasoning_tokens": 0
+          },
+          "total_tokens": 4565,
+          "prompt_tokens": 3849,
+          "completion_tokens": 716
+        },
+        "outputTruncated": false,
+        "responseDiagnostics": "finish_reason=stop, content_chars=1809, completion_tokens=716",
+        "outputChars": 1809,
+        "outputCharsPerSecond": 73.55273108724055,
+        "recovery": {
+          "schema": "scene",
+          "repaired": [],
+          "rejected": []
+        },
+        "finishedAt": 1795020806799,
+        "durationMs": 24633,
+        "nodeCount": 8,
+        "nodeCounts": {
+          "raw": 8,
+          "expanded": 8,
+          "parsed": 8,
+          "rejected": 0
+        },
+        "attempts": 1
+      }
+    ],
+    "pipeline": "direct-whole-image-v1",
+    "stages": {
+      "prepareMs": 33,
+      "recognitionMs": 24635,
+      "sceneToSvgMs": 2
+    },
+    "skipped": [
+      "inventory",
+      "regional-recognition",
+      "ai-acceptance",
+      "repair",
+      "automatic-retry"
+    ],
+    "sourceWidth": 2048,
+    "sourceHeight": 1152,
+    "pinnedModel": "gpt-6.2-astra",
+    "reasoningEffort": "high",
+    "nodeCount": 8,
+    "finishedAt": 1795020806802,
+    "durationMs": 24671
+  },
+  "finishedAt": "2026-11-18T16:53:30.473Z",
+  "backendRequests": [
+    {
+      "method": "POST",
+      "host": "gallery-analytics.lixiao-gallery.workers.dev",
+      "path": "/collect",
+      "at": "2026-11-18T16:49:58.524Z"
+    },
+    {
+      "method": "POST",
+      "host": "gallery-analytics.lixiao-gallery.workers.dev",
+      "path": "/collect",
+      "at": "2026-11-18T16:53:28.592Z"
+    }
+  ],
+  "passed": false
+}

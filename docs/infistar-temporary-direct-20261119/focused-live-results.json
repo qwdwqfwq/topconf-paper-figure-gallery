@@ -1,0 +1,230 @@
+{
+  "startedAt": "2026-11-18T16:56:42.397Z",
+  "apiMocked": false,
+  "origin": "https://qwdwqfwq.github.io",
+  "explicitProxy": false,
+  "requests": [
+    {
+      "method": "POST",
+      "host": "gallery-analytics.lixiao-gallery.workers.dev",
+      "path": "/collect",
+      "at": "2026-11-18T16:56:44.005Z"
+    },
+    {
+      "method": "GET",
+      "host": "infistar.cc",
+      "path": "/pricing",
+      "at": "2026-11-18T16:56:44.707Z",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "host": "infistar.cc",
+      "path": "/pricing",
+      "at": "2026-11-18T16:56:44.708Z",
+      "status": 200
+    },
+    {
+      "method": "GET",
+      "host": "infistar.cc",
+      "path": "/pricing",
+      "at": "2026-11-18T16:56:44.709Z",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "host": "infistar.cc",
+      "path": "/v1/images/edits",
+      "at": "2026-11-18T16:56:46.591Z",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "host": "infistar.cc",
+      "path": "/v1/chat/completions",
+      "at": "2026-11-18T16:57:55.296Z",
+      "status": 200
+    },
+    {
+      "method": "POST",
+      "host": "gallery-analytics.lixiao-gallery.workers.dev",
+      "path": "/collect",
+      "at": "2026-11-18T16:59:00.703Z"
+    },
+    {
+      "method": "GET",
+      "host": "infistar.cc",
+      "path": "/pricing",
+      "at": "2026-11-18T16:59:01.377Z"
+    },
+    {
+      "method": "GET",
+      "host": "infistar.cc",
+      "path": "/pricing",
+      "at": "2026-11-18T16:59:01.378Z"
+    },
+    {
+      "method": "GET",
+      "host": "infistar.cc",
+      "path": "/pricing",
+      "at": "2026-11-18T16:59:01.379Z"
+    }
+  ],
+  "results": [
+    {
+      "stage": "image-upload",
+      "ok": true,
+      "elapsedMs": 190,
+      "id": "272d87b7-4902-41da-84c5-7c2c05f87401",
+      "parentId": null,
+      "width": 2048,
+      "height": 1152,
+      "route": {},
+      "sha256": "77d4a9428cad840ef3c40b6a59514605aa9e654a08a0ae8152b6d0482e4b5a60"
+    },
+    {
+      "stage": "image-revision",
+      "ok": true,
+      "elapsedMs": 70280,
+      "versions": 2,
+      "bytes": 1696222,
+      "id": "88297235-c818-4fbe-bcdb-0ecae0263cca",
+      "parentId": "272d87b7-4902-41da-84c5-7c2c05f87401",
+      "width": 2048,
+      "height": 1152,
+      "route": {
+        "p": "infistar",
+        "model": "gpt-image-2.5-sunburst",
+        "base": "https://infistar.cc/v1",
+        "proto": "oai",
+        "ratio": "16:9",
+        "resolution": "2K"
+      },
+      "sha256": "e073c67834cd6f750d2091aba8b3933c642ad5f606c77d20bdc7631365732715"
+    },
+    {
+      "stage": "svg-generation",
+      "ok": true,
+      "elapsedMs": 64503,
+      "versions": 3,
+      "svgBytes": 7804,
+      "id": "69948fe1-80cb-4498-b38d-4d49a5abfb3f",
+      "parentId": null,
+      "width": 1600,
+      "height": 900,
+      "source": "svg",
+      "route": {
+        "p": "infistar",
+        "model": "gpt-image-2.5-sunburst",
+        "base": "https://infistar.cc/v1",
+        "proto": "oai",
+        "ratio": "16:9",
+        "resolution": "2K"
+      },
+      "sha256": "f60fb119a6dd98de4183426564766644d036dc220e3c648fa36e8382b43e9d86"
+    },
+    {
+      "stage": "history-reload",
+      "ok": true,
+      "elapsedMs": 1808,
+      "versions": 3,
+      "records": [
+        {
+          "id": "272d87b7-4902-41da-84c5-7c2c05f87401",
+          "parentId": null,
+          "width": 2048,
+          "height": 1152,
+          "route": {},
+          "sha256": "77d4a9428cad840ef3c40b6a59514605aa9e654a08a0ae8152b6d0482e4b5a60"
+        },
+        {
+          "id": "69948fe1-80cb-4498-b38d-4d49a5abfb3f",
+          "parentId": null,
+          "width": 1600,
+          "height": 900,
+          "source": "svg",
+          "route": {
+            "p": "infistar",
+            "model": "gpt-image-2.5-sunburst",
+            "base": "https://infistar.cc/v1",
+            "proto": "oai",
+            "ratio": "16:9",
+            "resolution": "2K"
+          },
+          "sha256": "f60fb119a6dd98de4183426564766644d036dc220e3c648fa36e8382b43e9d86"
+        },
+        {
+          "id": "88297235-c818-4fbe-bcdb-0ecae0263cca",
+          "parentId": "272d87b7-4902-41da-84c5-7c2c05f87401",
+          "width": 2048,
+          "height": 1152,
+          "route": {
+            "p": "infistar",
+            "model": "gpt-image-2.5-sunburst",
+            "base": "https://infistar.cc/v1",
+            "proto": "oai",
+            "ratio": "16:9",
+            "resolution": "2K"
+          },
+          "sha256": "e073c67834cd6f750d2091aba8b3933c642ad5f606c77d20bdc7631365732715"
+        }
+      ]
+    }
+  ],
+  "testOnlyInstrumentation": [
+    "skip gallery search model startup",
+    "expose existing app functions",
+    "run step4 separately from image generation"
+  ],
+  "liveHtmlSha256": "e792dec67ad474768b91d8679b1147946de08b36d9fbfcde91462e11f6f04ca1",
+  "setup": {
+    "base": "https://infistar.cc/v1"
+  },
+  "input": {
+    "id": "272d87b7-4902-41da-84c5-7c2c05f87401",
+    "parentId": null,
+    "width": 2048,
+    "height": 1152,
+    "route": {},
+    "sha256": "77d4a9428cad840ef3c40b6a59514605aa9e654a08a0ae8152b6d0482e4b5a60"
+  },
+  "networkErrors": [
+    {
+      "host": "infistar.cc",
+      "path": "/v1/images/edits",
+      "error": "net::ERR_ABORTED"
+    }
+  ],
+  "revised": {
+    "id": "88297235-c818-4fbe-bcdb-0ecae0263cca",
+    "parentId": "272d87b7-4902-41da-84c5-7c2c05f87401",
+    "width": 2048,
+    "height": 1152,
+    "route": {
+      "p": "infistar",
+      "model": "gpt-image-2.5-sunburst",
+      "base": "https://infistar.cc/v1",
+      "proto": "oai",
+      "ratio": "16:9",
+      "resolution": "2K"
+    },
+    "sha256": "e073c67834cd6f750d2091aba8b3933c642ad5f606c77d20bdc7631365732715"
+  },
+  "finishedAt": "2026-11-18T16:59:01.624Z",
+  "analyticsRequests": [
+    {
+      "method": "POST",
+      "host": "gallery-analytics.lixiao-gallery.workers.dev",
+      "path": "/collect",
+      "at": "2026-11-18T16:56:44.005Z"
+    },
+    {
+      "method": "POST",
+      "host": "gallery-analytics.lixiao-gallery.workers.dev",
+      "path": "/collect",
+      "at": "2026-11-18T16:59:00.703Z"
+    }
+  ],
+  "modelBackendRequests": [],
+  "passed": true
+}

@@ -1,0 +1,8 @@
+{
+  "exitCode": 1,
+  "previousReference": "artifacts/dns-tls-deep-diagnosis-20261118/freeze-after.txt",
+  "previousCount": 60,
+  "currentCount": 60,
+  "issueListUnchanged": true,
+  "warning": "Compares issue lists, not before/after hashes of already modified files. Checker remains failed; baseline and checker unchanged."
+}
