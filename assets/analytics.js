@@ -19,3 +19,22 @@
     send('pageview');
   }catch{}
 })();
+
+/* Public domain registration notice, independent of analytics and API requests. */
+(()=>{
+  'use strict';
+  const path=location.pathname.replace(/index\.html$/,'').replace(/\/?$/,'/');
+  if(!['/topconf-paper-figure-gallery/','/topconf-paper-figure-gallery/forge/'].includes(path))return;
+  function showNotice(){
+    if(!document.body||document.getElementById('gallery-domain-notice'))return;
+    const notice=document.createElement('aside');
+    notice.id='gallery-domain-notice';
+    notice.setAttribute('role','status');
+    notice.setAttribute('aria-label','网站通告');
+    notice.textContent='域名正在备案中，静候2天';
+    notice.style.cssText='display:block;position:relative;z-index:1000;box-sizing:border-box;width:100%;margin:0;padding:16px 20px;background:#fff0bd;color:#792b08;border-bottom:2px solid #e9ac35;text-align:center;font-size:20px;font-weight:800;line-height:1.5;letter-spacing:.04em;';
+    document.body.prepend(notice);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',showNotice,{once:true});
+  else showNotice();
+})();
