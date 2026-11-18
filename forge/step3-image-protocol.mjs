@@ -4,7 +4,7 @@ export function imageJobRoute(url){
   try{
     const u=new URL(url);if(u.protocol!=='https:'||u.port||u.username||u.password||u.hash)return null;
     if(['infistar.cc','www.infistar.cc','infistar.ai','www.infistar.ai'].includes(u.hostname)&&((u.pathname==='/v1/images/generations'&&!u.search)||(/^\/v1beta\/models\/[^/]+:(?:streamGenerateContent|generateContent)$/.test(u.pathname)&&(!u.search||u.search==='?alt=sse'))))return 'infistar';
-    if(['api.nonelinear.com.cn','gallery-nonelinear-relay.lixiao-gallery.workers.dev'].includes(u.hostname)&&u.pathname==='/v1/images/generations'&&!u.search)return 'nonelinear';
+    if(['api.nonelinear.com.cn','gallery-nonelinear-relay.lixiao-gallery.workers.dev','analysis.topconf-paper-figure-gallery.cn'].includes(u.hostname)&&u.pathname==='/v1/images/generations'&&!u.search)return 'nonelinear';
     if(u.hostname==='api.openai.com'&&/^\/v1\/images\/(generations|edits)$/.test(u.pathname)&&!u.search)return 'oai';
   }catch{}return null;
 }

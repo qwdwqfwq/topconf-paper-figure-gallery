@@ -1,9 +1,9 @@
 // Used only by analyzeReferences(). Image generation and exports do not import it.
 import {requestDirectAnalysis} from './step3-analysis-direct.mjs';
-export const ANALYSIS_JOB_BASE='https://analysis.topconf-paper-figure-gallery.cn';
-// The Hong Kong HTTPS ingress forwards to the SAME production Durable Object service/namespace.
+export const ANALYSIS_JOB_BASE='https://analysis.topconf-paper-figure-gallery.cn/analysis';
+// Tencent runs the durable analysis service directly, without an overseas ingress.
 export const ANALYSIS_JOB_BASES=Object.freeze([ANALYSIS_JOB_BASE]);
-const hosts=new Set(['gallery-nonelinear-relay.lixiao-gallery.workers.dev','api.nonelinear.com.cn','api.nonelinear.com']);
+const hosts=new Set(['gallery-nonelinear-relay.lixiao-gallery.workers.dev','api.nonelinear.com.cn','api.nonelinear.com','analysis.topconf-paper-figure-gallery.cn']);
 export function analysisUpstream(provider,url){
  try{
   const u=new URL(url);
@@ -29,13 +29,22 @@ export async function requestReferenceAnalysis({provider,url,init,fetchImpl=glob
  const readHeaders=new Headers({Authorization:authorization});
  if(upstream!=='nonelinear')readHeaders.set('X-Analysis-Upstream',upstream);
  // Persist only hashes and the opaque task identifier, never the key or pictures.
- const slot='gallery.reference-analysis.v1.'+await digest(url+'\n'+authorization+'\n'+init.body);
- const saved=storageGet(storage,slot),start=now();
+ let slot='gallery.reference-analysis.v1.'+await digest(url+'\n'+authorization+'\n'+init.body);
+ let saved=storageGet(storage,slot);
+ // A base-URL migration must still find the old opaque task ID. Old server
+ // storage is separate: a missing legacy job must never become a new paid call.
+ if(!saved&&upstream==='nonelinear'){
+  for(const oldBase of ['https://gallery-nonelinear-relay.lixiao-gallery.workers.dev/v1','https://api.nonelinear.com.cn/v1','https://api.nonelinear.com/v1']){
+   const oldSlot='gallery.reference-analysis.v1.'+await digest(oldBase+'/chat/completions'+'\n'+authorization+'\n'+init.body);
+   const old=storageGet(storage,oldSlot);if(old){slot=oldSlot;saved=old;break;}
+  }
+ }
+ const start=now();
  const resume=saved&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(saved.id)&&Number.isFinite(saved.created)&&saved.created<=start&&saved.created>start-86400000;
- // New analyses use the Hong Kong job service. Keep old browser-direct records
+ // New analyses use Tencent job storage. Keep old browser-direct records
  // on their original path so a lost response cannot trigger another paid call.
  if(upstream==='infistar-cc'&&resume&&saved.transport==='direct')return requestDirectAnalysis({url,init,fetchImpl,storage,slot,id:saved.id,now,deadlineMs});
- const task=resume?saved:{id:uuid(),created:start};storageSet(storage,slot,task);
+ const task=resume?saved:{id:uuid(),created:start,endpoint:jobBases[0]};storageSet(storage,slot,task);
  const bases=[...new Set(jobBases)];
  if(!bases.length)throw new Error('归纳服务入口未配置');
  let preferred=bases[0];
@@ -103,6 +112,7 @@ export async function requestReferenceAnalysis({provider,url,init,fetchImpl=glob
    }
    const result=await across('/jobs/'+task.id+'/result',{headers:readHeaders},'result',hedgeMs,Math.max(1,Math.min(networkMs,deadlineMs-(now()-start))));
    if(result.response.status===404&&result.data?.error==='NOT_FOUND'){
+    if(resume&&task.endpoint!==preferred)return serviceResponse({error:{message:'此任务保存在迁移前的后台，新服务器没有该结果。原任务编号 '+task.id+' 已保留；为避免重复扣费，本次未重新提交模型。请先核对旧任务或服务商记录。',code:'analysis_legacy_job_unavailable',request_id:task.id}},409);
     // A lost submission acknowledgement is retried with THE SAME task id. The
     // backend serializes duplicate PUTs and never repeats the upstream call.
     accepted=false;task.accepted=false;storageSet(storage,slot,task);submit=true;

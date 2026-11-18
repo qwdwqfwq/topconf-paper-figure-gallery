@@ -246,7 +246,7 @@ export async function readRevisionSource(source,options){
     let url;try{url=new URL(source);}catch{}
     if(url?.protocol==='https:'&&url.hostname==='imagen-nonelinear-2025.tos-cn-beijing.volces.com'&&!url.port&&!url.username&&!url.password&&!url.search&&!url.hash&&/^\/(?:others|gemini)\/[A-Za-z0-9_-]+\.(?:png|jpe?g|webp)$/.test(url.pathname)){
       try{
-        const response=await fetch('https://gallery-revision-images.lixiao-gallery.workers.dev/revision-image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url.href}),credentials:'omit',redirect:'error',signal:AbortSignal.timeout(90000)});
+        const response=await fetch('https://analysis.topconf-paper-figure-gallery.cn/revision-image',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url.href}),credentials:'omit',redirect:'error',signal:AbortSignal.timeout(90000)});
         if(!response.ok)throw Error('HTTP '+response.status);
         const blob=await response.blob();if(!/^image\/(?:png|jpeg|webp)/.test(blob.type))throw Error('非图片响应');
         return await new Promise((resolve,reject)=>{const reader=new FileReader();reader.onload=()=>resolve(reader.result);reader.onerror=()=>reject(Error('图片读取失败'));reader.readAsDataURL(blob);});

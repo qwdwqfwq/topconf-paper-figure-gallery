@@ -3,7 +3,7 @@ import {packImageBody} from './step3-image-protocol.mjs';
 import {revisionImageJobRoute} from './revision-image-protocol.mjs';
 import {requestStep3ImageStream} from './step3-image-stream.mjs';
 import {REVISION_CHUNK,REVISION_UPLOAD_MAX,revisionDigest} from './revision-upload.mjs';
-const ENDPOINT='https://gallery-revision-image-jobs.lixiao-gallery.workers.dev';
+const ENDPOINT='https://analysis.topconf-paper-figure-gallery.cn/revision';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const transientStatus=status=>status===408||status===425||status===429||status>=500;
 

@@ -1,9 +1,10 @@
 // Only NoneLinear's own generated image storage needs this CORS bridge.
 // All other providers, local data URIs, and custom gateways retain their path.
-const relay = 'https://gallery-nonelinear-relay.lixiao-gallery.workers.dev/v1';
+const relay = 'https://analysis.topconf-paper-figure-gallery.cn/v1';
+const legacyRelay = 'https://gallery-nonelinear-relay.lixiao-gallery.workers.dev/v1';
 const host = 'imagen-nonelinear-2025.tos-cn-beijing.volces.com';
 function bridged(src, {provider, base}) {
-  try { return provider === 'nonelinear' && new URL(src).hostname === host && base.replace(/\/+$/, '') === relay; }
+  try { return provider === 'nonelinear' && new URL(src).hostname === host && [relay, legacyRelay].includes(base.replace(/\/+$/, '')); }
   catch { return false; }
 }
 function pause(ms, signal) {

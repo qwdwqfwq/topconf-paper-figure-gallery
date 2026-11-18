@@ -1,6 +1,6 @@
 import {imageJobRoute,packImageBody} from './step3-image-protocol.mjs';
 import {internationalInitialImageUrl} from './step3-international-image-route.mjs';
-const ENDPOINT='https://gallery-infistar-image-jobs.lixiao-gallery.workers.dev';
+const ENDPOINT='https://analysis.topconf-paper-figure-gallery.cn/initial';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const transientStatus=status=>status===408||status===425||status===429||status>=500;
 

@@ -3,7 +3,7 @@ export function officialCatalogUrls(config){
   try{
     const url=new URL(config.base);
     if(url.protocol!=='https:'||url.port||url.username||url.password||url.pathname.replace(/\/+$/,'')!=='/v1'||url.search||url.hash)return [];
-    if(config.provider==='nonelinear'&&['api.nonelinear.com.cn','gallery-nonelinear-relay.lixiao-gallery.workers.dev'].includes(url.hostname)){
+    if(config.provider==='nonelinear'&&['api.nonelinear.com.cn','gallery-nonelinear-relay.lixiao-gallery.workers.dev','analysis.topconf-paper-figure-gallery.cn'].includes(url.hostname)){
       return ['https://nonelinear.com.cn/models?offset=0&limit=500','https://www.nonelinear.com.cn/models?offset=0&limit=500'];
     }
     if(config.provider!=='infistar'||!['infistar.cc','infistar.ai'].includes(url.hostname))return [];

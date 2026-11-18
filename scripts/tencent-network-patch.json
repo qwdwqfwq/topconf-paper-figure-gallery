@@ -1,0 +1,46 @@
+{
+  "forge/nonelinear-config.js": {
+    "original": "14dc2049e85f22de0da5a1f412d74db26fdc5a9fba3cdc85131e51cc743d747d",
+    "candidate": "402a279632813dacf1261229ca2b40a1531c33abfaf98913d66c735fca81d468"
+  },
+  "forge/nonelinear-source.mjs": {
+    "original": "990976d7c1d6aafde95805df93e226b5c98513fde9fc6a86a17ea4af1db3df2c",
+    "candidate": "295197cbe557c7aa7e5ff447e441825ae5ab8a327749125d4a9a4beb41e46ea6"
+  },
+  "forge/revision-image-job.mjs": {
+    "original": "5b8d235dbec851d43ff9b0d62a20b97e2aa40b5a4744142762e77bfe674efcd6",
+    "candidate": "49d7e734d124c1ceaf5c97c442b449aaff050957e98a7584aa198fabb9bb0463"
+  },
+  "forge/revision-result-recovery.mjs": {
+    "original": "9f7d03dd98d48300449577f7cba6159b0af76ac0695d3dbe5d7b90c91224b68b",
+    "candidate": "5ed1cc8c011499174abca156e3b847e3fccfb27594ff7092d81df6de58961a3d"
+  },
+  "forge/revision-scope.mjs": {
+    "original": "fcba4017e0590ca7390849c0f360f2a16e33aa7af57622c7762b9f6033116429",
+    "candidate": "718c31c72924d538720ccc7841c8e91e78842edb5a16beedee7cfdd7e6f8416f"
+  },
+  "forge/step3-analysis-job.mjs": {
+    "original": "40904de0efe26db45ec071476d96b697db8ea926650646fd82ea96271cd3a630",
+    "candidate": "1ecad34350f8b2cd6cafb90a8288a4875478da1396f9e85a011f5b6df9ff33e9"
+  },
+  "forge/step3-image-protocol.mjs": {
+    "original": "40a955f00db97b28aa37871f4d899fa438164c984fd3d5411d4d177df197d077",
+    "candidate": "7f2874ea35b736278e86d4696b8d88f9afee89e291c984299ee05ebd87771a6d"
+  },
+  "forge/step3-infistar-job.mjs": {
+    "original": "efe53b6c56c6c99473d8acf3109929bdd0f678136ecef4ee29a4a0bdbe04904c",
+    "candidate": "9c1e4dcff592ee1bab4cba583db66467df42f1070c664ceaa0dbc500ea30f81c"
+  },
+  "forge/step3-initial-image-job.mjs": {
+    "original": "5dc62d324af255f4670b896ff31df8717ac2c274c148e828afcd2de1eb8557f1",
+    "candidate": "54eb0f54366c0923df25532b255b6d80e801a11e2d53aa56ea8ea0e46aaa7ba4"
+  },
+  "forge/step3-international-image-route.mjs": {
+    "original": "e715c8ba13f0c61b8538b4d9d01f2067d735101a5f9ce1ea1ce48c023a357fb2",
+    "candidate": "6a638c36a689997b665fc61b0c19011d0e33dd8ed203174318b2c1ac025321f0"
+  },
+  "forge/step3-official-catalog.mjs": {
+    "original": "1bb9b45cf1c0f936e1ef5893b816a9b8a15aa8f88dc653f8879a3374420e7746",
+    "candidate": "b64c8de7a05fe0fb3cb3b286370ede2a5f3fbbcee1df741f3fcdfc39844eecc0"
+  }
+}

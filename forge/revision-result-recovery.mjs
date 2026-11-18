@@ -15,7 +15,7 @@ export async function receiveRevisionOutput(image,provider,toDataURL,{fetchImpl=
     new Promise((_,reject)=>{timer=setTimeout(()=>{controller.abort();reject(Object.assign(Error('图片接收超时'),{retryable:true}));},Math.max(1,Math.min(requestMs,end-Date.now())));}),
     (async()=>{
      if(!relay)return toDataURL(image);
-     const response=await fetchImpl('https://gallery-revision-images.lixiao-gallery.workers.dev/revision-image',{
+     const response=await fetchImpl('https://analysis.topconf-paper-figure-gallery.cn/revision-image',{
       method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({url:url.href}),
       credentials:'omit',redirect:'error',signal:controller.signal
      });
