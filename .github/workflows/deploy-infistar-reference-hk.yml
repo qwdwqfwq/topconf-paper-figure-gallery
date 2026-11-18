@@ -1,0 +1,73 @@
+name: Deploy Infistar reference analysis through Hong Kong
+on:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/deploy-infistar-reference-hk.yml
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Record original freeze check without changing its baseline
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Report original freeze result and verify unchanged protection
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: |
+          echo "Original freeze outcome = $ORIGINAL_OUTCOME; existing guard and baseline remain unchanged." >> "$GITHUB_STEP_SUMMARY"
+          git diff --exit-code HEAD^ HEAD -- .github/forge-workflow-lock.json scripts/check-forge-workflow-lock.mjs forge/index.html
+      - uses: actions/download-artifact@v4
+        with:
+          name: hk-analysis-ingress-proof
+          run-id: 44203033441
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/published-proof
+      - name: Verify exact Infistar routing patch and task recovery
+        run: |
+          node --test scripts/test-infistar-reference-hk-release.mjs forge/test-step3-analysis-job.mjs
+          node --test --test-name-pattern='SSE parser' forge/test-step3-analysis-direct.mjs
+          previous=$(mktemp -d)
+          git archive 4add693a0095674b05d830b1f3e5108aa6887aaa \
+            forge/test-step3-analysis-direct.mjs forge/step3-analysis-job.mjs \
+            forge/step3-analysis-direct.mjs forge/step3-analysis-request.mjs | tar -x -C "$previous"
+          node --test "$previous/forge/test-step3-analysis-direct.mjs"
+      - name: Build artifact preserving every other published byte
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-infistar-reference-hk-release.mjs "$RUNNER_TEMP/published-proof/hk-analysis-ingress-proof.json" --prepare-pages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: infistar-reference-hk-proof
+          path: /tmp/infistar-reference-hk-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/infistar-reference-hk-pages
+      - name: Recheck latest successful deployment before publishing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-infistar-reference-hk-release.mjs "$RUNNER_TEMP/published-proof/hk-analysis-ingress-proof.json" --check-published-base
+      - name: Publish only the authorized Infistar reference-analysis module
+        id: deployment
+        uses: actions/deploy-pages@v4
