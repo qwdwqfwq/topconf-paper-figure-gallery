@@ -31,7 +31,7 @@
     notice.id='gallery-domain-notice';
     notice.setAttribute('role','status');
     notice.setAttribute('aria-label','网站通告');
-    notice.textContent='域名正在备案中，静候2天';
+    notice.textContent='域名备案中，可先使用无限星河api';
     notice.style.cssText='display:block;position:relative;z-index:1000;box-sizing:border-box;width:100%;margin:0;padding:16px 20px;background:#fff0bd;color:#792b08;border-bottom:2px solid #e9ac35;text-align:center;font-size:20px;font-weight:800;line-height:1.5;letter-spacing:.04em;';
     document.body.prepend(notice);
   }
