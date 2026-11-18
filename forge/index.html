@@ -766,6 +766,7 @@
 import {createParserModelCatalog} from './parser-model-catalog.mjs?v=20261114';
 import {createStep3ModelCatalog} from './step3-model-catalog.mjs?v=20261114';
 import {createRetrievalBoot,createSemanticWorker} from './retrieval-boot.mjs';
+import {loadKeywordIndex, loadEmbedding} from './retrieval-domestic.mjs';
 import {readBitmapSource} from './nonelinear-source.mjs';
 import {fetchReconstructionStream,usesReconstructionStream} from './infistar-reconstruction-stream.mjs?v=20261114-errors';
 import {fetchReconstructionResponses,usesReconstructionResponses} from './infistar-reconstruction-responses.mjs?v=20261117-sol-chat';
@@ -943,7 +944,7 @@ function renderBootStatus(){
   $('#bootRetry').hidden=busy||s.phase==='ready';
   $('#bootRetry').textContent=bootWords('重试检索初始化','Retry retrieval');
   const elapsed=Math.floor((Date.now()-bootStarted)/1000);
-  let text=s.phase==='core-loading'?bootWords('正在加载基础检索索引','Loading keyword index'):
+  let text=s.phase==='core-loading'?bootWords('正在加载基础检索索引（国内优先，自动切源，最长 30 秒）','Loading keyword index (domestic first, automatic fallback, up to 30 seconds)'):
     s.phase==='semantic-loading'?bootWords('关键词检索已可用，语义模型正在后台加载（最长 5 分钟）','Keyword search is ready. Semantic search is loading in the background (up to 5 minutes)'):
     s.phase==='core-error'?bootWords('基础检索索引加载失败，请检查网络后点击重试','Keyword index failed to load. Check your connection and retry'):
     bootWords('关键词检索可用，语义检索暂不可用，可点击重试；生成、重建及导出可正常使用','Keyword search is available. Semantic search is unavailable; retry when ready. Generation, reconstruction and export remain available');
@@ -961,34 +962,27 @@ function onBootState(s){
 const retrievalBoot=createRetrievalBoot({
   timeoutMs:BOOT_TIMEOUT,onState:onBootState,
   loadCore:async signal=>{
-    await loadManifest();
-    const DV=MAN.dataVersion||'0';
-    const json=async name=>{
-      const r=await fetch('data/'+name+'?v='+DV,{signal});
-      if(!r.ok)throw new Error(name+' HTTP '+r.status);
-      return r.json();
-    };
-    const [figs,ids,bm]=await Promise.all(['figures.json','ids.json','bm25.json'].map(json));
-    const next={figs,ids,bm,IE:null,TE:null,N:ids.length};
-    const index=buildIndex(next);
+    const loaded=await loadKeywordIndex({signal,onProgress:progress=>{
+      if(progress.status==='cache-check')bootProgress=bootWords('检查本地索引缓存','Checking local index cache');
+      else if(progress.status==='cache')bootProgress=bootWords('已恢复本地索引缓存','Restored local index cache');
+      else if(progress.status==='build')bootProgress=bootWords('下载已校验，正在后台构建索引','Verified; building index in background');
+      else bootProgress=(progress.source==='国内'?bootWords('国内线路','Domestic route'):bootWords('备用线路','Fallback route'))+' · '+(progress.file||'').split('/').pop()+(progress.total?' '+Math.round(progress.loaded/progress.total*100)+'%':'');
+      renderBootStatus();
+    }});
     if(signal.aborted)throw signal.reason;
-    data=next;retrievalIndex=index;
+    data=loaded.data;retrievalIndex=loaded.index;
   },
   loadSemantic:async signal=>{
-    const client=createSemanticWorker(new URL('./retrieval-worker.mjs',import.meta.url),signal,progress=>{
-      if(progress.status==='progress'&&progress.total)bootProgress=(progress.file||'model').split('/').pop()+' '+Math.round(progress.loaded/progress.total*100)+'%';
+    const client=createSemanticWorker(new URL('./retrieval-domestic-worker.mjs',import.meta.url),signal,progress=>{
+      if(progress.status==='progress'&&progress.total)bootProgress=(progress.source==='国内'?bootWords('国内线路 · ','Domestic route · '):progress.source?bootWords('备用线路 · ','Fallback route · '):'')+(progress.file||'model').split('/').pop()+' '+Math.round(progress.loaded/progress.total*100)+'%';
+      else if(progress.status==='cache')bootProgress=bootWords('使用已缓存语义资源','Using cached semantic resources');
+      else if(progress.status==='source')bootProgress=(progress.source==='国内'?bootWords('国内线路 · ','Domestic route · '):bootWords('备用线路 · ','Fallback route · '))+(progress.file||'model').split('/').pop();
       else if(progress.status==='initialize')bootProgress=bootWords('下载完成，正在初始化计算引擎','Downloaded; initializing inference engine');
       renderBootStatus();
     });
     semanticWorker=client;
     try{
-      const binary=async name=>{
-        const r=await fetch('data/'+name+'?v='+(MAN.dataVersion||'0'),{signal});
-        if(!r.ok)throw new Error(name+' HTTP '+r.status);
-        const v=new Float32Array(await r.arrayBuffer());
-        if(v.length!==data.N*512)throw new Error(name+' dimensions mismatch');
-        return v;
-      };
+      const binary=name=>loadEmbedding(name,data.N,{signal});
       const [IE,TE]=await Promise.all([binary('image_emb.bin'),binary('text_emb.bin'),client.ready]);
       if(signal.aborted)throw signal.reason;
       data.IE=IE;data.TE=TE;
@@ -6505,11 +6499,12 @@ renderEditableExportCard();
 
 /* ---------------- go ---------------- */
 onBootState(bootStatus);
+const startupRetrieval=boot();
 await loadManifest();
 initProviders();
 syncSubCount();
 const startupModels=Promise.all([populateModels(), populateParserModels()]);
-await boot();
+await startupRetrieval;
 await startupModels;
 $('#manifestHint').textContent = tt('manifest.hint',{d:MAN.updated});
 </script>

@@ -1,0 +1,38 @@
+[
+  {
+    "before": "import {createRetrievalBoot,createSemanticWorker} from './retrieval-boot.mjs';",
+    "after": "import {createRetrievalBoot,createSemanticWorker} from './retrieval-boot.mjs';\nimport {loadKeywordIndex, loadEmbedding} from './retrieval-domestic.mjs';"
+  },
+  {
+    "before": "bootWords('正在加载基础检索索引','Loading keyword index')",
+    "after": "bootWords('正在加载基础检索索引（国内优先，自动切源，最长 30 秒）','Loading keyword index (domestic first, automatic fallback, up to 30 seconds)')"
+  },
+  {
+    "before": "  loadCore:async signal=>{\n    await loadManifest();\n    const DV=MAN.dataVersion||'0';\n    const json=async name=>{\n      const r=await fetch('data/'+name+'?v='+DV,{signal});\n      if(!r.ok)throw new Error(name+' HTTP '+r.status);\n      return r.json();\n    };\n    const [figs,ids,bm]=await Promise.all(['figures.json','ids.json','bm25.json'].map(json));\n    const next={figs,ids,bm,IE:null,TE:null,N:ids.length};\n    const index=buildIndex(next);\n    if(signal.aborted)throw signal.reason;\n    data=next;retrievalIndex=index;\n  },\n",
+    "after": "  loadCore:async signal=>{\n    const loaded=await loadKeywordIndex({signal,onProgress:progress=>{\n      if(progress.status==='cache-check')bootProgress=bootWords('检查本地索引缓存','Checking local index cache');\n      else if(progress.status==='cache')bootProgress=bootWords('已恢复本地索引缓存','Restored local index cache');\n      else if(progress.status==='build')bootProgress=bootWords('下载已校验，正在后台构建索引','Verified; building index in background');\n      else bootProgress=(progress.source==='国内'?bootWords('国内线路','Domestic route'):bootWords('备用线路','Fallback route'))+' · '+(progress.file||'').split('/').pop()+(progress.total?' '+Math.round(progress.loaded/progress.total*100)+'%':'');\n      renderBootStatus();\n    }});\n    if(signal.aborted)throw signal.reason;\n    data=loaded.data;retrievalIndex=loaded.index;\n  },\n"
+  },
+  {
+    "before": "new URL('./retrieval-worker.mjs',import.meta.url)",
+    "after": "new URL('./retrieval-domestic-worker.mjs',import.meta.url)"
+  },
+  {
+    "before": "bootProgress=(progress.file||'model').split('/').pop()+' '+Math.round(progress.loaded/progress.total*100)+'%';",
+    "after": "bootProgress=(progress.source==='国内'?bootWords('国内线路 · ','Domestic route · '):progress.source?bootWords('备用线路 · ','Fallback route · '):'')+(progress.file||'model').split('/').pop()+' '+Math.round(progress.loaded/progress.total*100)+'%';"
+  },
+  {
+    "before": "      else if(progress.status==='initialize')bootProgress=bootWords('下载完成，正在初始化计算引擎','Downloaded; initializing inference engine');",
+    "after": "      else if(progress.status==='cache')bootProgress=bootWords('使用已缓存语义资源','Using cached semantic resources');\n      else if(progress.status==='source')bootProgress=(progress.source==='国内'?bootWords('国内线路 · ','Domestic route · '):bootWords('备用线路 · ','Fallback route · '))+(progress.file||'model').split('/').pop();\n      else if(progress.status==='initialize')bootProgress=bootWords('下载完成，正在初始化计算引擎','Downloaded; initializing inference engine');"
+  },
+  {
+    "before": "      const binary=async name=>{\n        const r=await fetch('data/'+name+'?v='+(MAN.dataVersion||'0'),{signal});\n        if(!r.ok)throw new Error(name+' HTTP '+r.status);\n        const v=new Float32Array(await r.arrayBuffer());\n        if(v.length!==data.N*512)throw new Error(name+' dimensions mismatch');\n        return v;\n      };\n",
+    "after": "      const binary=name=>loadEmbedding(name,data.N,{signal});\n"
+  },
+  {
+    "before": "onBootState(bootStatus);\nawait loadManifest();",
+    "after": "onBootState(bootStatus);\nconst startupRetrieval=boot();\nawait loadManifest();"
+  },
+  {
+    "before": "await boot();\nawait startupModels;",
+    "after": "await startupRetrieval;\nawait startupModels;"
+  }
+]

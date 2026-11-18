@@ -1,0 +1,8 @@
+{
+  "forge/index.html": "0718e3587828f99f3268c16310d10e639ca680f0be1c742ea1012152c8f32877",
+  "forge/retrieval-assets.mjs": "718c0b92e8f65759d00ba732c29ea8bfa8bac0b8f525af18246348574b9c06b6",
+  "forge/retrieval-core-worker.mjs": "f7a88f38162a2eb4e95be7230bf9d63abc8902a481e9bffb9596bcda39d7e66b",
+  "forge/retrieval-domestic-worker.mjs": "0b4b3306f56ca2c09012f812c4b7affa865040152f9897aacaaed356a4c64bb9",
+  "forge/retrieval-domestic.mjs": "1a6a39611835e3e6410ddd82bb330b0ce495fcd49e94b75c545810f985a59913",
+  "forge/retrieval-resource-loader.mjs": "c1d32f5da813a12e2f26d5ff49b27ab3584dce5b29f79b7a4bf496290fab67de"
+}
