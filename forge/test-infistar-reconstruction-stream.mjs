@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {fetchReconstructionStream,usesReconstructionStream} from './infistar-reconstruction-stream.mjs';
+import {fetchReconstructionStream,usesReconstructionStream,reconstructionStreamRetryDelay,waitForReconstructionStreamRetry} from './infistar-reconstruction-stream.mjs';
 const enc=new TextEncoder();
 const event=o=>'data: '+JSON.stringify(o)+'\r\n\r\n';
 const chunk=(content,finish_reason=null)=>({id:'test',model:'same-model',choices:[{index:0,delta:{content},finish_reason}]});
@@ -29,4 +29,39 @@ test('broken body retains sanitized request ID and byte/stage diagnostics',async
  await assert.rejects(fetchReconstructionStream('x',{...options,headers:{Authorization:'Bearer '+key}},Infinity,async()=>new Response(new ReadableStream({pull(c){if(reads++)c.error(Error('connection reset '+key));else c.enqueue(enc.encode(event(chunk('partial'))));}}),{headers:{'content-type':'text/event-stream','x-oneapi-request-id':'id-'+key}})),e=>{
   assert.equal(e.reconstructionTransport.stage,'reading_response');assert.ok(e.reconstructionTransport.responseBytes>0);assert.ok(!JSON.stringify(e.reconstructionTransport).includes(key));assert.ok(!e.message.includes(key));return true;
  });
+});
+test('missing confirmation, truncated JSON, partial SSE and empty streams have distinct safe diagnostics',async()=>{
+ for(const [body,code,complete,done] of [
+  [event(chunk('{"scene":{}}')),'missing_terminal',true,false],
+  [event(chunk('{"scene":{}}'))+'data: [DONE]\n\n','missing_terminal',true,true],
+  [event(chunk('{"scene":')),'content_incomplete',false,false],
+  [event(chunk('{"scene":'))+'data: {"choices":','content_incomplete',false,false],
+  [': heartbeat\n\n','empty_stream',false,false],
+  ['data: invalid\n\n','malformed_event',false,false],
+ ])await assert.rejects(fetchReconstructionStream('x',options,Infinity,async()=>response(body)),error=>{
+  assert.equal(error.reconstructionStreamFailure,code);
+  assert.equal(error.reconstructionTransport.contentJsonComplete,complete);
+  assert.equal(error.reconstructionTransport.doneReceived,done);
+  assert.ok(!('content' in error.reconstructionTransport));return true;
+ });
+});
+test('only recoverable interruptions opt into two retries; cancellation and timeout never retry',()=>{
+ for(const code of ['missing_terminal','content_incomplete','empty_stream','connection_interrupted']){
+  const error={reconstructionStreamFailure:code};
+  assert.equal(reconstructionStreamRetryDelay(error,1),null);
+  assert.equal(reconstructionStreamRetryDelay(error,1,true),1000);
+  assert.equal(reconstructionStreamRetryDelay(error,2,true),2000);
+  assert.equal(reconstructionStreamRetryDelay(error,3,true),null);
+  assert.equal(reconstructionStreamRetryDelay({...error,name:'AbortError'},1,true),null);
+  assert.equal(reconstructionStreamRetryDelay({...error,visionTimeout:true},1,true),null);
+ }
+ for(const error of [{},{httpStatus:429},{reconstructionStreamFailure:'malformed_event'},{outputTruncated:true}])assert.equal(reconstructionStreamRetryDelay(error,1,true),null);
+});
+test('backoff aborts immediately, including an already cancelled signal',async()=>{
+ for(const already of [true,false]){
+  const controller=new AbortController();if(already)controller.abort();
+  const pending=waitForReconstructionStreamRetry(60000,controller.signal);
+  if(!already)controller.abort();await assert.rejects(pending,{name:'AbortError'});
+ }
+ await waitForReconstructionStreamRetry(1);
 });

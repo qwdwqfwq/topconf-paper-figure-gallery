@@ -1,0 +1,76 @@
+name: Recover interrupted Infistar reconstruction streams
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/deploy-infistar-stream-recovery.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Record existing workflow lock result
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Verify original protection remains unchanged
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: |
+          echo "Original freeze outcome = $ORIGINAL_OUTCOME; original guard and baseline remain unchanged." >> "$GITHUB_STEP_SUMMARY"
+          git diff --exit-code HEAD^ HEAD -- .github/forge-workflow-lock.json scripts/check-forge-workflow-lock.mjs
+      - name: Test stream completeness and bounded recovery
+        run: |
+          node forge/test-infistar-reconstruction-stream.mjs
+          node scripts/check-infistar-stream-recovery-release.mjs --self-test
+      - uses: actions/download-artifact@v4
+        with:
+          name: notice-infistar-api-proof
+          run-id: 44360068394
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/published-proof
+      - name: Prepare exactly two authorized published files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-infistar-stream-recovery-release.mjs "$RUNNER_TEMP/published-proof/notice-infistar-api-proof.json" --prepare-pages
+      - name: Test the actual publication in Chromium
+        env:
+          REVISION_PLAYWRIGHT: ${{ runner.temp }}/stream-browser/node_modules/playwright
+          REVISION_BUNDLED_BROWSER: '1'
+          INFISTAR_TEST_ROOT: /tmp/infistar-stream-recovery-pages
+        run: |
+          npm install --prefix "$RUNNER_TEMP/stream-browser" --no-package-lock playwright@1.56.1
+          "$RUNNER_TEMP/stream-browser/node_modules/.bin/playwright" install --with-deps chromium
+          node scripts/test-infistar-stream-recovery-browser.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: infistar-stream-recovery-proof
+          path: /tmp/infistar-stream-recovery-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/infistar-stream-recovery-pages
+      - name: Recheck published base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-infistar-stream-recovery-release.mjs "$RUNNER_TEMP/published-proof/notice-infistar-api-proof.json" --check-published-base
+      - name: Publish scoped stream recovery
+        id: deployment
+        uses: actions/deploy-pages@v4

@@ -768,7 +768,7 @@ import {createStep3ModelCatalog} from './step3-model-catalog.mjs?v=20261114';
 import {createRetrievalBoot,createSemanticWorker} from './retrieval-boot.mjs';
 import {loadKeywordIndex, loadEmbedding} from './retrieval-domestic.mjs';
 import {readBitmapSource} from './nonelinear-source.mjs';
-import {fetchReconstructionStream,usesReconstructionStream} from './infistar-reconstruction-stream.mjs?v=20261114-errors';
+import {fetchReconstructionStream,usesReconstructionStream,reconstructionStreamRetryDelay,waitForReconstructionStreamRetry} from './infistar-reconstruction-stream.mjs?v=20261119-recovery';
 import {fetchReconstructionResponses,usesReconstructionResponses} from './infistar-reconstruction-responses.mjs?v=20261117-sol-chat';
 import {prepareQuery,buildIndex,rank} from './retrieval.mjs';
 import {requestChat, pdfResponseJSON, pdfRepairBody} from './chat-api.mjs?v=20261021-unlimited';
@@ -5048,6 +5048,7 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   if(!model) throw new Error(tt('analyze.needmodel'));
   const audit=tileAudit||{};
   const wholeRequest=!!audit.wholeImage;
+  const streamRecovery=!!audit.infistarStreamRecovery&&wholeRequest&&$('#provider').value==='infistar'&&!usesReconstructionResponses('infistar',model,true);
   const limitedImages=$('#provider').value==='ark'||/^doubao-/i.test(model)||/^https:\/\/ark\.[^/]*volces\.com(?:\/|$)/i.test(baseURL());
   const detail=(wholeRequest||audit.wholeImageAssessment)&&/^gpt-6\.1-sol(?:$|-)/i.test(model)?'original':'high';
   const prepareBody=body=>{
@@ -5090,9 +5091,13 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
   const configuredTimeoutMs=Infinity;
   let lastError=null;
   let previousResponse='';
-  const formatAttempts=Math.max(1,Math.min(3,Number(audit.maxAttempts)||3));
+  const formatAttempts=streamRecovery?1:Math.max(1,Math.min(3,Number(audit.maxAttempts)||3));
   const maxAttempts=Math.min(3,audit.maxAttempts||3);
   for(let attempt=1;attempt<=maxAttempts;attempt++){
+    if(streamRecovery){
+      if(audit.signal?.aborted){lastError=new DOMException('Reconstruction stopped','AbortError');break;}
+      audit.state='pending';
+    }
     const remainingBudget=Number.isFinite(audit.maxTotalMs)
       ? audit.maxTotalMs-(Date.now()-audit.startedAt) : Infinity;
     if(remainingBudget<1000) break;
@@ -5288,20 +5293,28 @@ async function requestEditableScene(imageDataUri,W,H,tileAudit,revision){
     }catch(err){
       lastError=err;
       if(err.reconstructionTransport)audit.transport={...err.reconstructionTransport};
+      if(streamRecovery&&!responseRecord&&err.reconstructionTransport){
+        // Persist safe metadata for every failed attempt, never partial scene text.
+        responseRecord=await rememberReconResponse({stage:'whole-image',model,attempt,request:audit.requestParameters,status:audit.transport.status??null,incomplete:true,envelope:'',content:'',transport:{...audit.transport}});
+      }
       if(responseRecord){responseRecord.error=String(err.message||err);await persistReconArchive();}
       audit.lastError=String(err&&err.message||err);
-      const delay=err.imageTransportFailure?null:reconstructionRetryDelay(err,attempt,formatAttempts);
+      const delay=streamRecovery?reconstructionStreamRetryDelay(err,attempt,true):err.imageTransportFailure?null:reconstructionRetryDelay(err,attempt,formatAttempts);
       if(attempt>=maxAttempts || audit.signal?.aborted || delay===null || (Number.isFinite(audit.maxTotalMs)&&Date.now()-audit.startedAt+delay+1000>=audit.maxTotalMs)) break;
       audit.state='retrying';
       audit.retryDelayMs=delay;
-      await new Promise(resolve=>setTimeout(resolve,delay));
+      if(streamRecovery){
+        try{await waitForReconstructionStreamRetry(delay,audit.signal);}
+        catch(error){lastError=error;break;}
+      }else await new Promise(resolve=>setTimeout(resolve,delay));
     }
   }
-  audit.state='failed';
+  audit.state=streamRecovery&&audit.signal?.aborted?'cancelled':'failed';
   audit.finishedAt=Date.now();
   audit.durationMs=audit.finishedAt-audit.startedAt;
   audit.attempts=audit.attempt||maxAttempts;
   if(lastError)lastError.message=reconstructionFailureMessage(lastError,audit.attempts,GAL_I18N.lang==='zh',audit)||lastError.message;
+  if(streamRecovery&&reconstructionStreamRetryDelay(lastError,1,true)!==null)lastError.message+='（已请求 '+audit.attempts+' 次，自动重试已结束；可下载诊断记录）';
   if(lastError&&audit.transport?.requestId&&!lastError.message.includes(audit.transport.requestId))lastError.message+=' [request-id: '+audit.transport.requestId+']';
   audit.error=String(lastError&&lastError.message||lastError||tt('recon.badjson'));
   throw lastError||new Error(tt('recon.badjson'));
@@ -5495,7 +5508,7 @@ async function runReconstruction(options={}){
   window.__ffDirectTiming=audit;window.__ffReconResponses=[];window.__ffReconArchive=null;
   Object.assign(st,{svg:'',baseSvg:'',scene:null,partialScene:null,wholeImageResult:null,vectorScene:null,fidelityScene:null,vectorSvg:'',fidelitySvg:'',exportMode:'vector',recon:null,reconFailed:false,reconError:''});
   const formatElapsed=ms=>{const seconds=Math.floor(Math.max(0,ms)/1000);return Math.floor(seconds/60)+':'+String(seconds%60).padStart(2,'0');};
-  const timer=setInterval(()=>{if(audit.state==='pending'&&status)status.textContent='单次整图识别中 · '+formatElapsed(Date.now()-startedAt)+' · 不进行分区、验收或修补';},1000);
+  const timer=setInterval(()=>{if(audit.state==='pending'&&status){const call=audit.tiles[0];status.textContent=(call?.infistarStreamRecovery&&call.state==='retrying'?'流式响应中断，准备自动重试（最多 2 次）':call?.infistarStreamRecovery&&call.attempt>1?'整图识别自动重试 '+(call.attempt-1)+'/2':'单次整图识别中')+' · '+formatElapsed(Date.now()-startedAt)+' · 不进行分区、验收或修补';}},1000);
   try{
     const src=await ensureBitmapDataUrl(syncStep3Bitmap(),controller.signal);
     if(!src)throw Error('请先上传位图');
@@ -5504,7 +5517,9 @@ async function runReconstruction(options={}){
     Object.assign(audit,{sourceWidth:W,sourceHeight:H,pinnedModel,reasoningEffort:reasoningEffort('recon')});
     audit.stages.prepareMs=Date.now()-startedAt;audit.phase='whole-image-recognition';
     await persistReconArchive({status:'running',source:{width:W,height:H},model:pinnedModel,pipeline:audit.pipeline});
-    const call={wholeImage:true,nativeLayout:false,recognitionRecovery:true,inputWidth:W,inputHeight:H,pinnedModel,signal:controller.signal,maxAttempts:1,maxTotalMs:Infinity};audit.tiles.push(call);
+    const infistarStreamRecovery=$('#provider').value==='infistar'&&!usesReconstructionResponses('infistar',pinnedModel,true);
+    if(infistarStreamRecovery){audit.skipped=audit.skipped.filter(stage=>stage!=='automatic-retry');audit.streamRecovery={maxRetries:2,only:'recoverable-infistar-chat-stream-interruptions'};}
+    const call={wholeImage:true,nativeLayout:false,recognitionRecovery:true,inputWidth:W,inputHeight:H,pinnedModel,signal:controller.signal,maxAttempts:infistarStreamRecovery?3:1,maxTotalMs:Infinity,infistarStreamRecovery};audit.tiles.push(call);
     const recognitionStart=Date.now();
     let scene;
     try{scene=await requestEditableScene(src,W,H,call);}finally{audit.stages.recognitionMs=Date.now()-recognitionStart;delete call.signal;}
@@ -5515,7 +5530,7 @@ async function runReconstruction(options={}){
     Object.assign(audit,{state:'succeeded',phase:'complete',completedTiles:1,nodeCount:scene.nodes.length,finishedAt:Date.now()});audit.durationMs=audit.finishedAt-startedAt;
     Object.assign(st,{scene,svg,baseSvg:svg,vectorScene:scene,vectorSvg:svg,fidelityScene:null,fidelitySvg:'',exportMode:'vector',source:'bitmap',recon:{mode:'vector',nodes:scene.nodes.length,fidelityTiles:0,audit,qualityState:'not-run'},reconFailed:false,reconError:''});
     renderEditableExportCard();applyExportFont(st.font||'original');
-    if(status)status.textContent='单次整图识别完成：'+scene.nodes.length+' 个元素，原图 '+W+' × '+H+'；耗时 '+formatElapsed(audit.durationMs)+'。可直接选择格式导出。';
+    if(status)status.textContent=(call.infistarStreamRecovery&&call.attempts>1?'整图识别完成（自动重试 '+(call.attempts-1)+' 次）':'单次整图识别完成')+'：'+scene.nodes.length+' 个元素，原图 '+W+' × '+H+'；耗时 '+formatElapsed(audit.durationMs)+'。可直接选择格式导出。';
     return true;
   }catch(err){
     Object.assign(audit,{state:controller.signal.aborted?'cancelled':'failed',phase:'complete',finishedAt:Date.now(),error:safeExportError(err)});audit.durationMs=audit.finishedAt-startedAt;
