@@ -13,22 +13,34 @@ function browser(){
  vm.runInNewContext(readFileSync(new URL('./nonelinear-config.js',import.meta.url),'utf8'),{window,URL,Request,Headers});
  return {window,calls};
 }
-test('all known provider request families reach fixed Tencent routes',async()=>{
+test('Nonelinear request families retain fixed Tencent routes',async()=>{
  const {window,calls}=browser();assert.equal(window.FF_NONELINEAR_BASE,origin+'/v1');
  for(const [url,method,path] of [
   ['https://api.nonelinear.com.cn/v1/chat/completions','POST','/v1/chat/completions'],
   ['https://gallery-nonelinear-relay.lixiao-gallery.workers.dev/v1/images/edits','POST','/v1/images/edits'],
   ['https://nonelinear.com.cn/models?offset=0&limit=100','GET','/providers/nonelinear/models?offset=0&limit=100'],
-  ['https://nonelinear.com.cn/api/upload-file','POST','/providers/nonelinear/api/upload-file'],
+  ['https://nonelinear.com.cn/api/upload-file','POST','/providers/nonelinear/api/upload-file']
+ ]){
+  const body=method==='POST'?'unchanged request bytes':undefined;
+  await window.fetch(url,{method,body,headers:{Authorization:'Bearer fixture'}});
+  const [target,init]=calls.at(-1);assert.equal(target,origin+path);assert.equal(init.body,body);assert.equal(init.credentials,'omit');assert.equal(init.redirect,'error');
+ }
+});
+
+test('temporary bypass leaves every Infistar request family browser-direct',async()=>{
+ const {window,calls}=browser();
+ for(const [url,method] of [
+  ['https://infistar.cc/v1/models','GET'],
+  ['https://infistar.ai/v1/chat/completions','POST'],
   ['https://infistar.cc/v1/messages','POST','/providers/infistar-cc/v1/messages'],
   ['https://infistar.ai/v1/responses','POST','/providers/infistar-ai/v1/responses'],
   ['https://infistar.cc/v1beta/models/gemini-fixture:streamGenerateContent?alt=sse','POST','/providers/infistar-cc/v1beta/models/gemini-fixture:streamGenerateContent?alt=sse'],
   ['https://infistar.cc/v1/images/generations','POST','/providers/infistar-cc/v1/images/generations'],
   ['https://infistar.cc/pricing','GET','/providers/infistar-cc/pricing']
  ]){
-  const body=method==='POST'?'unchanged request bytes':undefined;
-  await window.fetch(url,{method,body,headers:{Authorization:'Bearer fixture'}});
-  const [target,init]=calls.at(-1);assert.equal(target,origin+path);assert.equal(init.body,body);assert.equal(init.credentials,'omit');assert.equal(init.redirect,'error');
+  const init={method,body:method==='POST'?'unchanged request bytes':undefined,headers:{Authorization:'Bearer fixture'}};
+  await window.fetch(url,init);
+  assert.equal(calls.at(-1)[0],url);assert.equal(calls.at(-1)[1],init);
  }
 });
 test('custom endpoints and unsupported URL variants are never redirected',async()=>{
@@ -44,7 +56,7 @@ test('FormData upload is preserved and Request retains headers, bytes and cancel
  assert.equal(calls.at(-1)[1].body,form);assert.equal(calls.at(-1)[1].signal,controller.signal);
  const request=new Request('https://infistar.cc/v1/images/edits',{method:'POST',body:'exact JSON bytes',headers:{Authorization:'Bearer fixture','Content-Type':'application/json'},signal:controller.signal});
  await window.fetch(request);const redirected=calls.at(-1)[0];
- assert.equal(redirected.url,origin+'/providers/infistar-cc/v1/images/edits');assert.equal(await redirected.text(),'exact JSON bytes');assert.equal(redirected.headers.get('Authorization'),'Bearer fixture');
+ assert.equal(redirected,request);assert.equal(redirected.url,request.url);assert.equal(await redirected.text(),'exact JSON bytes');assert.equal(redirected.headers.get('Authorization'),'Bearer fixture');
  controller.abort();assert.equal(redirected.signal.aborted,true);
 });
 test('both providers use Tencent jobs and keep the configured upstream entrance',()=>{

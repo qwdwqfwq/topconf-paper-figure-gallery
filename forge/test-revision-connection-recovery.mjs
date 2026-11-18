@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createRevisionImageJobClient} from './revision-image-job.mjs';
 
-const input=()=>({url:'https://infistar.cc/v1/images/generations',body:{model:'fixture',image:['original']},key:'fixture-key',task:{id:crypto.randomUUID()},saveTask:async()=>{}});
+const input=()=>({url:'https://gallery-nonelinear-relay.lixiao-gallery.workers.dev/v1/images/generations',body:{model:'fixture',image:['original']},key:'fixture-key',task:{id:crypto.randomUUID()},saveTask:async()=>{}});
 test('status and result reads recover outages longer than the former six-failure cutoff, with one paid submission',async()=>{
  const task=input();let puts=0,status=0,result=0;const progress=[];
  const client=createRevisionImageJobClient({wait:async()=>{},pollMs:0,retryMs:0,fetchImpl:async(url,init={})=>{
@@ -41,7 +41,7 @@ test('stored result download recovers repeated outages and transient HTTP withou
  globalThis.FileReader=class{async readAsDataURL(blob){this.result='data:image/png;base64,'+Buffer.from(await blob.arrayBuffer()).toString('base64');this.onload();}};
  try{
   const image=await receiveRevisionOutput(hosted,'nonelinear',()=>assert.fail('must use private receiver'),{wait:async()=>{},onProgress:p=>progress.push(p),fetchImpl:async(url,init)=>{
-   assert.match(url,/gallery-revision-images.*\/revision-image$/);assert.equal(init.method,'POST');assert.equal(init.credentials,'omit');assert.equal(init.redirect,'error');assert.deepEqual(JSON.parse(init.body),{url:hosted});
+   assert.equal(url,'https://analysis.topconf-paper-figure-gallery.cn/revision-image');assert.equal(init.method,'POST');assert.equal(init.credentials,'omit');assert.equal(init.redirect,'error');assert.deepEqual(JSON.parse(init.body),{url:hosted});
    if(calls++<8)throw TypeError('Failed to fetch');
    if(calls===10)return new Response('temporary',{status:503});
    return new Response('pixels',{headers:{'Content-Type':'image/png'}});

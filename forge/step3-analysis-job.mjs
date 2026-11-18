@@ -1,5 +1,6 @@
 // Used only by analyzeReferences(). Image generation and exports do not import it.
 import {requestDirectAnalysis} from './step3-analysis-direct.mjs';
+import {TEMPORARY_INFISTAR_DIRECT} from './infistar-temporary-direct.mjs';
 export const ANALYSIS_JOB_BASE='https://analysis.topconf-paper-figure-gallery.cn/analysis';
 // Tencent runs the durable analysis service directly, without an overseas ingress.
 export const ANALYSIS_JOB_BASES=Object.freeze([ANALYSIS_JOB_BASE]);
@@ -41,9 +42,13 @@ export async function requestReferenceAnalysis({provider,url,init,fetchImpl=glob
  }
  const start=now();
  const resume=saved&&/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/.test(saved.id)&&Number.isFinite(saved.created)&&saved.created<=start&&saved.created>start-86400000;
- // New analyses use Tencent job storage. Keep old browser-direct records
- // on their original path so a lost response cannot trigger another paid call.
- if(upstream==='infistar-cc'&&resume&&saved.transport==='direct')return requestDirectAnalysis({url,init,fetchImpl,storage,slot,id:saved.id,now,deadlineMs});
+ // Temporary ingress bypass; preserve uncertain paid jobs across route changes.
+ const infistar=upstream==='infistar-cc'||upstream==='infistar-ai';
+ if(infistar&&resume&&saved.transport==='direct')return requestDirectAnalysis({url,init,fetchImpl,storage,slot,id:saved.id,now,deadlineMs});
+ if(infistar&&TEMPORARY_INFISTAR_DIRECT){
+  if(resume)return new Response(JSON.stringify({error:{message:'此归纳任务已记录在原后台，备案期间暂不能取回。任务编号 '+saved.id+' 已保留；为避免重复扣费，本次未重新提交模型。请先核对服务商记录。',code:'analysis_temporary_direct_legacy_job',request_id:saved.id}}),{status:409,headers:{'Content-Type':'application/json'}});
+  return requestDirectAnalysis({url,init,fetchImpl,storage,slot,id:uuid(),now,deadlineMs});
+ }
  const task=resume?saved:{id:uuid(),created:start,endpoint:jobBases[0]};storageSet(storage,slot,task);
  const bases=[...new Set(jobBases)];
  if(!bases.length)throw new Error('归纳服务入口未配置');

@@ -33,31 +33,20 @@ test('custom endpoints and other stages retain their original native request',as
  }
 });
 
-test('existing jobs in both Infistar environments resume without another model submission',async()=>{
+test('temporary direct routing preserves old Infistar jobs without replay',async()=>{
  for(const host of ['cc','ai']){
-  let puts=0,gets=0;
-  const c=config(async(target,options)=>{
-   assert.ok(target.startsWith(ANALYSIS_JOB_BASE+'/jobs/'));
-   const h=new Headers(options.headers);
-   assert.equal(h.get('Authorization'),'Bearer '+key);
-   assert.equal(h.get('X-Analysis-Upstream'),'infistar-'+host);
-   if(options.method==='PUT'){puts++;assert.equal(options.body,init.body);return json({state:'running'},202);}
-   gets++;if(gets===1)throw TypeError('Failed to fetch');
-   return json({choices:[{message:{content:'saved '+host}}]});
-  });
-  c.provider='infistar';c.url='https://infistar.'+host+'/v1/chat/completions';
-  await seedBackend(c);
-  assert.equal((await (await requestReferenceAnalysis(c)).json()).choices[0].message.content,'saved '+host);
-  assert.equal(puts,0);assert.equal(gets,2);
+  let calls=0;const c=config(async()=>{calls++;throw Error('must not call');});
+  c.provider='infistar';c.url='https://infistar.'+host+'/v1/chat/completions';await seedBackend(c);
+  const response=await requestReferenceAnalysis(c);assert.equal(response.status,409);
+  assert.equal((await response.json()).error.code,'analysis_temporary_direct_legacy_job');
+  assert.equal(calls,0);assert.equal(JSON.parse([...c.map.values()][0]).id,id);
  }
 });
-
-test('unavailable job service never falls back to a second paid request',async()=>{
- const targets=[];const c=config(async target=>{targets.push(target);throw TypeError('Failed to fetch');});
- c.provider='infistar';c.url='https://infistar.ai/v1/chat/completions';c.deadlineMs=30;
- await assert.rejects(requestReferenceAnalysis(c),new RegExp(id));
- assert.ok(targets.every(t=>t.startsWith(ANALYSIS_JOB_BASE)));
- assert.equal(JSON.parse([...c.map.values()][0]).id,id);
+test('failed temporary direct call is not replayed after refresh',async()=>{
+ const targets=[];const c=config(async(target,options)=>{targets.push(target);assert.equal(options.method,'POST');throw TypeError('Failed to fetch');});
+ c.provider='infistar';c.url='https://infistar.ai/v1/chat/completions';
+ await assert.rejects(requestReferenceAnalysis(c));await assert.rejects(requestReferenceAnalysis(c));
+ assert.deepEqual(targets,[c.url]);assert.equal(JSON.parse([...c.map.values()][0]).id,id);
 });
 
 test('a saved terminal error is returned immediately, while storage outages are retried',async()=>{
@@ -113,7 +102,7 @@ test('a stalled primary result switches ingress before its timeout, including a 
  for(const bodyStall of [false,true]){
   let puts=0,reads=0,aborted=0;const ids=new Set();
   const c=config(async(target,options)=>{
-   ids.add(new URL(target).pathname.split('/')[2]);
+   ids.add(new URL(target).pathname.match(/\/jobs\/([^/]+)/)?.[1]);
    if(options.method==='PUT'){puts++;return json({state:'running'},202);}
    reads++;
    if(target.startsWith(ANALYSIS_JOB_BASE)){
@@ -133,13 +122,13 @@ test('a stalled primary result switches ingress before its timeout, including a 
 test('a failed ingress immediately switches and retains authorization, environment and completed task across refresh',async()=>{
  let puts=0,alternateReads=0;
  const c=config(async(target,options)=>{
-  const h=new Headers(options.headers);assert.equal(h.get('Authorization'),'Bearer '+key);assert.equal(h.get('X-Analysis-Upstream'),'infistar-cc');
+  const h=new Headers(options.headers);assert.equal(h.get('Authorization'),'Bearer '+key);assert.equal(h.get('X-Analysis-Upstream'),null);
   if(options.method==='PUT'){puts++;throw new DOMException('lost acknowledgement','TimeoutError');}
   if(target.startsWith(ANALYSIS_JOB_BASE))throw TypeError('route offline');
   alternateReads++;assert.ok(target.endsWith('/'+id+'/result'));
   return json({choices:[{message:{content:'already paid'}}]});
  });
- Object.assign(c,{provider:'infistar',url:'https://infistar.cc/v1/chat/completions',jobBases:[ANALYSIS_JOB_BASE,alternate],hedgeMs:60000});
+ Object.assign(c,{jobBases:[ANALYSIS_JOB_BASE,alternate],hedgeMs:60000});
  await seedBackend(c);
  for(let attempt=0;attempt<2;attempt++)assert.equal((await (await requestReferenceAnalysis(c)).json()).choices[0].message.content,'already paid');
  assert.equal(puts,0);assert.equal(alternateReads,2);

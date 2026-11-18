@@ -1,10 +1,20 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createInitialImageJobClient} from './step3-initial-image-job.mjs';
+import {createInitialImageJobClient,createInternationalInitialImageJobClient} from './step3-initial-image-job.mjs';
 import {createInfistarJobClient} from './step3-infistar-job.mjs';
 const input={url:'https://infistar.cc/v1/images/generations',body:{model:'gpt-image-2.5-sunburst',prompt:'fixture'},key:'fixture-key'};
 const reply=(data,status=200)=>new Response(JSON.stringify(data),{status});
 const options={pollMs:1,retryMs:1,deadlineMs:1000,requestMs:50,resultMs:200,wait:async()=>{}};
+for(const url of ['https://infistar.cc/v1/images/generations','https://infistar.ai/v1/images/generations','https://infistar.cc/v1beta/models/gemini-nano-banana-2.1:generateContent'])test('temporary international initial image entry calls original Infistar URL directly: '+url,async()=>{
+ const body={model:'fixture-model',prompt:'unchanged prompt',size:'2K',aspect_ratio:'16:9',image:['data:image/png;base64,fixture']};
+ const calls=[];
+ const client=createInternationalInitialImageJobClient({...options,fetchImpl:async(target,init)=>{
+  calls.push(target);assert.equal(target,url);assert.equal(init.method,'POST');assert.equal(new Headers(init.headers).get('Authorization'),'Bearer fixture-key');assert.deepEqual(JSON.parse(init.body),url.includes('/images/generations')?{...body,stream:true}:body);
+  return reply({data:[{b64_json:'fixture-image'}]});
+ }});
+ const result=await client.request({...input,url,body});
+ assert.equal(result.ok,true);assert.match(result.text,/fixture-image/);assert.equal(calls.length,1);
+});
 for(const [provider,url,model] of [
  ['Infistar','https://infistar.cc/v1/images/generations','gpt-image-2.5-sunburst'],
  ['Infistar','https://infistar.cc/v1beta/models/gemini-3.1-flash-image:generateContent','gemini-3.1-flash-image'],

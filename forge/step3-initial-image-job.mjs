@@ -1,5 +1,7 @@
 import {imageJobRoute,packImageBody} from './step3-image-protocol.mjs';
 import {internationalInitialImageUrl} from './step3-international-image-route.mjs';
+import {TEMPORARY_INFISTAR_DIRECT} from './infistar-temporary-direct.mjs';
+import {requestStep3ImageStream} from './step3-image-stream.mjs';
 const ENDPOINT='https://analysis.topconf-paper-figure-gallery.cn/initial';
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const transientStatus=status=>status===408||status===425||status===429||status>=500;
@@ -83,6 +85,8 @@ export function createInitialImageJobClient({fetchImpl=globalThis.fetch.bind(glo
 let defaultClient;
 export function createInternationalInitialImageJobClient(options){
  const client=createInitialImageJobClient(options);
- return {request:input=>client.request({...input,url:internationalInitialImageUrl(input.url,input.body),...(imageJobRoute(input.url)==='infistar'?{routePolicy:'preserve-initial-host'}:{})})};
+ return {request:input=>imageJobRoute(input.url)==='infistar'&&TEMPORARY_INFISTAR_DIRECT
+  ?requestStep3ImageStream({...input,fetchImpl:options?.fetchImpl||globalThis.fetch.bind(globalThis),timeoutMs:options?.deadlineMs||15*60*1000})
+  :client.request({...input,url:internationalInitialImageUrl(input.url,input.body),...(imageJobRoute(input.url)==='infistar'?{routePolicy:'preserve-initial-host'}:{})})};
 }
 export const requestInfistarImageJob=options=>(defaultClient||=createInternationalInitialImageJobClient()).request(options);

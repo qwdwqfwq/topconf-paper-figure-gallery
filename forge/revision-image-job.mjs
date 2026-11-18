@@ -1,6 +1,7 @@
 import {revisionFailure} from './revision-diagnostics.mjs';
 import {packImageBody} from './step3-image-protocol.mjs';
 import {revisionImageJobRoute} from './revision-image-protocol.mjs';
+import {TEMPORARY_INFISTAR_DIRECT} from './infistar-temporary-direct.mjs';
 import {requestStep3ImageStream} from './step3-image-stream.mjs';
 import {REVISION_CHUNK,REVISION_UPLOAD_MAX,revisionDigest} from './revision-upload.mjs';
 const ENDPOINT='https://analysis.topconf-paper-figure-gallery.cn/revision';
@@ -12,7 +13,7 @@ export function createRevisionImageJobClient({fetchImpl=globalThis.fetch.bind(gl
   if(!task?.id||typeof saveTask!=='function')throw Error('修改任务尚未保存；本次未提交。');
   if(task.raw)return task.raw;
   async function save(){try{await saveTask(task);}catch(error){throw revisionFailure(error,'storage',{jobId:task.id},key);}}
-  if(!revisionImageJobRoute(url)){
+  if(!revisionImageJobRoute(url)||(revisionImageJobRoute(url)==='infistar'&&(TEMPORARY_INFISTAR_DIRECT||task.transport==='direct'))){
    // Preserve existing custom/other-provider support without turning this
    // private relay into an unrestricted proxy. Uncertain direct calls are not replayed.
    if(task.submitted)throw Error('此服务商使用浏览器直连，上次结果未确认；原图和输入已保留，未重复生图。请先核对服务商记录。');
