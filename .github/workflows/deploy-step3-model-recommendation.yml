@@ -1,0 +1,63 @@
+name: Publish Step 3 recommended model labels
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/deploy-step3-model-recommendation.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Record original protection outcome
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Verify original protection remains unchanged
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: |
+          echo "Original freeze outcome = $ORIGINAL_OUTCOME; baseline and guard remain unchanged." >> "$GITHUB_STEP_SUMMARY"
+          git diff --exit-code HEAD^ HEAD -- .github/forge-workflow-lock.json scripts/check-forge-workflow-lock.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          name: reasoning-effort-note-proof
+          run-id: 44500863369
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/published-proof
+      - name: Prepare only Step 3 model display labels
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-step3-model-recommendation-release.mjs "$RUNNER_TEMP/published-proof/reasoning-effort-note-proof.json" --prepare-pages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: step3-model-recommendation-proof
+          path: /tmp/step3-model-recommendation-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/step3-model-recommendation-pages
+      - name: Recheck publication base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-step3-model-recommendation-release.mjs "$RUNNER_TEMP/published-proof/reasoning-effort-note-proof.json" --check-published-base
+      - name: Publish approved model labels
+        id: deployment
+        uses: actions/deploy-pages@v4

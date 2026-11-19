@@ -20,6 +20,20 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
   const unique=list=>[...new Set(list)];
   const modelKind=(m,c,kinds=officialKinds)=>Object.hasOwn(kinds,m)?kinds[m]:c.provider==='infistar'&&isOfficialGeminiImageModel(m)?'image':kindOf(m);
   const conciseImage=c=>['infistar','nonelinear'].includes(c.provider)&&c.mode==='image';
+  function updateRecommendationLabels(){
+    if(!conciseImage(readConfig()))return;
+    for(const option of select.options){
+      if(/^gemini-nano-banana(?:-|$)/i.test(option.value)){
+        const label=option.value+'（推荐）';
+        if(option.textContent!==label)option.textContent=label;
+      }
+    }
+  }
+  // Only Step 3 image labels change; option values and shared renderers stay intact.
+  // Reapply after the display's expand/collapse and language-change rerenders.
+  const Observer=select.ownerDocument?.defaultView?.MutationObserver;
+  const recommendationObserver=Observer?new Observer(updateRecommendationLabels):null;
+  recommendationObserver?.observe(select,{childList:true});
   const selectableImage=(m,c)=>c.provider==='nonelinear'||(c.provider==='infistar'?!/^gpt-image-2\.6(?:-|$)/i.test(m):supportsStep3ReferenceImage(c,m));
   const filter=(list,c,analysis=false)=>unique(list.filter(m=>analysis?(Object.hasOwn(officialVisual,m)?officialVisual[m]:isVisualModel(m,c.vision||[])):modelKind(m,c)===(c.mode==='svg'?'chat':'image')&&(c.mode!=='image'||selectableImage(m,c))));
   const permissionNote=()=>text('目录不代表当前 Key 的调用权限。','The catalog does not confirm this key’s inference access.');
@@ -43,6 +57,7 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
     (analysis?analysisDisplay:mainDisplay).render({models:list,selected,source,enabled:supported,
       scope:JSON.stringify([c.provider,c.base,analysis?'analysis':c.mode]),
       placeholder:text('暂无适用模型，请刷新目录','No compatible models; refresh the catalog')});
+    if(!analysis)updateRecommendationLabels();
   }
   function render(c,rows,source,message,fallback=initial(c)){
     const main=filter(rows,c),analysis=filter(rows,c,true);
@@ -166,7 +181,7 @@ export function createStep3ModelCatalog({select,analysisSelect,status,readConfig
     const c=readConfig();
     const kinds=lastConfig&&identity(lastConfig)===identity(c)?officialKinds:{};
     return !!model&&c.mode==='image'&&modelKind(model,c,kinds)==='image'&&selectableImage(model,c);
-  },dispose(){++revision;resolutionDisplay.dispose();mainDisplay.dispose();analysisDisplay.dispose();clearTimeout(scheduled);clearInterval(timer);globalThis.removeEventListener?.('focus',checkFreshness);globalThis.document?.removeEventListener('visibilitychange',checkFreshness);},schedule(){
+  },dispose(){++revision;recommendationObserver?.disconnect();resolutionDisplay.dispose();mainDisplay.dispose();analysisDisplay.dispose();clearTimeout(scheduled);clearInterval(timer);globalThis.removeEventListener?.('focus',checkFreshness);globalThis.document?.removeEventListener('visibilitychange',checkFreshness);},schedule(){
     ++revision;clearTimeout(scheduled);onLiveModels(null);officialKinds={};officialVisual={};
     const c=readConfig(),fallback=initial(c);render(c,fallback.list,fallback.source,text('设置已更新，即将刷新步骤三模型…','Settings updated; refreshing Step 3 models shortly…'));
     scheduled=setTimeout(refresh,debounceMs);
