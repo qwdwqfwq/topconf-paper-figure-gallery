@@ -38,3 +38,22 @@
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',showNotice,{once:true});
   else showNotice();
 })();
+
+/* Step 1 connection notice. Static display only; independent of generation. */
+(()=>{
+  'use strict';
+  const path=location.pathname.replace(/index\.html$/,'').replace(/\/?$/,'/');
+  if(path!=='/topconf-paper-figure-gallery/forge/')return;
+  function showConnectionNotice(){
+    const header=document.querySelector('#card1 > .step');
+    const contact=header?.querySelector('#authorContactOpen');
+    if(!contact||document.getElementById('gallery-connection-notice'))return;
+    const notice=document.createElement('span');
+    notice.id='gallery-connection-notice';
+    notice.textContent='建议不要挂梯子';
+    notice.style.cssText='flex:1 0 160px;text-align:center;color:#b45309;font-size:16px;font-weight:700;line-height:1.5;';
+    header.insertBefore(notice,contact);
+  }
+  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',showConnectionNotice,{once:true});
+  else showConnectionNotice();
+})();

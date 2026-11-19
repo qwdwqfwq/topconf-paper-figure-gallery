@@ -1,0 +1,63 @@
+name: Publish Step 1 connection notice
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/deploy-step1-network-note.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Record original protection outcome
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Preserve original protection and historical acceptance
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: |
+          echo "Original freeze outcome = $ORIGINAL_OUTCOME; only an independent static notice script may change." >> "$GITHUB_STEP_SUMMARY"
+          git diff --exit-code HEAD^ HEAD -- .github/forge-workflow-lock.json scripts/check-forge-workflow-lock.mjs scripts/check-tutorial-example-images-release.mjs .github/workflows/deploy-tutorial-example-images.yml forge/sw.js
+      - uses: actions/download-artifact@v4
+        with:
+          name: tutorial-image-versions-proof
+          run-id: 44512763021
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/published-proof
+      - name: Verify isolated static notice and identical frozen files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-step1-network-note-release.mjs "$RUNNER_TEMP/published-proof/tutorial-image-versions-proof.json" --prepare-pages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: step1-network-note-proof
+          path: /tmp/step1-network-note-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/step1-network-note-pages
+      - name: Recheck publication base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-step1-network-note-release.mjs "$RUNNER_TEMP/published-proof/tutorial-image-versions-proof.json" --check-published-base
+      - name: Publish Step 1 connection notice
+        id: deployment
+        uses: actions/deploy-pages@v4
