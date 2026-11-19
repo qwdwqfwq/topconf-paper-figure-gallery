@@ -1,0 +1,63 @@
+name: Publish approved tutorial image URL versions
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/deploy-tutorial-image-versions.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Record original protection outcome
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Preserve original protection and historical acceptance
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: |
+          echo "Original freeze outcome = $ORIGINAL_OUTCOME; only two image src values are authorized." >> "$GITHUB_STEP_SUMMARY"
+          git diff --exit-code HEAD^ HEAD -- .github/forge-workflow-lock.json scripts/check-forge-workflow-lock.mjs scripts/check-tutorial-example-images-release.mjs .github/workflows/deploy-tutorial-example-images.yml forge/sw.js
+      - uses: actions/download-artifact@v4
+        with:
+          name: tutorial-example-images-proof
+          run-id: 44509836928
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/published-proof
+      - name: Verify exactly two approved image src changes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-tutorial-image-versions-release.mjs "$RUNNER_TEMP/published-proof/tutorial-example-images-proof.json" --prepare-pages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tutorial-image-versions-proof
+          path: /tmp/tutorial-image-versions-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/tutorial-image-versions-pages
+      - name: Recheck publication base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-tutorial-image-versions-release.mjs "$RUNNER_TEMP/published-proof/tutorial-example-images-proof.json" --check-published-base
+      - name: Publish approved tutorial image URL versions
+        id: deployment
+        uses: actions/deploy-pages@v4
