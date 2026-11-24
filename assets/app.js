@@ -69,6 +69,15 @@
   const sentinel = $("#sentinel");
   const endHint = $("#end-hint");
   const countEl = $("#result-count");
+  const collectionNav = $("#collection-nav");
+  const favoritesView = new URLSearchParams(location.search).get("view") === "favorites";
+  const favoritePrefix = "figgal.favorite.";
+  let favorites = readFavorites();
+  if (favoritesView) {
+    collectionNav.href = "?";
+    collectionNav.dataset.i18n = "fav.back";
+    $("#favorites-heading").hidden = false;
+  }
   $("#total-figures").textContent = figures.length.toLocaleString();
   const nBest = figures.filter((f) => f.award).length;
   const nOral = figures.filter((f) => (f.award ? false : f.tier === "oral")).length;
@@ -83,7 +92,7 @@
     const label = btn.dataset.lk ? GAL_I18N.t(btn.dataset.lk) : btn.dataset.static;
     // No count on the “All” chip: counts["all"] is undefined and used to render
     // a bogus “0” next to it.
-    const n = counts ? counts[btn.dataset.val] : null;
+    const n = counts && !favoritesView ? counts[btn.dataset.val] : null;
     return label + (n ? ` <span class="n">${n}</span>` : "");
   }
   function makeChips(containerId, key, values, labelKeyFor, counts) {
@@ -194,6 +203,66 @@
     return a.length > 5 ? a.slice(0, 5).join(", ") + " et al." : a.join(", ");
   }
 
+  // One key per figure lets tabs save different papers without overwriting each other.
+  function readFavorites() {
+    const ids = new Set();
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith(favoritePrefix)) ids.add(key.slice(favoritePrefix.length));
+      }
+    } catch (_) { /* The gallery still works with browser storage disabled. */ }
+    return ids;
+  }
+
+  function favoriteText(id) {
+    return GAL_I18N.t(favorites.has(id) ? "fav.saved" : "fav.save");
+  }
+
+  function updateFavoriteButton(button, id) {
+    button.setAttribute("aria-pressed", String(favorites.has(id)));
+    button.textContent = favoriteText(id);
+  }
+
+  function refreshFavorites({ preventScroll = true } = {}) {
+    favorites = readFavorites();
+    if (favoritesView) {
+      const focused = document.activeElement;
+      const card = focused.closest(".card");
+      const index = card ? filtered.findIndex((f) => f.id === card.dataset.id) : -1;
+      render(Math.max(PAGE, shown));
+      if (card) {
+        const next = cardFor(card.dataset.id) || gallery.children[Math.min(index, shown - 1)];
+        const control = focused.matches(".card-favorite") ? ".card-favorite" : ".card-link";
+        (next ? next.querySelector(control) : collectionNav).focus({ preventScroll });
+      }
+    } else {
+      gallery.querySelectorAll(".card-favorite").forEach((button) => {
+        updateFavoriteButton(button, button.closest(".card").dataset.id);
+      });
+    }
+    if (currentId) {
+      updateFavoriteButton($("#lb-favorite"), currentId);
+      updateLightboxNav();
+    }
+  }
+
+  function toggleFavorite(id) {
+    try {
+      if (favorites.has(id)) localStorage.removeItem(favoritePrefix + id);
+      else localStorage.setItem(favoritePrefix + id, "1");
+    } catch (_) {
+      window.alert(GAL_I18N.t("fav.error"));
+      return;
+    }
+    refreshFavorites({ preventScroll: false });
+  }
+
+  window.addEventListener("storage", (e) => {
+    if (e.key === null || e.key.startsWith(favoritePrefix)) refreshFavorites();
+  });
+  window.addEventListener("pageshow", (e) => { if (e.persisted) refreshFavorites(); });
+
   /* ---------- chunked render ---------- */
   function ribbonInfo(f) {
     if (f.award === "best") return { className: "rb-best", key: "rib.best" };
@@ -211,7 +280,7 @@
     const eager = idx < 24;
     const imgAttrs = eager ? `src="${f.image}"` : `data-src="${f.image}"`;
     return `
-    <article class="card${f.award ? " is-award" : f.tier ? " is-" + f.tier : ""}" data-id="${f.id}" tabindex="0" role="button" aria-label="${GAL_I18N.t("card.aria", { t: escapeHtml(f.title) })}">
+    <article class="card${f.award ? " is-award" : f.tier ? " is-" + f.tier : ""}" data-id="${f.id}">
       <span class="card-close-target" aria-hidden="true"></span>
       <div class="img-slot" style="${ratio}">
         ${ribbonHtml(f)}
@@ -225,7 +294,10 @@
         </div>
         <h3 class="card-title">${escapeHtml(f.title)}</h3>
         <p class="card-authors">${escapeHtml(authorsText(f))}</p>
-        <span class="card-link"><span class="card-link-image">${GAL_I18N.t("card.viewImage")}</span><span class="card-link-separator">/</span><span class="card-link-paper">${GAL_I18N.t("card.paper")}</span></span>
+        <div class="card-actions">
+          <button class="card-link" type="button" aria-label="${GAL_I18N.t("card.aria", { t: escapeHtml(f.title) })}"><span class="card-link-image">${GAL_I18N.t("card.viewImage")}</span><span class="card-link-separator">/</span><span class="card-link-paper">${GAL_I18N.t("card.paper")}</span></button>
+          <button class="card-favorite" type="button" aria-label="${GAL_I18N.t("fav.label", { t: escapeHtml(f.title) })}" aria-pressed="${favorites.has(f.id)}">${favoriteText(f.id)}</button>
+        </div>
       </div>
     </article>`;
   }
@@ -273,8 +345,8 @@
     gallery.querySelectorAll(".card-img").forEach(wireImg);
   }
 
-  function appendChunk() {
-    const slice = filtered.slice(shown, shown + PAGE);
+  function appendChunk(size = PAGE) {
+    const slice = filtered.slice(shown, shown + size);
     gallery.insertAdjacentHTML("beforeend", slice.map((f, i) => cardHtml(f, shown + i)).join(""));
     wireNewCards();
     // CSS masonry can place newly appended cards ABOVE the current viewport
@@ -295,15 +367,19 @@
     }
   }
 
-  function render() {
-    filtered = sorted(figures.filter(matches));
+  function render(size = PAGE) {
+    const collection = favoritesView ? figures.filter((f) => favorites.has(f.id)) : figures;
+    filtered = sorted(collection.filter(matches));
     // Filter/sort/search changes rewrite the query only; the figure hash, if the
     // lightbox happens to be open, is carried through untouched.
     writeUrl("replaceState", location.hash);
     gallery.innerHTML = "";
     shown = 0;
     empty.hidden = filtered.length > 0;
-    appendChunk();
+    const noFavorites = favoritesView && !collection.length;
+    empty.querySelector("p").textContent = GAL_I18N.t(noFavorites ? "fav.empty" : "empty.text");
+    $("#reset-all").hidden = noFavorites;
+    appendChunk(size);
     const active = [
       state.venue !== "all" ? VENUES[state.venue].name : null,
       state.year !== "all" ? state.year : null,
@@ -312,7 +388,7 @@
     ].filter(Boolean);
     countEl.innerHTML = active.length
       ? GAL_I18N.t("count.full", { n: filtered.length.toLocaleString(), active: active.map(escapeHtml).join(" · ") })
-      : GAL_I18N.t("count.base", { n: filtered.length.toLocaleString(), m: figures.length.toLocaleString() });
+      : GAL_I18N.t("count.base", { n: filtered.length.toLocaleString(), m: collection.length.toLocaleString() });
   }
 
   if ("IntersectionObserver" in window) {
@@ -471,9 +547,15 @@
     $("#lb-authors").textContent = (f.authors || []).join(", ");
     $("#lb-paper").href = f.paper || "#";
     $("#lb-image").href = f.image;
+    $("#lb-favorite").setAttribute("aria-label", GAL_I18N.t("fav.label", { t: f.title }));
+    updateFavoriteButton($("#lb-favorite"), f.id);
+    updateLightboxNav();
+  }
+
+  function updateLightboxNav() {
     const i = currentIndex();
     $("#lb-prev").style.visibility = i > 0 ? "visible" : "hidden";
-    $("#lb-next").style.visibility = i < filtered.length - 1 ? "visible" : "hidden";
+    $("#lb-next").style.visibility = i >= 0 && i < filtered.length - 1 ? "visible" : "hidden";
   }
 
   function cardFor(id) {
@@ -652,7 +734,7 @@
     if (!card) writeUrl("replaceState", "#f=" + f.id);
     else writeUrl("pushState", "#f=" + f.id);
     lightboxBusy = true;
-    opener = card || document.activeElement;
+    opener = card ? card.querySelector(".card-link") : document.activeElement;
     lbDialog.style.height = "";
     setFigureContent(f);
     await decodeLightboxImage();
@@ -677,18 +759,19 @@
     if (lightboxBusy) return;
     const i = currentIndex();
     const j = i + d;
-    if (j < 0 || j >= filtered.length) return;
+    if (i < 0 || j < 0 || j >= filtered.length) return;
+    const next = filtered[j];
 
     lightboxBusy = true;
     // Stepping replaces the entry instead of stacking one per figure, so Back
     // always returns to the grid rather than walking through the whole list.
-    writeUrl("replaceState", "#f=" + filtered[j].id);
+    writeUrl("replaceState", "#f=" + next.id);
     if (!lbDialog.style.height) {
       lbDialog.style.height = `${lbDialog.getBoundingClientRect().height}px`;
     }
     try {
       await transitionLightbox(async () => {
-        setFigureContent(filtered[j]);
+        setFigureContent(next);
         await decodeLightboxImage();
       }, {
         pairs: [{ source: lbContent, destination: lbContent, name: transitionParts.swap }],
@@ -703,7 +786,8 @@
     if (lightboxBusy || lb.hidden) return;
     lightboxBusy = true;
     const targetCard = cardFor(currentId);
-    const returnFocus = targetCard || opener;
+    const returnFocus = targetCard ? targetCard.querySelector(".card-link") :
+      (opener && opener.isConnected && opener !== document.body ? opener : collectionNav);
 
     try {
       await transitionLightbox(() => {
@@ -757,7 +841,7 @@
   // The only place the lightbox is opened or closed without a click.
   async function applyHashToLightbox() {
     const id = figureHash();
-    if (id === currentId) return;
+    if (id === currentId && !lb.hidden) return;
     if (id === null) {
       if (!lb.hidden) await closeLb();
       return;
@@ -773,7 +857,7 @@
     }
     const f = figures.find((x) => x.id === id);
     if (!f) return; // unknown or stale id: leave the grid alone
-    if (!filtered.some((x) => x.id === id)) {
+    if (!matches(f)) {
       // The link carries filters that hide its own target — drop only what gets
       // in the way, then re-render, so a shared figure is actually visible.
       if (state.venue !== "all" && f.venue !== state.venue) state.venue = "all";
@@ -826,15 +910,15 @@
   gallery.addEventListener("click", (e) => {
     const card = e.target.closest(".card");
     if (card) {
+      if (e.target.closest(".card-favorite")) {
+        toggleFavorite(card.dataset.id);
+        return;
+      }
       const f = figures.find((x) => x.id === card.dataset.id);
       if (f) openFigure(f, card);
     }
   });
-  gallery.addEventListener("keydown", (e) => {
-    if (e.key !== "Enter" && e.key !== " ") return;
-    const card = e.target.closest(".card");
-    if (card) { e.preventDefault(); const f = figures.find((x) => x.id === card.dataset.id); if (f) openFigure(f, card); }
-  });
+  $("#lb-favorite").addEventListener("click", () => toggleFavorite(currentId));
   lbClose.addEventListener("click", closeLb);
   $("#lb-prev").addEventListener("click", () => step(-1));
   $("#lb-next").addEventListener("click", () => step(1));
