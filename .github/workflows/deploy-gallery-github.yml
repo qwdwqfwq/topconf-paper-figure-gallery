@@ -1,0 +1,64 @@
+name: Publish gallery GitHub links and compact header
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/deploy-gallery-github.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Record original protection outcome
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Preserve all FigureForge files and existing protection
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: |
+          echo "Original freeze outcome = $ORIGINAL_OUTCOME; only three gallery presentation files may change online." >> "$GITHUB_STEP_SUMMARY"
+          git diff --exit-code HEAD^ HEAD -- forge .github/forge-workflow-lock.json scripts/check-forge-workflow-lock.mjs .github/workflows/deploy.yml
+          node --test scripts/test-gallery-github-release.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          name: step1-network-note-proof
+          run-id: 44577959506
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/published-proof
+      - name: Verify exact gallery changes and construct identical remaining files
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-gallery-github-release.mjs "$RUNNER_TEMP/published-proof/step1-network-note-proof.json" --prepare-pages
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gallery-github-proof
+          path: /tmp/gallery-github-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/gallery-github-pages
+      - name: Recheck unchanged publication base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-gallery-github-release.mjs "$RUNNER_TEMP/published-proof/step1-network-note-proof.json" --check-published-base
+      - name: Publish approved gallery changes
+        id: deployment
+        uses: actions/deploy-pages@v4

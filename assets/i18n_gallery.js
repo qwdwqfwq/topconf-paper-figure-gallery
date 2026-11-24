@@ -1,6 +1,9 @@
 /* ===== Gallery static UI dictionary ===== */
 GAL_I18N.register({
   en: {
+    "repo.button": "GitHub repo ↗",
+    "repo.free": "Free to explore · Regularly updated",
+    "repo.star": "Found it useful? Star us on GitHub ⭐",
     "tagline": 'Inspiration gallery of top-conference Figure 1 · <span class="vn iclr">ICLR</span>·<span class="vn icml">ICML</span>·<span class="vn neurips">NeurIPS</span>·<span class="vn cvpr">CVPR</span>·<span class="vn acl">ACL</span>·<span class="vn aaai">AAAI</span> · 2023–2026',
     "stat.figures": "figures",
     "intro": 'Curated <b>Figure&nbsp;1 / teaser figures</b> from six top ML conferences — <b>conceptual diagrams</b>, <b>system frameworks</b>, <b>pipelines</b> &amp; <b>architectures</b>. Filter by venue, year, <b class="t-k">acceptance tier</b> or visual pattern to find layout ideas for <b>your own paper\u2019s overview figure</b>. FigureForge can generate paper figures using images found in the gallery, your own uploads, or both. Download the results to support manuscript submission, or recreate figures with high fidelity and export editable PowerPoint (PPTX), SVG, Visio (VSDX), and draw.io files for detailed editing.',
@@ -36,6 +39,9 @@ GAL_I18N.register({
     "aria.next": "Next figure",
   },
   zh: {
+    "repo.button": "GitHub 仓库 ↗",
+    "repo.free": "免费开放 · 持续更新",
+    "repo.star": "觉得有用？欢迎去 GitHub 点个 Star ⭐",
     "tagline": '顶会论文主图灵感画廊 · <span class="vn iclr">ICLR</span>·<span class="vn icml">ICML</span>·<span class="vn neurips">NeurIPS</span>·<span class="vn cvpr">CVPR</span>·<span class="vn acl">ACL</span>·<span class="vn aaai">AAAI</span> · 2023–2026',
     "stat.figures": "张",
     "intro": '精选六大顶会排版精良的 <b>Figure 1 / Teaser</b>，覆盖<b>概念示意 · 系统框架 · 流程 · 架构</b>，并按 <b style="color:#b8860b">Oral / Spotlight / Best Paper</b> 等级标注，为你的论文主图找灵感。 FigureForge 可用画廊检索图、自己上传的图，或混合两者生成论文主图。成图可直接下载辅助论文投稿，也可高保真复刻并导出为可编辑的 PPTX（PowerPoint）、SVG、VSDX（Visio）和 draw.io 文件，逐项精修。',
