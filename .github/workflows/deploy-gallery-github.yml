@@ -55,6 +55,8 @@ jobs:
       - uses: actions/upload-pages-artifact@v3
         with:
           path: /tmp/gallery-github-pages
+      - name: Allow uploaded Pages artifact metadata to become available
+        run: sleep 30
       - name: Recheck unchanged publication base
         env:
           GH_TOKEN: ${{ github.token }}

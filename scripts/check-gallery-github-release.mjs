@@ -10,6 +10,7 @@ import {fileURLToPath} from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 const baseCommit = 'b330dadd61612f6281052defe20181737397cd43';
+const approvedGalleryCommit = '503766dd6026f11b1613904b32cbf65a91df3ddf';
 const baseRun = 44577959506;
 const baseTree = '2ed7761708d9d9c26e7fc9328933ad1325a6c972';
 const proofHash = '561ed508da12a6c755c8230bc14a613a5be117776e3f93b4de316fdf8aa78dab';
@@ -72,9 +73,10 @@ async function checkPublishedBase() {
 }
 async function main() {
   const working = process.argv.includes('--working');
-  assert.equal(git('rev-parse', working ? 'HEAD' : 'HEAD^'), baseCommit);
+  assert.equal(git('rev-parse', working ? 'HEAD' : 'HEAD^'), approvedGalleryCommit);
+  assert.equal(git('show', '-s', '--format=%P', approvedGalleryCommit), baseCommit);
   if (!working) {
-    assert.equal(git('show', '-s', '--format=%P', 'HEAD'), baseCommit);
+    assert.equal(git('show', '-s', '--format=%P', 'HEAD'), approvedGalleryCommit);
     assert.equal(git('status', '--porcelain', '--untracked-files=all'), '');
   }
   const paths = git('diff', '--name-only', '--no-renames', baseCommit, ...(working ? [] : ['HEAD'])).split('\n').filter(Boolean);
