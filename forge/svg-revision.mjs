@@ -1,4 +1,82 @@
 // Independent SVG revision path; does not reconstruct or export bitmaps.
+// Used only by Infistar SVG revisions. Keep the shared request/export paths intact.
+async function streamInfistarSVGRevision(route,path,body,key){
+  const request={...body,stream:true};
+  // Preserve the token-limit normalization previously applied by postJSON.
+  if(/^(gpt-|chatgpt-|o[134](?:-|$))/i.test(request.model)&&Object.hasOwn(request,'max_tokens')){
+    request.max_completion_tokens=request.max_completion_tokens??request.max_tokens;
+    delete request.max_tokens;
+  }
+  let response;
+  try{
+    response=await fetch(route.base+path,{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+key,Accept:'text/event-stream'},body:JSON.stringify(request)});
+  }catch{throw new Error('SVG 修改连接失败，请检查网络后重试。');}
+  if(!response.ok){
+    await response.body?.cancel().catch(()=>{});
+    throw new Error('SVG 修改请求失败（HTTP '+response.status+'）'+(response.status===524?'：网关等待上游响应超时，请稍后重试。':''));
+  }
+  const incomplete=()=>new Error('SVG 修改流式响应中断或缺少完成确认，未保存不完整版本，请重试。');
+  const checkFinish=reason=>{
+    if(reason==='length')throw new Error('SVG 修改输出达到长度限制，未保存不完整版本，请重试。');
+    if(reason==='content_filter')throw new Error('SVG 修改输出被服务商过滤，未保存新版本。');
+    if(reason!=='stop')throw incomplete();
+  };
+  const checkError=data=>{if(data?.error||data?.type==='error')throw new Error('SVG 修改服务返回流式错误，未保存新版本，请稍后重试。');};
+  // Some compatible gateways still return a complete JSON response to stream:true.
+  // Consume that same response once; never resubmit a potentially billed request.
+  if(!(response.headers.get('content-type')||'').toLowerCase().includes('text/event-stream')){
+    let data;
+    try{data=await response.json();}catch{throw new Error('SVG 修改服务返回无效响应，请重试。');}
+    checkError(data);
+    const choice=data?.choices?.[0];
+    if(!choice)throw incomplete();
+    if(Object.hasOwn(choice,'finish_reason'))checkFinish(choice.finish_reason);
+    return data;
+  }
+  if(!response.body)throw incomplete();
+  const reader=response.body.getReader(),decoder=new TextDecoder(),parts=[];
+  let buffer='',dataLines=[],finished=false,ended=false;
+  const text=value=>typeof value==='string'?value:Array.isArray(value)?value.map(x=>typeof x?.text==='string'?x.text:'').join(''):'';
+  function event(){
+    const payload=dataLines.join('\n');dataLines=[];
+    if(!payload.trim())return;
+    if(payload.trim()==='[DONE]')throw incomplete(); // A finish_reason must precede it.
+    let data;
+    try{data=JSON.parse(payload);}catch{throw new Error('SVG 修改服务返回无效流数据，未保存新版本，请重试。');}
+    checkError(data);
+    for(const choice of Array.isArray(data?.choices)?data.choices:[]){
+      if(!choice||typeof choice!=='object'||(choice.index!=null&&choice.index!==0))continue;
+      // Ignore reasoning deltas, usage records and other choices.
+      parts.push(text(choice.delta?.content??choice.message?.content));
+      if(choice.finish_reason!=null){checkFinish(choice.finish_reason);finished=true;break;}
+    }
+  }
+  function line(value){
+    if(value==='')event();
+    else if(value.startsWith('data:'))dataLines.push(value.slice(5).replace(/^ /,''));
+  }
+  try{
+    while(!finished&&!ended){
+      let part;
+      try{part=await reader.read();}catch{throw incomplete();}
+      ended=part.done;buffer+=decoder.decode(part.value,{stream:!ended});
+      let boundary;
+      while(!finished&&(boundary=buffer.search(/[\r\n]/))!==-1){
+        // A CRLF may be split across network chunks.
+        if(!ended&&buffer[boundary]==='\r'&&boundary===buffer.length-1)break;
+        const value=buffer.slice(0,boundary),size=buffer.slice(boundary,boundary+2)==='\r\n'?2:1;
+        buffer=buffer.slice(boundary+size);line(value);
+      }
+      if(ended&&!finished){if(buffer)line(buffer);if(!finished&&dataLines.length)event();}
+    }
+    if(!finished)throw incomplete();
+    return {choices:[{message:{content:parts.join('')},finish_reason:'stop'}]};
+  }finally{
+    // A valid finish_reason is sufficient even if [DONE]/socket close never arrive.
+    await reader.cancel().catch(()=>{});reader.releaseLock();
+  }
+}
+
 export function svgVersion(input,parent){
   const match=String(input).match(/<svg\b[\s\S]*<\/svg\s*>/i);
   if(!match)throw new Error('模型没有返回完整 SVG，请重试。');
@@ -42,7 +120,9 @@ export async function generateSVGRevision(parent,prompt,{route,key,post}){
   }else{
     path='/chat/completions';body={model:route.model,max_tokens:32000,messages:[{role:'user',content:[{type:'text',text},...references.map(url=>({type:'image_url',image_url:{url}}))]}]};
   }
-  const response=await post(path,body,key);
+  const response=route.p==='infistar'&&route.proto!=='anthropic'
+    ?await streamInfistarSVGRevision(route,path,body,key)
+    :await post(path,body,key);
   const content=route.proto==='anthropic'?response.content?.filter(x=>x.type==='text').map(x=>x.text).join('\n'):response.choices?.[0]?.message?.content;
   const output=typeof content==='string'?content:Array.isArray(content)?content.map(x=>x.text||'').join('\n'):'';
   return {...svgVersion(output,parent),route,revisionAudit:{status:200,model:route.model,referenceCount:references.length}};

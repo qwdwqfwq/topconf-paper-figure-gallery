@@ -1,0 +1,76 @@
+name: Publish Infistar SVG revision streaming
+on:
+  push:
+    branches: [main]
+    paths: [.github/workflows/deploy-infistar-svg-stream.yml]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+  deployments: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-24.04
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Record original protection outcome
+        id: original_lock
+        continue-on-error: true
+        run: node scripts/check-forge-workflow-lock.mjs
+      - name: Preserve original guards and all shared runtime files
+        env:
+          ORIGINAL_OUTCOME: ${{ steps.original_lock.outcome }}
+        run: |
+          echo "Original freeze outcome = $ORIGINAL_OUTCOME; historical failures remain failures. Only the independent Infistar SVG revision module may change online." >> "$GITHUB_STEP_SUMMARY"
+          git diff --exit-code HEAD^ HEAD -- 'forge/**' ':(exclude)forge/svg-revision.mjs' ':(exclude)forge/test-svg-revision-stream.cjs' .github/forge-workflow-lock.json scripts/check-forge-workflow-lock.mjs .github/workflows/deploy.yml
+          node --check scripts/check-infistar-svg-stream-release.mjs
+          node --check forge/svg-revision.mjs
+      - uses: actions/download-artifact@v4
+        with:
+          name: forge-warnings-proof
+          run-id: 45308323816
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/published-proof
+      - name: Construct publication with every other file byte-identical
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-infistar-svg-stream-release.mjs "$RUNNER_TEMP/published-proof/forge-warnings-proof.json" --prepare-pages
+      - name: Verify actual publication streaming and unchanged providers in Chromium
+        env:
+          REVISION_PLAYWRIGHT: ${{ runner.temp }}/svg-stream-browser/node_modules/playwright
+          REVISION_BUNDLED_BROWSER: '1'
+          SVG_REVISION_TEST_ROOT: /tmp/infistar-svg-stream-pages/forge
+        run: |
+          npm install --prefix "$RUNNER_TEMP/svg-stream-browser" --no-package-lock playwright@1.58.2
+          "$RUNNER_TEMP/svg-stream-browser/node_modules/.bin/playwright" install --with-deps chromium
+          node forge/test-svg-revision-stream.cjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: infistar-svg-stream-proof
+          path: /tmp/infistar-svg-stream-proof.json
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: /tmp/infistar-svg-stream-pages
+      - name: Wait for Pages artifact metadata
+        run: sleep 30
+      - name: Recheck unchanged publication base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-infistar-svg-stream-release.mjs "$RUNNER_TEMP/published-proof/forge-warnings-proof.json" --check-published-base
+      - name: Publish only Infistar SVG revision streaming
+        id: deployment
+        uses: actions/deploy-pages@v4
