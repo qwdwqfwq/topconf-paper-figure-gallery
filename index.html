@@ -27,7 +27,7 @@
 <meta name="twitter:image" content="https://qwdwqfwq.github.io/topconf-paper-figure-gallery/docs/social-preview.png">
 <meta name="twitter:image:alt" content="Top-Conf Figure Gallery — Figure 1 / teaser figures from six top AI conferences, 2023–2026">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='22' fill='%234f46e5'/%3E%3Ccircle cx='36' cy='38' r='10' fill='white'/%3E%3Crect x='28' y='54' width='44' height='7' rx='3.5' fill='%23a5b4fc'/%3E%3Crect x='28' y='67' width='30' height='7' rx='3.5' fill='%23a5b4fc'/%3E%3C/svg%3E">
-<link rel="stylesheet" href="assets/style.css">
+<link rel="stylesheet" href="assets/style.css?v=20261124-favorites">
 <script type="application/ld+json">
 {
   "@context": "https://schema.org",
@@ -128,6 +128,7 @@
           <option value="title" data-i18n="sort.title">Title A–Z</option>
         </select>
       </div>
+      <a id="collection-nav" class="ghost-btn" href="?view=favorites" data-i18n="fav.page">我的收藏</a>
       <a class="forge-nav" href="./forge/" title="打开 FigureForge 画图">FigureForge ↗</a>
     </div>
     <div class="filter-row">
@@ -148,6 +149,10 @@
 </div>
 
 <main class="container">
+  <section id="favorites-heading" hidden>
+    <h2 data-i18n="fav.page">我的收藏</h2>
+    <p data-i18n="fav.local">收藏保存在当前浏览器中。</p>
+  </section>
   <div id="gallery" class="masonry" aria-live="polite"></div>
   <div id="sentinel" class="sentinel" hidden>
     <span class="spinner"></span> <span data-i18n="loading">Loading more…</span>
@@ -204,6 +209,7 @@
         <div class="lb-actions">
           <a id="lb-image" class="ghost-btn" target="_blank" rel="noopener" data-i18n="lb.viewImage"></a>
           <a id="lb-paper" class="primary-btn" target="_blank" rel="noopener" data-i18n="lb.openPaper"></a>
+          <button id="lb-favorite" class="ghost-btn" type="button" aria-pressed="false"></button>
           <span id="lb-separator-target" class="lb-separator-target" aria-hidden="true">/</span>
         </div>
       </div>
@@ -212,9 +218,9 @@
 </div>
 
 <script src="assets/i18n.js"></script>
-<script src="assets/i18n_gallery.js"></script>
+<script src="assets/i18n_gallery.js?v=20261124-favorites"></script>
 <script src="assets/figures.js"></script>
-<script src="assets/app.js?v=20261001"></script>
+<script src="assets/app.js?v=20261124-favorites"></script>
 <dialog id="support-dialog" class="support-dialog" aria-labelledby="support-heading">
   <button id="support-close" class="support-close" type="button" aria-label="关闭支持作者弹窗">×</button>
   <h2 id="support-heading">请作者喝杯咖啡 ☕</h2>
